@@ -138,6 +138,11 @@ together.
   sampled in place and answered by a Model Serving endpoint. Checked against
   the public API by `test_databricks_notebooks.py`; they run only in a
   workspace.
+  Given a metric view, the AdventureWorks notebook asks four questions through it, one through the view's `revenue` measure.
+  It returns the schema's conversion notes and any conversion warning with the results, as `view_notes` and `view_messages`.
+- **Metric views convert across more of their configurations.**
+  Wildcard dimensions, parameters read as their defaults, the columns measures aggregate, names in any case, and a time column taken from the date a dimension truncates all convert as Databricks reads them.
+  `Schema.conversion_notes` says how a view was read, one note per measure, time column or parameter; the text is for reading, not parsing.
 - What installing on Databricks needs: the engine's `pyarrow` floor is 10.0.1
   rather than 8, since its warehouse backends read results as `pd.ArrowDtype`
   and Databricks Runtime 14.3 LTS ships 8; `structured-data-models-connectors[databricks]` brings
@@ -193,6 +198,22 @@ together.
   `customers` join or dropped it as referencing two tables, and a literal
   equal to another dimension's name was replaced by that dimension's
   expression. Literals are now left as written.
+- **A metric view join that cannot be used is left out, not the whole view.**
+  A joined table that is missing, empty, a metric view or not yours to read, a join key that repeats or holds no value, and a column the warehouse refuses are each left out with a conversion message.
+  A key whose count fails is kept unchecked, with a message.
+  Any other warehouse failure raises `GraphConstructionError`, and a metric view on a metric view, or a query as a source, is refused with the way out.
+- **What a semantic model loses, or why it is refused, arrives as the client's own types.**
+  Losses are one `SDMWarning` at the caller.
+  A refusal is a `StructuredDataError` (`INVALID_REQUEST`) with the model's name in `details['semantic_model']`.
+  The schema holds only the model's own relationships, which `relationships=` replaces.
+  A parameter named like a `DESCRIBE` detail, such as `Type`, no longer stands in for it.
+- **`Schema.from_source` leaves out a column no predictive query can name, rather than refusing the source.**
+  This applies to every source: a column whose name holds a `.`, a backtick or a line break is left out with an `SDMWarning`; `Schema.from_data` still refuses such a name.
+- **A `DECIMAL(p, 0)` key is read as the integer its type says, and a decimal identifier keeps every digit.**
+  Such columns were read as decimals, which no type inference takes, so a question failed when their rows were read.
+- **Sampling a table reached by two paths, or a column linking two tables, no longer fails.**
+  Each hop of the SQL sampler now reads only the rows of the hop before, as the in-memory sampler does, and a column linking two tables is selected once.
+  Predictions change for any warehouse schema where two paths reach a keyed table, such as RelBench's rel-stack and rel-avito.
 - **A ranking leaves out the candidates no sampled context can teach, and
   ranks the rest.** The endpoint refuses a candidate whose context holds one
   answer, usually because no entity in it linked to the candidate in the
@@ -508,6 +529,8 @@ Now a column whose expression calls anything but a pure, deterministic built-in 
 Qualified and quoted function names, `IDENTIFIER()`, and session values such as `current_user` and `current_date` are left out the same way.
 `source.semantic_model(name, trust_expressions=True)`, and `trust_expressions=True` on `Graph.from_databricks_metric_view` and `Graph.from_snowflake_semantic_view`, keep such a column if you trust whoever authored the view.
 Sub-queries, comments and statement separators are refused either way, and that check now also catches the forms Databricks runs without `SELECT`: `TABLE t`, a query opening with `FROM`, and the `|>` pipe.
+A metric view's comments are dropped first, as Databricks drops them, and Snowflake's `//` counts as a comment.
+A character outside ASCII is refused outside quotes, since neither warehouse documents which such characters may join a name; quote the name instead.
 It also refuses parentheses that do not balance outside quoted text, since a stray `)` could close the query the expression is spliced into.
 Some allowed built-ins are costly or read the session time zone; `docs/about/architecture.md` lists them.
 A keyword before `(`, as in `x IN (1)`, counts as grammar only after something known to be a value: a literal, a closing bracket, quoted text, a qualified name, or a column of the table the expression runs on.
@@ -522,9 +545,10 @@ Each table's columns are read before its expressions are checked, and the metric
 **A metric view's `filter` is applied, or the view is refused.**
 The filter decides which rows a metric view holds, and it used to be reported as unrepresentable and dropped, so a schema and every request read rows the view leaves out.
 A filter on the source table's own columns now limits every read of that table: its preview, its row count, its time range, entity sampling and each lookup read `(SELECT * FROM <source> AS source WHERE (<filter>))` instead of the table.
-A filter that references a joined table has no single table to apply to, so `Schema.from_source` and `Graph.from_databricks_metric_view` refuse the view with a `ValueError`, as they do a filter with a sub-query or a call to a function other than a pure built-in.
+A filter that references a joined table has no single table to apply to, so `Graph.from_databricks_metric_view` refuses the view with a `ViewConversionError`, a `ValueError`, and `Schema.from_source` with a `StructuredDataError` (`INVALID_REQUEST`), as they do a filter with a sub-query or a call to a function other than a pure built-in.
 The message names the way out: create a regular view with that `WHERE` clause and point the metric view's source at it.
-`parameters` and `materialization` are still left out with a message.
+A parameter the filter or a dimension references is read as its default, as a query of the view without arguments reads it, and a filter on a parameter with no default refuses the view.
+`materialization` is still left out with a message.
 
 **`predictive_query` is not public API.**
 `structured-data-models-pql` installs it because `structured-data-models-client` parses and validates PQL with it, and any release may change it.

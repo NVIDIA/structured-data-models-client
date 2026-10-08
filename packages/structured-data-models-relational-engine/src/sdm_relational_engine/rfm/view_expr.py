@@ -11,19 +11,184 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection
+from dataclasses import dataclass, field, replace
 
 _UNSAFE_EXPR_TOKENS = (';', '--', '/*', '*/', '|>', '->>')
 _EXPR_QUOTE_DELIMITERS = ('$$', "'", '"', '`')
-_QUOTED_EXPR_TEXT = re.compile(
-    '|'.join(
-        [
-            r'\$\$[\s\S]*?\$\$',
-            r"'(?:''|\\[\s\S]|[^'\\])*'",
-            r'"(?:""|\\[\s\S]|[^"\\])*"',
-            r'`(?:``|[^`])*`',
-        ]
-    )
+
+
+@dataclass(frozen=True)
+class _Token:
+    kind: str
+    text: str
+    start: int
+    end: int
+
+    @property
+    def folded(self) -> str:
+        return self.text.lower() if self.kind == 'word' else ''
+
+
+# How each dialect splits an expression into tokens, in the order tried. Every
+# check reads quoted text through these, so no two can disagree about where a
+# literal ends. A `string` is data, and a `quoted` token is a name.
+_ESCAPED_STRING = r"'(?:''|\\[\s\S]|[^'\\])*'"
+_ESCAPED_DOUBLE = r'"(?:""|\\[\s\S]|[^"\\])*"'
+_BACKTICKED = r'`(?:``|[^`])*`'
+_DOLLARS = r'\$\$[\s\S]*?\$\$'
+_WORD = r'[A-Za-z_][\w$]*'
+# Databricks reads a run of letters, digits and `_` as a name unless the
+# whole run is a number, as `1e5`, `2d` and `10L` are: `2024_total` names a
+# column on a DBSQL 2026.38 warehouse.
+_WHOLE_NUMBER = r'(?i:\d+(?:e\d+)?(?:bd|d|f)?|\d+[lsy])(?![A-Za-z0-9_])'
+BARE_NAME = rf'(?!{_WHOLE_NUMBER})[A-Za-z0-9_]+'
+# A signed exponent outruns any name, and a decimal point ends a number
+# only where no name character follows, as in Spark's lexer.
+_DATABRICKS_NUMBER = (
+    r'(?i:\d+e[+-]\d+(?:bd|d|f)?'
+    r'|(?:\d+\.\d*|\.\d+)(?:e[+-]?\d+)?(?:bd|d|f)?(?![A-Za-z0-9_]))'
+    rf'|{_WHOLE_NUMBER}'
 )
+# Words and numbers elsewhere. A word may hold `$`, as a Snowflake name
+# does, so `a$$` opens no literal.
+_LOOSE_WORDS = (
+    ('open', r'/\*'),
+    ('number', r'(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[A-Za-z]*'),
+    ('word', _WORD),
+)
+_LEXEMES = {
+    # A raw string, `r'...'`, takes no escapes: `r'x\'` ends at its second
+    # quote. Double quotes delimit a string, not a name. A line comment goes
+    # on past a backslash ending its line, as Databricks reads it.
+    'databricks': (
+        ('comment', r'--(?:\\\n|[^\r\n])*'),
+        (
+            'string',
+            rf"[rR]'[^']*'|[rR]\"[^\"]*\"|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}",
+        ),
+        ('quoted', _BACKTICKED),
+        ('open', r'/\*'),
+        ('number', _DATABRICKS_NUMBER),
+        ('word', BARE_NAME),
+    ),
+    # Double quotes delimit a name, which takes no escapes. Snowflake
+    # refuses a backtick, so reading one as a quote hides nothing from it.
+    'snowflake': (
+        ('comment', r'(?:--|//)[^\r\n]*'),
+        ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}'),
+        ('quoted', rf'"(?:""|[^"])*"|{_BACKTICKED}'),
+        *_LOOSE_WORDS,
+    ),
+    # What a check that knows no dialect reads as quoted.
+    None: (
+        ('comment', r'--[^\r\n]*'),
+        ('string', rf'{_DOLLARS}|{_ESCAPED_STRING}|{_ESCAPED_DOUBLE}'),
+        ('quoted', _BACKTICKED),
+        *_LOOSE_WORDS,
+    ),
+}
+# `?::` is Databricks' try-cast, `x ?:: INT`, read wherever `::` is.
+_LEXEMES_EVERYWHERE = (
+    ('punct', r'<=>|<=|>=|<>|\?::|::|->|=>|[.:(),\[\]<>]'),
+    ('space', r'\s+'),
+    ('other', r'[\s\S]'),
+)
+
+
+def _lexer(
+    lexemes: tuple[tuple[str, str], ...],
+) -> tuple[re.Pattern[str], list[str]]:
+    r"""One pattern trying each of ``lexemes`` in turn, and their kinds by
+    group.
+    """
+    pattern = '|'.join(f'({lexeme})' for _, lexeme in lexemes)
+    return re.compile(pattern), [kind for kind, _ in lexemes]
+
+
+_LEXERS = {
+    dialect: _lexer((*own, *_LEXEMES_EVERYWHERE))
+    for dialect, own in _LEXEMES.items()
+}
+
+
+def _comment_end(expr: str, start: int, nested: bool) -> int | None:
+    r"""Where the ``/*`` comment at ``start`` ends, or ``None`` if it never
+    does. Databricks nests one such comment in another.
+    """
+    depth, at = 1, start + 2
+    while depth:
+        close = expr.find('*/', at)
+        if close < 0:
+            return None
+        open_ = expr.find('/*', at, close) if nested else -1
+        depth += 1 if open_ >= 0 else -1
+        at = open_ + 2 if open_ >= 0 else close + 2
+    return at
+
+
+def _lex(expr: str, dialect: str | None = 'databricks') -> list[_Token]:
+    r"""The tokens of ``expr`` as ``dialect`` reads them, spaces left out.
+
+    A quote or ``/*`` that is never closed is a token of kind ``other``.
+    """
+    pattern, kinds = _LEXERS[dialect]
+    tokens: list[_Token] = []
+    at = 0
+    while at < len(expr):
+        # Some lexeme matches any character, so a match always exists.
+        match = pattern.match(expr, at)
+        assert match is not None
+        kind, end = kinds[(match.lastindex or 1) - 1], match.end()
+        if kind == 'open':
+            close = _comment_end(expr, at, nested=dialect == 'databricks')
+            kind, end = ('comment', close) if close else ('other', at + 1)
+        if kind != 'space':
+            tokens.append(_Token(kind, expr[at:end], at, end))
+        at = end
+    return tokens
+
+
+def strip_comments(expr: str) -> str:
+    r"""A Databricks expression with each comment replaced by a space.
+
+    A comment hides nothing from a check of what is left, and what is left
+    is what runs, so a call written inside one is never executed.
+    """
+    out: list[str] = []
+    last = 0
+    for token in _lex(expr):
+        if token.kind == 'comment':
+            out += [expr[last : token.start], ' ']
+            last = token.end
+    out.append(expr[last:])
+    return ''.join(out).strip()
+
+
+def _masked(expr: str, dialect: str | None, mask: str) -> str:
+    r"""``expr`` with each string literal and quoted name replaced by
+    ``mask``.
+    """
+    out: list[str] = []
+    last = 0
+    for token in _lex(expr, dialect):
+        if token.kind in ('string', 'quoted'):
+            out += [expr[last : token.start], mask]
+            last = token.end
+    out.append(expr[last:])
+    return ''.join(out)
+
+
+def string_literals(expr: str) -> list[tuple[int, int]]:
+    r"""Where each string literal of a Databricks expression starts and
+    ends.
+    """
+    return [
+        (token.start, token.end)
+        for token in _lex(expr)
+        if token.kind == 'string'
+    ]
+
+
 _UNSAFE_EXPR_KEYWORDS = re.compile(
     r'(?<![\w.])'
     r'(?:(?:select|table|update|delete|merge|create|alter|drop|grant|revoke'
@@ -31,8 +196,36 @@ _UNSAFE_EXPR_KEYWORDS = re.compile(
     r'|(?:insert|truncate)\b(?!\s*\())',
     flags=re.IGNORECASE,
 )
-# Databricks runs `(FROM t |> ...)` and `(TABLE t)` as sub-queries.
-_QUERY_START = re.compile(r'(?:^|\()\s*from\b', flags=re.IGNORECASE)
+# Databricks runs each of these as a sub-query where it opens the expression
+# or a `(`: `(FROM t |> ...)`, `(VALUES 1)`, `(WITH a AS (...) ...)` and the
+# script transforms `(MAP x USING 'cmd')` and `(REDUCE ...)`, which need a
+# USING before their bracket closes. A filter is spliced into `WHERE (...)`,
+# so `values + 1 > 0` opens `(VALUES +1 > 0)`. `TABLE` is refused anywhere.
+_QUERY_START = re.compile(
+    r'(?:^|\()\s*(?:'
+    r'(?:from|values)\b'
+    r'|with\s+(?:recursive\s+)?(?:[\w$]+\s*)?(?:\([^()]*\)\s*)?as\s*\('
+    r'|(?P<script>(?:map|reduce)\b(?!\s*\())'
+    r')',
+    flags=re.IGNORECASE,
+)
+_USING = re.compile(r'\busing\b', flags=re.IGNORECASE)
+
+
+def _starts_a_query(unquoted: str) -> bool:
+    r"""Whether ``unquoted``, its quoted text masked, opens a sub-query."""
+    for match in _QUERY_START.finditer(unquoted):
+        if not match.group('script'):
+            return True
+        depth, end = 0, len(unquoted)
+        for at in range(match.end(), len(unquoted)):
+            depth += {'(': 1, ')': -1}.get(unquoted[at], 0)
+            if depth < 0:
+                end = at
+                break
+        if _USING.search(unquoted, match.end(), end):
+            return True
+    return False
 
 
 def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
@@ -50,23 +243,23 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     not become invisible just because this function believes it is quoted.
 
     Deciding what counts as quoted is itself dialect-specific, and getting it
-    wrong defeats the guard. Snowflake also has ``$$...$$``, and both
-    Snowflake and Databricks honour backslash escapes inside a literal. A
-    payload using ``$$`` or ``\'`` shifts where a doubling-only reader sees the
-    literal end and can smuggle a sub-query through the gap, so both forms are
-    recognised. A remaining delimiter means this function and the warehouse
-    disagree about string boundaries, so it fails closed. This also refuses a
-    quoted name ending in a lone backslash, which is invalid on Databricks and
-    exotic on Snowflake.
+    wrong defeats the guard. Snowflake also has ``$$...$$``, both warehouses
+    honour backslash escapes inside a literal, and a Databricks raw string,
+    ``r'...'``, takes none. A payload using ``$$``, ``\'`` or ``r'\'`` shifts
+    where a reader missing that form sees the literal end, and can smuggle a
+    sub-query through the gap, so each dialect is read as it lexes. A
+    remaining delimiter means this function and the warehouse disagree about
+    string boundaries, so it fails closed.
 
     ``INSERT`` and ``TRUNCATE`` are also ordinary Snowflake scalar functions,
     and as statements are always followed by ``INTO``/``TABLE`` rather than by
     ``(``, so a call cannot be one. A keyword directly behind a ``.`` is the
     trailing part of a qualified name (``ORDERS.MERGE``), which also cannot
     begin a statement. ``SELECT`` may legally be followed by ``(``, so it is
-    always refused. Databricks also reads a table without ``SELECT``: through
-    ``TABLE t``, a query opening with ``FROM``, and the ``|>`` pipe, and
-    Snowflake chains statements with ``->>``, so those are refused too.
+    always refused. Databricks also runs a query without ``SELECT``: through
+    ``TABLE t``, a query opening with ``FROM``, ``VALUES``, ``WITH``, ``MAP``
+    or ``REDUCE``, and the ``|>`` pipe, and Snowflake chains statements with
+    ``->>``, so those are refused too.
 
     Parentheses must balance outside quoted text. An expression is spliced
     into a select list or a filter's ``WHERE (...)``, and a stray ``)`` would
@@ -85,11 +278,23 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
     # Databricks has no `$$` literal, and quotes no name with a backslash.
     if dialect == 'databricks' and '$$' in expr:
         return "it contains '$$', which Databricks SQL does not quote with"
+    # Snowflake also comments out the rest of a line with `//`, which a
+    # literal such as a URL may hold.
+    if dialect == 'snowflake' and any(
+        token.kind == 'comment' for token in _lex(expr, dialect)
+    ):
+        return "it contains '//'"
     if dialect == 'snowflake':
-        for quoted in _QUOTED_EXPR_TEXT.findall(expr):
-            if quoted.startswith('"') and '\\' in quoted:
+        for quoted in _lex(expr, dialect):
+            if quoted.text.startswith('"') and '\\' in quoted.text:
                 return 'it has a backslash inside a double-quoted name'
-    unquoted = _QUOTED_EXPR_TEXT.sub(' ', expr)
+    unquoted = _masked(expr, dialect, ' ')
+    # Which characters may join a name, and so keep a quote after them from
+    # opening a literal, is documented for ASCII alone: Snowflake might read
+    # `é$$` as a name or as `é` and a literal. Refusing anything else outside
+    # quotes holds whatever the warehouse decides.
+    if other := re.search(r'[^\x00-\x7f]', unquoted):
+        return f'it has {other.group()!r} outside quotes, which is not ASCII'
     for delimiter in _EXPR_QUOTE_DELIMITERS:
         if delimiter in unquoted:
             return (
@@ -105,7 +310,7 @@ def _unsafe_expr_reason(expr: str, dialect: str | None = None) -> str | None:
         return "it leaves a '(' unclosed"
     if match := _UNSAFE_EXPR_KEYWORDS.search(unquoted):
         return f"it contains the SQL keyword '{match.group()}'"
-    if _QUERY_START.search(unquoted):
+    if _starts_a_query(unquoted):
         return 'it contains a sub-query'
     return None
 
@@ -308,10 +513,6 @@ _SESSION_VALUES = re.compile(
 # that name, answer the session user and today. A column of the name wins
 # for every session word quoted, `current_path` included. How Snowflake
 # reads a quoted session word is not documented, so none is excused there.
-_QUOTED_NAME = {
-    'databricks': re.compile(r'`((?:``|[^`])*)`'),
-    'snowflake': re.compile(r'"((?:""|[^"])*)"'),
-}
 _COLUMN_OVER_QUOTED_SESSION = {
     'databricks': _SESSION_WORDS,
     'snowflake': frozenset(),
@@ -499,13 +700,17 @@ _SNOWFLAKE_RESERVED = frozenset(
 #: each is followed by a literal, a name, `(`, `,` or another keyword, so a
 #: column of that name before `IN (` is a value. A keyword missing here stays
 #: grammar, which refuses rather than lifts.
-_NEVER_BEFORE_AN_EXPRESSION = frozenset(
+_DATETIME_UNITS = frozenset(
     {
-        # Datetime units. Each is followed by a literal, `,`, `FROM` or `TO`.
         'day', 'dayofyear', 'days', 'hour', 'hours', 'microsecond',
         'microseconds', 'millisecond', 'milliseconds', 'minute', 'minutes',
         'month', 'months', 'nanosecond', 'nanoseconds', 'quarter', 'second',
         'seconds', 'week', 'weeks', 'year', 'years',
+    }
+)  # fmt: skip
+_NEVER_BEFORE_AN_EXPRESSION = _DATETIME_UNITS | frozenset(
+    {
+        # Each datetime unit is followed by a literal, `,`, `FROM` or `TO`.
         # Typed literals and type names, followed by a literal, `AS` or `(`.
         'date', 'number', 'text', 'time', 'timestamp', 'x',
         # Words that only commands, clauses or `name(` forms use.
@@ -791,7 +996,7 @@ def _untrusted_call_reason(
             Pass ``()`` where none are known, and no bare word is a value.
     """
     trusted = _TRUSTED_FUNCTIONS[dialect]
-    text = _QUOTED_EXPR_TEXT.sub(_QUOTED, expr)
+    text = _masked(expr, dialect, _QUOTED)
     named = frozenset(column.lower() for column in columns)
     visible = named | _lambda_parameters(text)
     for index, char in enumerate(text):
@@ -830,11 +1035,710 @@ def _untrusted_call_reason(
         if session.group(1).lower() not in overridden:
             return f"it reads the session value '{session.group(1)}'"
     overridden = named & _COLUMN_OVER_QUOTED_SESSION[dialect]
-    for quoted in _QUOTED_EXPR_TEXT.finditer(expr):
-        name = _QUOTED_NAME[dialect].fullmatch(quoted.group())
-        if name is None or _QUALIFIED.search(expr[: quoted.start()]):
+    for quoted in _lex(expr, dialect):
+        if quoted.kind != 'quoted' or _QUALIFIED.search(expr[: quoted.start]):
             continue
-        word = name.group(1).lower()
+        word = _unquoted(quoted).lower()
         if word in _SESSION_WORDS and word not in overridden:
-            return f'it reads the session value {quoted.group()}'
+            return f'it reads the session value {quoted.text}'
     return None
+
+
+# A column may take any keyword's name but TRUE, FALSE and NULL, so where a
+# word stands decides whether it names one. Where both readings parse,
+# Databricks takes the form, as in `NOT and(x)`.
+_LITERAL_WORDS = frozenset({'true', 'false', 'null'})
+# Words that, after an operand, take another: `x REGEXP y`, `s FOR 2`, and
+# a type, field, collation or window name after AS, COLLATE or OVER.
+_TAKE_AN_OPERAND = frozenset(
+    {
+        'and', 'as', 'between', 'collate', 'div', 'else', 'escape', 'filter',
+        'for', 'from', 'ilike', 'in', 'is', 'like', 'or', 'over', 'placing',
+        'range', 'regexp', 'rlike', 'rows', 'then', 'when', 'within',
+    }
+)  # fmt: skip
+_TAKE_A_NAME = frozenset({'as', 'collate', 'over'})
+# Words before `(` that open no call, or a form with its own grammar.
+_NO_CALL_OPENERS = _TAKE_AN_OPERAND | {
+    '', 'cast', 'extract', 'group', 'overlay', 'position', 'substring',
+    'struct', 'trim', 'try_cast',
+}  # fmt: skip
+# What a CASE may have read last before each of its words.
+_CASE_STEPS = {
+    'when': ('case', 'then'),
+    'then': ('when',),
+    'else': ('then',),
+    'end': ('then', 'else'),
+}
+# How many steps trial readings may take per token, and how deep they may
+# nest, which only keeps the call stack in bounds: each level is a bracket.
+_TRIAL_STEPS = 16
+_DEEPEST_TRIAL = 64
+# Words that follow an operand only before these: `x NOT IN (1)`,
+# `IGNORE NULLS`.
+_FOLLOWED_BY = {
+    'not': frozenset({'between', 'ilike', 'in', 'like', 'regexp', 'rlike'}),
+    'ignore': frozenset({'nulls'}),
+    'respect': frozenset({'nulls'}),
+}
+_NAME_KINDS = ('word', 'quoted')
+_OPERATOR_PAIRS = frozenset({'!=', '==', '||', '<<', '>>'})
+# What may stand after IS: `IS [NOT] NULL`, `IS UNKNOWN`, `IS DISTINCT FROM`.
+_AFTER_IS = frozenset(
+    {'distinct', 'false', 'from', 'not', 'null', 'true', 'unknown'}
+)
+# What a window's frame says between ROWS or RANGE and its `)`, and what
+# may start it.
+_FRAME_WORDS = frozenset(
+    {'between', 'current', 'following', 'preceding', 'row', 'unbounded'}
+)
+_FRAME_STARTS = frozenset({'between', 'current', 'interval', 'unbounded'})
+# Words before a string that type it: `DATE '2024-01-01'`, and `X'1F'`, a
+# binary literal in hex.
+_TYPED_LITERALS = frozenset(
+    {'date', 'timestamp', 'timestamp_ltz', 'timestamp_ntz', 'x'}
+)
+_TRIM_SIDES = frozenset({'both', 'leading', 'trailing'})
+# The words before BY that only a window's clauses open with, as in
+# `OVER (DISTRIBUTE BY y SORT BY n)`. ORDER BY also sorts a WITHIN GROUP.
+_WINDOW_BY = frozenset({'cluster', 'distribute', 'partition', 'sort'})
+# The types that take fields in `<...>`; after any other, `<` compares.
+_TYPES_WITH_FIELDS = frozenset({'array', 'map', 'struct'})
+# The fields an interval type names, as in `INTERVAL DAY TO SECOND`.
+_INTERVAL_FIELDS = frozenset(
+    {'year', 'month', 'day', 'hour', 'minute', 'second'}
+)
+# The time zones a timestamp type may name.
+_TIME_ZONES = (('with', 'local', 'time', 'zone'), ('without', 'time', 'zone'))
+# Functions whose first argument may be a datetime unit, as a bare word.
+_UNIT_FIRST = frozenset({'timediff', 'timestampadd', 'timestampdiff'})
+# These take a unit first only in their three-argument form: `datediff(a,
+# b)` reads two values.
+_UNIT_FIRST_OF_THREE = frozenset(
+    {'date_add', 'date_diff', 'dateadd', 'datediff'}
+)
+
+
+class UnreadableExpressionError(ValueError):
+    r"""An expression whose names could not be settled within the bounds
+    the scan keeps, so no reading of it is safe.
+    """
+
+
+@dataclass(frozen=True)
+class NameReference:
+    r"""A name an expression reads as a value, possibly qualified.
+
+    Args:
+        parts: Its parts, unquoted.
+        span: Where it is in the expression as written.
+        bare: Whether it is one unquoted part.
+    """
+
+    parts: tuple[str, ...]
+    span: tuple[int, int]
+    bare: bool
+
+
+def _closing(tokens: list[_Token], at: int) -> int:
+    r"""The index of the bracket closing the one at ``at``, or the last."""
+    pairs = {'(': ')', '[': ']', '<': '>'}
+    opening, depth = tokens[at].text, 0
+    for index in range(at, len(tokens)):
+        if tokens[index].text == opening:
+            depth += 1
+        elif tokens[index].text == pairs[opening]:
+            depth -= 1
+            if depth == 0:
+                return index
+    return len(tokens) - 1
+
+
+def _type_end(tokens: list[_Token], at: int) -> int:
+    r"""Where the type named at ``at`` ends: past its parameters, as in
+    ``DECIMAL(38, 2)``, its fields, as in ``ARRAY<INT>``, ``STRUCT<>`` and
+    ``INTERVAL DAY TO SECOND``, or its time zone. An alias, collation or
+    window name ends where it starts.
+    """
+    word, after = tokens[at].folded, tokens[at + 1].text
+    if after == '(' or (after == '<' and word in _TYPES_WITH_FIELDS):
+        return _closing(tokens, at + 1)
+    if after == '<>' and word == 'struct':
+        return at + 1
+    if word == 'interval' and tokens[at + 1].folded in _INTERVAL_FIELDS:
+        return at + 3 if tokens[at + 2].folded == 'to' else at + 1
+    if word == 'timestamp':
+        words = tuple(token.folded for token in tokens[at + 1 : at + 5])
+        for zone in _TIME_ZONES:
+            if words[: len(zone)] == zone:
+                return at + len(zone)
+    return at
+
+
+def _next(tokens: list[_Token], at: int) -> int:
+    r"""Where the token after the one at ``at`` is, past the type a ``::``,
+    ``?::`` or ``AS`` there introduces, read as the scan reads it, so a comma
+    in ``MAP<STRING, INT>`` separates nothing.
+    """
+    casts = tokens[at].text in ('::', '?::') or tokens[at].folded == 'as'
+    if casts and tokens[at + 1].kind == 'word':
+        return _type_end(tokens, at + 1) + 1
+    return at + 1
+
+
+def _arguments(tokens: list[_Token], at: int) -> int:
+    r"""How many arguments the call whose ``(`` is at ``at`` is given.
+
+    A type that runs past the call's ``)`` leaves the call unclosed, and the
+    scan refuses the expression whatever this counts.
+    """
+    commas, depth, end = 0, 0, _closing(tokens, at)
+    while at < end:
+        text = tokens[at].text
+        depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(text, 0)
+        commas += text == ',' and depth == 1
+        at = _next(tokens, at)
+    return commas + 1
+
+
+def _lambda_scopes(tokens: list[_Token]) -> list[tuple[int, int, set[str]]]:
+    r"""Each lambda's parameters, folded, with the tokens they are bound in:
+    from the parameters to the end of the lambda's argument, at the comma or
+    bracket after it. The next argument may be another lambda, as the
+    finish of ``aggregate`` is, which binds names of its own.
+    """
+    scopes: list[tuple[int, int, set[str]]] = []
+    for index, token in enumerate(tokens):
+        if token.text != '->' or index == 0:
+            continue
+        before = tokens[index - 1]
+        if before.text == ')':
+            depth, start = 0, index - 1
+            while start > 0:
+                depth += {')': 1, '(': -1}.get(tokens[start].text, 0)
+                if depth == 0:
+                    break
+                start -= 1
+            names = {
+                _folded_name(t) for t in tokens[start:index] if _folded_name(t)
+            }
+        else:
+            start, names = index - 1, {_folded_name(before)}
+        depth, end, at = 0, len(tokens) - 1, start
+        while at < len(tokens):
+            text = tokens[at].text
+            depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(text, 0)
+            if depth < 0 or (depth == 0 and text == ','):
+                end = at
+                break
+            at = _next(tokens, at)
+        scopes.append((start, end, names))
+    return scopes
+
+
+@dataclass
+class _Group:
+    r"""A bracket open while scanning, and what is open inside it."""
+
+    opener: str  # The word before it, folded, if any.
+    # Each CASE open, by what it last read: CASE, WHEN, THEN or ELSE.
+    cases: tuple[str, ...] = ()
+    frame: bool = False  # Whether a window's frame is being read.
+
+
+@dataclass
+class _State:
+    r"""What a scan carries from one token to the next."""
+
+    groups: list[_Group] = field(default_factory=lambda: [_Group('')])
+    operand: bool = True  # An operand is expected next.
+    name_next: bool = False  # A type, alias, collation or window comes.
+    after_is: bool = False  # Within `IS [NOT] ...`.
+    case_at: int = -1  # Where a CASE's subject or first WHEN stands.
+    by_at: int = -1  # Where the BY of `PARTITION BY` stands.
+    skip_to: int = -1  # The end of a type.
+
+    def taken(self) -> tuple[bool, bool, bool]:
+        r"""What the last token left expected, cleared for the next."""
+        left = self.operand, self.name_next, self.after_is
+        self.operand = self.name_next = self.after_is = False
+        return left
+
+    def copy(self) -> _State:
+        return replace(self, groups=[replace(g) for g in self.groups])
+
+    def trial(self) -> _State:
+        r"""A copy holding only the innermost group, which is all a trial to
+        the bracket's end reads, under an outermost one.
+        """
+        return replace(self, groups=[_Group(''), replace(self.groups[-1])])
+
+    def settled(self) -> bool:
+        r"""Whether the innermost group may end here, nothing left owed."""
+        return not (self.operand or self.name_next or self.groups[-1].cases)
+
+    def key(self) -> tuple[object, ...]:
+        r"""What a reading to the end of the current bracket depends on."""
+        flags = (v for k, v in vars(self).items() if k != 'groups')
+        return (*flags, *vars(self.groups[-1]).values())
+
+
+class _NameScan:
+    r"""Reads an expression's tokens in order, keeping whether an operand is
+    expected next, which decides whether a word names a value.
+
+    Where a word may open a form or be a column, as NOT, CASE and a CASE's
+    first WHEN may, Databricks' parser takes the form if the rest parses,
+    and so does the scan. A trial reads on as if the word opened the form,
+    to the end of its bracket, checking that each token may stand where it
+    does. Meeting another such word in that bracket, it takes the form and
+    comes back to read a column if the form fails; one in a deeper bracket
+    is a trial of its own. What a trial finds is kept by where it starts
+    and the state it starts in.
+    """
+
+    def __init__(self, tokens: list[_Token]) -> None:
+        self.end = len(tokens)
+        # Past the end, and so at index -1, stand tokens of no kind.
+        self.tokens = [*tokens, *[_Token('end', '', -1, -1)] * 4]
+        self.scopes = _lambda_scopes(self.tokens)
+        self.parsed: dict[tuple[object, ...], bool] = {}
+        # For each trial under way, the readings as a column left to try.
+        self.trials: list[list[tuple[int, _State, tuple[object, ...]]]] = []
+        # Past this many steps in all, or the deepest trial, the scan stops
+        # trying and keeps nothing more, and the expression is refused as
+        # unreadable. So a long expression is read in time linear in its
+        # length, and none is read wrong.
+        self.budget = _TRIAL_STEPS * (self.end + 1)
+        self.cut = False
+        self.parses = True  # Whether the whole expression parses.
+        # Where the bracket around each token closes, or the end.
+        around, closing, open_at = [], {-1: self.end}, [-1]
+        for index, token in enumerate(tokens):
+            if token.text in ')]' and len(open_at) > 1:
+                closing[open_at.pop()] = index
+            around.append(open_at[-1])
+            if token.text in '([':
+                open_at.append(index)
+        self.closes = [closing.get(at, self.end) for at in around]
+
+    def references(self) -> list[NameReference]:
+        state, found = _State(), list[NameReference]()
+        index = 0
+        while index < self.end:
+            index, parses = self._step(index, state, found)
+            self.parses = self.parses and parses
+        self.parses = self.parses and len(state.groups) == 1 and state.settled()
+        return found
+
+    def _parses(self, index: int, state: _State) -> bool:
+        r"""Whether the tokens from ``index`` to the end of the current
+        bracket parse, read from ``state``.
+        """
+        key = (index, *state.key())
+        if key in self.parsed:
+            return self.parsed[key]
+        if self.budget <= 0 or len(self.trials) >= _DEEPEST_TRIAL:
+            self.cut = True
+            return True  # Undecided: the expression will be refused.
+        columns: list[tuple[int, _State, tuple[object, ...]]] = []
+        self.trials.append(columns)
+        state = state.trial()
+        while not (parses := self._reads_on(index, state)) and columns:
+            index, state, form = columns.pop()
+            self._keep(form, False)
+        self.trials.pop()
+        for _, _, form in columns:
+            self._keep(form, True)  # Each form taken on the way parsed.
+        self._keep(key, parses)
+        return parses
+
+    def _keep(self, key: tuple[object, ...], parses: bool) -> None:
+        if not self.cut:
+            self.parsed[key] = parses
+
+    def _reads_on(self, index: int, state: _State) -> bool:
+        r"""Whether every token from ``index`` to the end of the current
+        bracket may stand where it does, read from ``state``.
+        """
+        while index < self.end and len(state.groups) > 1:
+            known = self.parsed.get((index, *state.key()))
+            if known is not None and (not known or len(state.groups) == 2):
+                return known  # Read from here before, from this state.
+            if known:
+                # The rest of this deeper bracket parses: go on after it.
+                index = self.closes[index] + 1
+                state.groups.pop()
+                state.operand = state.name_next = state.after_is = False
+                continue
+            if self.budget <= 0:
+                self.cut = True
+                return True
+            self.budget -= 1
+            index, parses = self._step(index, state, None)
+            if not parses:
+                return False
+        # A `)` checks its own group as it closes it.
+        return len(state.groups) == 1 or state.settled()
+
+    def _step(
+        self, index: int, state: _State, found: list[NameReference] | None
+    ) -> tuple[int, bool]:
+        r"""Reads the token or name at ``index``, adding a name read as a
+        value to ``found``. Returns where the next starts, and whether what
+        was read may stand where it does.
+        """
+        tokens = self.tokens
+        if index <= state.skip_to:
+            return index + 1, True
+        if tokens[index].kind not in _NAME_KINDS:
+            if found is not None and self._star(index, state):
+                found.append(
+                    NameReference(
+                        ('*',), (tokens[index].start, tokens[index].end), False
+                    )
+                )
+            return index + 1, self._punctuation(index, state)
+        last = index
+        while (
+            tokens[last + 1].text == '.'
+            and tokens[last + 2].kind in _NAME_KINDS
+        ):
+            last += 2
+        if tokens[last + 1].text == '.' and tokens[last + 2].text == '*':
+            last += 2  # `t.*`, every column of `t`.
+        value, parses = self._read_name(index, last, state)
+        if value and found is not None:
+            found.append(
+                NameReference(
+                    tuple(_unquoted(t) for t in tokens[index : last + 1 : 2]),
+                    (tokens[index].start, tokens[last].end),
+                    last == index and tokens[index].kind == 'word',
+                )
+            )
+        return last + 1, parses
+
+    def _star(self, index: int, state: _State) -> bool:
+        r"""Whether the token at ``index`` is a ``*`` reading every column,
+        as in ``struct(*)``. ``COUNT(*)`` counts rows instead.
+        """
+        tokens = self.tokens
+        if tokens[index].text != '*' or not state.operand:
+            return False
+        return not (
+            state.groups[-1].opener == 'count'
+            and tokens[index - 1].text == '('
+            and tokens[index + 1].text == ')'
+        )
+
+    def _punctuation(self, index: int, state: _State) -> bool:
+        r"""Reads the token at ``index``, no name, and says whether it may
+        stand where it does.
+        """
+        token, previous = self.tokens[index], self.tokens[index - 1]
+        text, operand = token.text, state.operand
+        state.name_next, state.after_is = text in ('::', '?::'), False
+        if text in '([':
+            state.groups.append(_Group(previous.folded))
+            state.operand = True
+            return operand or text == '['
+        if text in ')]':
+            closed = len(state.groups) > 1 and not state.groups.pop().cases
+            state.operand = False
+            return closed and (not operand or previous.text == '(')
+        if token.kind in ('number', 'string'):
+            state.operand = False
+            # `INTERVAL 1 YEAR 2 MONTHS` gives a value after each unit.
+            return operand or previous.folded in _DATETIME_UNITS
+        if text in '+-~' or (text == '*' and operand):
+            state.operand = text != '*'  # A sign, or COUNT(*).
+            return True
+        if (
+            previous.end == token.start
+            and previous.text + text in _OPERATOR_PAIRS
+        ):
+            return True  # The second half of an operator.
+        if text == '!' and self.tokens[index + 1].text != '=':
+            return operand  # Not, as in `!x`.
+        state.operand = True
+        return not operand  # An operator after an operand, or a comma.
+
+    def _follows(self, word: str, state: _State, at: int) -> bool:
+        r"""Whether ``word`` at ``at`` may stand right after an operand."""
+        group, before = state.groups[-1], self.tokens[at - 1]
+        after = self.tokens[at + 1].folded
+        if word in _CASE_STEPS:
+            return bool(group.cases) and group.cases[-1] in _CASE_STEPS[word]
+        if word in ('preceding', 'following', 'row'):
+            return group.frame
+        if word in _FOLLOWED_BY:
+            return after in _FOLLOWED_BY[word]
+        if word == 'nulls':
+            return after in ('first', 'last') or before.folded in (
+                'ignore',
+                'respect',
+            )
+        if word in ('first', 'last'):
+            return before.folded == 'nulls'
+        if word == 'to':
+            return before.folded in _DATETIME_UNITS
+        if word in _DATETIME_UNITS:
+            # `INTERVAL 1 DAY`, `'1' DAY TO HOUR`, `INTERVAL (n) DAYS`.
+            return (
+                before.kind in ('number', 'string')
+                or before.text == ')'
+                or before.folded == 'to'
+                or self.tokens[at - 2].folded == 'interval'
+            )
+        if word in _TAKE_AN_OPERAND or word in ('asc', 'desc'):
+            return True
+        return self._implicit_alias(at, state)
+
+    def _implicit_alias(self, at: int, state: _State) -> bool:
+        r"""Whether the name at ``at``, right after an operand, is an alias
+        STRUCT takes without AS: ``struct(x a, y `b c`)``.
+        """
+        alias = self.tokens[at + 1].text in (',', ')')
+        return alias and state.groups[-1].opener == 'struct'
+
+    def _from_follows(self, at: int) -> bool:
+        r"""Whether a FROM follows the token at ``at`` in its own bracket."""
+        depth = 0
+        for token in self.tokens[at + 1 : self.closes[at]]:
+            depth += {'(': 1, ')': -1, '[': 1, ']': -1}.get(token.text, 0)
+            if depth == 0 and token.folded == 'from':
+                return True
+        return False
+
+    def _names_a_field(self, at: int, state: _State) -> bool:
+        r"""Whether the name at ``at``, first in its call, is the field of
+        ``EXTRACT(DOW FROM d)`` or the unit of ``dateadd(DAY, 1, d)``. Either
+        may be quoted, and as Databricks' parser, which refuses a unit it
+        does not know only later, any lone name there is one.
+
+        A qualified name calls a function someone wrote, never the builtin,
+        so nothing in its call is a field or a unit, as for a cast.
+        """
+        opener = state.groups[-1].opener
+        if self.tokens[at - 1].text != '(':
+            return False
+        if self.tokens[at - 3].text == '.':
+            return False
+        if opener == 'extract':
+            return True
+        three = opener in _UNIT_FIRST_OF_THREE
+        unit_first = opener in _UNIT_FIRST or (
+            three and _arguments(self.tokens, at - 1) == 3
+        )
+        return unit_first and self.tokens[at + 1].text == ','
+
+    def _read_name(
+        self, index: int, last: int, state: _State
+    ) -> tuple[bool, bool]:
+        r"""Reads the name at ``index`` to ``last``, and says whether it is
+        read as a value and whether it may stand where it does.
+        """
+        tokens, group = self.tokens, state.groups[-1]
+        previous, after = tokens[index - 1], tokens[last + 1]
+        word = tokens[index].folded if index == last else ''
+        name = _folded_name(tokens[index]) if index == last else ''
+        operand, name_next, after_is = state.taken()
+        if previous.text in ('.', ':'):
+            return False, True  # A field or a JSON path's step.
+        if name_next:
+            if (end := _type_end(tokens, last)) > last:
+                state.skip_to = end
+            return False, True
+        if after.text == '(' and operand:
+            # `NOT (x)` and `CASE (x) WHEN` open forms, and others call.
+            self._opens_a_form(index, word, state, after_is)
+            state.operand = True
+            return False, True
+        if after.text == '=>':
+            return False, operand  # A named argument.
+        if name and any(
+            s <= index <= e and name in n for s, e, n in self.scopes
+        ):
+            return False, operand  # A lambda's parameter.
+        if not word:
+            # Quoted or qualified: a value, but for a quoted field, unit or
+            # alias, as in ``EXTRACT(`DOW` FROM d)``.
+            if (
+                tokens[index].kind == 'quoted'
+                and index == last
+                and (
+                    self._names_a_field(index, state)
+                    if operand
+                    else self._implicit_alias(last, state)
+                )
+            ):
+                return False, True
+            return True, operand
+        if index == state.by_at:
+            state.operand = True
+            return False, True
+        if after.folded == 'by' and (
+            word == 'order' or (word in _WINDOW_BY and group.opener == 'over')
+        ):
+            # After an operand, or first in `OVER (`.
+            state.by_at = last + 1
+            return False, not operand or previous.text == '('
+        if operand:
+            return not self._opens_a_form(index, word, state, after_is), True
+        if word == 'except' and previous.text == '*' and after.text == '(':
+            # The columns `* EXCEPT (...)` leaves out are read as no value.
+            state.skip_to = _closing(tokens, last + 1)
+            return False, True
+        # Right after an operand: an operator or a clause's word.
+        parses = self._follows(word, state, index)
+        state.operand = word in _TAKE_AN_OPERAND
+        state.name_next = word in _TAKE_A_NAME
+        state.after_is = word == 'is'
+        group.frame = group.frame or word in ('rows', 'range')
+        if word == 'end':
+            group.cases = group.cases[:-1]
+        elif word in _CASE_STEPS and group.cases:
+            group.cases = (*group.cases[:-1], word)
+        return False, parses
+
+    def _opens_a_form(
+        self, index: int, word: str, state: _State, after_is: bool
+    ) -> bool:
+        r"""Whether ``word``, where an operand is expected, is grammar,
+        moving ``state`` on past it.
+        """
+        form = self._fixed_form(index, word, state, after_is)
+        return self._tried_form(index, word, state) if form is None else form
+
+    def _fixed_form(
+        self, index: int, word: str, state: _State, after_is: bool
+    ) -> bool | None:
+        r"""Whether ``word`` at ``index`` is grammar by where it stands, or
+        ``None`` if a trial decides.
+        """
+        group, tokens = state.groups[-1], self.tokens
+        after, opens = tokens[index + 1], tokens[index - 1].text == '('
+        if word in _LITERAL_WORDS:
+            return True
+        if after_is and word in _AFTER_IS:
+            state.after_is = word in ('not', 'distinct')
+            state.operand = word in ('not', 'distinct', 'from')
+            return True
+        if group.frame and word in _FRAME_WORDS:
+            state.operand = word == 'between'
+            return True
+        if self._names_a_field(index, state):
+            return True
+        if opens and group.opener == 'trim' and word in _TRIM_SIDES:
+            # `TRIM(BOTH FROM s)`, `TRIM(BOTH from FROM s)`, and `TRIM(both)`
+            # and `TRIM(both < x)`, which have no FROM. In `TRIM(BOTH FROM
+            # from)` no operand follows the second `from`.
+            form = self._from_follows(index)
+            third = tokens[index + 3]
+            column = tokens[index + 2].folded == 'from' and (
+                third.kind in (*_NAME_KINDS, 'number', 'string')
+                or third.text in ('(', '+', '-', '~')
+            )
+            state.operand = form and (after.folded != 'from' or column)
+            return form
+        if opens and group.opener == 'over' and word in ('rows', 'range'):
+            if after.folded in _FRAME_STARTS or after.kind == 'number':
+                group.frame = state.operand = True
+                return True
+        if word == 'interval':
+            # `INTERVAL 1 DAY` and `INTERVAL -1 DAY`, where `interval - 1`
+            # and `interval ASC` read a column.
+            signed = after.text in ('+', '-')
+            value = signed or (
+                after.kind == 'word' and after.folded not in _TAKE_AN_OPERAND
+            )
+            unit = tokens[index + 2 + signed].folded in _DATETIME_UNITS
+            state.operand = (
+                after.kind in ('number', 'string')
+                or after.text == '('
+                or (value and unit)
+            )
+            return state.operand
+        if word == 'where':
+            # FILTER takes a WHERE, and nothing else does.
+            state.operand = opens and group.opener == 'filter'
+            return state.operand
+        if word in _TYPED_LITERALS and after.kind == 'string':
+            state.operand = True
+            return True
+        return None
+
+    def _tried_form(self, index: int, word: str, state: _State) -> bool:
+        r"""Whether ``word`` at ``index``, which may open a form or be a
+        column, opens the form: whether what follows then parses.
+        """
+        form = state.trial()
+        inner = form.groups[-1]
+        if word == 'when' and index == state.case_at:
+            # A searched CASE's first WHEN, or a subject named `when`.
+            inner.cases = (*inner.cases[:-1], 'when')
+        elif word == 'case':
+            inner.cases, form.case_at = (*inner.cases, 'case'), index + 1
+        elif word != 'not' and not (
+            word in ('all', 'distinct')
+            and self.tokens[index - 1].text == '('
+            and inner.opener not in _NO_CALL_OPENERS
+        ):
+            return False
+        form.operand = True
+        if self.trials and len(state.groups) == 2:
+            # In the bracket this trial reads to the end of: take the form,
+            # and keep the column to come back to.
+            column = (index + 1, state.copy(), (index + 1, *form.key()))
+            self.trials[-1].append(column)
+        elif not self._parses(index + 1, form):
+            return False
+        state.groups[-1].cases, state.case_at = inner.cases, form.case_at
+        state.operand = True
+        return True
+
+
+def name_references(expr: str) -> list[NameReference]:
+    r"""The names a Databricks expression reads as values.
+
+    That leaves out a function's name, a type, a keyword where it is
+    grammar, a datetime unit, a named argument, a lambda's parameter and a
+    JSON path step, so a word of the grammar is never read as a column or a
+    parameter. Where a word stands decides which it is, as it does for
+    Databricks: in ``SUM(x) OVER (PARTITION BY range)`` the ``range`` is a
+    column, and in ``col REGEXP 'x'`` the ``REGEXP`` is an operator.
+
+    An expression that does not parse as the scan reads SQL is refused,
+    since a failed reading of a form makes its word a column: an unknown
+    clause late in the expression would turn an earlier ``NOT`` into one.
+
+    Raises:
+        UnreadableExpressionError: If the expression does not parse as the
+            scan reads SQL, or brackets nest too deeply, or it is too long,
+            to settle which words are names.
+    """
+    tokens = [token for token in _lex(expr) if token.kind != 'comment']
+    scan = _NameScan(tokens)
+    references = scan.references()
+    if scan.cut:
+        raise UnreadableExpressionError(
+            'it is too deeply nested or too long to read safely'
+        )
+    if not scan.parses:
+        raise UnreadableExpressionError(
+            'it has syntax that is not understood, so which of its words '
+            'name columns cannot be settled'
+        )
+    return references
+
+
+def _folded_name(token: _Token) -> str:
+    r"""The folded name ``token`` gives, quoted or not, or ``''``."""
+    return _unquoted(token).lower() if token.kind in ('word', 'quoted') else ''
+
+
+def _unquoted(token: _Token) -> str:
+    if token.kind == 'quoted':
+        quote = token.text[0]
+        return token.text[1:-1].replace(quote * 2, quote)
+    return token.text

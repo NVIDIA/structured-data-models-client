@@ -326,14 +326,21 @@ A `metric_view=` argument on `from_source` would put one vendor's word on the on
 The engine turns the view into its graph: the source becomes a table named as it is in the catalog, each join a table named after the join, each dimension a column of the table it reads, and each join a relationship to the key it names.
 An expression dimension stays an expression, computed in the warehouse when the table is sampled, so `materialize()` rebuilds the tables from the view and then keeps only what the schema kept.
 Measures are aggregations rather than row values and are left out; a predictive query states the aggregation it asks about.
+The columns a measure over one table aggregates are added to that table, and a conversion note names the aggregation matching each simple measure, so `revenue` can be asked as `SUM(order_lines.LineTotal, 0, 30, days)`.
+A wildcard dimension such as `source.* EXCEPT (rowguid)` becomes the columns it stands for, as Databricks expands it.
+A dimension truncating or casting a date stands for the column it truncates when the time column is chosen, so windows count days, not months.
+A join whose table cannot be read, or whose key repeats, is left out with the tables and dimensions hanging off it; only a source table that cannot be read fails the conversion.
 A model is written by someone else, and its expressions run under the caller's credentials each time a request is gathered, so by default they may call only pure, deterministic built-in functions, from an allowlist per dialect.
-A column calling a user-defined function, `secret()`, `http_request()` or `SYSTEM$WAIT()` is left out with a message, and `trust_expressions=True` keeps it; sub-queries, comments and statement separators are refused either way.
+A column calling a user-defined function, `secret()`, `http_request()` or `SYSTEM$WAIT()` is left out with a message, and `trust_expressions=True` keeps it; sub-queries and statement separators are refused either way.
+A comment in a metric view is removed first, as Databricks drops it, and one in a Snowflake semantic view is refused.
 Allowed is not the same as cheap or fixed.
 Some allowed built-ins can build large values from small inputs and so cost the warehouse time and memory: `repeat`, `space`, `lpad`, `rpad`, `array_repeat` and `sequence` on Databricks, and `repeat`, `space` and `array_generate_range` on Snowflake.
 Others read the session's time zone, so their results can differ between two sessions reading the same rows: `from_unixtime`, `date_format`, `to_timestamp`, `convert_timezone` with two arguments, and the `*_ltz` functions.
 Both kinds stay allowed, since views use them for ordinary columns, so review a model's expressions for them when its author is not your own team.
 A metric view's `filter` decides which rows it holds, so it is applied to the source table on every read rather than dropped.
 A filter on a joined table cannot be, and the view is refused: create a regular view with that `WHERE` clause and point the metric view's source at it.
+A parameter the filter or a dimension references is read as its default, as a query of the view without arguments reads it; a filter on one with no default refuses the view.
+Besides the unit tests, metric views are converted live by an opt-in test that creates eight variants over AdventureWorks in the schema `SDM_MV_TEST_SCHEMA` names, and drops them again.
 A Snowflake semantic view goes through the same path, read by the engine's own semantic-view support; it is tested against a fake connection, not yet against a Snowflake account.
 
 ---

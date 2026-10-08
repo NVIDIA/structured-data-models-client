@@ -856,9 +856,17 @@ class Table(ABC):
 
         return self
 
-    def _infer_time_column_among(self, candidates: list[str]) -> str | None:
+    def _infer_time_column_among(
+        self, candidates: list[str], *, warn: bool = True
+    ) -> str | None:
         r"""Set the time column inferred among ``candidates``, keeping how it
         was chosen and what was refused, and return it.
+
+        Args:
+            candidates: The columns to choose among.
+            warn: Whether to warn, as a :class:`TimeColumnWarning`, of a
+                time column taken on the rows read alone.
+                :attr:`time_column_choice` says it either way.
         """
         df = self._get_sample_df()
         # Only a capped read can hide a second value past its last row.
@@ -872,7 +880,7 @@ class Table(ABC):
             self.time_column = time_column
         self._time_column_inferred = True
         for doubt in self._time_column_choice.unconfirmed:
-            if doubt.column == time_column:
+            if doubt.column == time_column and warn:
                 warnings.warn(
                     taken_unchecked(
                         self.name,
@@ -1127,9 +1135,44 @@ class Table(ABC):
 
             return ser
 
+        import pyarrow as pa
+
+        def _from_decimal(ser: pd.Series, dtype: Dtype | None) -> pd.Series:
+            r"""A decimal column as the number or string its data type says.
+
+            A warehouse reads a `DECIMAL(38, 0)` key as a decimal, which no
+            type inference takes, though its data type says integer. Only a
+            column whose data type is unset, an integer or a float is read as
+            a number, an integer where it says so, or where unset and the
+            scale is 0, and one that does not fit 64 bits is left as it is.
+            One declared a string, such as a `DECIMAL(38, 0)` identifier, is
+            read as the exact digits, since a float holds only about 16 of
+            them. Any other column is left as it is.
+            """
+            arrow_type = ser.dtype.pyarrow_dtype
+            if dtype is None:
+                target = pa.int64() if arrow_type.scale == 0 else pa.float64()
+            elif dtype.is_int():
+                target = pa.int64()
+            elif dtype.is_float():
+                target = pa.float64()
+            elif dtype == Dtype.string:
+                target = pa.string()
+            else:
+                return ser
+            try:
+                return ser.astype(pd.ArrowDtype(target))
+            except (ValueError, TypeError, ArithmeticError):
+                return ser
+
         for column_name in df.columns:
             dtype = (dtype_dict or {}).get(column_name)
             stype = (stype_dict or {}).get(column_name)
+
+            if isinstance(
+                df[column_name].dtype, pd.ArrowDtype
+            ) and pa.types.is_decimal(df[column_name].dtype.pyarrow_dtype):
+                df[column_name] = _from_decimal(df[column_name], dtype)
 
             if dtype == Dtype.time or stype == Stype.timestamp:
                 df[column_name] = to_datetime(df[column_name], column_name)
