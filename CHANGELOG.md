@@ -21,7 +21,7 @@ of the others.
 - Connectors for SQLite, DuckDB, PostgreSQL, Lakebase, Snowflake, Databricks,
   local CSV and Parquet, and S3.
 - Conversion of a Databricks metric view and a Snowflake semantic view into a
-  schema, including the view's filter, and guarded evaluation of the
+  schema, including the metric view's filter, and guarded evaluation of the
   expressions a view's author wrote.
 - `SDMClient.for_databricks_serving(endpoint)` for a model served on Databricks,
   with `warehouse()` and `lakebase()` for the SQL warehouse and Lakebase.
@@ -45,6 +45,43 @@ of the others.
 They pin each other by exact version and are upgraded together.
 `predictive_query` is an internal dependency: write predictive queries through
 `sdm_client.PredictiveQuery`.
+
+### Behaviour worth knowing before you rely on it
+
+**`materialize()` takes the model it is gathering for.** It does not infer one.
+
+**`id` holds the key you asked about, on both models.**
+
+**A schema infers a time column by rule, not by name alone.** A timestamp
+empty in more than half the rows, or holding one value wherever it holds any,
+is never taken, nor is one named for when a row was loaded or synced, nor a
+date of birth. A last-edit stamp such as `ModifiedDate` is never taken on a
+table another table links to, and on a table nothing links to only when it is
+the one timestamp left. Of several left, a `created` stamp wins, otherwise the
+one whose values start earliest, placeholder dates such as 1900-01-01 and
+1970-01-01 ignored. Pass `time_columns=` to decide it yourself.
+
+**A `DECIMAL` column travels as the number it is, and a fractional one
+rounds.** A whole-number decimal is sent as `int64`, one too wide for `int64`
+as its digits in a string, and a fractional one as `float64`, which rounds.
+Above 2**53 a float cannot hold even the integer part, so the value is refused
+rather than quietly mangled. Send the column as strings to keep a fractional
+decimal exactly.
+
+**A CSV or Parquet column with blanks keeps its type instead of becoming
+`float64`.** That is what stops an identifier above 2**53 being rounded on the
+way in.
+
+**`Schema.from_source` checks every key against every row**, so a schema may
+warn or raise where the keys do not hold.
+
+**A semantic model's expressions may call only standard SQL functions**,
+unless you pass `trust_expressions=True`.
+
+**`predictive_query` is not public API.** Write predictive queries through
+`sdm_client.PredictiveQuery`.
+
+**Nothing public hands out a type that is not public.**
 
 ### Compatibility
 
