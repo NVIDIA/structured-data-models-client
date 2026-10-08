@@ -5,9 +5,14 @@
 import warnings
 from datetime import timedelta, timezone
 
+import numpy as np
 import pandas as pd
 import pytest
-from sdm_relational_engine.rfm.base.utils import Timestamp, to_datetime
+from sdm_relational_engine.rfm.base.utils import (
+    Timestamp,
+    random_state,
+    to_datetime,
+)
 
 
 def test_timestamp() -> None:
@@ -66,3 +71,29 @@ def test_to_datetime_does_not_warn_about_already_null_values() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         assert to_datetime(ser, 'TS').isna().tolist() == [False, True, True]
+
+
+@pytest.mark.parametrize('seed', [0, 1, 42, 2**31, 2**32 - 1])
+def test_random_state_of_a_32_bit_seed_is_the_seed_itself(seed: int) -> None:
+    expected = np.random.RandomState(seed).randint(0, 2**31, size=8)
+    assert np.array_equal(
+        random_state(seed).randint(0, 2**31, size=8), expected
+    )
+
+
+def test_random_state_of_a_larger_seed_uses_its_32_bit_words() -> None:
+    seed = 2**32 + 7 + (3 << 64)
+    words = np.array([7, 1, 3], dtype=np.uint32)
+    expected = np.random.RandomState(words).randint(0, 2**31, size=8)
+    assert np.array_equal(
+        random_state(seed).randint(0, 2**31, size=8), expected
+    )
+    # Distinct seeds past 2**32 give distinct streams:
+    assert not np.array_equal(
+        random_state(2**32).randint(0, 2**31, size=8),
+        random_state(2**33).randint(0, 2**31, size=8),
+    )
+
+
+def test_random_state_without_a_seed_is_unseeded() -> None:
+    assert isinstance(random_state(None), np.random.RandomState)

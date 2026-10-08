@@ -977,9 +977,9 @@ class KumoRelational:
                 1. Increase this when strict entity filters require
                 :class:`KumoRelational` to sample more entities for valid
                 labels.
-            random_seed: Pseudo-random seed. The :obj:`"sqlite"` and
-                :obj:`"snowflake"` backends cannot seed random row sampling and
-                warn once when given a seed. :obj:`None` resamples every batch,
+            random_seed: Pseudo-random seed. The :obj:`"snowflake"` backend
+                cannot seed random row sampling and warns once when given a
+                seed. :obj:`None` resamples every batch,
                 preventing the shared-context session otherwise used for a
                 multi-batch prediction. Each batch then re-uploads all context.
             verbose: Whether to print verbose output.
@@ -1637,8 +1637,8 @@ class KumoRelational:
             random_seed: A manual seed for neighborhood sampling. Reusing a
                 seed produces the same sampled local neighborhoods for the
                 same graph, ordered task rows, batching, and options. The
-                :obj:`"sqlite"` and :obj:`"snowflake"` backends cannot seed
-                their random row sampling and warn once when a seed is given.
+                :obj:`"snowflake"` backend cannot seed its random row sampling
+                and warns once when a seed is given.
                 Passing :obj:`None` re-samples neighborhoods for every batch,
                 which rules out the shared-context session a multi-batch
                 prediction otherwise opens, so each batch re-uploads the full

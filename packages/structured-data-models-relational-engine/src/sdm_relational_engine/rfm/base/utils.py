@@ -5,6 +5,7 @@
 import warnings
 from typing import Any, Literal, cast
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 
@@ -175,3 +176,33 @@ def date_offset_to_seconds(
             total_sec += scaled_value
 
     return total_sec
+
+
+_SEED_WORD = 2**32
+
+
+def random_state(random_seed: int | None) -> np.random.RandomState:
+    r"""The random stream a ``random_seed`` stands for, for a draw made here.
+
+    A draw the database cannot seed itself is made from numpy's legacy MT19937
+    generator, :class:`numpy.random.RandomState`, whose streams NEP 19
+    freezes: a seed gives the same numbers in every numpy release. Today that
+    is the seeded SQLite entity-table sample, whose hash coefficients are drawn
+    from a stream of ``random_seed`` of its own.
+
+    A seed below ``2**32`` seeds the stream directly, as
+    ``RandomState(random_seed)``. A larger one, which ``RandomState`` cannot
+    take as a number, seeds it with its 32-bit words, least significant
+    first. ``None`` draws a fresh seed from the operating system.
+
+    Args:
+        random_seed: The seed, a whole number from 0 upwards, or ``None``.
+    """
+    if random_seed is None or random_seed < _SEED_WORD:
+        return np.random.RandomState(random_seed)
+    words: list[int] = []
+    rest = int(random_seed)
+    while rest > 0:
+        words.append(rest % _SEED_WORD)
+        rest //= _SEED_WORD
+    return np.random.RandomState(np.array(words, dtype=np.uint32))

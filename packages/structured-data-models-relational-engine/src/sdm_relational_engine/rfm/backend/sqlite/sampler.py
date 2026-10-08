@@ -15,7 +15,7 @@ from sdm_connectors import quote_ident
 
 from sdm_relational_engine.rfm.backend.sqlite import SQLiteTable
 from sdm_relational_engine.rfm.base import DataBackend, SQLSampler, Table
-from sdm_relational_engine.rfm.base.utils import Timestamp
+from sdm_relational_engine.rfm.base.utils import Timestamp, random_state
 from sdm_relational_engine.rfm.query.pandas_executor import PQueryPandasExecutor
 from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
@@ -58,6 +58,39 @@ _STORED_TIME = re.compile(
     r'^\d{4}-\d{2}-\d{2}([T ])\d{2}:\d{2}:\d{2}(?:\.(\d+))?(.*)$'
 )
 _UTC_SUFFIXES = frozenset({'', 'Z', '+00:00', '+0000'})
+
+
+# The modulus of the seeded row order: a prime, so the hash below is a
+# polynomial over a field, and below 2**31, so a product of two residues stays
+# inside SQLite's 64-bit integers.
+_HASH_PRIME = 2**31 - 1
+
+
+def _seeded_hash(random_seed: int, ref: str) -> str:
+    r"""A hash of the integer ``ref`` that shuffles rows, repeatably for a seed.
+
+    SQLite's ``RANDOM()`` takes no seed, so ``ORDER BY RANDOM()`` drew a
+    different sample on every call. Rows are ordered by this hash instead: a
+    cubic polynomial modulo a prime, whose four coefficients are drawn from
+    ``random_state(random_seed)``. Over uniform coefficients such a polynomial
+    hashes any four distinct values below the prime independently and
+    uniformly, so the rows that hash lowest are spread over the table like a
+    random draw, and a different seed draws different ones. It is not an
+    exactly uniform draw of every larger set of rows, which no family of
+    hashes this small gives.
+
+    Args:
+        random_seed: The seed the coefficients are drawn from.
+        ref: The integer to hash, a key column or ``rowid``.
+    """
+    p = _HASH_PRIME
+    c0, c1, c2, c3 = (
+        int(c) for c in random_state(random_seed).randint(0, p, size=4)
+    )
+    x = f'(({ref} % {p} + {p}) % {p})'
+    return (
+        f'(((({c3} * {x} + {c2}) % {p}) * {x} + {c1}) % {p} * {x} + {c0}) % {p}'
+    )
 
 
 class SQLiteSampler(SQLSampler):
@@ -265,6 +298,32 @@ class SQLiteSampler(SQLSampler):
 
         return out_dict
 
+    def _seeded_order_by(self, table_name: str, random_seed: int) -> str:
+        r"""The ``ORDER BY`` of a seeded entity draw.
+
+        An integer primary key is hashed, so the draw follows the data alone;
+        rows sharing a key, which a key the source does not enforce allows,
+        are then taken in ``rowid`` order. SQLite has no hash of a string, so
+        a table with another kind of key hashes its ``rowid`` instead: the
+        draw then follows the physical row ids, which ``VACUUM`` may renumber
+        unless the key is the table's ``INTEGER PRIMARY KEY``, and so is the
+        rowid itself.
+
+        Args:
+            table_name: The table being sampled.
+            random_seed: The seed of the draw.
+        """
+        key = self.primary_key_dict[table_name]
+        source = self.source_table_dict[table_name].get(key)
+        dtype = source.dtype if source is not None else None
+        if dtype is None:
+            dtype = self.table_dtype_dict[table_name].get(key)
+        if dtype is not None and dtype.is_int():
+            key_ref = self.table_column_ref_dict[table_name][key]
+            hashed = _seeded_hash(random_seed, key_ref)
+            return f'{hashed}, {key_ref}, rowid'
+        return f'{_seeded_hash(random_seed, "rowid")}, rowid'
+
     def _sample_entity_table(
         self,
         table_name: str,
@@ -273,10 +332,6 @@ class SQLiteSampler(SQLSampler):
         random_seed: int | None = None,
         entity_ids: list | None = None,
     ) -> pd.DataFrame:
-        # NOTE SQLite does not natively support passing a `random_seed`.
-        if entity_ids is None:
-            self._warn_random_seed_unsupported(random_seed)
-
         source_table = self.source_table_dict[table_name]
         filters: list[str] = []
 
@@ -313,8 +368,11 @@ class SQLiteSampler(SQLSampler):
         )
         if len(filters) > 0:
             sql += f'\nWHERE{" AND".join(filters)}'
-        if entity_ids is None:
+        if entity_ids is None and random_seed is None:
             sql += f'\nORDER BY RANDOM() LIMIT {num_rows}'
+        elif entity_ids is None:
+            order_by = self._seeded_order_by(table_name, random_seed)
+            sql += f'\nORDER BY {order_by} LIMIT {num_rows}'
 
         with self._connection.cursor() as cursor:
             # NOTE This may return duplicate primary keys. This is okay.
