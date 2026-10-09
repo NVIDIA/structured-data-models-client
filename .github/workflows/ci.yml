@@ -126,13 +126,15 @@ jobs:
         with:
           workspaces: rust
       # As the runner's user, so the cache can read rust/target afterwards,
-      # with the runner's crate registry, which the cache restores.
+      # in a home the runner made, so that user can write it, holding the
+      # runner's crate registry, which the cache restores.
       - name: Build the wheels in manylinux2014
         run: |
-          mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git"
+          home="$RUNNER_TEMP/manylinux-home"
+          mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$home/.cargo/registry" "$home/.cargo/git"
           docker run --rm --user "$(id -u):$(id -g)" \
             -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
-            -v "$PWD:/io" -w /io \
+            -v "$home:/tmp/home" -v "$PWD:/io" -w /io \
             -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
             -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
             "$MANYLINUX" bash -euo pipefail -c '
