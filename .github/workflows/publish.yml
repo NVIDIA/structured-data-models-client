@@ -2,21 +2,27 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Publishing to PyPI, without a credential that can be stolen.
+# Publishing to PyPI, without a stored credential.
 #
-# There is no API token anywhere in this workflow or in the repository's
-# secrets. PyPI's Trusted Publishing exchanges this job's OIDC identity for a
-# short-lived, single-use upload token, and the same identity signs a PEP 740
-# attestation that a consumer can verify back to this repository. A token in a
-# secret proves that whoever holds it can upload; an attestation proves the
-# upload came from a publisher this repository authorized. It does not pin the
-# workflow or the tag: the verifier takes those from PyPI's own provenance and
-# cross-checks only the repository, so a second Trusted Publisher configured
-# here would verify just as cleanly.
+# There is no API token in this workflow or in the repository's secrets. PyPI's
+# Trusted Publishing exchanges this job's OIDC identity for a PyPI token minted
+# on the spot and good for about fifteen minutes, which the upload then uses
+# for every file. That token is worth stealing while it lives; what does not
+# exist is a long-lived one sitting in a secret for anyone who ever gets read
+# access to it.
 #
-# The release runs in two jobs on purpose. `build` has no privileges and no
-# id-token, so a compromised build dependency cannot reach the publishing
-# identity; `publish` has the identity and runs nothing but the upload action.
+# The same identity signs a PEP 740 attestation that a consumer can verify back
+# to this repository. An attestation proves the upload came from a publisher
+# this repository authorized. It does not pin the workflow or the tag: the
+# verifier takes those from PyPI's own provenance and cross-checks only the
+# repository, so a second Trusted Publisher configured here would verify just
+# as cleanly.
+#
+# `publish` is the only job that can reach the publishing identity, because it
+# is the only one with `id-token: write`. `build` has `contents: read` to check
+# the tree out and `actions: read` to ask whether CI passed, and nothing more,
+# so a compromised build dependency cannot publish. `verify` and `attach-sbom`
+# run after the upload and need neither.
 name: publish
 
 on:
@@ -232,8 +238,12 @@ jobs:
       # the job holding `id-token: write`. The trust boundary is therefore the
       # pypa organization, not just the commit above. Writing the upload by
       # hand to avoid it would put less-reviewed code in the same place, which
-      # is the worse trade. Recorded here so nobody reads the digests above and
-      # concludes that everything the release executes is immutable.
+      # is the worse trade, and there is no supported way to pin the digest
+      # without forking the action. Recorded here so nobody reads the digests
+      # above and concludes that everything the release executes is immutable.
+      # What this does not leave unguarded is the bytes: the `verify` job below
+      # checks what PyPI attested against the artifacts `build` produced, so an
+      # image that altered a distribution on its way to the index fails there.
       - name: Publish with Trusted Publishing and attest the artifacts
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
@@ -244,16 +254,25 @@ jobs:
   # run before anyone installs them, because an attestation is only on the
   # index once the upload is done; what it catches is a release whose
   # signatures are wrong, while the release is still minutes old and whoever
-  # cut it is still watching. This runs the command SECURITY.md gives
-  # consumers, against the index they install from.
+  # cut it is still watching.
   #
-  # What it establishes is narrower than it looks, and the prose elsewhere is
-  # written to match: a PEP 740 attestation proves these exact bytes were
-  # published by a Trusted Publisher of this repository and have not been
-  # altered since. It is not build provenance, and `--repository` is the only
-  # constraint the verifier accepts. The workflow filename in the attestation
-  # comes from PyPI's own provenance rather than from anything asserted here,
-  # so this does not distinguish one workflow in this repository from another.
+  # It checks the files `build` produced, not copies fetched back from PyPI.
+  # The verifier takes either, and the difference matters here: the provenance
+  # always comes from PyPI, so handing it the local artifact asks whether what
+  # PyPI attested is byte-for-byte what this workflow built. Handing it
+  # `pypi:<name>` would download the attested file and compare it against its
+  # own attestation, which passes by construction even if the upload step
+  # swapped the bytes. That is the one risk the step below the publish action
+  # describes, so this is where it gets caught.
+  #
+  # What it establishes is still narrower than it looks, and the prose
+  # elsewhere is written to match: a PEP 740 attestation proves these exact
+  # bytes were published by a Trusted Publisher of this repository and have not
+  # been altered since. It is not build provenance, and `--repository` is the
+  # only constraint the verifier accepts. The workflow filename in the
+  # attestation comes from PyPI's own provenance rather than from anything
+  # asserted here, so this does not distinguish one workflow in this repository
+  # from another.
   verify:
     needs: publish
     runs-on: ubuntu-latest
@@ -292,7 +311,7 @@ jobs:
             for attempt in 1 2 3 4 5; do
               if python -m pypi_attestations verify pypi \
                    --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-                   "pypi:$name"; then
+                   "$path"; then
                 verified=yes
                 break
               fi

@@ -79,10 +79,12 @@ then creates the GitHub Release for the tag with those notes and attaches the
 SBOM to it, so the dependency inventory outlives the ninety days an Actions
 artifact gets.
 
-**There is no PyPI token.** Publishing authenticates with the workflow's OIDC
-identity, which is why the `publish` job is the only one holding `id-token:
-write` and runs nothing but the upload. If you find yourself wanting to add a
-token, something is wrong with the trusted-publisher configuration instead.
+**There is no stored PyPI token.** Publishing authenticates with the
+workflow's OIDC identity, which PyPI exchanges for a token minted on the spot
+and good for about fifteen minutes. That is why `publish` is the only job
+holding `id-token: write`. If you find yourself wanting to add a token to the
+repository's secrets, something is wrong with the trusted-publisher
+configuration instead.
 
 ## After
 
@@ -94,8 +96,11 @@ was cold is worse than one whose verification has to be re-run. A red `verify`
 on a green `publish` means the files are on PyPI and something about their
 attestations needs looking at, not that the release did not happen.
 
-To reproduce what it did, SECURITY.md's "Verifying a release" section is the
-same command written for a consumer.
+It checks the artifacts the build produced against the provenance PyPI
+serves, which is the stronger direction: it answers whether what reached the
+index is byte-for-byte what was built here. SECURITY.md's "Verifying a
+release" section is the same command written for a consumer, who starts from
+the file they downloaded instead.
 
 ## Yanking
 
