@@ -70,15 +70,24 @@ jobs:
           queries: security-extended
 
       # CodeQL observes a real compilation rather than guessing at one, so the
-      # engine is built the same way `ci.yml` builds it. Only this matrix leg
-      # compiles anything; the Python leg reads the tree.
+      # engine is actually built here. Only this matrix leg compiles anything;
+      # the Python leg reads the tree.
+      #
+      # `--no-deps` because the engine pins its four siblings by exact version
+      # and those versions are not on PyPI until the release publishes, so
+      # resolving them fails outright. `ci.yml` works around that by installing
+      # the siblings from the tree first, which this job has no use for: the
+      # dependencies are never imported, and what CodeQL needs is the compiler
+      # running over `csrc/`. Build requirements still install, because those
+      # come from `[build-system] requires` and pip's build isolation, which
+      # `--no-deps` does not touch.
       - name: Build the engine for CodeQL
         if: matrix.build-mode == 'manual'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq build-essential cmake
           python -m pip install --upgrade pip
-          python -m pip install ./packages/structured-data-models-relational-engine
+          python -m pip install --no-deps ./packages/structured-data-models-relational-engine
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
