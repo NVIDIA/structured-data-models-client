@@ -30,7 +30,7 @@ use sdm_contract::{
     Field as ContractField, HostFacts, Scalar, Unit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot, RunState};
-use sdm_host::{HostRun, Outgoing, Unreadable, encode, read};
+use sdm_host::{HostRun, Outgoing, Unreadable, Unreadables, encode, read};
 
 fn start_message(operation: Operation) -> Vec<u8> {
     encode(&ControlMessage::Start(Box::new(StartRun {
@@ -334,13 +334,25 @@ fn fetch_reply(id: u32, data: u32) -> Vec<u8> {
     .unwrap()
 }
 
+fn unread(id: u32, failure: Unreadable) -> Unreadables {
+    Unreadables::from([(AttachmentId(id), failure)])
+}
+
+fn extra() -> Attachments {
+    Attachments::from([(AttachmentId(2), Attachment::Bytes(b"extra".to_vec()))])
+}
+
 #[test]
 fn an_attachment_a_binding_could_not_read_ends_the_fetch_as_its_cause_says() {
     // A producer's failure reaches the run as the provider's error.
     let run = fetching(ExpectedSchema::Discover {});
-    run.reply_unreadable(&fetch_reply(1, 1), AttachmentId(1), Unreadable::Producer)
-        .map_err(error)
-        .unwrap();
+    run.reply_reading(
+        &fetch_reply(1, 1),
+        Attachments::new(),
+        &unread(1, Unreadable::Producer),
+    )
+    .map_err(error)
+    .unwrap();
     let err = error(run.next().unwrap_err());
     assert_eq!(
         (err.kind, err.code, err.retryable),
@@ -351,7 +363,11 @@ fn an_attachment_a_binding_could_not_read_ends_the_fetch_as_its_cause_says() {
     // and ends the run.
     let run = fetching(ExpectedSchema::Discover {});
     let err = run
-        .reply_unreadable(&fetch_reply(1, 1), AttachmentId(1), Unreadable::Declared)
+        .reply_reading(
+            &fetch_reply(1, 1),
+            Attachments::new(),
+            &unread(1, Unreadable::Declared),
+        )
         .map_err(error)
         .unwrap_err();
     assert_eq!(
@@ -364,30 +380,68 @@ fn an_attachment_a_binding_could_not_read_ends_the_fetch_as_its_cause_says() {
         Some(&Detail::Scalar(Scalar::UInt32(1)))
     );
     assert_eq!(run.state().unwrap(), RunState::Finished);
-    // A reply the run does not await gets the run's own refusal, and the
-    // run still awaits its fetch.
+}
+
+#[test]
+fn an_unreadable_attachment_s_message_is_checked_before_the_run_changes() {
     let run = fetching(ExpectedSchema::Discover {});
     for failure in [Unreadable::Producer, Unreadable::Declared] {
+        // An attachment the reply does not name, or a reply that names
+        // another, is the envelope's refusal; the run still awaits.
+        for (message, attachments) in [
+            (fetch_reply(1, 1), extra()),
+            (fetch_reply(1, 2), Attachments::new()),
+        ] {
+            let err = run
+                .reply_reading(&message, attachments, &unread(1, failure))
+                .map_err(error)
+                .unwrap_err();
+            assert_eq!(err.code, ErrorCode::InvalidMessage, "{failure:?}");
+            assert!(matches!(run.state().unwrap(), RunState::AwaitingFetch(_)));
+        }
+        // A reply the run does not await gets the run's own refusal.
         let err = run
-            .reply_unreadable(&fetch_reply(7, 1), AttachmentId(1), failure)
+            .reply_reading(&fetch_reply(7, 1), Attachments::new(), &unread(1, failure))
             .map_err(error)
             .unwrap_err();
         assert_eq!(err.code, ErrorCode::UnknownReply, "{failure:?}");
         assert!(matches!(run.state().unwrap(), RunState::AwaitingFetch(_)));
     }
-    // The message must name the attachment, as data of a fetch_reply.
-    let err = run
-        .reply_unreadable(&fetch_reply(1, 2), AttachmentId(1), Unreadable::Declared)
-        .map_err(error)
-        .unwrap_err();
+    // The run takes its fetch afterwards.
+    let data = consistent(&["a"]);
+    reply(&run, data).unwrap();
+    assert!(run.next().is_ok());
+    // A start: an unreadable attachment its operation does not name is the
+    // envelope's refusal, not the producer's.
+    let validate = start_message(Operation::ValidateQuery(ValidateQuery {
+        query: AttachmentId(1),
+        schema: AttachmentId(2),
+        profile: ProfileSpec {
+            name: ProfileName::Relational,
+            model: None,
+            capabilities: BTreeMap::new(),
+        },
+    }));
+    let attachments = Attachments::from([
+        (AttachmentId(1), json(&"PREDICT t.c FOR EACH t.id")),
+        (
+            AttachmentId(2),
+            json(&QuerySchema {
+                tables: vec![],
+                links: vec![],
+            }),
+        ),
+    ]);
+    let err = HostRun::start_reading(
+        &CompositionRoot::default(),
+        &validate,
+        attachments,
+        &unread(3, Unreadable::Producer),
+    )
+    .map_err(error)
+    .err()
+    .unwrap();
     assert_eq!(err.code, ErrorCode::InvalidMessage);
-    assert!(matches!(run.state().unwrap(), RunState::AwaitingFetch(_)));
-    // Without a run, a start's unreadable attachment is the start's error.
-    let err = error(HostRun::start_unreadable(
-        AttachmentId(3),
-        Unreadable::Producer,
-    ));
-    assert_eq!(err.code, ErrorCode::ProviderError);
 }
 
 fn panicking(at: PanicAt, payload: &str) -> Result<HostRun, CoreError> {

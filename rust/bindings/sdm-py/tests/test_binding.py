@@ -157,7 +157,9 @@ def test_an_object_with_only_pyarrow_s_private_export_is_refused() -> None:
         _native.Run.start(start, {**attachments, 3: Legacy()})
 
 
-def test_a_start_whose_arrow_producer_fails_is_the_provider_s_error() -> None:
+def test_a_start_with_an_unnamed_failing_stream_is_an_invalid_message() -> None:
+    # The start's whole set of attachments is checked first: one it does
+    # not name is the envelope's refusal, readable or not (E13).
     class Failing:
         def __arrow_c_stream__(self, requested_schema: object = None) -> object:
             raise RuntimeError(CANARY)
@@ -168,7 +170,7 @@ def test_a_start_whose_arrow_producer_fails_is_the_provider_s_error() -> None:
     with pytest.raises(_native.CoreError) as raised:
         _native.Run.start(start, {**attachments, 3: Failing()})
     error = raised.value
-    assert (error.kind, error.code) == ('data_source', 'PROVIDER_ERROR')
+    assert error.code == 'INVALID_MESSAGE'
     assert CANARY not in f'{error} {error!r} {error.control!r}'
 
 

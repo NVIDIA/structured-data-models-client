@@ -190,6 +190,30 @@ def test_a_handler_that_raises_is_reported_and_the_answer_delivered(
     assert finished.value.code == 'RUN_FINISHED'
 
 
+@pytest.mark.parametrize('interrupt', [KeyboardInterrupt, SystemExit])
+def test_an_interrupt_in_a_handler_is_raised_and_the_step_is_gone(
+    interrupt: type[BaseException],
+) -> None:
+    # Not an Exception: it goes on up in place of the answer. The core
+    # finished the step before the binding saw the interrupt, so the run
+    # has moved on and the step is not given again.
+    class Interrupting(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise interrupt()
+
+    handler = Interrupting()
+    logger = _with_handler(handler)
+    run = _native.Run.start(messages.operation_for_tests('log', hold_ms=0), {})
+    try:
+        with pytest.raises(interrupt):
+            run.next()
+    finally:
+        logger.removeHandler(handler)
+    with pytest.raises(_native.CoreError) as finished:
+        run.next()
+    assert finished.value.code == 'RUN_FINISHED'
+
+
 def test_a_handler_that_calls_into_its_own_run_is_refused_as_busy() -> None:
     codes: list[str] = []
     run = _native.Run.start(messages.operation_for_tests('log', hold_ms=0), {})
@@ -380,6 +404,25 @@ def test_a_producer_that_fails_is_the_provider_s_error() -> None:
         with pytest.raises(_native.CoreError) as finished:
             run.next()
         assert finished.value.code == 'RUN_FINISHED'
+
+
+def test_an_unreadable_reply_s_attachments_are_checked_before_the_run_changes() -> (
+    None
+):
+    declared = pa.schema([pa.field('a', pa.int64(), nullable=False)])
+    unreadable = {
+        'producer': _failing_stream(at_start=True),
+        'declared': pa.table({'a': [1, None]}, schema=declared),
+    }
+    for failure, data in unreadable.items():
+        run = _fetching({'expect': 'discover'})
+        with pytest.raises(_native.CoreError) as raised:
+            run.reply(messages.fetch_reply(), {1: data, 2: b'extra'})
+        assert raised.value.code == 'INVALID_MESSAGE', failure
+        # The run still awaits its fetch, and takes it.
+        run.reply(messages.fetch_reply(), {1: _ints('a')})
+        done = messages.read(run.next()[0])
+        assert done['result'] == {'op': 'test', 'rows': 2}, failure
 
 
 def test_the_data_asked_for_is_taken_and_comes_back_out() -> None:

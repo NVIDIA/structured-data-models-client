@@ -34,8 +34,9 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Mutex, MutexGuard, Once, TryLockError};
+use std::sync::{Arc, Mutex, MutexGuard, Once, TryLockError};
 
+use arrow_schema::Schema;
 use sdm_contract::data::AttachmentId;
 use sdm_contract::data::ProviderError;
 use sdm_contract::facts::LocalZone;
@@ -45,8 +46,8 @@ use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scal
 use sdm_core::attached::check_attachments;
 use sdm_core::run::schema_mismatch;
 use sdm_core::{
-    Attachment, AttachmentIds, Attachments, CompositionRoot, FetchResult, ModelResult, Run,
-    RunState,
+    ArrowData, Attachment, AttachmentIds, Attachments, CompositionRoot, FetchResult, ModelResult,
+    Run, RunState,
 };
 
 use crate::admission::admit;
@@ -161,8 +162,24 @@ fn producer_failed() -> ProviderError {
     }
 }
 
+/// The Arrow attachments a binding could not read, by id, and why.
+pub type Unreadables = BTreeMap<AttachmentId, Unreadable>;
+
+/// `attachments` with each unreadable one standing in as empty Arrow data
+/// of its id, so the message's attachments are checked as a whole; a
+/// stand-in is never admitted.
+fn with_stand_ins(mut attachments: Attachments, unreadable: &Unreadables) -> Attachments {
+    for &id in unreadable.keys() {
+        attachments.insert(
+            id,
+            Attachment::Arrow(ArrowData::new(Arc::new(Schema::empty()), vec![])),
+        );
+    }
+    attachments
+}
+
 /// The error an unreadable attachment is, naming the attachment.
-fn unreadable(id: AttachmentId, failure: Unreadable) -> CoreError {
+fn unreadable_error(id: AttachmentId, failure: Unreadable) -> CoreError {
     let error = match failure {
         Unreadable::Producer => CoreError::provider(&producer_failed()),
         Unreadable::Declared => schema_mismatch(
@@ -209,6 +226,22 @@ impl HostRun {
         message: &[u8],
         attachments: Attachments,
     ) -> Result<HostRun, Outgoing> {
+        HostRun::start_reading(root, message, attachments, &Unreadables::new())
+    }
+
+    /// [`HostRun::start`], for a binding that could not read some of the
+    /// Arrow attachments it was handed: `unreadable` names them and why.
+    /// The `start` and its whole set of attachments are checked as any
+    /// start's are, an unreadable one standing in as Arrow data of its id,
+    /// so a message that names the wrong attachments is still
+    /// `INVALID_MESSAGE`; only then does an unreadable attachment refuse
+    /// the start, as a provider error or check (a)'s refusal.
+    pub fn start_reading(
+        root: &CompositionRoot,
+        message: &[u8],
+        attachments: Attachments,
+        unreadable: &Unreadables,
+    ) -> Result<HostRun, Outgoing> {
         contain(|| {
             let ControlMessage::Start(start) = decode(message)? else {
                 return Err(invalid("a run starts with a start message"));
@@ -221,16 +254,15 @@ impl HostRun {
                 path: root.path.clone().into(),
                 version: root.version.clone(),
             }));
+            if let Some((&id, &failure)) = unreadable.first_key_value() {
+                let envelope = with_stand_ins(attachments, unreadable);
+                check_attachments(&start.operation.attachments(), &envelope)?;
+                return Err(unreadable_error(id, failure));
+            }
             let run = sdm_core::start(root, *start, attachments)?;
             Ok(HostRun::with(run, zones))
         })
         .map_err(|failure| start_error(&failure.error))
-    }
-
-    /// The error of a `start` whose attachment `id` the binding could not
-    /// read: as a provider error or a check (a) refusal; there is no run.
-    pub fn start_unreadable(id: AttachmentId, failure: Unreadable) -> Outgoing {
-        start_error(&unreadable(id, failure))
     }
 
     /// The host run of a core run built directly, as tests and the
@@ -286,13 +318,45 @@ impl HostRun {
     /// it names. Fetched data is admitted first; data admission refuses ends
     /// the run with that refusal.
     pub fn reply(&self, message: &[u8], attachments: Attachments) -> Result<(), Outgoing> {
+        self.reply_reading(message, attachments, &Unreadables::new())
+    }
+
+    /// [`HostRun::reply`], for a binding that could not read some of the
+    /// Arrow attachments it was handed: `unreadable` names them and why.
+    /// The reply and its whole set of attachments are checked as any
+    /// reply's are, an unreadable one standing in as Arrow data of its id,
+    /// before the run changes. Then, for a fetch the run awaits whose data
+    /// is unreadable, a producer's failure reaches the run as the
+    /// provider's error, as a failed fetch the host reports does, and a
+    /// batch that broke its own stream's schema ends the run with check
+    /// (a)'s refusal, as admission does; a reply the run does not await
+    /// gets the run's own refusal.
+    pub fn reply_reading(
+        &self,
+        message: &[u8],
+        attachments: Attachments,
+        unreadable: &Unreadables,
+    ) -> Result<(), Outgoing> {
         self.enter(|run| {
-            let mut attachments = attachments;
+            let mut attachments = with_stand_ins(attachments, unreadable);
             match decode(message)? {
                 ControlMessage::FetchReply(reply) => {
                     let result = match reply.outcome {
                         FetchOutcome::Data { data } => {
                             check_attachments(&[(data, AttachmentKind::Arrow)], &attachments)?;
+                            if let Some(&failure) = unreadable.get(&data) {
+                                // Not awaited: the run refuses it before it
+                                // reads the outcome. Awaited: the producer's
+                                // failure is the fetch's.
+                                if !awaits(run, reply.id) || failure == Unreadable::Producer {
+                                    return run.submit_fetch(
+                                        reply.id,
+                                        FetchResult::Error(producer_failed()),
+                                    );
+                                }
+                                run.end()?;
+                                return Err(unreadable_error(data, failure));
+                            }
                             let Some(Attachment::Arrow(arrow)) = attachments.remove(&data) else {
                                 return Err(invalid("fetched data is an Arrow attachment"));
                             };
@@ -345,37 +409,6 @@ impl HostRun {
                     "a run takes replies here: a fetch_reply or a model_reply",
                 )),
             }
-        })
-    }
-
-    /// Hands the run a `fetch_reply` whose data, attachment `id`, the
-    /// binding could not read. A reply the run does not await gets the
-    /// run's own refusal, as [`HostRun::reply`] gives it. Otherwise a
-    /// producer's failure reaches the run as the provider's error, as a
-    /// failed fetch the host reports does, and a batch that broke its own
-    /// stream's schema ends the run with check (a)'s refusal, as admission
-    /// does.
-    pub fn reply_unreadable(
-        &self,
-        message: &[u8],
-        id: AttachmentId,
-        failure: Unreadable,
-    ) -> Result<(), Outgoing> {
-        self.enter(|run| {
-            let ControlMessage::FetchReply(reply) = decode(message)? else {
-                return Err(invalid("Arrow data arrives in a fetch_reply"));
-            };
-            if reply.outcome != (FetchOutcome::Data { data: id }) {
-                return Err(invalid("the fetch_reply does not name the attachment"));
-            }
-            // A reply the run does not await is refused by the run before
-            // it reads the outcome; an awaited one carries the producer's
-            // failure as the fetch's.
-            if !awaits(run, reply.id) || failure == Unreadable::Producer {
-                return run.submit_fetch(reply.id, FetchResult::Error(producer_failed()));
-            }
-            run.end()?;
-            Err(unreadable(id, failure))
         })
     }
 
