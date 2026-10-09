@@ -152,7 +152,9 @@ def test_a_refused_start_quotes_nothing_it_was_given() -> None:
         (b'{"message": "start", "' + CANARY.encode(), {}, 'INVALID_MESSAGE'),
         (malformed, {}, 'INVALID_MESSAGE'),
         (
-            other_contract.replace(b'"contract": 3', b'"contract": 99'),
+            other_contract.replace(
+                f'"contract": {messages.CONTRACT}'.encode(), b'"contract": 99'
+            ),
             attachments,
             None,
         ),

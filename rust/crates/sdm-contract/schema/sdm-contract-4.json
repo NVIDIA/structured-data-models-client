@@ -1,0 +1,2540 @@
+{
+  "$id": "sdm-contract/4",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ControlMessage",
+  "description": "Every control message that crosses between a host and the core.",
+  "oneOf": [
+    {
+      "description": "Starts a run.",
+      "type": "object",
+      "properties": {
+        "contract": {
+          "description": "The contract version the host speaks; see `CONTRACT_VERSION`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "facts": {
+          "$ref": "#/$defs/HostFacts"
+        },
+        "operation": {
+          "$ref": "#/$defs/Operation"
+        },
+        "message": {
+          "type": "string",
+          "const": "start"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "contract",
+        "facts",
+        "operation"
+      ]
+    },
+    {
+      "description": "The host's answer to one fetch.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "outcome": {
+          "$ref": "#/$defs/FetchOutcome"
+        },
+        "message": {
+          "type": "string",
+          "const": "fetch_reply"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "id",
+        "outcome"
+      ]
+    },
+    {
+      "description": "The host's answer to one model call.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ModelOutcome"
+        },
+        "message": {
+          "type": "string",
+          "const": "model_reply"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "id",
+        "outcome"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "const": "cancel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ]
+    },
+    {
+      "description": "What a run asks of its host next.",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "const": "step"
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Answer every one of these before asking for the next step.",
+          "type": "object",
+          "properties": {
+            "requests": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FetchStep"
+              }
+            },
+            "step": {
+              "type": "string",
+              "const": "fetch"
+            }
+          },
+          "required": [
+            "step",
+            "requests"
+          ]
+        },
+        {
+          "description": "A call to the model; the host sends the body's bytes as they are.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/ReplyId"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/Endpoint"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "body": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "step": {
+              "type": "string",
+              "const": "call_model"
+            }
+          },
+          "required": [
+            "step",
+            "id",
+            "endpoint",
+            "content_type",
+            "body"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "result": {
+              "$ref": "#/$defs/OperationResult"
+            },
+            "step": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "step",
+            "result"
+          ]
+        }
+      ],
+      "required": [
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/CoreError"
+        },
+        "message": {
+          "type": "string",
+          "const": "error"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "error"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoreWarning"
+          }
+        },
+        "message": {
+          "type": "string",
+          "const": "warnings"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "warnings"
+      ]
+    },
+    {
+      "description": "A message the core wrote whose encoding would pass the control cap:\nit travels whole as a bytes attachment of its UTF-8 JSON, named here\n(decision H7). Nothing the core writes is truncated, refused or\ndropped for size.",
+      "type": "object",
+      "properties": {
+        "attachment": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "message": {
+          "type": "string",
+          "const": "attached"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "attachment"
+      ]
+    }
+  ],
+  "$defs": {
+    "HostFacts": {
+      "description": "The facts a host passes with every operation.",
+      "type": "object",
+      "properties": {
+        "now": {
+          "description": "The clock: a `ts` scalar in UTC. Two-digit years and \"now\" read it.",
+          "$ref": "#/$defs/Scalar"
+        },
+        "local_zone": {
+          "description": "The host's local zone, if it knows one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalZone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "zone_roots": {
+          "description": "The zone lookup roots, in the order the host's own zone library\nsearches them; the core falls back to its bundled database.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ZoneRootFact"
+          }
+        },
+        "platform": {
+          "$ref": "#/$defs/PlatformFacts"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "now",
+        "zone_roots",
+        "platform"
+      ]
+    },
+    "Scalar": {
+      "description": "The encoded form: what crosses the boundary, field for field.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "boolean"
+            },
+            "t": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i16"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u16"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/FloatText"
+            },
+            "t": {
+              "type": "string",
+              "const": "f32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/FloatText"
+            },
+            "t": {
+              "type": "string",
+              "const": "f64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "description": "The unscaled integer: the value is `v * 10^-s`.",
+          "type": "object",
+          "properties": {
+            "p": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "s": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "d128"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "p",
+            "s",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "p": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "s": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "d256"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "p",
+            "s",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "const": "utf8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "description": "Standard base64 with padding.",
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "const": "binary"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "date32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "ts"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "time64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        }
+      ]
+    },
+    "Digits": {
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]*)$"
+    },
+    "FloatText": {
+      "type": "string",
+      "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
+    },
+    "Unit": {
+      "description": "The unit of a timestamp, duration or time of day.",
+      "type": "string",
+      "enum": [
+        "ns",
+        "us"
+      ]
+    },
+    "LocalZone": {
+      "description": "The host's local zone, as the host's own platform names it: an IANA\nname, or a POSIX `TZ` string where the platform has no IANA name for it.",
+      "oneOf": [
+        {
+          "description": "An IANA zone name, such as `Europe/Berlin`.",
+          "type": "object",
+          "properties": {
+            "iana": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "iana"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A POSIX `TZ` string, such as `EST5EDT,M3.2.0,M11.1.0`.",
+          "type": "object",
+          "properties": {
+            "posix": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "posix"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ZoneRootFact": {
+      "description": "One zone lookup root, with the database version the host read there.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "PlatformFacts": {
+      "description": "Platform behavior the reference depends on.",
+      "type": "object",
+      "properties": {
+        "os": {
+          "description": "The operating system, as the host names it (`linux`, `darwin`,\n`windows`).",
+          "type": "string"
+        },
+        "strftime_pads_year": {
+          "description": "Whether the platform's `strftime` pads years below 1000 to four\ndigits (`date-rules.md`).",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "strftime_pads_year"
+      ]
+    },
+    "Operation": {
+      "description": "One operation's request.",
+      "oneOf": [
+        {
+          "description": "Validate a predictive query against a schema, for a profile.",
+          "type": "object",
+          "properties": {
+            "query": {
+              "description": "The query text: a bytes attachment of a JSON string.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "schema": {
+              "description": "A bytes attachment of a [`QuerySchema`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "profile": {
+              "$ref": "#/$defs/ProfileSpec"
+            },
+            "op": {
+              "type": "string",
+              "const": "validate_query"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "query",
+            "schema",
+            "profile"
+          ]
+        },
+        {
+          "description": "Describe the tables of a source: types, keys and time columns.",
+          "type": "object",
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/ProviderChoice"
+            },
+            "source": {
+              "description": "A bytes attachment of a [`SourceSpec`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "check_keys": {
+              "description": "Whether to count duplicate keys.",
+              "type": "boolean"
+            },
+            "op": {
+              "type": "string",
+              "const": "describe_source"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "provider",
+            "source",
+            "check_keys"
+          ]
+        },
+        {
+          "description": "Build a request for a query over a described source.",
+          "type": "object",
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/ProviderChoice"
+            },
+            "schema": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "query": {
+              "description": "The query text: a bytes attachment of a JSON string.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "indices": {
+              "description": "The entities to predict for: an Arrow attachment of one column.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchor_time": {
+              "description": "The anchor time, a `ts` scalar.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Scalar"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seed": {
+              "description": "The sampling seed, an integer of any size.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Seed"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "const": "materialize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "provider",
+            "schema",
+            "query"
+          ]
+        },
+        {
+          "description": "Send a materialized request to the model and lay out its answer.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "$ref": "#/$defs/RequestState"
+            },
+            "model": {
+              "type": "string"
+            },
+            "op": {
+              "type": "string",
+              "const": "predict"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "state",
+            "model"
+          ]
+        }
+      ]
+    },
+    "AttachmentId": {
+      "description": "Names an attachment that travels beside a control message: Arrow data\n(a fetch's result, a key set, a predict result) or bytes (a model\nrequest or response body).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "ProfileSpec": {
+      "description": "A named profile, optionally naming the model in diagnostics and\nchanging named capabilities, as the language's `Profile.named` and\n`Capabilities.also` do. The profiles themselves are the core's.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ProfileName"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "counterfactuals": {
+              "type": "boolean"
+            },
+            "derived_targets": {
+              "type": "boolean"
+            },
+            "entity_filters": {
+              "type": "boolean"
+            },
+            "forecasting": {
+              "type": "boolean"
+            },
+            "key_columns_in_filters": {
+              "type": "boolean"
+            },
+            "link_prediction": {
+              "type": "boolean"
+            },
+            "multiple_tables": {
+              "type": "boolean"
+            },
+            "relationships": {
+              "type": "boolean"
+            },
+            "static": {
+              "type": "boolean"
+            },
+            "temporal": {
+              "type": "boolean"
+            },
+            "timestamp_columns_in_filters": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "ProfileName": {
+      "type": "string",
+      "enum": [
+        "FINE_TUNING",
+        "RELATIONAL",
+        "TABULAR",
+        "TIMESERIES",
+        "ANOMALY"
+      ]
+    },
+    "ProviderChoice": {
+      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "dialect": {
+              "$ref": "#/$defs/Dialect"
+            },
+            "provider": {
+              "type": "string",
+              "const": "sql"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "dialect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "capabilities": {
+              "$ref": "#/$defs/ProviderCapabilities"
+            },
+            "provider": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "capabilities"
+          ]
+        }
+      ]
+    },
+    "Dialect": {
+      "description": "A built-in SQL dialect.",
+      "type": "string",
+      "enum": [
+        "duckdb",
+        "sqlite",
+        "postgres",
+        "databricks",
+        "snowflake"
+      ]
+    },
+    "ProviderCapabilities": {
+      "description": "What a host provider declares it answers.",
+      "type": "object",
+      "properties": {
+        "optional": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/OptionalRequest"
+          }
+        },
+        "max_keys_per_request": {
+          "description": "The most keys one request may carry; `None` is no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampling": {
+          "$ref": "#/$defs/Determinism"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "optional",
+        "sampling"
+      ]
+    },
+    "OptionalRequest": {
+      "description": "The optional requests a provider may declare.",
+      "type": "string",
+      "enum": [
+        "preview",
+        "count_rows",
+        "key_counts",
+        "time_bounds",
+        "sample_entities"
+      ]
+    },
+    "Determinism": {
+      "description": "Whether a provider's seeded sampling repeats.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unseeded"
+          ]
+        },
+        {
+          "description": "The same seed gives the same rows on this provider.",
+          "type": "string",
+          "const": "seeded_stable"
+        }
+      ]
+    },
+    "Seed": {
+      "type": "string",
+      "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"
+    },
+    "RequestState": {
+      "description": "What `predict` needs of a materialized request; the payload bytes travel\nas an attachment.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of this state's format, independent of the contract's.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "The query text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "payload",
+        "query"
+      ]
+    },
+    "ReplyId": {
+      "description": "Names one fetch or model call within a run, so its reply can be matched.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "FetchOutcome": {
+      "oneOf": [
+        {
+          "description": "The rows, as an Arrow attachment.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "data"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ProviderError"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "error"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "error"
+          ]
+        }
+      ]
+    },
+    "ProviderError": {
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE and vendor code. The driver's message and\nfree-text codes stay in the host, since drivers quote values there;\nnothing is matched on text.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "sqlstate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vendor_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "retryable"
+      ]
+    },
+    "ErrorKind": {
+      "description": "What kind of problem an error is.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "invalid_request"
+        },
+        {
+          "description": "A valid request the core does not support, such as a type outside\nthe closed set.",
+          "type": "string",
+          "const": "unsupported"
+        },
+        {
+          "description": "Something the request names does not exist.",
+          "type": "string",
+          "const": "not_found"
+        },
+        {
+          "description": "The data source or its driver failed.",
+          "type": "string",
+          "const": "data_source"
+        },
+        {
+          "description": "The model endpoint or its transport failed.",
+          "type": "string",
+          "const": "model_endpoint"
+        },
+        {
+          "description": "The run was cancelled.",
+          "type": "string",
+          "const": "cancelled"
+        },
+        {
+          "description": "The host broke the run protocol: a call in the wrong state, a reply\nthe run did not ask for, a malformed control message.",
+          "type": "string",
+          "const": "protocol"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
+    "ModelOutcome": {
+      "oneOf": [
+        {
+          "description": "The endpoint answered, with any HTTP status; the body is an\nattachment of the bytes received.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "body": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "response"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "status",
+            "content_type",
+            "body"
+          ]
+        },
+        {
+          "description": "The transport failed before an answer: its kind and whether trying\nagain may succeed; the transport's message stays in the host.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ErrorKind"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "transport_error"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "kind",
+            "retryable"
+          ]
+        }
+      ]
+    },
+    "FetchStep": {
+      "description": "One data request of a fetch step.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "request": {
+          "$ref": "#/$defs/DataRequest"
+        },
+        "sql": {
+          "description": "The compiled statement, for a SQL provider.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SqlStatement"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expect": {
+          "$ref": "#/$defs/ExpectedSchema"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "request",
+        "expect"
+      ]
+    },
+    "DataRequest": {
+      "description": "A typed request for data.",
+      "oneOf": [
+        {
+          "description": "The catalog: the tables named (all when empty), their columns,\ndeclared keys and foreign keys.",
+          "type": "object",
+          "properties": {
+            "tables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "describe"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "tables"
+          ]
+        },
+        {
+          "description": "Every matching row of `table`, `columns` in order, paged through to\nthe end; `limit` asks for any `limit` rows instead.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": {
+              "type": "string",
+              "const": "scan"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "columns",
+            "filters"
+          ]
+        },
+        {
+          "description": "The first rows of `table`, for inference.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "limit": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": {
+              "type": "string",
+              "const": "preview"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "columns",
+            "limit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "count_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "filters"
+          ]
+        },
+        {
+          "description": "Rows per key value, for duplicate-key checks.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "key_counts"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "filters"
+          ]
+        },
+        {
+          "description": "The smallest and largest value of a time column.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "time_bounds"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "column",
+            "filters"
+          ]
+        },
+        {
+          "description": "A seeded sample of `n` entities of `table` by `key`.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "n": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "seed": {
+              "$ref": "#/$defs/Scalar"
+            },
+            "request": {
+              "type": "string",
+              "const": "sample_entities"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "n",
+            "seed"
+          ]
+        }
+      ]
+    },
+    "Filter": {
+      "description": "A condition on the rows a request reads; a request's filters are a\nconjunction.",
+      "oneOf": [
+        {
+          "description": "The row's `columns` equal one of the key set's rows.",
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "keys": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "filter": {
+              "type": "string",
+              "const": "key_in"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "columns",
+            "keys"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "lower": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Bound"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "upper": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Bound"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "filter": {
+              "type": "string",
+              "const": "time_range"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "string",
+              "const": "not_null"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column"
+          ]
+        }
+      ]
+    },
+    "KeySet": {
+      "description": "A set of keys: an Arrow attachment, and the columns it holds.",
+      "type": "object",
+      "properties": {
+        "attachment": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Field"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "attachment",
+        "columns"
+      ]
+    },
+    "Field": {
+      "description": "A named, typed column or child of a nested type.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ColumnType"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "metadata": {
+          "description": "Arrow field metadata, kept as it came.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "nullable"
+      ]
+    },
+    "ColumnType": {
+      "description": "A type of the closed set.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int8"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int16"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int64"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint8"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint16"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint64"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "float32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "float64"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "precision": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "scale": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "type": {
+              "type": "string",
+              "const": "decimal128"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "precision",
+            "scale"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "precision": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "scale": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "type": {
+              "type": "string",
+              "const": "decimal256"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "precision",
+            "scale"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "utf8"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "binary"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "date32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "timestamp"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "type": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "type": {
+              "type": "string",
+              "const": "time64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/Field"
+            },
+            "type": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Field"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "struct"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fields"
+          ]
+        },
+        {
+          "description": "`entries` is the name of Arrow's entries struct, kept so the type\nleaves exactly as it came.",
+          "type": "object",
+          "properties": {
+            "entries": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Field"
+            },
+            "value": {
+              "$ref": "#/$defs/Field"
+            },
+            "sorted": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "map"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "entries",
+            "key",
+            "value",
+            "sorted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "$ref": "#/$defs/IndexType"
+            },
+            "type": {
+              "type": "string",
+              "const": "dictionary_utf8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "index"
+          ]
+        }
+      ]
+    },
+    "IndexType": {
+      "description": "The index type of a dictionary.",
+      "type": "string",
+      "enum": [
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64"
+      ]
+    },
+    "Bound": {
+      "description": "One bound of a time range.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/Scalar"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "inclusive"
+      ]
+    },
+    "SqlStatement": {
+      "description": "A request compiled for a SQL provider.",
+      "type": "object",
+      "properties": {
+        "dialect": {
+          "$ref": "#/$defs/Dialect"
+        },
+        "text": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SqlParam"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dialect",
+        "text",
+        "params"
+      ]
+    },
+    "SqlParam": {
+      "description": "A statement's parameter: a scalar, or a key set the provider binds (for\nexample by registering the attachment as a relation).",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/Scalar"
+            },
+            "param": {
+              "type": "string",
+              "const": "value"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "param",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "keys": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "param": {
+              "type": "string",
+              "const": "key_set"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "param",
+            "keys"
+          ]
+        }
+      ]
+    },
+    "ExpectedSchema": {
+      "description": "The Arrow schema a request expects back, or that the answer discovers\nit (a describe or a preview).",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "expect": {
+              "type": "string",
+              "const": "discover"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "expect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Field"
+              }
+            },
+            "expect": {
+              "type": "string",
+              "const": "schema"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "expect",
+            "fields"
+          ]
+        }
+      ]
+    },
+    "Endpoint": {
+      "description": "Which model endpoint a call goes to.",
+      "type": "string",
+      "enum": [
+        "predict"
+      ]
+    },
+    "OperationResult": {
+      "description": "One operation's result, the payload of the run's last step.",
+      "oneOf": [
+        {
+          "description": "A query's validation: accepted, or refused with PQL's diagnostics.",
+          "type": "object",
+          "properties": {
+            "accepted": {
+              "type": "boolean"
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PqlDiagnostic"
+              }
+            },
+            "op": {
+              "type": "string",
+              "const": "validate_query"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "accepted",
+            "diagnostics"
+          ]
+        },
+        {
+          "description": "`describe_source`'s result.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "describe_source"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "description"
+          ]
+        },
+        {
+          "description": "A materialized request, held by the host and handed back to `predict`.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "$ref": "#/$defs/RequestState"
+            },
+            "op": {
+              "type": "string",
+              "const": "materialize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "state"
+          ]
+        },
+        {
+          "description": "The prediction: an Arrow attachment, whose schema names its columns in\norder; nothing inline grows with the result's width (decision H5).",
+          "type": "object",
+          "properties": {
+            "result": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "predict"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "result"
+          ]
+        }
+      ]
+    },
+    "PqlDiagnostic": {
+      "description": "One PQL diagnostic: its code and where in the query text it points.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "severity"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
+    "Span": {
+      "description": "Where in the query text a diagnostic or node is, as PQL counts it: rows\nfrom 1, columns from 0 in code points, from the first character of the\nfirst token to the first character of the last.",
+      "type": "object",
+      "properties": {
+        "start_row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "start_col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end_row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "end_col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start_row",
+        "start_col",
+        "end_row",
+        "end_col"
+      ]
+    },
+    "CoreError": {
+      "description": "An error the core reports.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "code": {
+          "description": "Stable across releases and languages.",
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "description": "For a person to read; not promised, and never holding an input value.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "What callers branch on, by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        },
+        "cause": {
+          "description": "The error this one was raised from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code",
+        "message"
+      ]
+    },
+    "ErrorCode": {
+      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_REQUEST"
+        },
+        {
+          "description": "A valid request this core does not support.",
+          "type": "string",
+          "const": "UNSUPPORTED_REQUEST"
+        },
+        {
+          "description": "The model endpoint answered with something the core cannot read.",
+          "type": "string",
+          "const": "INVALID_RESPONSE"
+        },
+        {
+          "description": "The host's configuration of a run is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_CONFIGURATION"
+        },
+        {
+          "description": "The model endpoint could not be reached.",
+          "type": "string",
+          "const": "TRANSPORT_ERROR"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "INTERNAL_ERROR"
+        },
+        {
+          "description": "The model a request names does not exist.",
+          "type": "string",
+          "const": "UNKNOWN_MODEL"
+        },
+        {
+          "description": "An optional dependency of the host is not installed.",
+          "type": "string",
+          "const": "MISSING_EXTRA"
+        },
+        {
+          "description": "A schema the core cannot work with.",
+          "type": "string",
+          "const": "INVALID_SCHEMA"
+        },
+        {
+          "description": "The endpoint does not support sessions.",
+          "type": "string",
+          "const": "SESSIONS_UNSUPPORTED"
+        },
+        {
+          "description": "An Arrow type outside the closed set.",
+          "type": "string",
+          "const": "UNSUPPORTED_TYPE"
+        },
+        {
+          "description": "A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.",
+          "type": "string",
+          "const": "VALUE_OUT_OF_RANGE"
+        },
+        {
+          "description": "A provider answered with a schema other than the one asked for.",
+          "type": "string",
+          "const": "PROVIDER_SCHEMA_MISMATCH"
+        },
+        {
+          "description": "A provider's query failed.",
+          "type": "string",
+          "const": "PROVIDER_ERROR"
+        },
+        {
+          "description": "A reply for an id the run is not waiting on: unknown, stale or already answered.",
+          "type": "string",
+          "const": "UNKNOWN_REPLY"
+        },
+        {
+          "description": "`next` was called before every reply the run asked for arrived.",
+          "type": "string",
+          "const": "REPLY_MISSING"
+        },
+        {
+          "description": "A reply of the wrong kind: a model answer for a fetch, or the other way round.",
+          "type": "string",
+          "const": "WRONG_REPLY"
+        },
+        {
+          "description": "The run was used after it finished.",
+          "type": "string",
+          "const": "RUN_FINISHED"
+        },
+        {
+          "description": "The run was used after it was cancelled.",
+          "type": "string",
+          "const": "RUN_CANCELLED"
+        },
+        {
+          "description": "The run was used after a panic poisoned it.",
+          "type": "string",
+          "const": "RUN_POISONED"
+        },
+        {
+          "description": "A second call reached a run while one was in progress.",
+          "type": "string",
+          "const": "RUN_BUSY"
+        },
+        {
+          "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
+          "type": "string",
+          "const": "INVALID_MESSAGE"
+        }
+      ]
+    },
+    "Detail": {
+      "description": "A value under an error's or a warning's `fields`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Scalar"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Scalar"
+          }
+        }
+      ]
+    },
+    "CoreWarning": {
+      "description": "A warning a run gives, kept in the order given.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}
