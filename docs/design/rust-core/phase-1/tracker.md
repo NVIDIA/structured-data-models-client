@@ -60,7 +60,7 @@ A task's checks are active from the moment it lands, as listed in the design's t
 | T1.35 Evidence pack and held-out run | 1b | not started | | |
 | T1.36 Phase 1b review, decision and merge | 1b | not started | | Completed independent review with blocking findings resolved; `gate.sh --locked` on the merge SHA; migration-plan.md carries every confirmed row; the owner's go or no-go, and the local merge on go |
 
-The Evidence column cites each landing's CI run on its topic branch. The phase-branch runs on the same SHAs, all green, are 37881261724 (94eedfe, T1.8b), 37887997790 (2d19851, T1.9), 37968493012 (08697fe, T1.10), 37986994678 (911e892, T1.10c) and 37999618718 (1b8d478, T1.10d, running when T1.11a started); T1.8's row cites both.
+The Evidence column cites each landing's CI run on its topic branch. The phase-branch runs on the same SHAs, all green, are 37881261724 (94eedfe, T1.8b), 37887997790 (2d19851, T1.9), 37968493012 (08697fe, T1.10), 37986994678 (911e892, T1.10c) and 37999618718 (1b8d478, T1.10d); T1.8's row cites both.
 
 ## Stop-rule counters
 
