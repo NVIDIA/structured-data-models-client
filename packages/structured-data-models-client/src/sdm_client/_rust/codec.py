@@ -24,6 +24,7 @@ Input-sized fields of a ``start`` travel as bytes attachments of their JSON
 from __future__ import annotations
 
 import base64
+import decimal
 import json
 import math
 import re
@@ -119,8 +120,9 @@ def decode_scalar(scalar: Any) -> Any:
         ):
             raise CodecError(f'{tag}: outside its precision and scale')
         # From its digits, never by scaleb, which rounds to the context.
-        unscaled = Decimal(number).as_tuple()
-        return Decimal((unscaled.sign, unscaled.digits, -scale))
+        with decimal.localcontext(_exact()):
+            unscaled = Decimal(number).as_tuple()
+            return Decimal((unscaled.sign, unscaled.digits, -scale))
     if tag == 'utf8':
         if not isinstance(value, str):
             raise CodecError('utf8: not text')
@@ -168,14 +170,28 @@ def _of_bits32(bits: int) -> float:
     return float(struct.unpack('>f', bits.to_bytes(4, 'big'))[0])
 
 
+#: The largest float32.
+_FLOAT32_MAX = (2 - 2**-23) * 2.0**127
+#: Halfway from the largest float32 to 2**128: text whose magnitude reaches
+#: it rounds to infinity (a tie goes to the even neighbour, 2**128).
+_FLOAT32_OVERFLOW = Decimal(2**128 - 2**103)
+
+
+def _exact() -> decimal.Context:
+    r"""A context of this module's own for exact comparisons, whatever the
+    caller's context traps (``FloatOperation`` included)."""
+    return decimal.Context()
+
+
 def _float32(text: str) -> float:
     r"""``text`` rounded to the nearest float32, as a Python float.
 
     Rounding the text to a double first and the double to a float32 can
     round twice: when the double lands exactly halfway between two
-    float32s while the text does not, the text itself decides, read
-    exactly as a :class:`~decimal.Decimal`. Finite text that rounds past the
-    largest float32 is refused, as the core refuses it.
+    float32s, or exactly on the overflow threshold, while the text does
+    not, the text itself decides, read exactly as a
+    :class:`~decimal.Decimal`. Finite text that rounds past the largest
+    float32 is refused, as the core refuses it.
     """
     wide = float(text)
     if math.isnan(wide):
@@ -185,9 +201,13 @@ def _float32(text: str) -> float:
     try:
         narrow = _of_bits32(_bits32(wide))
     except OverflowError:
-        raise CodecError('f32: finite text past the largest float32') from None
+        narrow = math.inf
     if math.isinf(narrow):
-        raise CodecError('f32: finite text past the largest float32')
+        with decimal.localcontext(_exact()):
+            below = Decimal(text).copy_abs() < _FLOAT32_OVERFLOW
+        if not below:
+            raise CodecError('f32: finite text past the largest float32')
+        return math.copysign(_FLOAT32_MAX, wide)
     if narrow == wide:
         return narrow
     # The float32 on the double's side of ``narrow`` (bits count magnitude
@@ -197,15 +217,12 @@ def _float32(text: str) -> float:
     halfway = (narrow + other) / 2
     if wide != halfway:
         return narrow
-    exact, middle = Decimal(text), Decimal(halfway)
-    if exact == middle:
-        return narrow  # A true tie: struct rounded it to even.
-    nearer_other = (exact > middle) == (other > narrow)
-    if not nearer_other:
-        return narrow
-    if math.isinf(other):
-        raise CodecError('f32: finite text past the largest float32')
-    return other
+    with decimal.localcontext(_exact()):
+        exact, middle = Decimal(text), Decimal.from_float(halfway)
+        if exact == middle:
+            return narrow  # A true tie: struct rounded it to even.
+        nearer_other = (exact > middle) == (other > narrow)
+    return other if nearer_other else narrow
 
 
 def integer(tag: str, value: int) -> dict[str, Any]:

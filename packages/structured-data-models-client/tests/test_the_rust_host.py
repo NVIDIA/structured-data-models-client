@@ -14,6 +14,7 @@ message text (H6, E22); warnings keep their order and their class.
 from __future__ import annotations
 
 import ast
+import decimal
 import json
 import math
 import struct
@@ -89,8 +90,27 @@ def test_a_scalar_the_contract_does_not_hold_is_refused_without_its_text(
     assert CANARY not in str(refused.value)
 
 
-def test_float_text_reads_at_its_width_as_the_core_reads_it() -> None:
-    # The vectors sdm-contract's float_text.rs checks the core against.
+@pytest.mark.parametrize('trapping', [False, True])
+def test_float_text_reads_at_its_width_as_the_core_reads_it(
+    trapping: bool,
+) -> None:
+    # The vectors sdm-contract's float_text.rs checks the core against, read
+    # also under a caller's context that traps mixing floats and decimals
+    # and every inexact result: the codec keeps a context of its own.
+    if trapping:
+        with decimal.localcontext() as caller:
+            caller.traps[decimal.FloatOperation] = True
+            caller.traps[decimal.Inexact] = True
+            caller.prec = 3
+            _read_float_vectors()
+            edges = json.loads(EDGES.read_text(encoding='utf-8'))['edges']
+            for edge in edges.values():
+                codec.decode_scalar(edge)
+    else:
+        _read_float_vectors()
+
+
+def _read_float_vectors() -> None:
     document = json.loads(FLOATS.read_text(encoding='utf-8'))
     assert document['format'] == 'sdm-float-text/1'
     for vector in document['vectors']:
