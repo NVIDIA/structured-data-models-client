@@ -104,6 +104,21 @@ jobs:
         with:
           workspaces: rust
       - run: cargo test --workspace --locked
+      # The pure-Rust host over the contract cases, its observations compared
+      # with the cases' expectations and reference observations (T1.10;
+      # T1.18 moves this to the checkpoint's comparator). The test host links
+      # no Python.
+      - run: cargo run -p sdm-testkit --bin sdm-contract-run --locked -- --out ../rust-host.jsonl ../contract/cases
+      - run: |
+          cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt
+          ! grep -w pyo3 ../testkit-tree.txt
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: |
+          pip install jsonschema
+          python scripts/rust_core/compare.py --cases contract/cases --reference contract/reference/*.jsonl rust-host.jsonl
+        working-directory: .
 
   # The client wheel, which carries the core as sdm_client._native (design,
   # "Packaging"). maturin, at the version native_wheel.py pins, builds it in
@@ -327,6 +342,14 @@ jobs:
       # only exercise anything with an engine installed, so running them in
       # the test job would prove nothing.
       - run: python -m pytest tests -q
+      # The S0 contract cases on python-core and python-old against their
+      # reference observations, and the Python runner's controls (T1.10).
+      # Running a case builds a schema from DuckDB and materializes it, which
+      # needs the engine, so they run here rather than in the test job, until
+      # T1.18 moves them to contract-python. DuckDB at the reference's version.
+      - run: |
+          pip install duckdb==1.5.6 jsonschema
+          python -m pytest contract/tests -q
 
   build:
     runs-on: ubuntu-latest
