@@ -9,7 +9,7 @@ A row changes with the dependency, in the same commit.
 |---|---|---|---|---|
 | `arrow-*` (`arrow-schema`, `arrow-buffer`, `arrow-array`, `arrow-data`, `arrow-ipc`, `arrow-select`) | 58 | contract, host, later domain crates | Use a library | The closed type set is Arrow's (plan section 3); one major across the workspace, because `duckdb =1.10506.0` and `arrow-pyarrow` 58 both need 58 and two majors in one process need FFI glue between them (decision B-D2); `cargo-deny` refuses a second version of any `arrow-*` crate |
 | `pyo3` | 0.28 (`abi3-py310`) | `sdm-py` only | Use a library | The binding tool the plan names; 0.28 because `arrow-pyarrow` 58 needs it (B-D2); RUSTSEC-2026-0176 and RUSTSEC-2026-0177 are ignored with reasons until the next Arrow bump brings 0.29 (decision E1) |
-| `arrow-pyarrow` | 58 | `sdm-py` only | Use a library | PyCapsule only, which the `pyarrow>=14.0.1` floor guarantees (E16), without our own FFI code |
+| `arrow-pyarrow` | 58 | `sdm-py` only | Use a library | PyCapsule only, which the `pyarrow>=14.0.1` floor guarantees (E16), without our own FFI code; as built at T1.8 it reads Arrow in, after the binding checks for `__arrow_c_stream__`, and Arrow out is the binding's own `ArrowStream` over `arrow-array`'s safe FFI types, since `arrow-pyarrow` exports through pyarrow's private `_import_from_c` |
 | `duckdb` (duckdb-rs, `bundled`; `icu` planned at T1.11b) | `=1.10506.0` (DuckDB 1.5.6) | `sdm-testkit` only | Use a library | The pure-Rust test host runs the core's DuckDB SQL at the reference's DuckDB version; `cargo-deny` refuses it anywhere else; `icu`, with extension autoload off, lets the host set a session `TimeZone` so `CAST(TIMESTAMPTZ AS TIMESTAMP)` matches the Python host (`time.timestamptz`) |
 | `jiff` (`std`, `tzdb-zoneinfo`, `tzdb-bundle-always`; no `tz-system`) | 0.2.38 | host, later engine and the interim parser | Use a library | The one calendar and zone library (decision A7): it meets DT-1 and DT-2 on all 2,808 zone answers and all 208 `DateOffset` answers of the T0.6 corpus, with a host directory and with its bundled copy; `tz-system` stays off so nothing reads the environment |
 | `jiff-tzdb` | 0.1.9 (tzdata 2026e) | host | Use a library | The bundled zone database behind `jiff`, the DT-2 fallback; its version (`jiff_tzdb::VERSION`) is recorded as the bundled source's version, and the zone vectors are checked against it |
@@ -26,9 +26,9 @@ A row changes with the dependency, in the same commit.
 | `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
 | `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
-| `tracing` (feature `log`) | planned (T1.8) | first-party crates | Use a library | Logging in Rust (decision H8); the `log` feature emits each event to the `log` facade when no subscriber is set, which is what `pyo3-log` reads |
+| `tracing` (features `std`, `log`) | 0.1.44 | first-party crates (`sdm-core` from T1.8) | Use a library | Logging in Rust (decision H8); the `log` feature emits each event to the `log` facade when no subscriber is set, which is what `pyo3-log` reads |
 | `serde_stacker` | 0.1.14 | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27), through `read_validated_query`, which refuses text nested past `MAX_JSON_DEPTH` (2,008) before reading; `sdm-contract` turns on `serde_json`'s `unbounded_depth` for it, which only adds the switch that reader uses: every other read keeps the 128-level limit |
-| `pyo3-log` | planned (T1.8) | `sdm-py` only | Use a library | Bridges Rust `log` records to Python `logging`, initialized at the first core call; its level cache is reset at each run start (H8) |
+| `pyo3-log` | 0.13 | `sdm-py` only | Use a library | Bridges Rust `log` records to Python `logging`, initialized at the first core call; its level cache is reset at each run start (H8) |
 
 ## Ported algorithms and host concerns
 
