@@ -67,9 +67,55 @@ pub struct Input {
     #[serde(default)]
     pub setup: Option<Vec<String>>,
     #[serde(default)]
-    pub from_source: Option<Value>,
+    pub from_source: Option<FromSource>,
     pub pql: String,
-    pub materialize: Value,
+    pub materialize: Materialize,
+}
+
+/// Keyword arguments to `Schema.from_source`, each as the case gives it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FromSource {
+    #[serde(default)]
+    pub tables: Option<Tables>,
+    #[serde(default)]
+    pub primary_keys: Option<serde_json::Map<String, Value>>,
+    #[serde(default)]
+    pub time_columns: Option<serde_json::Map<String, Value>>,
+}
+
+/// `from_source`'s tables: a list of names, or names by alias.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum Tables {
+    List(Vec<Value>),
+    Named(serde_json::Map<String, Value>),
+}
+
+/// Keyword arguments to `materialize`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Materialize {
+    pub indices: Vec<Index>,
+    #[serde(default)]
+    pub indices_as: Option<IndicesAs>,
+    #[serde(default)]
+    pub anchor_time: Option<String>,
+}
+
+/// One entity key: an integer of either sign's range, or text.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum Index {
+    Signed(i64),
+    Unsigned(u64),
+    Text(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndicesAs {
+    Decimal,
 }
 
 /// The core operations a case's call starts, with what the host passes.

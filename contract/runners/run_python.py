@@ -31,8 +31,8 @@ case's outcome, recorded by class, ``StructuredDataError.code`` and stage, a
 one. A runner failure is anything else: the guard failing, a missing
 ``sdm_client._native`` or a refused forced route (``RouteError``), an error
 in the runner itself, an observation that does not validate, or the process
-dying. It exits non-zero and writes nothing; observations are written only
-when every case was recorded. No message text is recorded (decision H17).
+dying. It exits non-zero and leaves no output file, an earlier run's
+included; observations are written only when every case was recorded. No message text is recorded (decision H17).
 
 This file also holds the case loader and the Phase 1b inventory loader,
 which maps each inventory case into the case format and back without loss.
@@ -507,8 +507,16 @@ def _call(
     from sdm_client import PredictiveQuery, Schema
     from sdm_connectors import DuckDBSource
 
-    connection = _connection(case, bases)
     given = case['input']
+    # The call's arguments are the harness's to build: an input it cannot
+    # build is a runner failure, never the case's outcome.
+    try:
+        arguments = _materialize_arguments(given['materialize'])
+    except Exception:  # noqa: BLE001 - building the input is not the call
+        raise RunnerFailure(
+            f'{case["id"]}: its materialize arguments could not be built'
+        ) from None
+    connection = _connection(case, bases)
     stage = 'from_source'
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
@@ -518,9 +526,7 @@ def _call(
             )
             if case['until'] != 'from_source':
                 stage = 'materialize'
-                PredictiveQuery(given['pql'], schema).materialize(
-                    **_materialize_arguments(given['materialize'])
-                )
+                PredictiveQuery(given['pql'], schema).materialize(**arguments)
             if case['until'] == 'predict':
                 raise RunnerFailure(
                     f'{case["id"]}: this runner does not make the predict '
@@ -552,6 +558,15 @@ def _native_sha256() -> str | None:
     return digest(Path(location).read_bytes())
 
 
+def _require_reference_client(reference: Path) -> None:
+    r"""``sdm_client`` is the reference checkout's own."""
+    import sdm_client
+
+    location = Path(sdm_client.__file__).resolve()
+    if not location.is_relative_to(reference.resolve()):
+        raise RunnerFailure("sdm_client is not the reference checkout's")
+
+
 def run(
     mode: str,
     cases: list[tuple[dict[str, Any], str]],
@@ -562,11 +577,7 @@ def run(
     guard = _Guard(reference) if reference is not None else None
     if guard is not None:
         guard.check('before the first case')
-        import sdm_client
-
-        location = Path(sdm_client.__file__).resolve()
-        if not location.is_relative_to(reference.resolve()):  # type: ignore[union-attr]
-            raise RunnerFailure("sdm_client is not the reference checkout's")
+        _require_reference_client(reference)  # type: ignore[arg-type]
     bases_path = BASES
     bases = load_bases(bases_path)
     bases_digest = digest(bases_path.read_bytes())
@@ -649,6 +660,10 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):
         parser.error('--reference is given in python-ref mode, and only there')
+    # A failed run leaves no output, not an earlier run's.
+    partial = arguments.out.with_name(arguments.out.name + '.partial')
+    arguments.out.unlink(missing_ok=True)
+    partial.unlink(missing_ok=True)
     try:
         cases = load_cases(arguments.cases)
         if not cases:
@@ -657,7 +672,6 @@ def main(argv: list[str] | None = None) -> int:
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)
         return 1
-    partial = arguments.out.with_name(arguments.out.name + '.partial')
     partial.write_text(
         ''.join(
             json.dumps(item, sort_keys=True) + '\n' for item in observations

@@ -140,6 +140,8 @@ def test_an_unexpected_runtime_error_on_a_success_case_is_rejected(
     out = tmp_path / 'python-old.jsonl'
     run = _run('python-old', out, cases)
     assert run.returncode == 0, run.stderr
+    [observation] = _observations(out)
+    assert observation['outcome']['error'] == 'RuntimeError'
     compared = _compare(cases, out, reference=False)
     assert compared.returncode == 1
     assert (
@@ -181,9 +183,25 @@ def test_a_refused_forced_route_fails_the_runner(tmp_path: Path) -> None:
     cases = tmp_path / 'cases'
     _write_case(cases, case)
     out = tmp_path / 'python-core.jsonl'
+    out.write_text("an earlier run's observations\n")
     run = _run('python-core', out, cases)
     assert run.returncode == 1
     assert 'runner failure' in run.stderr and 'RouteError' in run.stderr
+    # Not even an earlier run's output survives a failed run.
+    assert not out.exists()
+
+
+def test_an_input_the_harness_cannot_build_fails_the_runner(
+    tmp_path: Path,
+) -> None:
+    case = json.loads(ACCEPTED.read_text())
+    case['input']['materialize']['anchor_time'] = '2024-13-45'
+    cases = tmp_path / 'cases'
+    _write_case(cases, case)
+    out = tmp_path / 'python-old.jsonl'
+    run = _run('python-old', out, cases)
+    assert run.returncode == 1
+    assert 'its materialize arguments could not be built' in run.stderr
     assert not out.exists()
 
 
@@ -215,4 +233,42 @@ def test_python_ref_stops_when_sdm_client_is_not_the_references(
     run = _run('python-ref', out, CASES, reference=reference)
     assert run.returncode == 1
     assert "sdm_client is not the reference checkout's" in run.stderr
+    assert not out.exists()
+
+
+def test_python_ref_stops_when_the_guard_fails_after_the_last_case(
+    tmp_path: Path,
+) -> None:
+    reference = _reference(
+        tmp_path,
+        'calls = []\n'
+        'def require_isolation():\n'
+        '    calls.append(1)\n'
+        '    if len(calls) > 1:\n'
+        "        raise RuntimeError('the Rust core was loaded')\n",
+    )
+    out = tmp_path / 'python-ref.jsonl'
+    # The candidate's sdm_client stands in for the reference's here, so the
+    # check that it is the reference checkout's is replaced.
+    script = textwrap.dedent(
+        f"""
+        import importlib.util, sys
+        spec = importlib.util.spec_from_file_location('run_python', {str(RUNNER)!r})
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        runner._require_reference_client = lambda reference: None
+        sys.exit(runner.main([
+            '--mode', 'python-ref', '--reference', {str(reference)!r},
+            '--out', {str(out)!r}, {str(CASES)!r},
+        ]))
+        """
+    )
+    run = subprocess.run(
+        [sys.executable, '-I', '-c', script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 1, run.stderr
+    assert 'the reference guard failed after the last case' in run.stderr
     assert not out.exists()

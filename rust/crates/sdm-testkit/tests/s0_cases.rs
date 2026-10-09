@@ -40,23 +40,95 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
     assert!(answers.contains(&Answer::Validated(false)));
 }
 
-#[test]
-fn a_case_names_its_file_and_position_when_it_does_not_load() {
-    let directory = std::env::temp_dir().join(format!("sdm-testkit-{}", std::process::id()));
+/// The accepted S0 case as JSON, for a test to change.
+fn accepted() -> serde_json::Value {
+    let path = cases_dir().join("s0/s0.accept.sum-window.json");
+    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+}
+
+/// A scratch directory of this test's own.
+fn scratch(name: &str) -> PathBuf {
+    let directory = std::env::temp_dir().join(format!("sdm-testkit-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
     std::fs::create_dir_all(&directory).unwrap();
-    let path = directory.join("broken.json");
-    std::fs::write(
-        &path,
-        br#"{"format": "sdm-case/1", "id": "x", "secret-canary": 1}"#,
-    )
-    .unwrap();
-    let error = case::load(&[path]).unwrap_err().to_string();
+    directory
+}
+
+/// Loads `case` written to a file: the loader's error, if any.
+fn load_error(name: &str, case: &serde_json::Value) -> Option<String> {
+    let directory = scratch(name);
+    let path = directory.join("case.json");
+    std::fs::write(&path, serde_json::to_vec(case).unwrap()).unwrap();
+    let error = case::load(&[path]).err().map(|error| error.to_string());
     std::fs::remove_dir_all(&directory).unwrap();
+    error
+}
+
+#[test]
+fn the_accepted_case_loads_unchanged() {
+    assert_eq!(load_error("unchanged", &accepted()), None);
+}
+
+#[test]
+fn an_unknown_key_names_the_file_and_position_and_never_the_key() {
+    let mut case = accepted();
+    case["secret-canary"] = serde_json::json!(1);
+    let error = load_error("top", &case).expect("refused");
     assert!(
-        error.contains("broken.json") && error.contains("line 1"),
+        error.contains("case.json") && error.contains("line 1"),
         "{error}"
     );
     assert!(!error.contains("secret-canary"), "{error}");
+}
+
+/// The same key `contract/tests` shows the Python loader refusing.
+#[test]
+fn an_unknown_key_inside_the_call_arguments_is_refused() {
+    let mut case = accepted();
+    case["input"]["materialize"]["ignored_typo"] = serde_json::json!(true);
+    assert!(load_error("nested-materialize", &case).is_some());
+    let mut case = accepted();
+    case["input"]["from_source"] = serde_json::json!({"ignored_typo": {}});
+    assert!(load_error("nested-from-source", &case).is_some());
+}
+
+#[test]
+fn a_failed_run_leaves_no_output_an_earlier_run_wrote() {
+    let directory = scratch("stale");
+    let mut case = accepted();
+    case.as_object_mut().unwrap().remove("core");
+    let cases = directory.join("case.json");
+    std::fs::write(&cases, serde_json::to_vec(&case).unwrap()).unwrap();
+    let out = directory.join("rust-host.jsonl");
+    std::fs::write(&out, "an earlier run's observations\n").unwrap();
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_sdm-contract-run"))
+        .arg("--out")
+        .arg(&out)
+        .arg(&cases)
+        .output()
+        .unwrap();
+    let left = out.exists();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert!(!run.status.success());
+    assert!(String::from_utf8_lossy(&run.stderr).contains("runner failure"));
+    assert!(!left, "the earlier run's output survived");
+}
+
+#[test]
+fn the_host_records_the_inputs_it_encoded() {
+    let mut loaded = case::load(&[cases_dir()]).unwrap().remove(0).case;
+    // A profile spelled with an explicit empty capabilities map: the host
+    // encodes it without one, and records what it encoded.
+    let spec = loaded
+        .core
+        .as_mut()
+        .unwrap()
+        .validate_query
+        .as_mut()
+        .unwrap();
+    spec.profile["capabilities"] = serde_json::json!({});
+    let observed = host::run(&loaded).unwrap();
+    assert!(observed.inputs[0]["profile"].get("capabilities").is_none());
 }
 
 #[test]

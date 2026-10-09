@@ -11,9 +11,9 @@
 //! Runs every case through `HostRun` and writes one observation per case,
 //! one JSON object per line, for `scripts/rust_core/compare.py`. A runner
 //! failure (a case it cannot load or run, a step S0 never takes) exits
-//! non-zero and writes nothing; observations are written only when every
-//! case was recorded. The identity's commit is the checkout the command
-//! runs in.
+//! non-zero and leaves no output file, an earlier run's included;
+//! observations are written only when every case was recorded. The
+//! identity's commit is the checkout the command runs in.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -29,6 +29,17 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         ),
         _ => bail!("usage: sdm-contract-run --out FILE CASE_OR_DIRECTORY..."),
     };
+    let mut partial = out.clone().into_os_string();
+    partial.push(".partial");
+    // A failed run leaves no output, not an earlier run's.
+    for stale in [out.as_os_str(), partial.as_os_str()] {
+        match std::fs::remove_file(stale) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(error.into());
+            }
+            _ => {}
+        }
+    }
     let loaded = case::load(&cases)?;
     if loaded.is_empty() {
         bail!("no cases");
@@ -40,8 +51,6 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         lines.push_str(&observation::write(&identity, each, &observed).to_string());
         lines.push('\n');
     }
-    let mut partial = out.clone().into_os_string();
-    partial.push(".partial");
     std::fs::write(&partial, lines)?;
     std::fs::rename(&partial, &out)?;
     Ok((out, loaded.len()))

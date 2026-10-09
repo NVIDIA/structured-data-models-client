@@ -126,12 +126,21 @@ pub fn run(case: &Case) -> Result<Observed> {
             case.id
         )
     })?;
-    serde_json::from_value::<QuerySchema>(spec.schema.clone()).map_err(|_| {
+    let schema: QuerySchema = serde_json::from_value(spec.schema.clone()).map_err(|_| {
         anyhow!(
             "{}: core.validate_query.schema is not a QuerySchema",
             case.id
         )
     })?;
+    // What this host sends, as it encodes it, is what it records.
+    let query_bytes = serde_json::to_vec(&case.input.pql)?;
+    let schema_bytes = serde_json::to_vec(&schema)?;
+    let input = json!({
+        "op": "validate_query",
+        "query": serde_json::from_slice::<Value>(&query_bytes)?,
+        "profile": serde_json::to_value(&profile)?,
+        "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
+    });
     let start = ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: facts()?,
@@ -142,21 +151,9 @@ pub fn run(case: &Case) -> Result<Observed> {
         }),
     }));
     let attachments = BTreeMap::from([
-        (
-            AttachmentId(1),
-            Attachment::Bytes(serde_json::to_vec(&case.input.pql)?),
-        ),
-        (
-            AttachmentId(2),
-            Attachment::Bytes(serde_json::to_vec(&spec.schema)?),
-        ),
+        (AttachmentId(1), Attachment::Bytes(query_bytes)),
+        (AttachmentId(2), Attachment::Bytes(schema_bytes)),
     ]);
-    let input = json!({
-        "op": "validate_query",
-        "query": case.input.pql,
-        "profile": spec.profile,
-        "schema": spec.schema,
-    });
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let answer = match HostRun::start(&default_root(), &message, attachments) {
         Err(refused) => error_of(&refused)?,
