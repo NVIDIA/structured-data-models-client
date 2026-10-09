@@ -13,9 +13,13 @@ through (``skip_while``, a dev-only edge, emulation inside an allowlisted
 module). The fixtures are the tree's own files, copied into a temporary
 directory and changed there, or ``cargo metadata``'s graph with one edge
 added or removed. The clippy bans are also run for real: a fixture crate
-under ``rust/clippy.toml`` that uses each banned item must fail clippy on
-each, and the reasoned ``#[allow]`` that ``sdm-host`` carries must silence
-its one (decision E24). That run needs the pinned toolchain and the
+under ``rust/clippy.toml`` uses every ban the file holds, one to one (the
+allow-invalid rand entries aside, inert while rand is no dependency), and
+must fail clippy on each; the reasoned ``#[allow]`` that ``sdm-host``
+carries must silence its one call and pass the bans check (decision E24);
+and each suppression a review found (``cfg_attr``, ``warnings``, a spaced
+path, an ``expect``, the allow widened to a function or its statement
+widened) must silence clippy there and fail the bans check. That run needs the pinned toolchain and the
 workspace's dependencies already fetched; ``--no-clippy`` leaves it out.
 
 Phase 1 design, task T1.10c (formerly T1.16); the rest of ``selftest.py``,
@@ -50,6 +54,7 @@ IGNORED = shutil.ignore_patterns('target', '__pycache__', '.venv', '*.pyc')
 IGNORE_ATTR = '#[' + 'ignore]'
 PYTEST_SKIP = 'pytest.' + 'skip'
 XFAIL = 'x' + 'fail'
+SKIP = 'sk' + 'ip'
 SKIPIF = 'skip' + 'if'
 ALLOWED_TO_FAIL = 'continue-on-' + 'error'
 
@@ -137,11 +142,17 @@ class Metadata:
         self.package(name, manifest)
         self.data['workspace_members'].append(self.ids[name])
 
-    def edge(self, crate: str, dep: str, kind: str | None = None) -> None:
+    def edge(
+        self,
+        crate: str,
+        dep: str,
+        kind: str | None = None,
+        name: str | None = None,
+    ) -> None:
         self.package(dep)
         self.node(crate)['deps'].append(
             {
-                'name': dep.replace('-', '_'),
+                'name': name or dep.replace('-', '_'),
                 'pkg': self.ids[dep],
                 'dep_kinds': [{'kind': kind, 'target': None}],
             }
@@ -317,12 +328,53 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm-py reaches duckdb',
     )
 
+    # A future Java binding (sdm-jni) links jni, and no Python.
+    with tempfile.TemporaryDirectory(prefix='sdm-l0-') as tmp:
+        manifest = Path(tmp) / 'sdm-jni/Cargo.toml'
+        manifest.parent.mkdir()
+        manifest.write_text(
+            '[package]\nname = "sdm-jni"\n\n[lints.rust]\nunsafe_code = "deny"\n'
+        )
+        classes, allowed = dict(l0_deps.CLASSES), dict(l0_deps.ALLOWED)
+        l0_deps.CLASSES['sdm-jni'] = l0_deps.BINDING
+        l0_deps.ALLOWED['sdm-jni'] = frozenset({'sdm-host', 'sdm-contract'})
+        try:
+
+            def jni(m: Metadata, extra: str | None = None) -> None:
+                m.member('sdm-jni', manifest)
+                for dep in ('sdm-host', 'sdm-contract', 'jni'):
+                    m.edge('sdm-jni', dep)
+                if extra:
+                    m.edge('sdm-jni', extra)
+
+            case('control: a Java binding, sdm-jni, on jni', jni, None)
+            case(
+                'a Java binding on pyo3',
+                lambda m: jni(m, 'pyo3'),
+                'sdm-jni reaches pyo3',
+            )
+            case(
+                'a Java binding on duckdb',
+                lambda m: jni(m, 'duckdb'),
+                'sdm-jni reaches duckdb',
+            )
+        finally:
+            l0_deps.CLASSES.clear()
+            l0_deps.CLASSES.update(classes)
+            l0_deps.ALLOWED.clear()
+            l0_deps.ALLOWED.update(allowed)
+
     # The parser rule's source half, and the unsafe check: crates copied.
     def with_crate(
-        name: str, crate: str, change: Callable[[Path], object], fails_with: str
+        name: str,
+        crate: str,
+        change: Callable[[Path], object],
+        fails_with: str,
+        seed: Callable[[Metadata], object] = lambda m: None,
     ) -> None:
         with tree(f'rust/crates/{crate}', 'rust/bindings/sdm-py') as root:
             metadata = Metadata(base)
+            seed(metadata)
             directory = root / 'rust/crates' / crate
             if not directory.is_dir():
                 directory = root / 'rust/bindings' / crate
@@ -342,6 +394,18 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
             d / 'src/dispatch.rs', '\nuse sdm_pql_interim::parser;\n'
         ),
         'sdm-core/src/dispatch.rs: names sdm_pql_interim',
+    )
+
+    def renamed(m: Metadata) -> None:
+        m.drop_edge('sdm-core', l0_deps.PARSER)
+        m.edge('sdm-core', l0_deps.PARSER, name='pqlp')
+
+    with_crate(
+        'the parser renamed (pqlp = { package = "sdm-pql-interim" })',
+        'sdm-core',
+        lambda d: append(d / 'src/dispatch.rs', '\nuse pqlp::parse;\n'),
+        'sdm-core/src/dispatch.rs: names pqlp, the parser',
+        seed=renamed,
     )
     with_crate(
         "the parser named in sdm-core's tests",
@@ -587,7 +651,7 @@ def scan_cases(results: list[Result]) -> None:
             r / crates / 'sdm-engine/src/lib.rs',
             '\nconst Q: &str = "SELECT a FROM t";\n',
         ),
-        'holds the SQL `SELECT`',
+        'hold `SELECT`',
     )
     sql(
         'lowercase SQL in sdm-schema',
@@ -595,7 +659,7 @@ def scan_cases(results: list[Result]) -> None:
             r / crates / 'sdm-schema/src/lib.rs',
             '\nconst Q: &str = "select a from t";\n',
         ),
-        'holds the SQL `select a from`',
+        'hold `select a from`',
     )
     sql(
         'an ORDER BY clause in sdm-request',
@@ -603,7 +667,7 @@ def scan_cases(results: list[Result]) -> None:
             r / crates / 'sdm-request/src/lib.rs',
             '\nconst Q: &str = "x ORDER BY y NULLS LAST";\n',
         ),
-        'holds the SQL `ORDER BY`',
+        'hold `ORDER BY`',
     )
     sql(
         'a provider match in sdm-request',
@@ -618,6 +682,63 @@ def scan_cases(results: list[Result]) -> None:
         lambda r: append(
             r / crates / 'sdm-data/src/lib.rs',
             '\nconst Q: &str = "SELECT a FROM t";\n',
+        ),
+        None,
+    )
+    engine = 'sdm-engine/src/lib.rs'
+    for name, code, fragment in (
+        (
+            'a condition assembled by format!',
+            'pub fn f(c: &str) -> String { format!("{c} > 0 and {c} is not null") }',
+            'is not null',
+        ),
+        (
+            'a lowercase cast',
+            'const Q: &str = "cast(t as timestamp)";',
+            'cast(t as',
+        ),
+        ('a count', 'const Q: &str = "count(*) from";', 'count(*'),
+        (
+            'a query joined from words',
+            'pub fn f(t: &str) -> String { ["select", "*", "from", t].join(" ") }',
+            'select * from',
+        ),
+        (
+            'a query by concat!',
+            'const Q: &str = concat!("select ", "x", " from ", "t");',
+            'select  x  from',
+        ),
+        (
+            'a query by format! pieces',
+            'pub fn f() -> String { format!("{} {}", "select x", "from t") }',
+            'select x from',
+        ),
+        (
+            'a query added with +',
+            'pub fn f(t: &str) -> String { "select a ".to_owned() + "from " + t }',
+            'select a  from',
+        ),
+        (
+            'a provider name in a string',
+            'const B: &str = "duckdb";',
+            '`duckdb`',
+        ),
+        (
+            'text brought in',
+            'const Q: &str = include_str!("q.sql");',
+            'include_str',
+        ),
+    ):
+
+        def seed_sql(root: Path, code: str = code) -> None:
+            append(root / crates / engine, f'\n{code}\n')
+
+        sql(name, seed_sql, fragment)
+    sql(
+        'control: English that is not SQL',
+        lambda r: append(
+            r / crates / engine,
+            '\nconst M: &str = "the column is missing from the schema, so select another";\n',
         ),
         None,
     )
@@ -713,7 +834,7 @@ def scan_cases(results: list[Result]) -> None:
         'an import-or-skip in the contract tests',
         lambda r: append(
             r / 'contract/tests/test_runners.py',
-            '\nduckdb = pytest.importor' + 'skip("duckdb")\n',
+            f'\nduckdb = pytest.importor{SKIP}("duckdb")\n',
         ),
         'importor',
     )
@@ -723,6 +844,39 @@ def scan_cases(results: list[Result]) -> None:
             r / 'rust/crates/sdm-contract/src/lib.rs',
             '\n#[derive(schemars::JsonSchema)]\nstruct S { #[schemars(skip)] a: u8 }\n'
             'fn f(v: &[u8]) -> usize { v.iter().skip_while(|x| **x == 0).count() }\n',
+        ),
+        None,
+    )
+    skips(
+        'a skip marker through an imported mark',
+        lambda r: append(
+            r / client_tests / 'test_the_routing_seam.py',
+            f'\nfrom pytest import mark\n\n\n@mark.{SKIP}\ndef test_later():\n    pass\n',
+        ),
+        f'`mark.{SKIP}`',
+    )
+    skips(
+        'an expected failure by unittest',
+        lambda r: append(
+            r / client_tests / 'test_the_routing_seam.py',
+            '\nimport unittest\n\n\n@unittest.expected'
+            + 'Failure\ndef test_later():\n    pass\n',
+        ),
+        '`expected' + 'Failure`',
+    )
+    skips(
+        'a skip through an alias of pytest',
+        lambda r: append(
+            r / 'rust/bindings/sdm-py/tests/test_binding.py',
+            f'\nimport pytest as pt\n\n\ndef test_later():\n    pt.{SKIP}("x")\n',
+        ),
+        f'`{SKIP}(`',
+    )
+    skips(
+        "control: Rust's iterator skip",
+        lambda r: append(
+            r / 'rust/crates/sdm-contract/src/lib.rs',
+            f'\nfn g(v: &[u8]) -> usize {{ v.iter().{SKIP}(1).count() }}\n',
         ),
         None,
     )
@@ -741,6 +895,26 @@ def scan_cases(results: list[Result]) -> None:
         'a Rust job step allowed to fail',
         ci('rust-test', '      - run: cargo test --workspace --locked'),
         f'`{ALLOWED_TO_FAIL}` in job rust-test',
+    )
+    skips(
+        "the client's test job allowed to fail, at job level",
+        lambda r: edit(
+            r / l0_scan.CI_FILE,
+            '  test:\n    runs-on: ubuntu-latest\n',
+            f'  test:\n    runs-on: ubuntu-latest\n    {ALLOWED_TO_FAIL}: true\n',
+        ),
+        f'`{ALLOWED_TO_FAIL}` in job test',
+    )
+    skips(
+        'a step of installed-wheel allowed to fail',
+        lambda r: edit(
+            r / l0_scan.CI_FILE,
+            '  installed-wheel:\n    runs-on: ubuntu-latest\n    needs: build\n'
+            '    steps:\n      - uses: actions/checkout@v7\n',
+            '  installed-wheel:\n    runs-on: ubuntu-latest\n    needs: build\n'
+            f'    steps:\n      - uses: actions/checkout@v7\n        {ALLOWED_TO_FAIL}: true\n',
+        ),
+        f'`{ALLOWED_TO_FAIL}` in job installed-wheel',
     )
     skips(
         "the contract cases' step allowed to fail",
@@ -799,7 +973,7 @@ def scan_cases(results: list[Result]) -> None:
             r / 'rust/crates/sdm-host/src/zones.rs',
             '\n#[allow(clippy::disallowed_methods, reason = "x")]\nfn g() {}\n',
         ),
-        'allows clippy::disallowed_methods 2 times',
+        'sdm-host/src/zones.rs:',
     )
     bans(
         'an allow in a domain crate',
@@ -842,6 +1016,79 @@ def scan_cases(results: list[Result]) -> None:
             'all = { level = "warn", priority = -1 }\ndisallowed_methods = "allow"',
         ),
         'clippy::disallowed_methods set to allow',
+    )
+    run = 'rust/crates/sdm-core/src/run.rs'
+    for name, code in (
+        (
+            'an inner allow inside cfg_attr',
+            '#![cfg_attr(all(), allow(clippy::disallowed_types))]',
+        ),
+        (
+            'an allow inside cfg_attr',
+            '#[cfg_attr(all(), allow(clippy::disallowed_methods))]\nfn g() {}',
+        ),
+        ('allow(warnings)', '#[allow(warnings)]\nfn g() {}'),
+        ('a spaced path', '#[allow(clippy :: disallowed_methods)]\nfn g() {}'),
+        (
+            'an expect inside cfg_attr',
+            '#[cfg_attr(all(), expect(clippy::disallowed_methods))]\nfn g() {}',
+        ),
+    ):
+
+        def seed_ban(root: Path, code: str = code) -> None:
+            append(root / run, f'\n{code}\n')
+
+        bans(f'shipped code: {name}', seed_ban, f'{run}:')
+    zones = 'rust/crates/sdm-host/src/zones.rs'
+    statement = 'let db = TimeZoneDatabase::from_dir(&root.path).ok();'
+    bans(
+        "an environment read in sdm-host's allowed initializer",
+        lambda r: edit(
+            r / zones,
+            statement,
+            'let db = TimeZoneDatabase::from_dir(std::env::var("TZDIR").unwrap_or_default()).ok();',
+        ),
+        f'{zones}:',
+    )
+
+    def widened(root: Path) -> None:
+        path = root / zones
+        text = path.read_text()
+        start = text.index('                #[allow(')
+        end = text.index(')]', start) + 3
+        allow = text[start:end]
+        text = text[:start] + text[end:]
+        text = text.replace(
+            '    pub fn new(',
+            allow.replace('                ', '    ') + '    pub fn new(',
+            1,
+        )
+        path.write_text(text)
+
+    bans("sdm-host's allow moved up to the function", widened, f'{zones}:')
+    bans(
+        'a Zoned parsed by type annotation',
+        lambda r: append(
+            r / run,
+            '\nfn z() { let _z: jiff::Zoned = "2024-01-01T00:00[UTC]".parse().unwrap(); }\n',
+        ),
+        'parses a Zoned',
+    )
+    bans(
+        'a Zoned parsed by turbofish',
+        lambda r: append(
+            r / run, '\nfn z() { let _ = "x".parse::<Zoned>(); }\n'
+        ),
+        'parses a Zoned',
+    )
+    bans(
+        'every warning allowed in a lint table',
+        lambda r: edit(
+            r / 'rust/Cargo.toml',
+            'unsafe_code = "forbid"',
+            'unsafe_code = "forbid"\nwarnings = "allow"',
+        ),
+        'warnings set to allow',
     )
 
     contract = 'rust/crates/sdm-contract'
@@ -886,34 +1133,180 @@ def scan_cases(results: list[Result]) -> None:
 
 # --- the clippy bans, for real ------------------------------------------------
 
+# One use of every ban rust/clippy.toml holds that resolves today; the
+# rand entries are allow-invalid, inert while rand is no dependency.
 BANNED_USES = {
+    # Types.
     'std::collections::HashMap': 'let _ = std::collections::HashMap::<u8, u8>::new();',
     'std::collections::HashSet': 'let _ = std::collections::HashSet::<u8>::new();',
+    'std::hash::RandomState': 'let _ = std::hash::RandomState::new();',
+    'std::time::SystemTime': 'let _: Option<std::time::SystemTime> = None;',
+    'std::time::Instant': 'let _: Option<std::time::Instant> = None;',
+    'std::fs::File': 'let _: Option<std::fs::File> = None;',
+    'std::fs::OpenOptions': 'let _: Option<std::fs::OpenOptions> = None;',
+    'std::fs::DirEntry': 'let _: Option<std::fs::DirEntry> = None;',
+    # Clocks.
     'std::time::SystemTime::now': 'let _ = std::time::SystemTime::now();',
+    'std::time::SystemTime::elapsed': 'let _ = std::time::UNIX_EPOCH.elapsed();',
     'std::time::Instant::now': 'let _ = std::time::Instant::now();',
+    'jiff::Timestamp::now': 'let _ = jiff::Timestamp::now();',
+    'jiff::Zoned::now': 'let _ = jiff::Zoned::now();',
+    # The environment.
     'std::env::var': 'let _ = std::env::var("X");',
     'std::env::var_os': 'let _ = std::env::var_os("X");',
+    'std::env::vars': 'let _ = std::env::vars();',
+    'std::env::vars_os': 'let _ = std::env::vars_os();',
+    'std::env::args': 'let _ = std::env::args();',
+    'std::env::args_os': 'let _ = std::env::args_os();',
+    'std::env::current_dir': 'let _ = std::env::current_dir();',
+    'std::env::set_current_dir': 'let _ = std::env::set_current_dir("x");',
+    'std::env::current_exe': 'let _ = std::env::current_exe();',
+    'std::env::temp_dir': 'let _ = std::env::temp_dir();',
+    'std::env::home_dir': 'let _ = std::env::home_dir();',
+    'std::env::set_var': 'unsafe { std::env::set_var("X", "Y") };',
+    'std::env::remove_var': 'unsafe { std::env::remove_var("X") };',
+    # The file system.
+    'std::fs::read': 'let _ = std::fs::read("x");',
     'std::fs::read_to_string': 'let _ = std::fs::read_to_string("x");',
+    'std::fs::write': 'let _ = std::fs::write("x", b"");',
+    'std::fs::read_dir': 'let _ = std::fs::read_dir("x");',
+    'std::fs::metadata': 'let _ = std::fs::metadata("x");',
+    'std::fs::symlink_metadata': 'let _ = std::fs::symlink_metadata("x");',
+    'std::fs::canonicalize': 'let _ = std::fs::canonicalize("x");',
+    'std::fs::read_link': 'let _ = std::fs::read_link("x");',
+    'std::fs::exists': 'let _ = std::fs::exists("x");',
+    'std::fs::copy': 'let _ = std::fs::copy("x", "y");',
+    'std::fs::rename': 'let _ = std::fs::rename("x", "y");',
+    'std::fs::hard_link': 'let _ = std::fs::hard_link("x", "y");',
+    'std::fs::create_dir': 'let _ = std::fs::create_dir("x");',
+    'std::fs::create_dir_all': 'let _ = std::fs::create_dir_all("x");',
+    'std::fs::remove_file': 'let _ = std::fs::remove_file("x");',
+    'std::fs::remove_dir': 'let _ = std::fs::remove_dir("x");',
+    'std::fs::remove_dir_all': 'let _ = std::fs::remove_dir_all("x");',
+    'std::fs::set_permissions': (
+        'if let Ok(m) = std::fs::metadata("x") '
+        '{ let _ = std::fs::set_permissions("x", m.permissions()); }'
+    ),
     'std::path::Path::exists': 'let _ = std::path::Path::new("x").exists();',
-    'jiff::Timestamp::now': 'let _ = jiff::Timestamp::now();',
+    'std::path::Path::try_exists': 'let _ = std::path::Path::new("x").try_exists();',
+    'std::path::Path::is_file': 'let _ = std::path::Path::new("x").is_file();',
+    'std::path::Path::is_dir': 'let _ = std::path::Path::new("x").is_dir();',
+    'std::path::Path::is_symlink': 'let _ = std::path::Path::new("x").is_symlink();',
+    'std::path::Path::metadata': 'let _ = std::path::Path::new("x").metadata();',
+    'std::path::Path::symlink_metadata': 'let _ = std::path::Path::new("x").symlink_metadata();',
+    'std::path::Path::read_dir': 'let _ = std::path::Path::new("x").read_dir();',
+    'std::path::Path::read_link': 'let _ = std::path::Path::new("x").read_link();',
+    'std::path::Path::canonicalize': 'let _ = std::path::Path::new("x").canonicalize();',
+    # Zone databases.
     'jiff::tz::db': 'let _ = jiff::tz::db();',
+    'jiff::tz::TimeZoneDatabase::from_env': 'let _ = TimeZoneDatabase::from_env();',
+    'jiff::tz::TimeZoneDatabase::from_dir': 'let _ = TimeZoneDatabase::from_dir("x");',
+    'jiff::tz::TimeZoneDatabase::from_concatenated_path': (
+        'let _ = TimeZoneDatabase::from_concatenated_path("x");'
+    ),
     'jiff::tz::TimeZone::get': 'let _ = jiff::tz::TimeZone::get("UTC");',
     'jiff::tz::TimeZone::system': 'let _ = jiff::tz::TimeZone::system();',
-    'jiff::tz::TimeZoneDatabase::from_dir': 'let _ = jiff::tz::TimeZoneDatabase::from_dir("x");',
+    'jiff::tz::TimeZone::try_system': 'let _ = jiff::tz::TimeZone::try_system();',
     'jiff::Timestamp::in_tz': 'let _ = jiff::Timestamp::UNIX_EPOCH.in_tz("UTC");',
+    'jiff::Zoned::in_tz': (
+        'let _ = jiff::Timestamp::UNIX_EPOCH'
+        '.to_zoned(jiff::tz::TimeZone::UTC).in_tz("UTC");'
+    ),
+    'jiff::civil::DateTime::in_tz': (
+        'let _ = jiff::civil::date(2000, 1, 1).at(0, 0, 0, 0).in_tz("UTC");'
+    ),
+    'jiff::civil::Date::in_tz': 'let _ = jiff::civil::date(2000, 1, 1).in_tz("UTC");',
+    'jiff::fmt::temporal::DateTimeParser::parse_zoned': (
+        'let _ = jiff::fmt::temporal::DateTimeParser::new().parse_zoned("x");'
+    ),
+    'jiff::Zoned::strptime': 'let _ = jiff::Zoned::strptime("%Y", "2000");',
+    'jiff::fmt::strtime::BrokenDownTime::to_zoned': (
+        'let _ = jiff::fmt::strtime::parse("%Y", "2000").map(|t| t.to_zoned());'
+    ),
 }
-# sdm-host's exemption, reproduced: this one must not be reported.
-EXEMPT_USE = """
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "reads the zone lookup roots the host names (E24)"
-    )]
-    let _exempt = jiff::tz::TimeZoneDatabase::from_dir("roots");
+_REASON = 'reason = "reads the zone lookup roots the host names (E24)"'
+# sdm-host's exemption, as zones.rs has it: clippy must not report it, and
+# l0_scan.py must accept it.
+EXEMPT_USE = f"""pub fn exempt(root: &Root) {{
+    #[allow(clippy::disallowed_methods, {_REASON})]
+    let db = TimeZoneDatabase::from_dir(&root.path).ok();
+    let _ = db;
+}}
 """
+# The reviewers' bypasses: each silences clippy (shown by the run) and each
+# must fail l0_scan.py's bans check, read as if it were sdm-host's zones.rs.
+BYPASSES = {
+    'an inner allow inside cfg_attr': (
+        'mod bypass_inner {\n'
+        '    #![cfg_attr(all(), allow(clippy::disallowed_types))]\n'
+        '    pub fn f() { let _ = std::collections::HashMap::<u8, u8>::new(); }\n'
+        '}\n'
+    ),
+    'an allow inside cfg_attr': (
+        '#[cfg_attr(all(), allow(clippy::disallowed_methods))]\n'
+        'pub fn bypass_cfg_attr() { let _ = std::env::var("X"); }\n'
+    ),
+    'allow(warnings)': (
+        '#[allow(warnings)]\npub fn bypass_warnings() { let _ = std::env::var("X"); }\n'
+    ),
+    'a spaced path': (
+        '#[allow(clippy :: disallowed_methods)]\n'
+        'pub fn bypass_spaced() { let _ = std::env::var("X"); }\n'
+    ),
+    'an expect inside cfg_attr': (
+        '#[cfg_attr(all(), expect(clippy::disallowed_methods))]\n'
+        'pub fn bypass_expect() { let _ = std::env::var("X"); }\n'
+    ),
+    "sdm-host's allow moved up to the function": (
+        f'#[allow(clippy::disallowed_methods, {_REASON})]\n'
+        'pub fn bypass_wide(root: &Root) {\n'
+        '    let _ = TimeZoneDatabase::from_dir(&root.path).ok();\n'
+        '    let _ = std::env::var("TZDIR");\n'
+        '}\n'
+    ),
+    "an environment read in sdm-host's allowed initializer": (
+        'pub fn bypass_initializer(root: &Root) {\n'
+        f'    #[allow(clippy::disallowed_methods, {_REASON})]\n'
+        '    let db = TimeZoneDatabase::from_dir(std::env::var("TZDIR").unwrap_or_default()).ok();\n'
+        '    let _ = (db, &root.path);\n'
+        '}\n'
+    ),
+    "a block in sdm-host's allowed initializer": (
+        'pub fn bypass_block(root: &Root) {\n'
+        f'    #[allow(clippy::disallowed_methods, {_REASON})]\n'
+        '    let db = { let _ = std::env::var("X"); '
+        'TimeZoneDatabase::from_dir(&root.path).ok() };\n'
+        '    let _ = db;\n'
+        '}\n'
+    ),
+}
+
+
+def clippy_bans(config: dict[str, Any]) -> set[str]:
+    """Every ban the configuration holds, but the allow-invalid ones."""
+    return {
+        entry['path']
+        for key in ('disallowed-types', 'disallowed-methods')
+        for entry in config.get(key, [])
+        if isinstance(entry, dict) and not entry.get('allow-invalid')
+    }
 
 
 def clippy_case(results: list[Result]) -> None:
     rust = REPO_ROOT / 'rust'
+    config = l0_scan.tomllib.loads((rust / 'clippy.toml').read_text())
+    banned = clippy_bans(config)
+    missing, extra = banned - BANNED_USES.keys(), BANNED_USES.keys() - banned
+    results.append(
+        Result(
+            'clippy: the fixture uses every ban, one to one',
+            not missing and not extra,
+            'passes'
+            if not missing and not extra
+            else f'bans without a use: {sorted(missing)}; uses without a ban: '
+            f'{sorted(extra)}',
+        )
+    )
     jiff = re.search(r'^jiff = (.*)$', (rust / 'Cargo.toml').read_text(), re.M)
     if not jiff:
         results.append(
@@ -938,9 +1331,18 @@ def clippy_case(results: list[Result]) -> None:
             f'jiff = {jiff.group(1)}\n'
         )
         body = '\n'.join(f'    {use}' for use in BANNED_USES.values())
-        (crate / 'src/lib.rs').write_text(
-            f'pub fn uses() {{\n{body}\n{EXEMPT_USE}}}\n'
+        text = (
+            '#![allow(deprecated, reason = "home_dir is deprecated")]\n'
+            'use jiff::tz::TimeZoneDatabase;\n\n'
+            'pub struct Root {\n    pub path: std::path::PathBuf,\n}\n\n'
+            f'pub fn uses() {{\n{body}\n}}\n\n{EXEMPT_USE}\n'
         )
+        spans: dict[str, tuple[int, int]] = {}
+        for name, snippet in BYPASSES.items():
+            first = text.count('\n') + 1
+            text += snippet + '\n'
+            spans[name] = (first, text.count('\n'))
+        (crate / 'src/lib.rs').write_text(text)
         # A target directory of its own under rust/target, so the fixture's
         # build is kept between runs and never mixed with the workspace's.
         target = rust / 'target' / 'l0-selftest'
@@ -954,27 +1356,27 @@ def clippy_case(results: list[Result]) -> None:
             env=env,
         )
         output = run.stderr
-        if 'could not compile' not in output and run.returncode == 0:
+        if run.returncode == 0 or 'error[E' in output:
             results.append(
                 Result(
                     'clippy: the bans, for real',
                     False,
-                    'clippy passed the fixture',
+                    'clippy passed the fixture'
+                    if run.returncode == 0
+                    else f'the fixture did not build: {output[-2000:]}',
                 )
             )
             return
-        if 'error[E' in output:
-            results.append(
-                Result(
-                    'clippy: the bans, for real',
-                    False,
-                    f'the fixture did not build: {output[-2000:]}',
-                )
+        reports = [
+            (path, int(line))
+            for path, line in re.findall(
+                r'use of a disallowed (?:method|type) `([^`]+)`'
+                r'(?:[^\n]*\n){0,3}?\s*--> src/lib\.rs:(\d+):',
+                output,
             )
-            return
-        reported = re.findall(
-            r'use of a disallowed (?:method|type) `([^`]+)`', output
-        )
+        ]
+        reported = {path for path, _ in reports}
+        lines = {line for _, line in reports}
         for path in BANNED_USES:
             ok = path in reported
             results.append(
@@ -984,21 +1386,39 @@ def clippy_case(results: list[Result]) -> None:
                     'fails' if ok else f'not reported: {output[-1500:]}',
                 )
             )
-        lines = [int(m) for m in re.findall(r'--> src/lib\.rs:(\d+):', output)]
-        source = (crate / 'src/lib.rs').read_text().splitlines()
+        source = text.splitlines()
         exempt_line = next(
-            i for i, line in enumerate(source, 1) if '_exempt' in line
+            i
+            for i, line in enumerate(source, 1)
+            if 'let db = TimeZoneDatabase::from_dir(&root.path)' in line
+        )
+        exempt_scan = l0_scan.ban_problems(
+            l0_scan.BAN_EXEMPTION, l0_scan.read_rust(EXEMPT_USE), True
         )
         results.append(
             Result(
                 "clippy: control: sdm-host's reasoned allow",
-                exempt_line not in lines
-                and reported.count('jiff::tz::TimeZoneDatabase::from_dir') == 1,
+                exempt_line not in lines and not exempt_scan,
                 'passes'
-                if exempt_line not in lines
-                else 'the allowed call was reported',
+                if exempt_line not in lines and not exempt_scan
+                else f'reported by clippy: {exempt_line in lines}; '
+                f'by the scan: {exempt_scan}',
             )
         )
+        for name, (first, last) in spans.items():
+            silenced = not any(first <= line <= last for line in lines)
+            scan = l0_scan.ban_problems(
+                l0_scan.BAN_EXEMPTION, l0_scan.read_rust(BYPASSES[name]), True
+            )
+            results.append(
+                Result(
+                    f'clippy: bypass refused: {name}',
+                    silenced and bool(scan),
+                    f'clippy silenced, the scan fails: {scan[0]}'
+                    if silenced and scan
+                    else f'clippy silenced: {silenced}; the scan: {scan}',
+                )
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
