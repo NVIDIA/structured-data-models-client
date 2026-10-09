@@ -7,8 +7,9 @@
 //! `HostRun::start` into states no Phase 1a operation reaches yet: a fetch
 //! with a plan of any size, a result, error or warnings of any size. Their
 //! inputs travel as bytes attachments of JSON, as input-sized fields do, so
-//! the start message stays small. They are not part of the contract's
-//! schema.
+//! the start message stays small. Two more let a binding's tests reach what
+//! only a process can show: a logged event during a long call, and an
+//! abort. They are not part of the contract's schema.
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +33,12 @@ pub enum TestOperation {
     Warn { warnings: AttachmentId },
     /// Panics with `payload` as the panic's message, where `at` says.
     Panic { at: PanicAt, payload: String },
+    /// Emits one `tracing` event at its first step, at level `INFO` with
+    /// target `sdm_core::test_ops`, then holds the call for `hold_ms`
+    /// milliseconds and finishes with no rows (decision H8).
+    Log { hold_ms: u64 },
+    /// Aborts the process at its first step: what no host can contain.
+    Abort,
 }
 
 /// Where a test-only operation panics.
@@ -54,7 +61,9 @@ impl TestOperation {
             | TestOperation::Finish { result: id }
             | TestOperation::Fail { error: id }
             | TestOperation::Warn { warnings: id } => vec![(*id, AttachmentKind::Bytes)],
-            TestOperation::Panic { .. } => vec![],
+            TestOperation::Panic { .. } | TestOperation::Log { .. } | TestOperation::Abort => {
+                vec![]
+            }
         }
     }
 }
@@ -66,6 +75,10 @@ pub struct TestFetch {
     pub request: DataRequest,
     pub sql: Option<SqlStatement>,
     pub expect: ExpectedSchema,
+    /// Whether the admitted data comes back, attached, so a binding's tests
+    /// can export what the core holds.
+    #[serde(default)]
+    pub echo: bool,
 }
 
 /// A test-only operation's result.
@@ -74,4 +87,7 @@ pub struct TestFetch {
 pub struct TestResult {
     /// The rows fetched.
     pub rows: u64,
+    /// The attachment holding the admitted data, when the fetch echoes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<AttachmentId>,
 }

@@ -87,8 +87,9 @@ deny = [
     # Archived and unmaintained; YAML goes through a maintained 1.2 crate.
     { crate = "serde_yaml", reason = "archived; use a maintained YAML 1.2 crate" },
     # The binding alone talks to Python.
-    { crate = "pyo3", wrappers = ["sdm-py", "arrow-pyarrow"], reason = "only the Python binding loads Python" },
+    { crate = "pyo3", wrappers = ["sdm-py", "arrow-pyarrow", "pyo3-log"], reason = "only the Python binding loads Python" },
     { crate = "arrow-pyarrow", wrappers = ["sdm-py"], reason = "only the Python binding loads Python" },
+    { crate = "pyo3-log", wrappers = ["sdm-py"], reason = "only the Python binding loads Python" },
     # The database driver and anyhow belong to the dev-only test host.
     { crate = "duckdb", wrappers = ["sdm-testkit"], reason = "the test host alone runs DuckDB in Rust" },
     { crate = "anyhow", wrappers = ["sdm-testkit"], reason = "first-party errors are typed with thiserror" },

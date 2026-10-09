@@ -237,6 +237,7 @@ fn wide_fetch(pad: usize) -> TestFetch {
         })
         .collect();
     TestFetch {
+        echo: false,
         request: DataRequest::Scan {
             table: "orders".into(),
             columns: (0..200).map(|i| format!("column_{i:03}")).collect(),
@@ -305,7 +306,10 @@ fn a_fetch_step_with_a_wide_plan_arrives_whole_either_side_of_the_cap() {
         assert_eq!(
             read(&run.next().unwrap()).unwrap(),
             ControlMessage::Step(Step::Done {
-                result: OperationResult::Test(TestResult { rows: 3 })
+                result: OperationResult::Test(TestResult {
+                    rows: 3,
+                    data: None,
+                })
             })
         );
     }

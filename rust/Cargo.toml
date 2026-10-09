@@ -41,6 +41,9 @@ jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-
 jiff-tzdb = "0.1.9"
 proptest = { version = "1", default-features = false, features = ["std"] }
 pyo3 = { version = "0.28", features = ["abi3-py310"] }
+# Bridges the `log` records tracing emits to Python's logging, in sdm-py
+# alone (decision H8).
+pyo3-log = "0.13"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
@@ -49,6 +52,9 @@ regex = "1"
 sha2 = "0.10"
 stacker = "0.1"
 thiserror = "2"
+# Logging in Rust. The `log` feature sends each event to the `log` facade
+# when no subscriber is set, which is how pyo3-log hears it (decision H8).
+tracing = { version = "0.1.44", default-features = false, features = ["std", "log"] }
 anyhow = "1"
 
 [workspace.lints.rust]

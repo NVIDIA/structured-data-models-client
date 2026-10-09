@@ -46,6 +46,22 @@ pub enum ErrorKind {
     Internal,
 }
 
+impl ErrorKind {
+    /// The kind's name, as the contract spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ErrorKind::InvalidRequest => "invalid_request",
+            ErrorKind::Unsupported => "unsupported",
+            ErrorKind::NotFound => "not_found",
+            ErrorKind::DataSource => "data_source",
+            ErrorKind::ModelEndpoint => "model_endpoint",
+            ErrorKind::Cancelled => "cancelled",
+            ErrorKind::Protocol => "protocol",
+            ErrorKind::Internal => "internal",
+        }
+    }
+}
+
 /// The codes the core gives: one closed list, so each host's mapping
 /// matches every code with no catch-all arm (decision H6). Host and core
 /// ship together, so the list is exhaustive; a new code is a contract

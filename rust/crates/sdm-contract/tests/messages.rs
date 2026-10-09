@@ -163,6 +163,36 @@ fn every_error_code_is_listed_once_and_spelled_as_the_contract_spells_it() {
 }
 
 #[test]
+fn each_error_kind_s_name_is_its_contract_spelling() {
+    use sdm_contract::ErrorKind;
+    for kind in [
+        ErrorKind::InvalidRequest,
+        ErrorKind::Unsupported,
+        ErrorKind::NotFound,
+        ErrorKind::DataSource,
+        ErrorKind::ModelEndpoint,
+        ErrorKind::Cancelled,
+        ErrorKind::Protocol,
+        ErrorKind::Internal,
+    ] {
+        // A match with no catch-all arm, so a new kind fails to compile
+        // here until it is listed.
+        match kind {
+            ErrorKind::InvalidRequest
+            | ErrorKind::Unsupported
+            | ErrorKind::NotFound
+            | ErrorKind::DataSource
+            | ErrorKind::ModelEndpoint
+            | ErrorKind::Cancelled
+            | ErrorKind::Protocol
+            | ErrorKind::Internal => {}
+        }
+        let text = serde_json::to_string(&kind).unwrap();
+        assert_eq!(text, format!("\"{}\"", kind.as_str()));
+    }
+}
+
+#[test]
 fn provider_and_transport_errors_carry_no_message_text() {
     for text in [
         r#"{"message":"fetch_reply","id":1,"outcome":{"outcome":"error","error":{"kind":"data_source","retryable":false,"sqlstate":null,"vendor_code":null,"message":"value 'secret' is bad"}}}"#,

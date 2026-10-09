@@ -5,13 +5,15 @@
 //! The bodies of the test-only operations (`sdm_contract::test_ops`), built
 //! only with the `test-ops` feature, which a shipped build leaves off.
 
+use std::time::Duration;
+
 use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
 use sdm_contract::{CoreError, CoreWarning, HostFacts};
 
 use crate::attached::take_json;
 use crate::profiles::Profile;
-use crate::run::{Attachments, FetchResult, Reply, Run, internal};
+use crate::run::{Attachment, Attachments, FetchResult, Reply, Run, internal};
 
 /// The run of a test-only operation.
 pub(crate) fn run(
@@ -26,7 +28,12 @@ pub(crate) fn run(
                 match asker.fetch(fetch.request, fetch.sql, fetch.expect).await {
                     Reply::Fetch(FetchResult::Data(data)) => {
                         let rows = data.batches.iter().map(|b| b.num_rows() as u64).sum();
-                        Ok(OperationResult::Test(TestResult { rows }))
+                        let data = if fetch.echo {
+                            Some(asker.attach(Attachment::Arrow(data))?)
+                        } else {
+                            None
+                        };
+                        Ok(OperationResult::Test(TestResult { rows, data }))
                     }
                     Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
                     Reply::Model(_) => Err(internal("a fetch was answered by the model")),
@@ -47,7 +54,10 @@ pub(crate) fn run(
                 for warning in warnings {
                     asker.warn(warning);
                 }
-                Ok(OperationResult::Test(TestResult { rows: 0 }))
+                Ok(OperationResult::Test(TestResult {
+                    rows: 0,
+                    data: None,
+                }))
             })
         }
         TestOperation::Panic { at, payload } => match at {
@@ -69,5 +79,17 @@ pub(crate) fn run(
                     .map(OperationResult::ValidateQuery)
             }),
         },
+        // One known event, then a long call, so a binding's tests can show
+        // the event reaches the host's logging once and another thread runs
+        // while the core holds the call (decision H8).
+        TestOperation::Log { hold_ms } => Run::new(move |_| async move {
+            tracing::info!(target: "sdm_core::test_ops", "a test-only event");
+            std::thread::sleep(Duration::from_millis(hold_ms));
+            Ok(OperationResult::Test(TestResult {
+                rows: 0,
+                data: None,
+            }))
+        }),
+        TestOperation::Abort => Run::new(|_| async { std::process::abort() }),
     })
 }

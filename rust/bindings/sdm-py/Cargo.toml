@@ -21,9 +21,19 @@ crate-type = ["cdylib"]
 test = false
 doctest = false
 
+[features]
+# Operations only tests reach; the shipped wheel leaves it off, and the
+# binding's tests build a wheel with it on.
+test-ops = ["sdm-host/test-ops", "sdm-contract/test-ops", "sdm-core/test-ops"]
+
 [dependencies]
+arrow-array = { workspace = true, features = ["ffi"] }
 arrow-pyarrow.workspace = true
+arrow-schema = { workspace = true, features = ["ffi"] }
 pyo3.workspace = true
+pyo3-log.workspace = true
+sdm-contract = { path = "../../crates/sdm-contract" }
+sdm-core = { path = "../../crates/sdm-core" }
 sdm-host = { path = "../../crates/sdm-host" }
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the

@@ -74,6 +74,7 @@ fn text(error: &CoreError, field: &str) -> String {
 /// A run of the test-only fetch, waiting on its one fetch.
 fn fetching(expect: ExpectedSchema) -> HostRun {
     let fetch = TestFetch {
+        echo: false,
         request: DataRequest::Scan {
             table: "t".into(),
             columns: vec![],
