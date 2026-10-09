@@ -64,7 +64,10 @@ jobs:
         with:
           workspaces: rust
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # sdm-testkit builds the bundled DuckDB, so its clippy runs in rust-test,
+      # which builds it anyway (H3); the L0 self-tests' clippy fixture needs
+      # only jiff, and stays here.
+      - run: cargo clippy --workspace --exclude sdm-testkit --all-targets --locked -- -D warnings
       # The binding with its test-only operations, as its tests build it.
       - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
       # The L0 guards (T1.10c): the crate graph (l0_deps.py), and the
@@ -118,6 +121,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
+      # The test kit's clippy, here on the DuckDB build this job makes (H3).
+      - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       # The pure-Rust host over the contract cases, its observations compared
       # with the cases' expectations and reference observations (T1.10;
