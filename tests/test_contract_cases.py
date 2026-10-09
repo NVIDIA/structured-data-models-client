@@ -144,3 +144,171 @@ def test_the_reference_observations_validate_and_meet_each_expectation(
     )
     assert run.returncode == 1
     assert "outcome.code: expected 'INTERNAL_ERROR'" in run.stdout
+
+
+def test_both_loaders_refuse_an_unknown_key_inside_the_call_arguments(
+    tmp_path: Path,
+) -> None:
+    # sdm-testkit's tests/s0_cases.rs refuses the same key.
+    case = json.loads((CASES / 's0/s0.accept.sum-window.json').read_text())
+    case['input']['materialize']['ignored_typo'] = True
+    path = tmp_path / 'case.json'
+    path.write_text(json.dumps(case))
+    with pytest.raises(run_python.RunnerFailure, match='ignored_typo|fails'):
+        run_python.load_cases([path])
+
+
+# --- the comparator against seeded observations ---------------------------------
+
+
+def _reference() -> Path:
+    [reference] = sorted(REFERENCE.glob('*.jsonl'))
+    return reference
+
+
+def _seeded(
+    tmp_path: Path, change: Any, name: str = 'seeded.jsonl'
+) -> subprocess.CompletedProcess[str]:
+    r"""compare.py on the reference observations as ``change`` rewrites
+    each, the reference itself as the oracle."""
+    reference = _reference()
+    lines = []
+    for line in reference.read_text().splitlines():
+        observation = json.loads(line)
+        change(observation)
+        lines.append(json.dumps(observation) + '\n')
+    seeded = tmp_path / name
+    seeded.write_text(''.join(lines))
+    return subprocess.run(
+        [
+            sys.executable,
+            str(COMPARE),
+            '--cases',
+            str(CASES),
+            '--reference',
+            str(reference),
+            str(seeded),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _as_old(observation: dict[str, Any]) -> None:
+    observation['identity']['runner'] = 'python-old'
+    observation['identity']['reference'] = None
+
+
+def test_the_reference_relabelled_python_old_passes(tmp_path: Path) -> None:
+    run = _seeded(tmp_path, _as_old)
+    assert run.returncode == 0, run.stdout
+
+
+def test_an_empty_observations_file_is_a_runner_failure(
+    tmp_path: Path,
+) -> None:
+    empty = tmp_path / 'empty.jsonl'
+    empty.write_text('')
+    run = subprocess.run(
+        [sys.executable, str(COMPARE), '--cases', str(CASES), str(empty)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 1
+    assert 'empty.jsonl: runner failure: no valid observations' in run.stdout
+
+
+def test_a_python_runner_may_not_leave_its_stage_or_class_null(
+    tmp_path: Path,
+) -> None:
+    def blank(observation: dict[str, Any]) -> None:
+        _as_old(observation)
+        observation['outcome']['stage'] = None
+        observation['outcome']['error'] = None
+
+    run = _seeded(tmp_path, blank)
+    assert run.returncode == 1
+    assert 'outcome.stage: null on a Python runner' in run.stdout
+    assert 'outcome.error: a refusal without a class' in run.stdout
+
+
+def test_an_observation_of_another_case_file_fails(tmp_path: Path) -> None:
+    def elsewhere(observation: dict[str, Any]) -> None:
+        _as_old(observation)
+        observation['identity']['inputs']['case'] = '0' * 64
+
+    run = _seeded(tmp_path, elsewhere)
+    assert run.returncode == 1
+    assert 'identity.inputs.case: not this case file' in run.stdout
+
+    def other_bases(observation: dict[str, Any]) -> None:
+        _as_old(observation)
+        observation['identity']['inputs']['bases'] = '0' * 64
+
+    run = _seeded(tmp_path, other_bases)
+    assert 'identity.inputs.bases: not this bases file' in run.stdout
+
+
+def test_a_python_runner_at_another_duckdb_fails(tmp_path: Path) -> None:
+    def older(observation: dict[str, Any]) -> None:
+        _as_old(observation)
+        observation['identity']['versions']['duckdb'] = '1.5.5'
+
+    run = _seeded(tmp_path, older)
+    assert run.returncode == 1
+    assert 'identity.versions.duckdb' in run.stdout
+
+
+def _as_core(accepted: bool | None, error: Any = None) -> Any:
+    def change(observation: dict[str, Any]) -> None:
+        case = json.loads(
+            next(
+                path
+                for path in CASES.rglob('*.json')
+                if json.loads(path.read_text())['id'] == observation['case']
+            ).read_text()
+        )
+        spec = case['core']['validate_query']
+        identity = observation['identity']
+        identity.update(
+            runner='python-core',
+            reference=None,
+            native={'sha256': 'a' * 64},
+            native_loaded=True,
+            operations=['validate_query'],
+            contract=4,
+        )
+        observation['core'] = {
+            'inputs': [
+                {
+                    'op': 'validate_query',
+                    'query': case['input']['pql'],
+                    'profile': spec['profile'],
+                    'schema': spec['schema'],
+                }
+            ],
+            'accepted': (
+                observation['outcome']['result'] == 'success'
+                if accepted is None
+                else accepted
+            ),
+            'error': error,
+        }
+
+    return change
+
+
+def test_python_cores_answer_is_held_to_its_own_outcome(
+    tmp_path: Path,
+) -> None:
+    run = _seeded(tmp_path, _as_core(None))
+    assert run.returncode == 0, run.stdout
+    # Every case's core accepting, whatever the call did.
+    run = _seeded(tmp_path, _as_core(True))
+    assert run.returncode == 1
+    assert (
+        's0.refuse.unknown-column: python-core: outcome against core: '
+        "expected ('success', None), observed ('refusal', 'INVALID_REQUEST')"
+    ) in run.stdout

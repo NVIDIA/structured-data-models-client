@@ -10,8 +10,11 @@ r"""Compares runners' observations of the contract cases.
 Each OBSERVATIONS file is one runner's output (run_python.py or
 sdm-contract-run); FILE is the committed reference observations
 (``contract/reference/<reference-commit>.jsonl``). Every observation is
-validated against ``contract/observation.schema.json``, and every case has
-to have one from each runner: a missing one is a runner failure. Then, for
+validated against ``contract/observation.schema.json``; a file with none,
+or a case a given runner did not observe, is a runner failure. Each
+observation must be of the case and bases files compared (their SHA-256 in
+its identity), and leaves null only what its runner cannot observe: a
+Python runner always has a stage, and a class for a refusal. Then, for
 each acceptance case, the rules of Phase 1a so far (T1.10):
 
 - outcome: the call succeeded or refused, as expected and as the reference
@@ -19,16 +22,19 @@ each acceptance case, the rules of Phase 1a so far (T1.10):
   sides observe them;
 - code: ``StructuredDataError.code``, or the code the S0 route maps the
   core's answer to, as expected and as the reference;
-- kind and code on the core: ``python-core`` and ``rust-host`` started the
-  same operations with the same inputs, and the core answered both the same:
-  the same acceptance, or an error of the same kind and code;
+- kind and code on the core: each core runner's outcome is the core's
+  answer as the S0 route maps it (accepted, a success; refused,
+  ``INVALID_REQUEST``; an error, a refusal with its code); ``python-core``
+  and ``rust-host`` started the same operations with the same inputs, and
+  the core answered both the same: the same acceptance, or an error of the
+  same kind and code;
 - route proof: ``python-core`` ran the case's core operations with
   ``sdm_client._native`` loaded; ``python-old`` and ``python-ref`` never
-  loaded it; ``python-ref``'s guard passed; ``rust-host`` ran DuckDB at the
+  loaded it; ``python-ref``'s guard passed; every runner ran DuckDB at the
   reference's version.
 
-A field a runner does not observe (null) is not compared, never treated as
-equal: ``rust-host`` has no stage or exception class. Diagnostic cases are
+The fields ``rust-host`` cannot observe, a stage and an exception class,
+are null there and not compared, never treated as equal. Diagnostic cases are
 reported, not gated. The first difference per case, runner and field is
 printed with its path; message text is never compared, and input values are
 never printed. Exit status 1 on any difference or runner failure.
@@ -48,6 +54,11 @@ REPO = Path(__file__).resolve().parents[2]
 RUNNER = REPO / 'contract/runners/run_python.py'
 #: The outcome fields, compared wherever both sides observe them.
 OUTCOME = ('result', 'stage', 'error', 'code')
+#: The outcome fields the pure-Rust host cannot observe: it makes no public
+#: call, so it has no stage and no exception class. Every other runner
+#: observes both, and a null there is a defect, never a pass.
+UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
+PYTHON = ('python-ref', 'python-core', 'python-old')
 
 
 def _runner() -> ModuleType:
@@ -145,7 +156,7 @@ def _expectation(
     }
     for field, value in wanted.items():
         seen = outcome[field]
-        if field != 'code' and seen is None:
+        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
             continue
         if seen != value:
             _differ(report, where, f'outcome.{field}', value, seen)
@@ -160,7 +171,7 @@ def _against_reference(
 ) -> None:
     for field in OUTCOME:
         mine, theirs = outcome[field], reference['outcome'][field]
-        if field != 'code' and (mine is None or theirs is None):
+        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
             continue
         if mine != theirs:
             _differ(
@@ -193,6 +204,81 @@ def _route(
         missing = [op for op in wanted if op not in identity['operations']]
         if missing or observation['core'] is None:
             report.fail(f'{where}: route: {missing} did not run on the host')
+
+
+def _shape(
+    report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
+) -> None:
+    r"""Which fields may be null, by runner and outcome."""
+    where = f'{case["id"]}: {who}'
+    outcome = observation['outcome']
+    if who in PYTHON:
+        if outcome['stage'] is None:
+            report.fail(f'{where}: outcome.stage: null on a Python runner')
+        if outcome['result'] == 'refusal' and outcome['error'] is None:
+            report.fail(f'{where}: outcome.error: a refusal without a class')
+        if outcome['result'] == 'success' and (
+            outcome['error'] is not None or outcome['code'] is not None
+        ):
+            report.fail(f'{where}: outcome: a success with an error')
+        if observation['host'] is None:
+            report.fail(f'{where}: host: null on a Python runner')
+        if observation['identity']['inputs']['bases'] is None:
+            report.fail(f'{where}: identity.inputs.bases: null')
+        if (observation['core'] is None) != (who != 'python-core'):
+            report.fail(f'{where}: core: present only on python-core')
+    else:
+        for field in UNOBSERVED_BY_RUST_HOST:
+            if outcome[field] is not None:
+                report.fail(f'{where}: outcome.{field}: not observable here')
+        if observation['host'] is not None or observation['core'] is None:
+            report.fail(f'{where}: a host section, or no core section')
+
+
+def _inputs(
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    digests: dict[str, str],
+) -> None:
+    r"""The observation is of the case and bases files compared."""
+    inputs = observation['identity']['inputs']
+    where = f'{case["id"]}: {who}'
+    if inputs['case'] != digests[case['id']]:
+        report.fail(f'{where}: identity.inputs.case: not this case file')
+    if inputs['bases'] is not None and inputs['bases'] != digests['']:
+        report.fail(f'{where}: identity.inputs.bases: not this bases file')
+
+
+def _core_consistent(
+    report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
+) -> None:
+    r"""The core's answer is the outcome, as the S0 route maps it: an
+    accepted query succeeds, a refused one is ``INVALID_REQUEST``, and a
+    core error is a refusal with its own code."""
+    core = observation['core']
+    if core is None or 'validate_query' not in case.get('core', {}):
+        return
+    outcome = observation['outcome']
+    if core['error'] is not None:
+        wanted = ('refusal', core['error']['code'])
+        if core['accepted'] is not None:
+            report.fail(f'{case["id"]}: {who}: core: an answer and an error')
+    elif core['accepted'] is None:
+        report.fail(f'{case["id"]}: {who}: core: no answer')
+        return
+    else:
+        wanted = (
+            ('success', None)
+            if core['accepted']
+            else ('refusal', 'INVALID_REQUEST')
+        )
+    seen = (outcome['result'], outcome['code'])
+    if seen != wanted:
+        _differ(
+            report, f'{case["id"]}: {who}', 'outcome against core', wanted, seen
+        )
 
 
 def _core_agree(
@@ -261,10 +347,13 @@ def compare(
     report = Report()
     runner = _runner()
     try:
-        cases = [case for case, _ in runner.load_cases(cases_dir)]
+        loaded = runner.load_cases(cases_dir)
     except runner.RunnerFailure as failure:
         report.fail(f'cases: {failure}')
         return report
+    cases = [case for case, _ in loaded]
+    digests = {case['id']: digest for case, digest in loaded}
+    digests[''] = runner.digest(runner.BASES.read_bytes())
     reference: dict[str, dict[str, Any]] = {}
     if reference_file is not None:
         who, reference = _observations(reference_file, runner, report)
@@ -274,6 +363,7 @@ def compare(
     for path in files:
         who, by_case = _observations(path, runner, report)
         if who is None:
+            report.fail(f'{path.name}: runner failure: no valid observations')
             continue
         if who in observed:
             report.fail(f'{path.name}: a second file of {who}')
@@ -289,6 +379,8 @@ def compare(
         if reference_file is not None and ref is None:
             report.fail(f'{case["id"]}: no reference observation')
         if ref is not None:
+            _shape(report, case, 'python-ref', ref)
+            _inputs(report, case, 'python-ref', ref, digests)
             _expectation(report, case, 'python-ref', ref['outcome'])
             _route(report, case, 'python-ref', ref)
         for who, by_case in observed.items():
@@ -298,6 +390,9 @@ def compare(
                     f'{case["id"]}: {who}: runner failure: no observation'
                 )
                 continue
+            _shape(report, case, who, observation)
+            _inputs(report, case, who, observation, digests)
+            _core_consistent(report, case, who, observation)
             _expectation(report, case, who, observation['outcome'])
             if ref is not None:
                 _against_reference(
@@ -305,13 +400,13 @@ def compare(
                 )
             _route(report, case, who, observation)
             _case_inputs(report, case, who, observation)
-            if who == 'rust-host' and ref is not None:
+            if ref is not None:
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']
                 if mine != theirs:
                     _differ(
                         report,
-                        f'{case["id"]}: rust-host',
+                        f'{case["id"]}: {who}',
                         'identity.versions.duckdb',
                         theirs,
                         mine,
