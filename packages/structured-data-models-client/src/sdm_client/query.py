@@ -409,30 +409,50 @@ class PredictiveQuery:
         return whole
 
     def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
-        r"""Parse and validate the query."""
+        r"""Parse and validate the query.
+
+        On the core route (S0, the private routing seam) the core decides
+        validity, and an accepted query is resolved by the old validator for
+        the old materializer, which also checks that the two agree.
+        """
         from predictive_query import validate
 
+        from sdm_client import _routing
         from sdm_client.schema import to_schema_definition
 
-        resolved, response = validate(
-            self.text, to_schema_definition(self.schema), profile
-        )
+        core = _routing.route(_routing.S0) == 'core'
+        definition = to_schema_definition(self.schema)
+        if core:
+            from sdm_client._rust import s0
+
+            accepted, messages = s0.validate(self.text, definition, profile)
+            if accepted:
+                return s0.shadow(self.text, definition, profile)
+            raise self._refusal(messages, profile)
+        resolved, response = validate(self.text, definition, profile)
         if resolved is None or not response.ok:
-            reasons = (
-                '; '.join(
-                    _without_the_validator_trace(error.message)
-                    for error in response.errors
-                )
-                or 'the query did not resolve'
-            )
-            raise StructuredDataError(
-                f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
-                f'{self._why_the_target_is_text(reasons, profile)}'
-                f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
-                code='INVALID_REQUEST',
+            raise self._refusal(
+                [error.message for error in response.errors], profile
             )
         return resolved
+
+    def _refusal(
+        self, messages: list[str], profile: Profile
+    ) -> StructuredDataError:
+        r"""The refusal of a query the language does not accept."""
+        reasons = (
+            '; '.join(
+                _without_the_validator_trace(message) for message in messages
+            )
+            or 'the query did not resolve'
+        )
+        return StructuredDataError(
+            f'{self.text!r} is not a query {profile.capabilities.model} '
+            f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
+            f'{self._why_the_target_is_text(reasons, profile)}'
+            f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
+            code='INVALID_REQUEST',
+        )
 
     def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
         r"""Say how to resolve an ambiguous link, in the words of this object.
