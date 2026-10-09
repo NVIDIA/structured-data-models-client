@@ -172,6 +172,46 @@
       }
     },
     {
+      "name": "NaN is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[NaN]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "Infinity is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[Infinity]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "-Infinity is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[-Infinity]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "NaN outside the rows is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\", \"x\": NaN}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[1]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
       "name": "not an object",
       "method": "POST",
       "path": "/v1/predictions",

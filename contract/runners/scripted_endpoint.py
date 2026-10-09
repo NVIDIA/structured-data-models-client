@@ -19,7 +19,11 @@ The rule, for ``POST /v1/predictions`` with a JSON object body:
   as its decimal digits exactly as the request spelled them, text as itself;
 - ``p`` is ``1.0`` when ``task.kind`` is ``regression``, and the first of
   ``task.target.classes`` (text) for any other kind;
-- a request the rule cannot read (not a JSON object, an
+- a body that is not JSON, ``NaN``, ``Infinity`` and ``-Infinity``
+  included (JSON has none of them; Python's reader takes them and Rust's
+  refuses them, so both endpoints refuse them), is answered ``400`` with
+  ``{"error": "not_json"}``;
+- a request the rule cannot read otherwise (not a JSON object, an
   ``instance_table`` not in the ``arrays`` format or without an
   ``instance_id`` column, an instance id that is neither an integer nor
   text, a classification without classes or with a first class that is not
@@ -66,9 +70,18 @@ class _Refused(Exception):
         self.reason = reason
 
 
+def _not_json(_constant: str) -> Any:
+    raise _Refused('not_json')
+
+
 def _read(body: bytes) -> Any:
     try:
-        return json.loads(body, parse_int=_Number, parse_float=_Number)
+        return json.loads(
+            body,
+            parse_int=_Number,
+            parse_float=_Number,
+            parse_constant=_not_json,
+        )
     except ValueError:
         raise _Refused('not_json') from None
 
