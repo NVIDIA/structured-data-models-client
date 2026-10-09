@@ -1,0 +1,216 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Secret-scanner allowlist, read by nSpect's Pulse scan at the repository root.
+#
+# Every entry below is a placeholder credential in a test, a fixture or a CI
+# service definition, not a secret. Most of them exist precisely because this
+# client redacts credentials before they reach a log or an error: the tests
+# assert the redaction by feeding it a URL with a password in it. The scanner
+# cannot tell that apart from a real one, and has verified none of them against
+# a live service.
+#
+# Every host named below is `localhost`, a literal `host`, an RFC 2606 reserved
+# example domain, or an account that does not exist. Nothing here can be
+# rotated, because nothing here was ever issued.
+#
+# **The paths are historical on purpose.** The scan reads the repository's
+# history, not just its current tree, so entries remain for files that have
+# since been renamed or deleted: the packages were renamed from `sdm-*` to
+# `structured-data-models-*`, `qa/` is gone, and the credential-shaped literals
+# themselves were replaced with interpolated constants. A scan of the current
+# tree finds nothing at all. Removing an entry because its file no longer
+# exists puts the finding straight back.
+#
+# Each value is listed in both maskings a report may use, since a value that
+# does not match the one the scanner prints suppresses nothing.
+#
+# Generated from a scan rather than edited by hand, and never extended with an
+# entry for a credential that is real. A real one is rotated and removed.
+
+version = "1.0.0"
+
+[[pulse-trufflehog.files]]
+file = ".gitlab-ci.yml"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "Postgres"
+  values = [
+            "pos*************************************5432",
+            "postgresql://postgres:********@postgres:5432"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-client/src/sdm_client/core/transport.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt****************host",
+            "http://user:********@host",
+            "htt****************host",
+            "https://user:********@host"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-client/tests/test_credential_redaction.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt**************host",
+            "https://user:********@host",
+            "htt*******************8443",
+            "https://user:********@host:8443"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-client/tests/test_transport_hardening.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt**************************8000",
+            "http://user:********@127.0.0.1:8000",
+            "htt**************************8000",
+            "http://user:********@localhost:8000",
+            "htt************************mple",
+            "https://user:********@nim.example"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-relational-engine/src/sdm_relational_engine/client/client.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt****************host",
+            "http://user:********@host",
+            "htt****************host",
+            "https://user:********@host"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-relational-engine/tests/client/test_credential_redaction.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt**************host",
+            "https://user:********@host",
+            "htt*******************8443",
+            "https://user:********@host:8443"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-relational-engine/tests/client/test_databricks_serving.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt****************************************.com",
+            "https://user:********@acme.cloud.databricks.com"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-relational-engine/tests/client/test_rfm_nim_live_harness.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt***************************test",
+            "https://user:********@example.test",
+            "htt************************************test"]
+
+[[pulse-trufflehog.files]]
+file = "packages/sdm-relational-engine/tests/client/test_snowflake_serving.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt***************************************.com",
+            "https://user:********@acct.snowflakecomputing.com"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-client/src/sdm_client/core/transport.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt****************host",
+            "http://user:********@host",
+            "htt****************host",
+            "https://user:********@host"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-client/tests/test_credential_redaction.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt**************host",
+            "https://user:********@host",
+            "htt*******************8443",
+            "https://user:********@host:8443"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-client/tests/test_transport_hardening.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt**************************8000",
+            "http://user:********@127.0.0.1:8000",
+            "htt**************************8000",
+            "http://user:********@localhost:8000",
+            "htt************************mple",
+            "https://user:********@nim.example"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-relational-engine/src/sdm_relational_engine/client/client.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt****************host",
+            "http://user:********@host",
+            "htt****************host",
+            "https://user:********@host"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-relational-engine/tests/client/test_credential_redaction.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt**************host",
+            "https://user:********@host",
+            "htt*******************8443",
+            "https://user:********@host:8443"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-relational-engine/tests/client/test_rfm_nim_live_harness.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt***************************test",
+            "https://user:********@example.test",
+            "htt************************************test"]
+
+[[pulse-trufflehog.files]]
+file = "packages/structured-data-models-relational-engine/tests/client/test_snowflake_serving.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt***************************************.com",
+            "https://user:********@acct.snowflakecomputing.com"]
+
+[[pulse-trufflehog.files]]
+file = "qa/probe_edges.py"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt***********************.com",
+            "http://user:********@example.com"]
+
+[[pulse-trufflehog.files]]
+file = "tests/rust_core/switch/base.json"
+  [[pulse-trufflehog.files.secrets]]
+  type   = "URI"
+  values = [
+            "htt*******************mple",
+            "http://:********@nim.example",
+            "htt**************************8000",
+            "http://user:********@127.0.0.1:8000",
+            "htt**************************8000",
+            "http://user:********@localhost:8000",
+            "htt***********************mple",
+            "http://user:********@nim.example",
+            "htt****************************************************.com",
+            "https://user:********@dbc.example.com",
+            "htt************************mple",
+            "https://user:********@nim.example",
+            "htt**************host",
+            "https://user:********@host",
+            "htt*******************8443",
+            "https://user:********@host:8443"]
