@@ -267,7 +267,9 @@ jobs:
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
       postgres:
-        image: postgres:17
+        # Docker's official image, from its public ECR mirror: Docker Hub's
+        # anonymous pull limit failed every attempt of a run.
+        image: public.ecr.aws/docker/library/postgres:17
         env:
           POSTGRES_DB: sdm_test
           POSTGRES_PASSWORD: postgres
@@ -310,7 +312,9 @@ jobs:
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
       postgres:
-        image: postgres:17
+        # Docker's official image, from its public ECR mirror: Docker Hub's
+        # anonymous pull limit failed every attempt of a run.
+        image: public.ecr.aws/docker/library/postgres:17
         env:
           POSTGRES_DB: sdm_test
           POSTGRES_PASSWORD: postgres
