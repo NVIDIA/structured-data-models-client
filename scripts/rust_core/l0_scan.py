@@ -20,7 +20,9 @@ graph; these check the text:
   may be used anywhere in their crate.
 - ``sql``: no SQL fragment and no provider match in ``sdm-schema``,
   ``sdm-engine`` or ``sdm-request`` (migration plan, "Ownership"). It is a
-  lexical scan: the string literals of each statement are read together, so
+  lexical scan over what the literals stand for (escapes such as ``\\n``,
+  ``\\t``, ``\\x..`` and ``\\u{..}`` decoded, line continuations
+  joined): the string literals of each statement are read together, so
   a clause split across one ``format!``, ``concat!``, ``join`` or ``+`` is
   seen, as is a provider's name as a whole literal, an identifier naming a
   dialect, a backend or SQL, and ``include_str!``. SQL is told from English
@@ -419,20 +421,27 @@ def check_vocabulary(root: Path) -> list[str]:
 # `unreachable!`, `todo!`, `unimplemented!`, `.expect`, `.context`,
 # `.with_context` and `#[error]`; for `assert!` the arguments after the
 # condition, and for `assert_eq!`/`assert_ne!` (and the `debug_` forms)
-# those after the two operands, which are code.
+# those after the two operands, which are code. A turbofish's type
+# arguments nest when the arguments are split; where a bare `<` after a name
+# leaves the end of the code unclear, no argument is diagnostic text.
 _O = (
     r'(?:\{[^}]*\}|\*|\?|\$\d+|\'[^\']*\'|\d+(?:\.\d+)?'
     r'|\w+\s*\([^()]*\)|[\w."]+)'
 )
 _OS = rf'{_O}(?:\s+as\s+\w+)?(?:\s*,\s*{_O}(?:\s+as\s+\w+)?)*'
 _CMP = r'(?:=|<>|!=|<=|>=|<|>)'
-_CONTINUE = (
+_CLAUSE_NEXT = (
     r'(?i:\s*[,)]|\s+(?:where|group|order|limit|offset|having|qualify|join|'
-    r'inner|left|right|full|cross|natural|union|using|as|on)\b|\s*$)'
+    r'inner|left|right|full|cross|natural|union|using|as|on)\b)'
 )
+_CONTINUE = rf'(?:{_CLAUSE_NEXT}|\s*$)'
+# A table may carry an alias without `as`: then a clause must follow, or,
+# after `select *`, the end (`select * from {t} t`); `select {c} from {t}
+# first` stays English.
 _SELECT = (
     rf'select\s+(?:distinct\s+)?{_OS}\s+from'
-    rf'(?:\s+{_O}{_CONTINUE}|\s*\(|\s*$)'
+    rf'(?:\s+{_O}(?:{_CONTINUE}|\s+\w+{_CLAUSE_NEXT})|\s*\(|\s*$)'
+    rf'|select\s+(?:distinct\s+)?\*\s+from\s+{_O}\s+\w+\s*$'
 )
 _COMPARISON = (
     rf'{_O}\s*{_CMP}\s*{_O}|{_O}\s+(?:not\s+)?(?:in\s*\(|like\b|between\b)'
@@ -509,7 +518,41 @@ _DIAGNOSTIC_CALL = re.compile(
     r'|#\s*\[\s*error\s*\('
 )
 _INCLUDE = re.compile(r'\binclude_(str|bytes)\s*!')
-_LITERAL = re.compile(r'^b?r?(#*)"(?s:(.*))"\1$')
+_LITERAL = re.compile(r'^(b?r?)(#*)"(?s:(.*))"\2$')
+_ESCAPE = re.compile(
+    r'\\(?:\n\s*|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]{1,8}\}|[ntr0\\"\'])'
+)
+_SIMPLE_ESCAPES = {
+    'n': '\n',
+    't': '\t',
+    'r': '\r',
+    '0': '\0',
+    '\\': '\\',
+    '"': '"',
+    "'": "'",
+}
+
+
+def _unescape(match: re.Match[str]) -> str:
+    escape = match.group(0)[1:]
+    if escape[0] in '\n \t\r' and escape.strip() == '':
+        return ''  # a line continuation
+    if escape[0] == 'x':
+        return chr(int(escape[1:], 16))
+    if escape[0] == 'u':
+        code = int(escape[2:-1].replace('_', ''), 16)
+        return chr(code) if code <= 0x10FFFF else ''
+    return _SIMPLE_ESCAPES[escape]
+
+
+def literal_text(literal: str) -> str:
+    """The text a Rust string or byte-string literal stands for."""
+    match = _LITERAL.match(literal)
+    if not match:
+        return literal
+    if 'r' in match.group(1):
+        return match.group(3)
+    return _ESCAPE.sub(_unescape, match.group(3))
 
 
 def diagnostic_spans(source: Source) -> list[tuple[int, int]]:
@@ -520,19 +563,44 @@ def diagnostic_spans(source: Source) -> list[tuple[int, int]]:
         code_args = (
             1 if match.group('assert') else 2 if match.group('pair') else 0
         )
-        depth, j, start = 1, match.end(), match.end()
+        # A turbofish's type arguments (`same::<A, B>(…)`, `::<Vec<(A, B)>,
+        # C>`) nest like brackets, so their commas separate nothing. A bare
+        # `<` right after a name (`HashMap<K, V>` in a closure's types)
+        # could open type arguments too; then where the code ends cannot be
+        # told, and the arguments are all read as code.
+        depth, generic, j, start = 1, 0, match.end(), match.end()
+        unsure = False
         while j < len(skeleton) and depth:
             char = skeleton[j]
+            if skeleton.startswith('::', j):
+                k = j + 2
+                while k < len(skeleton) and skeleton[k].isspace():
+                    k += 1
+                if k < len(skeleton) and skeleton[k] == '<':
+                    generic += 1
+                    j = k + 1
+                    continue
             if char in '([{':
                 depth += 1
             elif char in ')]}':
                 depth -= 1
+            elif generic:
+                if char == '<':
+                    generic += 1
+                elif char == '>' and skeleton[j - 1] != '-':
+                    generic -= 1
+            elif (
+                char == '<'
+                and code_args
+                and (skeleton[j - 1].isalnum() or skeleton[j - 1] == '_')
+            ):
+                unsure = True
             elif char == ',' and depth == 1 and code_args:
                 code_args -= 1
                 start = j + 1
             j += 1
-        if code_args:
-            continue  # no message argument
+        if code_args or generic or unsure:
+            continue  # no message argument, or none that can be found
         spans.append((start, j))
     return spans
 
@@ -566,8 +634,7 @@ def statements(source: Source) -> Iterable[Statement]:
         while index < len(literals) and literals[index][0] < end:
             s, e = literals[index]
             if s >= start:
-                literal = _LITERAL.match(source.code[s:e])
-                text = literal.group(2) if literal else source.code[s:e]
+                text = literal_text(source.code[s:e])
                 parts.append(text)
                 if not any(a <= s < b for a, b in diagnostic):
                     prose.append(text)

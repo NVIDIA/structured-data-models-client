@@ -875,6 +875,67 @@ def scan_cases(results: list[Result]) -> None:
         ),
         ('pub const S: &str = "Spark";', 'hold `Spark`'),
     ]
+    # Fix round 4: turbofish commas, escapes, and an alias without `as`.
+    held = 'the strings of a statement hold'
+    passing += [
+        'pub fn f(x: u8, y: u8, c: u8) { assert!(same::<A, B>(&x, &y), "values differ for {c}"); }',
+        'pub fn f(x: u8, y: u8, c: u8) { assert!(same::<A, B>(&x, &y), "values differ where {c} = 0"); }',
+        'pub fn f(a: u8, b: u8, c: u8, d: u8, k: u8) { assert!(a < b && c > d, "the key {k} is null or missing"); }',
+        'pub fn f(a: u8, b: u8, c: u8, d: u8) { assert!(a < b && c > d, "expected {c} > 0 and below the cap"); }',
+        'pub fn f(a: u8, b: u8, c: u8) { assert_eq!(f::<Vec<(A, B)>, C>(a), b, "where {c} = 0 the run stops"); }',
+        'pub fn f(a: u8, c: u8) { assert!(g::<fn(A) -> B, C>(a), "where {c} = 0"); }',
+        error('the line\\nwhere {c} is unset'),
+        bare('a field\\tis null'),
+        error('order by time\\nis required'),
+    ]
+    failing += [
+        (
+            'pub fn f(count: u8, expected: u8) { assert!(same::<String, String>(&format!("LIMIT {count}"), expected)); }',
+            'LIMIT {count}',
+        ),
+        (
+            'pub fn f(n: u8, y: u8) { assert!(same::<Vec<(A, B)>, C>(&format!("LIMIT {n}"), y)); }',
+            'LIMIT {n}',
+        ),
+        (
+            'pub fn f(n: u8, x: u8) { assert_eq!(f::<A, B>(format!("LIMIT {n}")), x, "msg"); }',
+            'LIMIT {n}',
+        ),
+        (
+            'pub fn f(n: u8) { assert!(same :: < A, B > (format!("LIMIT {n}")), "ok"); }',
+            'LIMIT {n}',
+        ),
+        (
+            'pub fn f(n: u8) { assert!(g::<fn(A) -> B, C>(format!("LIMIT {n}")), "ok"); }',
+            'LIMIT {n}',
+        ),
+        (
+            'pub fn f(n: u8) { assert!(check(|m: HashMap<String, u8>| format!("limit {n}")), "ok"); }',
+            'limit {n}',
+        ),
+        (bare('select {c}\\nfrom {t}\\nwhere {c} is not null'), held),
+        (bare('select {c}\\nfrom {t}'), held),
+        (bare('select {c}\\tfrom {t}'), held),
+        (bare('select {c}\\r\\nfrom {t} where x'), held),
+        (bare('select {c} \\\n    from {t}'), held),
+        (bare('select\\x20{c}\\x20from {t}'), held),
+        (bare('select\\u{20}*\\u{20}from {t}'), held),
+        ('pub const Q: &[u8] = b"select a\\nfrom t";', held),
+        (bare('select * from {t} t'), 'select * from {t} t'),
+        (
+            bare('select {c} from {t} t where t.k = 1'),
+            'select {c} from {t} t where',
+        ),
+        (error('select * from {t} t'), 'select * from {t} t'),
+        (
+            error('select {c} from {t} t where t.k = 1'),
+            'select {c} from {t} t where',
+        ),
+        (
+            bare('select a, b from {t} t join u on x'),
+            'select a, b from {t} t join',
+        ),
+    ]
     for number, code in enumerate(passing):
 
         def seed_pass(root: Path, code: str = code) -> None:
