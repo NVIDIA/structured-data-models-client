@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sdm:observation:1",
+  "title": "Contract observation",
+  "description": "What one runner observed of one case, one JSON object per line of a runner's output. identity is validated on its own and never compared as a field. A field a runner cannot observe is null, never filled in: rust-host has no stage, exception class or host section, and python-old and python-ref have no core section. No message text is recorded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "case", "identity", "outcome", "host", "core"],
+  "properties": {
+    "format": {"const": "sdm-observation/1"},
+    "case": {"$ref": "urn:sdm:case:1#/$defs/id"},
+    "identity": {"$ref": "#/$defs/identity"},
+    "outcome": {
+      "description": "Where the public call ended. For rust-host, an S0 case's outcome is the core's answer as the S0 route maps it: an accepted query is a success and a refused one INVALID_REQUEST; a core error is a refusal with its code.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "stage", "error", "code"],
+      "properties": {
+        "result": {"enum": ["success", "refusal"]},
+        "stage": {"enum": ["from_source", "materialize", "predict", null]},
+        "error": {"type": ["string", "null"], "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "code": {"type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]*$"}
+      }
+    },
+    "host": {
+      "description": "Python runners only: warning classes in the order shown, for information.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["warnings"],
+      "properties": {
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "core": {
+      "description": "python-core and rust-host only: the inputs each core operation was started with, and its answer: validate_query's acceptance, or the core error's kind and code.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["inputs", "accepted", "error"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "query", "profile", "schema"],
+            "properties": {
+              "op": {"const": "validate_query"},
+              "query": {"type": "string"},
+              "profile": {"type": "object"},
+              "schema": {"type": "object"}
+            }
+          }
+        },
+        "accepted": {"type": ["boolean", "null"]},
+        "error": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["kind", "code"],
+          "properties": {
+            "kind": {"type": "string", "pattern": "^[a-z_]+$"},
+            "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha", "clean"],
+      "properties": {
+        "sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "clean": {"type": "boolean"}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runner", "cell", "platform", "commit", "reference", "native", "native_loaded", "operations", "contract", "versions", "inputs"],
+      "properties": {
+        "runner": {"enum": ["python-ref", "python-core", "python-old", "rust-host"]},
+        "cell": {
+          "description": "The runtime cell (design, Runtime cells) whose versions the runner's environment has exactly, or null when it has none's.",
+          "enum": ["ref-pandas3", "dbr17-pandas2", "floor-pandas2.2", null]
+        },
+        "platform": {"type": "string", "minLength": 1},
+        "commit": {"description": "The checkout the runner ran from.", "$ref": "#/$defs/commit"},
+        "reference": {
+          "description": "python-ref only: the reference checkout, its environment's hash and the guard's result before the first case and after the last.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["commit", "environment", "guard"],
+          "properties": {
+            "commit": {"$ref": "#/$defs/commit"},
+            "environment": {"$ref": "#/$defs/sha256"},
+            "guard": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["before", "after"],
+              "properties": {
+                "before": {"const": "passed"},
+                "after": {"const": "passed"}
+              }
+            }
+          }
+        },
+        "native": {
+          "description": "python-core only: the SHA-256 of the sdm_client._native extension module it ran.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["sha256"],
+          "properties": {"sha256": {"$ref": "#/$defs/sha256"}}
+        },
+        "native_loaded": {
+          "description": "Python runners: whether sdm_client._native was in sys.modules after the case; null for rust-host.",
+          "type": ["boolean", "null"]
+        },
+        "operations": {
+          "description": "The HostRun operations the case started, in order.",
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[a-z_]+$"}
+        },
+        "contract": {"description": "The contract version of the core it ran, or null.", "type": ["integer", "null"]},
+        "versions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["duckdb"],
+          "properties": {
+            "python": {"type": "string"},
+            "pandas": {"type": "string"},
+            "pyarrow": {"type": "string"},
+            "numpy": {"type": "string"},
+            "duckdb": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+"}
+          }
+        },
+        "inputs": {
+          "description": "SHA-256 of the case file's bytes, and of contract/bases.yaml when the runner read it.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["case", "bases"],
+          "properties": {
+            "case": {"$ref": "#/$defs/sha256"},
+            "bases": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+          }
+        }
+      }
+    }
+  }
+}

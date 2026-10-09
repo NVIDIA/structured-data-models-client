@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The named DuckDB bases a case builds its data from: each is a list of
+# statements run in order on a fresh in-memory connection, before the case's
+# own `setup`. They are the Phase 1b inventory's bases, which the inventory
+# loader's test holds equal to these (contract/runners/run_python.py).
+
+format: sdm-bases/1
+
+bases:
+  shop:
+  - CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)
+  - CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)
+  declared:
+  - CREATE TABLE users (uid INTEGER PRIMARY KEY, age INTEGER, country VARCHAR)
+  - CREATE TABLE orders (oid BIGINT PRIMARY KEY, buyer INTEGER REFERENCES users (uid), price DOUBLE, ts TIMESTAMP)
+  - INSERT INTO users SELECT i, 20 + i, ['US', 'DE', 'IN'][1 + i % 3] FROM range(8) t(i)
+  - INSERT INTO orders SELECT i, i % 8, 10 + i * 1.5, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) FROM range(80) t(i)

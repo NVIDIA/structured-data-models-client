@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sdm:case:1",
+  "title": "Contract case",
+  "description": "One case of the shared L2 corpus (contract/cases/): a public call and its inputs, how far it runs, and the reference's outcome. The Python runner (contract/runners/run_python.py) makes the public calls; the pure-Rust host (sdm-contract-run) starts the core operations under `core`. A case taken from the Phase 1b inventory keeps every key the inventory gave it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "id", "status", "slice", "paths", "routes", "cells", "input", "until", "expect", "why", "source"],
+  "properties": {
+    "format": {"const": "sdm-case/1"},
+    "id": {"$ref": "#/$defs/id"},
+    "status": {
+      "description": "acceptance: gating; diagnostic: run and reported, gating nothing (design, Merge rules).",
+      "enum": ["acceptance", "diagnostic"]
+    },
+    "slice": {"enum": ["S0", "S1", "S2", "S3"]},
+    "paths": {
+      "description": "The scope-python.yaml paths this case covers.",
+      "$ref": "#/$defs/path_ids"
+    },
+    "routes": {
+      "description": "The paths python-core forces onto the core through SDM_CORE_ROUTES: every path the call may end on, since one call runs its paths on one route.",
+      "$ref": "#/$defs/path_ids"
+    },
+    "seam": {"$ref": "#/$defs/seam"},
+    "cells": {"$ref": "#/$defs/cells"},
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "pql", "materialize"],
+      "properties": {
+        "base": {
+          "description": "A base of contract/bases.yaml: DuckDB statements run on a fresh in-memory connection.",
+          "$ref": "#/$defs/name"
+        },
+        "setup": {
+          "description": "DuckDB statements run after the base, on the same connection.",
+          "$ref": "#/$defs/statements"
+        },
+        "from_source": {"$ref": "#/$defs/from_source"},
+        "pql": {"type": "string", "minLength": 1},
+        "materialize": {"$ref": "#/$defs/materialize"}
+      }
+    },
+    "until": {
+      "description": "The last public call the case makes when nothing refuses: Schema.from_source, then PredictiveQuery.materialize, then SDMClient.predict.",
+      "enum": ["from_source", "materialize", "predict"]
+    },
+    "core": {
+      "description": "The core operations the call starts, with the inputs the host passes them. The pure-Rust host starts these; python-core records what its host passed and the comparator holds the two equal.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "validate_query": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["profile", "schema"],
+          "properties": {
+            "profile": {"description": "The contract's ProfileSpec.", "type": "object"},
+            "schema": {"description": "The contract's QuerySchema; the query text is input.pql.", "type": "object"}
+          }
+        }
+      }
+    },
+    "expect": {"$ref": "#/$defs/expect"},
+    "register": {"type": "string", "minLength": 1},
+    "why": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+    "path_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z.-]*/[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$"}
+    },
+    "seam": {"enum": ["keys", "decimal", "nested", "empty-null", "time", "refusal", "baseline"]},
+    "cells": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9-]+/(primary-key|foreign-key|time-column|feature|target)$"}
+    },
+    "statements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "bases": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/statements"}
+    },
+    "from_source": {
+      "description": "Keyword arguments to Schema.from_source; absent means Schema.from_source(source).",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "tables": {"type": ["array", "object"]},
+        "primary_keys": {"type": "object"},
+        "time_columns": {"type": "object"}
+      }
+    },
+    "materialize": {
+      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["indices"],
+      "properties": {
+        "indices": {"type": "array", "items": {"type": ["integer", "string"]}},
+        "indices_as": {"const": "decimal"},
+        "anchor_time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}
+      }
+    },
+    "expect": {
+      "description": "The reference's outcome: where the call ended, and for a refusal the exception's class name and StructuredDataError.code (null for one without a code). message and today are for information only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "stage"],
+      "properties": {
+        "outcome": {"enum": ["success", "refusal"]},
+        "stage": {"enum": ["from_source", "materialize", "predict"]},
+        "error": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+        "code": {"type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]*$"},
+        "message": {"type": "string"},
+        "today": {"type": "string"}
+      },
+      "if": {"properties": {"outcome": {"const": "refusal"}}},
+      "then": {"required": ["error", "code"]},
+      "else": {"not": {"anyOf": [{"required": ["error"]}, {"required": ["code"]}, {"required": ["message"]}]}}
+    }
+  }
+}
