@@ -59,7 +59,7 @@ const DENIED: &[&str] = &[
 
 /// Names refused, beyond `DENIED`, for a property typed as a reviewed typed
 /// value.
-const DENIED_FOR_VALUES: &[&str] = &["filter", "order"];
+const DENIED_FOR_VALUES: &[&str] = &["filter", "filters", "order", "orders"];
 
 /// Text properties that name what a request refers to.
 const IDENTIFIERS: &[&str] = &[
@@ -558,4 +558,16 @@ fn the_vocabulary_s_own_order_and_filters_are_typed_structures() {
             .any(|f| matches!(f, Finding::Identifier(p) if p.contains(field)))
     };
     assert!(at("/order") && at("/seed_column"), "{found:#?}");
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct FiltersScalars {
+    table: String,
+    filters: Vec<sdm_contract::Scalar>,
+}
+
+#[test]
+fn typed_values_named_as_filters_are_refused() {
+    refused::<FiltersScalars>("Denied(\"#/filters/items -> Scalar\")");
 }
