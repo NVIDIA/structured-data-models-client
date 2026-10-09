@@ -31,6 +31,121 @@
         "warnings": {"type": "array", "items": {"type": "string"}}
       }
     },
+    "driver": {
+      "description": "Python runners only (rust-host writes none): the test-only driver capture (design, Driver capture; decision Q2) and DuckDB's own query log, read after the case. capture is null when the run handed the source the driver connection itself (the conservation control). Setup, everything run before the connection reaches Schema.from_source, is in neither.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capture", "query_log"],
+      "properties": {
+        "capture": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["statements", "bindings", "events", "incomplete", "passed_through", "cursors"],
+          "properties": {
+            "statements": {
+              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), its SQL text, its typed parameters, every result read from it and the class of any error it raised.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["handle", "sql", "parameters", "results", "error"],
+                "properties": {
+                  "handle": {"type": "integer", "minimum": 0},
+                  "sql": {"type": ["string", "null"]},
+                  "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/typed"}},
+                  "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
+                  "error": {"type": ["string", "null"]}
+                }
+              }
+            },
+            "bindings": {
+              "description": "Each relation the provider bound by name (DuckDB's register), with its Arrow contents.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["handle", "name", "type"],
+                "properties": {
+                  "handle": {"type": "integer", "minimum": 0},
+                  "name": {"type": "string"},
+                  "type": {"type": "string"},
+                  "rows": {"type": "integer", "minimum": 0},
+                  "schema": {"$ref": "#/$defs/arrow_schema"},
+                  "digest": {"$ref": "#/$defs/sha256"}
+                }
+              }
+            },
+            "events": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["event", "handle"],
+                "properties": {
+                  "event": {"enum": ["cursor", "close", "commit", "rollback", "begin", "exit", "unregister"]},
+                  "handle": {"type": "integer", "minimum": 0},
+                  "name": {"type": "string"}
+                }
+              }
+            },
+            "incomplete": {"description": "What the capture could not record; any entry fails the capture's checks.", "type": "array", "items": {"type": "string"}},
+            "passed_through": {"description": "Attributes read from the driver that the capture neither records nor needs to.", "type": "array", "items": {"type": "string"}},
+            "cursors": {"type": "integer", "minimum": 0}
+          }
+        },
+        "query_log": {
+          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound through the API (without). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["statements", "bindings"],
+          "properties": {
+            "statements": {"type": "integer", "minimum": 0},
+            "bindings": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "public": {
+      "description": "Python runners only: the public projection the capture must not change (design, Driver capture): the public Schema, each request the scripted endpoint received, and the public result through to_pandas(). Warnings and the error outcome are host.warnings and outcome.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "payloads", "result"],
+      "properties": {
+        "schema": {"type": ["object", "null"]},
+        "payloads": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["method", "path", "sha256", "parsed"],
+            "properties": {
+              "method": {"type": "string"},
+              "path": {"type": "string"},
+              "sha256": {"$ref": "#/$defs/sha256"},
+              "parsed": {"description": "The body as JSON, every number as {\"number\": its text}; null when it is not JSON."}
+            }
+          }
+        },
+        "result": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["columns", "rows", "digest"],
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "dtype"],
+                "properties": {"name": {"type": "string"}, "dtype": {"type": "string"}}
+              }
+            },
+            "rows": {"type": "integer", "minimum": 0},
+            "digest": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      }
+    },
     "core": {
       "description": "python-core and rust-host only: the inputs each core operation was started with, and its answer: validate_query's acceptance, or the core error's kind and code.",
       "type": ["object", "null"],
@@ -66,6 +181,34 @@
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "typed": {
+      "description": "A value the capture recorded, as its Python type and repr: the capture's own text, never compared as a value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {"type": {"type": "string"}, "value": {"type": "string"}}
+    },
+    "arrow_schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {"name": {"type": "string"}, "type": {"type": "string"}}
+      }
+    },
+    "result": {
+      "description": "One read of a statement's result: the method, the rows it gave, their Arrow schema when it gave Arrow, and their digest (batch boundaries left out).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "rows", "digest"],
+      "properties": {
+        "method": {"type": "string"},
+        "rows": {"type": "integer", "minimum": 0},
+        "schema": {"$ref": "#/$defs/arrow_schema"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
     "commit": {
       "type": "object",
       "additionalProperties": false,

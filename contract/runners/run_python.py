@@ -8,7 +8,7 @@ r"""The Python runner of the contract cases, in three modes.
 Run with ``python -I``, from the interpreter of the environment under test:
 
     python -I contract/runners/run_python.py --mode MODE [--reference DIR]
-        --out FILE CASE_OR_DIRECTORY...
+        [--no-capture] [--inventory ID]... --out FILE [CASE_OR_DIRECTORY...]
 
 - ``python-ref``: the reference, the oracle. ``--reference`` names the
   reference checkout, whose environment must be the interpreter's. Its guard
@@ -25,7 +25,21 @@ Run with ``python -I``, from the interpreter of the environment under test:
 
 Each case builds its DuckDB base on a fresh in-memory connection, then makes
 the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
-as far as the case's ``until``. An exception a public call raises is the
+then ``SDMClient.predict`` against the scripted endpoint
+(``scripted_endpoint.py``), served on localhost and reached through the
+client's real transport, as far as the case's ``until``.
+
+The source is handed the connection through the test-only driver capture
+(design, "Driver capture"; decision Q2), which records every statement the
+driver runs, its typed parameters, each result read and every relation
+bound by name, derived cursors included, and changes nothing that crosses
+it; ``--no-capture`` hands it the connection itself, the conservation
+control. Setup, the statements before the connection reaches the source,
+is outside it. DuckDB's own query log is read after each case either way,
+so ``capture_check.py`` can hold the captured counts to it and the two runs
+to the same public projection (``public``: the schema, each request the
+scripted endpoint received, the result). Cases of the Phase 1b inventory are
+named with ``--inventory ID``. An exception a public call raises is the
 case's outcome, recorded by class, ``StructuredDataError.code`` and stage, a
 ``RuntimeError`` included; the comparator decides whether it is the expected
 one. A runner failure is anything else: the guard failing, a missing
@@ -270,6 +284,28 @@ def inventory_entry(
     return entry
 
 
+def inventory_cases(ids: Iterable[str]) -> list[tuple[dict[str, Any], str]]:
+    r"""The inventory cases named, in the case format, each with the
+    SHA-256 of its canonical JSON."""
+    wanted = list(ids)
+    if not wanted:
+        return []
+    inventory = load_inventory()
+    entries = {entry['id']: entry for entry in inventory['cases']}
+    validate = validator('case')
+    found = []
+    for case_id in wanted:
+        if case_id not in entries:
+            raise RunnerFailure(f'{case_id}: not an inventory case')
+        case = inventory_case(entries[case_id], inventory['defaults'])
+        problem = _invalid(validate, case)
+        if problem is not None:
+            raise RunnerFailure(f'{case_id}: not a case: {problem}')
+        text = json.dumps(case, sort_keys=True).encode()
+        found.append((case, digest(text)))
+    return found
+
+
 # --- identity --------------------------------------------------------------------
 
 
@@ -469,6 +505,323 @@ class _Boundary:
         return self.capture
 
 
+def _sibling(name: str) -> Any:
+    r"""A module beside this file, loaded by path: ``python -I`` puts no
+    script directory on ``sys.path``."""
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, HERE / f'{name}.py')
+    if spec is None or spec.loader is None:
+        raise RunnerFailure(f'{name}.py is missing beside the runner')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# --- the driver capture (Q2) ---------------------------------------------------------
+
+#: The methods that read a statement's result, by what they give back.
+_ROWS = ('fetchall', 'fetchmany')
+_ROW = ('fetchone',)
+_ARROW = ('to_arrow_table', 'fetch_arrow_table', 'arrow')
+#: Results the capture cannot record without consuming them or changing
+#: what the caller gets; reading one makes the capture incomplete, which
+#: fails the case rather than drop a result.
+_UNRECORDED = (
+    'fetch_record_batch',
+    'to_arrow_reader',
+    'fetchdf',
+    'fetch_df',
+    'df',
+    'fetch_df_chunk',
+    'fetchnumpy',
+    'pl',
+    'torch',
+    'tf',
+)
+#: Methods that start a statement the capture does not see as one (a lazy
+#: relation runs when it is read, outside the capture).
+_UNCAPTURED = (
+    'executemany',
+    'sql',
+    'query',
+    'from_query',
+    'table',
+    'view',
+    'values',
+    'read_csv',
+    'read_parquet',
+    'read_json',
+    'from_df',
+    'from_arrow',
+    'append',
+    'load_extension',
+    'install_extension',
+)
+
+
+def _typed(value: Any) -> dict[str, Any]:
+    r"""A parameter or a fetched value as its type and its text: the
+    capture's own record, which no value passes through to change."""
+    kind = type(value)
+    return {
+        'type': f'{kind.__module__}.{kind.__qualname__}',
+        'value': repr(value),
+    }
+
+
+def _rows_digest(rows: list[Any]) -> str:
+    text = json.dumps(
+        [[_typed(value) for value in row] for row in rows], sort_keys=True
+    )
+    return digest(text.encode())
+
+
+def _arrow_digest(table: Any) -> str:
+    r"""The SHA-256 of an Arrow table's contents, its batch boundaries left
+    out (decision H9): the IPC stream of one combined copy."""
+    import pyarrow as pa
+
+    sink = pa.BufferOutputStream()
+    combined = table.combine_chunks()
+    with pa.ipc.new_stream(sink, combined.schema) as writer:
+        writer.write_table(combined)
+    return digest(sink.getvalue().to_pybytes())
+
+
+class DriverLog:
+    r"""What the capture recorded of one case: each statement, in the order
+    the driver ran them, with its handle (0 the connection the source was
+    given, then each derived cursor in the order made), typed parameters
+    and every result read from it; each relation bound by name; and what
+    it could not record."""
+
+    def __init__(self) -> None:
+        self.statements: list[dict[str, Any]] = []
+        self.bindings: list[dict[str, Any]] = []
+        self.events: list[dict[str, Any]] = []
+        self.incomplete: list[str] = []
+        self.passed: list[str] = []
+        self.handles = 0
+
+    def handle(self) -> int:
+        number = self.handles
+        self.handles += 1
+        return number
+
+    def record(self) -> dict[str, Any]:
+        return {
+            'statements': self.statements,
+            'bindings': self.bindings,
+            'events': self.events,
+            'incomplete': sorted(set(self.incomplete)),
+            'passed_through': sorted(set(self.passed)),
+            'cursors': self.handles - 1,
+        }
+
+
+class _Captured:
+    r"""A DuckDB connection or derived cursor, as the capture hands it to
+    the source: every call goes to the driver unchanged, with the same
+    arguments, once, and its answer comes back unchanged; what was run and
+    read is recorded on the side.
+
+    It passes the reference's dispatch as the connection does (design,
+    "Driver capture"): its class's module is under ``duckdb``, which
+    ``sdm_connectors.source._backend_of`` reads over the MRO; a derived
+    cursor is the same class, so ``reader._query_handle``'s
+    ``isinstance(cursor, type(connection))`` holds as it does for the
+    driver; and ``__class__`` answers the driver's class, so
+    ``Graph.from_duckdb``'s ``isinstance(connection, DuckDBPyConnection)``
+    holds too.
+    """
+
+    __slots__ = ('_driver', '_log', '_handle', '_statement')
+
+    def __init__(self, driver: Any, log: DriverLog) -> None:
+        object.__setattr__(self, '_driver', driver)
+        object.__setattr__(self, '_log', log)
+        object.__setattr__(self, '_handle', log.handle())
+        object.__setattr__(self, '_statement', None)
+
+    @property  # type: ignore[misc]
+    def __class__(self) -> type:
+        return type(self._driver)
+
+    def _same(self, answer: Any) -> Any:
+        # The driver gives itself back from execute and register; the
+        # caller gets this proxy in its place, so what it reads next is
+        # recorded too.
+        return self if answer is self._driver else answer
+
+    def cursor(self) -> Any:
+        derived = self._driver.cursor()
+        self._log.events.append({'event': 'cursor', 'handle': self._handle})
+        return _Captured(derived, self._log)
+
+    def execute(self, *arguments: Any, **keywords: Any) -> Any:
+        given = list(arguments) + list(keywords.values())
+        query = given[0] if given else None
+        parameters = given[1] if len(given) > 1 else None
+        statement: dict[str, Any] = {
+            'handle': self._handle,
+            'sql': query if isinstance(query, str) else None,
+            'parameters': (
+                None
+                if parameters is None
+                else [_typed(value) for value in parameters]
+            ),
+            'results': [],
+            'error': None,
+        }
+        if not isinstance(query, str):
+            self._log.incomplete.append('execute:not_text')
+        self._log.statements.append(statement)
+        object.__setattr__(self, '_statement', statement)
+        try:
+            answer = self._driver.execute(*arguments, **keywords)
+        except BaseException as error:
+            statement['error'] = type(error).__name__
+            raise
+        return self._same(answer)
+
+    def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        answer = getattr(self._driver, method)(*arguments, **keywords)
+        statement = self._statement
+        if statement is None:
+            self._log.incomplete.append(f'{method}:no_statement')
+            return answer
+        if method in _ROWS:
+            rows = list(answer)
+            result = {'method': method, 'rows': len(rows)}
+            result['digest'] = _rows_digest(rows)
+        elif method in _ROW:
+            result = {'method': method, 'rows': 0 if answer is None else 1}
+            result['digest'] = _rows_digest([] if answer is None else [answer])
+        else:
+            result = {
+                'method': method,
+                'rows': answer.num_rows,
+                'schema': [
+                    {'name': field.name, 'type': str(field.type)}
+                    for field in answer.schema
+                ],
+                'digest': _arrow_digest(answer),
+            }
+        statement['results'].append(result)
+        return answer
+
+    def fetchall(self, *arguments: Any, **keywords: Any) -> Any:
+        return self._read('fetchall', *arguments, **keywords)
+
+    def fetchmany(self, *arguments: Any, **keywords: Any) -> Any:
+        return self._read('fetchmany', *arguments, **keywords)
+
+    def fetchone(self, *arguments: Any, **keywords: Any) -> Any:
+        return self._read('fetchone', *arguments, **keywords)
+
+    def to_arrow_table(self, *arguments: Any, **keywords: Any) -> Any:
+        return self._read('to_arrow_table', *arguments, **keywords)
+
+    def fetch_arrow_table(self, *arguments: Any, **keywords: Any) -> Any:
+        return self._read('fetch_arrow_table', *arguments, **keywords)
+
+    def arrow(self, *arguments: Any, **keywords: Any) -> Any:
+        return self._read('arrow', *arguments, **keywords)
+
+    def register(self, name: Any, value: Any) -> Any:
+        binding: dict[str, Any] = {
+            'handle': self._handle,
+            'name': name,
+            'type': f'{type(value).__module__}.{type(value).__qualname__}',
+        }
+        if type(value).__module__.startswith('pyarrow') and hasattr(
+            value, 'combine_chunks'
+        ):
+            binding['rows'] = value.num_rows
+            binding['schema'] = [
+                {'name': field.name, 'type': str(field.type)}
+                for field in value.schema
+            ]
+            binding['digest'] = _arrow_digest(value)
+        else:
+            self._log.incomplete.append('register:not_arrow')
+        self._log.bindings.append(binding)
+        return self._same(self._driver.register(name, value))
+
+    def unregister(self, name: Any) -> Any:
+        self._log.events.append(
+            {'event': 'unregister', 'handle': self._handle, 'name': name}
+        )
+        return self._same(self._driver.unregister(name))
+
+    def _event(self, method: str, *arguments: Any, **keywords: Any) -> Any:
+        self._log.events.append({'event': method, 'handle': self._handle})
+        return self._same(getattr(self._driver, method)(*arguments, **keywords))
+
+    def close(self) -> Any:
+        return self._event('close')
+
+    def commit(self) -> Any:
+        return self._event('commit')
+
+    def rollback(self) -> Any:
+        return self._event('rollback')
+
+    def begin(self) -> Any:
+        return self._event('begin')
+
+    def __enter__(self) -> Any:
+        self._driver.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        self._log.events.append({'event': 'exit', 'handle': self._handle})
+        return self._driver.__exit__(*exc)
+
+    def __repr__(self) -> str:
+        return repr(self._driver)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in _UNRECORDED or name in _UNCAPTURED:
+            self._log.incomplete.append(name)
+        else:
+            self._log.passed.append(name)
+        return getattr(self._driver, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self._driver, name, value)
+
+
+# Under the driver's own package, which the reference's backend dispatch
+# reads (sdm_connectors.source._DRIVER_MODULES); a test-only name no import
+# resolves.
+_Captured.__module__ = 'duckdb.sdm_capture'
+
+
+def capture(connection: Any, log: DriverLog) -> Any:
+    r"""``connection`` as the capture hands it to a source."""
+    return _Captured(connection, log)
+
+
+def enable_query_log(connection: Any) -> None:
+    r"""Turns on DuckDB's own query log, which every connection and
+    derived cursor of the database writes to, after the case's setup."""
+    connection.execute("CALL enable_logging('QueryLog')")
+
+
+def query_log(connection: Any) -> list[str]:
+    r"""Each query DuckDB logged since :func:`enable_query_log`, in order:
+    a statement's text, or ``''`` for a relation bound through the API
+    (``register``)."""
+    rows = connection.execute(
+        'SELECT message FROM duckdb_logs '
+        "WHERE type = 'QueryLog' ORDER BY context_id"
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
 # --- one case --------------------------------------------------------------------
 
 
@@ -522,12 +875,79 @@ def _outcome(
     }
 
 
+def _number(token: str) -> dict[str, str]:
+    return {'number': token}
+
+
+def _payload(body: bytes) -> dict[str, Any]:
+    r"""A request body the endpoint received: its SHA-256, and its parsed
+    form with every number as the decimal text sent, so no value passes
+    through a float."""
+    try:
+        parsed = json.loads(body, parse_int=_number, parse_float=_number)
+    except ValueError:
+        parsed = None
+    return {'sha256': digest(body), 'parsed': parsed}
+
+
+def _schema_projection(schema: Any) -> dict[str, Any]:
+    r"""The public ``Schema``: each table's columns with their dtype and
+    stype, its key, time column and duplicate-key count, and the links."""
+    tables = []
+    for name, table in schema.tables.items():
+        key = table.primary_key
+        tables.append(
+            {
+                'name': name,
+                'columns': [
+                    {'name': column, 'dtype': c.dtype, 'stype': c.stype}
+                    for column, c in table.columns.items()
+                ],
+                'primary_key': (
+                    key if key is None or isinstance(key, str) else list(key)
+                ),
+                'time_column': table.time_column,
+                'duplicate_keys': table.duplicate_keys,
+            }
+        )
+    links = [
+        [
+            link.source_table,
+            link.source_column,
+            link.target_table,
+            link.target_column,
+        ]
+        for link in getattr(schema, 'links', [])
+    ]
+    return {'tables': tables, 'links': links}
+
+
+def _result_projection(result: Any) -> dict[str, Any]:
+    r"""The public result, through ``to_pandas()``: its columns with their
+    dtypes, and its rows as typed values with their digest."""
+    frame = result.to_pandas()
+    rows = [list(row) for row in frame.itertuples(index=False, name=None)]
+    return {
+        'columns': [
+            {'name': str(name), 'dtype': str(dtype)}
+            for name, dtype in frame.dtypes.items()
+        ],
+        'rows': len(rows),
+        'digest': _rows_digest(rows),
+    }
+
+
 def _call(
-    case: dict[str, Any], bases: dict[str, list[str]]
-) -> tuple[dict[str, Any], list[str]]:
-    r"""Makes the case's public calls: its outcome and warning classes."""
-    from sdm_client import PredictiveQuery, Schema
+    case: dict[str, Any],
+    bases: dict[str, list[str]],
+    driver_capture: bool = True,
+) -> tuple[dict[str, Any], list[str], dict[str, Any], dict[str, Any]]:
+    r"""Makes the case's public calls, with the driver capture on or off:
+    its outcome, warning classes, driver record and public projection."""
+    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
     from sdm_connectors import DuckDBSource
+
+    serve = _sibling('scripted_endpoint').serve
 
     given = case['input']
     # The call's arguments are the harness's to build: an input it cannot
@@ -539,21 +959,35 @@ def _call(
             f'{case["id"]}: its materialize arguments could not be built'
         ) from None
     connection = _connection(case, bases)
+    # Setup is everything run before the connection reaches the source; the
+    # query log and the capture start after it.
+    enable_query_log(connection)
+    log = DriverLog() if driver_capture else None
+    given_to_source = (
+        capture(connection, log) if log is not None else connection
+    )
+    public: dict[str, Any] = {'schema': None, 'payloads': [], 'result': None}
     stage = 'from_source'
-    with warnings.catch_warnings(record=True) as shown:
+    with (
+        serve() as (url, received),
+        warnings.catch_warnings(record=True) as shown,
+    ):
         warnings.simplefilter('always')
         try:
             schema = Schema.from_source(
-                DuckDBSource(connection), **given.get('from_source', {})
+                DuckDBSource(given_to_source), **given.get('from_source', {})
             )
+            public['schema'] = _schema_projection(schema)
             if case['until'] != 'from_source':
                 stage = 'materialize'
-                PredictiveQuery(given['pql'], schema).materialize(**arguments)
-            if case['until'] == 'predict':
-                raise RunnerFailure(
-                    f'{case["id"]}: this runner does not make the predict '
-                    'call yet'
+                request = PredictiveQuery(given['pql'], schema).materialize(
+                    **arguments
                 )
+            if case['until'] == 'predict':
+                stage = 'predict'
+                with SDMClient(url) as client:
+                    result = client.predict(request, model=KumoRelational())
+                public['result'] = _result_projection(result)
             outcome = _outcome('success', stage)
         except RunnerFailure:
             raise
@@ -565,8 +999,27 @@ def _call(
                 ) from None
             outcome = _outcome('refusal', stage, error)
         finally:
-            connection.close()
-    return outcome, [type(warning.message).__name__ for warning in shown]
+            try:
+                logged = query_log(connection)
+            finally:
+                connection.close()
+        public['payloads'] = [
+            {'method': method, 'path': path, **_payload(body)}
+            for method, path, body in received.requests
+        ]
+    driver = {
+        'capture': log.record() if log is not None else None,
+        'query_log': {
+            'statements': sum(1 for text in logged if text),
+            'bindings': sum(1 for text in logged if not text),
+        },
+    }
+    return (
+        outcome,
+        [type(warning.message).__name__ for warning in shown],
+        driver,
+        public,
+    )
 
 
 # --- the run ---------------------------------------------------------------------
@@ -593,6 +1046,7 @@ def run(
     mode: str,
     cases: list[tuple[dict[str, Any], str]],
     reference: Path | None,
+    driver_capture: bool = True,
 ) -> list[dict[str, Any]]:
     r"""Every case's observation, or :class:`RunnerFailure`."""
     os.environ.pop('SDM_CORE_ROUTES', None)
@@ -613,7 +1067,7 @@ def run(
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
         try:
-            outcome, shown = _call(case, bases)
+            outcome, shown, driver, public = _call(case, bases, driver_capture)
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
         recorded.append(
@@ -624,6 +1078,8 @@ def run(
                 shown,
                 capture,
                 'sdm_client._native' in sys.modules,
+                driver,
+                public,
             )
         )
     reference_identity = None
@@ -641,7 +1097,16 @@ def run(
     commit = _git(REPO)
     validate = validator('observation')
     observations = []
-    for case, case_digest, outcome, shown, capture, loaded in recorded:
+    for (
+        case,
+        case_digest,
+        outcome,
+        shown,
+        capture,
+        loaded,
+        driver,
+        public,
+    ) in recorded:
         observation = {
             'format': 'sdm-observation/1',
             'case': case['id'],
@@ -663,6 +1128,8 @@ def run(
             'outcome': outcome,
             'host': {'warnings': shown},
             'core': capture.core() if capture else None,
+            'driver': driver,
+            'public': public,
         }
         problem = _invalid(validate, observation)
         if problem is not None:
@@ -678,7 +1145,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--mode', choices=MODES, required=True)
     parser.add_argument('--reference', type=Path)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('cases', type=Path, nargs='+')
+    parser.add_argument(
+        '--inventory',
+        action='append',
+        default=[],
+        metavar='ID',
+        help='a case of the Phase 1b inventory, by id, in the case format',
+    )
+    parser.add_argument(
+        '--no-capture',
+        action='store_true',
+        help='hand the source the driver connection itself (the capture '
+        "conservation control); DuckDB's query log is still read",
+    )
+    parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):
         parser.error('--reference is given in python-ref mode, and only there')
@@ -687,10 +1167,16 @@ def main(argv: list[str] | None = None) -> int:
     arguments.out.unlink(missing_ok=True)
     partial.unlink(missing_ok=True)
     try:
-        cases = load_cases(arguments.cases)
+        cases = load_cases(arguments.cases) if arguments.cases else []
+        cases.extend(inventory_cases(arguments.inventory))
         if not cases:
             raise RunnerFailure('no cases')
-        observations = run(arguments.mode, cases, arguments.reference)
+        observations = run(
+            arguments.mode,
+            cases,
+            arguments.reference,
+            driver_capture=not arguments.no_capture,
+        )
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)
         return 1
