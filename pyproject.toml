@@ -56,9 +56,9 @@ extend-exclude = [
 select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-# Databricks injects `spark`, `dbutils` and `display` into a notebook (F821),
-# and each cell imports what it uses so it can be rerun on its own (E402).
-"examples/databricks/*.ipynb" = ["F821", "E402"]
+# Each cell imports what it uses so it can be rerun on its own (E402). The
+# names Databricks injects are declared in examples/databricks/ruff.toml.
+"examples/databricks/*.ipynb" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "single"

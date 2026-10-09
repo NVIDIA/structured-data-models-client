@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The notebooks here run in a Databricks workspace, which injects these names
+# into every notebook. Declaring them, rather than ignoring F821, keeps every
+# other undefined name an error.
+extend = "../../pyproject.toml"
+builtins = ["dbutils", "display", "spark"]
