@@ -203,6 +203,11 @@ def load_inventory(path: Path = INVENTORY) -> dict[str, Any]:
     problem = _invalid(validator('inventory'), inventory)
     if problem is not None:
         raise RunnerFailure(f'{path.name}: not the inventory: {problem}')
+    # The case-level rules beyond the schema hold for the defaults a case
+    # inherits as for what it states; the indices rule is the only one.
+    problem = _indices(inventory['defaults'])
+    if problem is not None:
+        raise RunnerFailure(f'{path.name}: defaults: {problem}')
     for entry in inventory['cases']:
         problem = _indices(entry) if 'materialize' in entry else None
         if problem is not None:

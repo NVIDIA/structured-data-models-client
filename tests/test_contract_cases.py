@@ -25,6 +25,7 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNNER = ROOT / 'contract/runners/run_python.py'
@@ -347,3 +348,31 @@ def test_an_index_is_an_integer_literal_of_any_size_or_text(
     for literal in literals['refused']:
         with pytest.raises(run_python.RunnerFailure):
             load(literal)
+
+
+def test_an_inherited_index_is_held_to_the_same_rule(tmp_path: Path) -> None:
+    inventory = yaml.safe_load(run_python.INVENTORY.read_text())
+    inheriting = next(
+        entry for entry in inventory['cases'] if 'materialize' not in entry
+    )
+
+    def load(indices: list[Any]) -> dict[str, Any]:
+        inventory['defaults']['materialize']['indices'] = indices
+        path = tmp_path / 'inventory.yaml'
+        path.write_text(yaml.safe_dump(inventory))
+        loaded: dict[str, Any] = run_python.load_inventory(path)
+        return loaded
+
+    with pytest.raises(run_python.RunnerFailure, match='defaults'):
+        load([1.0])
+    loaded = load([2**70])
+    case = run_python.inventory_case(
+        next(e for e in loaded['cases'] if e['id'] == inheriting['id']),
+        loaded['defaults'],
+    )
+    [index] = case['input']['materialize']['indices']
+    assert type(index) is int and index == 2**70
+    path = tmp_path / 'case.json'
+    path.write_text(json.dumps(case))
+    [(read, _)] = run_python.load_cases([path])
+    assert read['input']['materialize']['indices'] == [2**70]
