@@ -91,7 +91,9 @@ entries:
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). The agreement is tracked in
-    phase-0/pql-asks.md.
+    phase-0/pql-asks.md. Since Phase 1 decision E18 (owner, 2026-10-08)
+    there is no PQL-team agreement: the parser is this client's own, and
+    keeps the reference's codes, spans and quirks.
 
 - id: PK-5
   title: PQL date-literal rules, written down
@@ -613,7 +615,8 @@ entries:
   notes: >-
     Not a chrono limit; the probe does not model dateutil's packed reading.
     Recommendation: add it to the PQL asks and keep it unless the agreed
-    dialect drops it.
+    dialect drops it. Since Phase 1 decision E18 (owner, 2026-10-08) the
+    asks are retired and this client's parser keeps D8 (T1.6b).
 
 - id: DT-6
   title: Per-row reading of values outside the accepted shapes

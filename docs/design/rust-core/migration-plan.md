@@ -18,7 +18,7 @@ All of the work happens on an epic branch and stays experimental until the owner
 | Core receives query results as Arrow; frames described by the host | Core takes only a closed set of Arrow types; each language converts its own types through a reviewed table | The core grew six pandas column models and parsed dtype names |
 | Core never calls into the host (stated) | Checked in CI: core crates can't depend on Python or Java bindings or name Python types, and a pure-Rust test host runs every contract case | The implementation called back into Python in 19 ways |
 | SQL dialects inside the core | Data access is pluggable: the core emits typed data requests; SQL dialects are one built-in provider, and the layer can be swapped or a host can answer with its own provider (for example for Pyramid) | Agreed when the proposal was posted, then lost: the first attempt hard-coded the dialects |
-| PQL: a hand-written port | One PQL implementation, the PQL team's C++ core, used through its published Rust crate | Several PQL copies already drift |
+| PQL: a hand-written port | One PQL implementation in this client: the hand-written Rust parser, completed and held to the reference's corpus, behind one adapter; the plan's earlier choice, the PQL team's C++ core through a Rust crate, is superseded (Phase 1 decision E18, approved by owner 2026-10-08) | Several PQL copies already drift |
 | Port the client logic | Port defined algorithms; use Rust libraries for general data work; keep presentation and object behavior in the host | 27-29% of the Rust re-created libraries by hand |
 | Python first, Java much later | Python leads every slice; Java runs the same contract cases from the start, so Python assumptions in the core surface early, but never holds Python back | Python assumptions surfaced only at the end |
 | Module-by-module phases, merged at the end | Vertical slices through the public API, each merged into an epic branch at its gate; `main` stays pure Python until the owner merges the epic | Modules passed alone and broke together; nothing merged |
@@ -33,7 +33,8 @@ The owner made these before any code:
    Java is a second binding on the same core, built so the core stays language-neutral, never at Python's expense.
 2. **Scope:** Python supports every backend it supports today (Databricks, Snowflake, Lakebase, Postgres, SQLite, DuckDB and in-memory frames, including files read from Amazon S3).
    Java starts with DuckDB, SQLite, Postgres and Databricks.
-   Platforms: the client becomes one CPython `abi3` wheel per platform (3.10 and later, no sdist) for Linux x86_64 and aarch64 (`manylinux2014`, and `musllinux_1_2` if the PQL C++ builds there), macOS (10.12 x86_64, 11.0 arm64) and Windows x86_64, with `pyarrow>=10.0.1` and `pandas>=1.5`.
+   Platforms: the client becomes one CPython `abi3` wheel per platform (3.10 and later, no sdist) for Linux x86_64 and aarch64 (`manylinux2014`, and `musllinux_1_2` if feasible; no PQL C++ is linked since Phase 1 decision E18, approved by owner 2026-10-08), macOS (10.12 x86_64, 11.0 arm64) and Windows x86_64, with `pyarrow>=10.0.1` and `pandas>=1.5`.
+   On the epic branch: Python 3.10 to 3.14, `pandas>=2.2`, `numpy>=1.26` and `pyarrow>=14.0.1`, with Arrow through the PyCapsule interface only (Phase 1 decision E16, approved by owner 2026-10-08); `main` keeps today's floors until the epic merges.
    Dropped by the owner: 32-bit, Windows on Arm, other architectures, PyPy, GraalPy and free-threaded CPython; Java natives are Linux x86_64 and aarch64 plus macOS, and only tested environments are claimed (`phase-0/support-matrix.md`, decisions G1 to G14).
 3. **Regressions:** refusing an input the old Python client accepted is a regression, and so is dropping a platform or version Python supports today, unless the owner decides it explicitly.
    Java on Snowflake is not prioritized, so it is not held to this yet.
@@ -47,6 +48,7 @@ The owner made these before any code:
    The original baseline is kept as an immutable tag `reference-baseline-<sha>`, and a guard fails if the reference ever loads the Rust core.
    Every test run records the reference commit and the identity of the installed artifact it used.
 6. **PQL:** the PQL team owns one C++ core and publishes it as a Rust crate and a Python package; this client's core uses the Rust crate, with the hand-written parser as a stopgap (section 3).
+   Superseded (Phase 1 decision E18, approved by owner 2026-10-08): the hand-written parser is permanent and owned by this team; no PQL-team crate is planned or waited on, and the PQL asks are retired.
 7. **Data layer:** the data layer must be switchable: a team given access to this repository should be able to replace it, for example to work with Pyramid, without touching the rest of the core.
    A Pyramid provider itself is not in scope.
 8. **Java:** the first Java consumer is a team using Pyramid, which brings its own data layer.
@@ -65,6 +67,7 @@ The owner made these before any code:
 
 Still to agree with the PQL team: one PQL dialect, the versioned validated-query format, the conformance suite, platform builds, and when the Rust crate ships.
 Phase 0 sends these asks and tracks them in `phase-0/pql-asks.md`; agreement is not a Phase 0 exit.
+Retired (Phase 1 decision E18, approved by owner 2026-10-08): the asks stay a Phase 0 record and are not sent.
 
 ## 3. Architecture
 
@@ -107,11 +110,11 @@ Phase 1b validates this set against its case inventory before it is final.
 
 | Concern | Same in every language? | Where |
 |---|---|---|
-| PQL parsing, validation, error codes and spans | Yes | The PQL team's C++ core, through its Rust crate, behind one adapter in `sdm-core` |
+| PQL parsing, validation, error codes and spans | Yes | This client's parser, behind one adapter in `sdm-core` (Phase 1 decision E18, approved by owner 2026-10-08) |
 | The run state machine, public operation dispatch, cancellation, model capability checks and profiles | Yes | `sdm-core` |
 | Canonical schema, semantic inference over typed columns (keys, time column, links, semantic types), source-neutral view interpretation | Yes | `sdm-schema` |
 | Catalog queries and view retrieval per source, typed data requests, SQL for each built-in dialect, provider capabilities, the in-memory fallback | Yes | `sdm-data` |
-| Time rules, random streams, sampling plan, neighbor sampler, labels and aggregations | Yes | `sdm-engine` |
+| Time rules, random streams, sampling plan, neighbor sampler, labels and aggregations | Yes | `sdm-engine`; labels over fetched Arrow, never compiled to SQL (Phase 1 decision E19, approved by owner 2026-10-08) |
 | Materialization, session state, decomposition, payload limits, payload encoding, response decoding, result layout | Yes | `sdm-request` |
 | Control-message codecs, native resource lifetime, panic containment, threading | Yes | `sdm-host` |
 | Native types to Arrow (pandas dtypes, JDBC types) | No | Host, as a reviewed table |
@@ -147,15 +150,14 @@ A Pyramid provider is not part of this plan.
 Several separate PQL implementations exist today, and only two share tests.
 The drift risk is less in the grammar than in the code around it (tree building, error handling, validators), so "defined once" means one implementation.
 
-- **One implementation, owned by the PQL team:** a C++ core holding the grammar, parser, validator, error codes and spans, and the validated query as versioned JSON.
-  The team publishes it as a Rust crate (wrapping the C++ core) and a Python package.
-- **This client's core uses the Rust crate**, so this client's Python and Java get PQL through the core; Kumo's consumers use the Python package or the C++ core directly.
-- **One conformance suite** of valid and invalid queries with expected codes and spans, seeded with this client's 417 cases, run by every consumer.
-- **Until the Rust crate is published,** this client's Python and Java both use the first attempt's hand-written Rust parser as an interim parser, behind one adapter in `sdm-core` and held to the shared suite; today's ANTLR grammar stays as a CI reference.
-- **As soon as the PQL team's artifact exists,** it is exercised behind the same adapter in the active slice: build, load, validated-query format, codes and spans, and coexistence with its Python package in one process.
-  In Phase 5 this client switches to a pinned release of the crate and deletes the interim parser; deferring that is an explicit scope decision.
-- **What to ask the PQL team for (the PQL asks):** a C interface or a Rust crate that never lets a C++ exception cross into Rust; static libraries for every platform this client ships (Linux x86_64 and aarch64 as `manylinux2014`, and `musllinux_1_2` if feasible; macOS x86_64 and arm64; Windows x86_64), with private C++ symbols so two copies can live in one process; matching crate and PyPI releases; no aborts or console output, and a recursion limit; a versioned validated-query format with a JSON Schema; and the conformance suite in their repository, run in their CI.
-- **This client keeps** only the model capability checks on top of the validated query.
+- **One implementation, this client's own (Phase 1 decision E18, approved by owner 2026-10-08):** the first attempt's hand-written Rust parser, ported in Phase 1 and completed there (the date-literal rules, the grammar quirks, fuzzing and a deep-query test), behind one adapter in `sdm-core`, so this client's Python and Java get PQL through the core.
+  The crate is `sdm-pql-interim` until Phase 1 task T1.6b gives it a permanent name.
+- **One conformance suite** of valid and invalid queries with the reference's codes, spans and date readings, seeded with this client's 417 cases; today's ANTLR grammar stays in CI as a cross-check, through the reference observations and the corpus recorded on it.
+- **The validated query** is a versioned format of this client's own, locked like the contract (Phase 1 decision E8).
+- **Validity-affecting emulation** stays inside the parser crate, on a permanent allowlist; each addition needs the owner (Phase 1 decision H21).
+- **This client keeps** the model capability checks on top of the validated query.
+- **Superseded by E18:** the PQL team's C++ core published as a Rust crate, exercising its artifact behind the adapter, switching to it and deleting this parser in Phase 5, and the PQL asks (a C interface, static libraries per platform with private C++ symbols, matching releases, a shared validated-query format and conformance suite in their repository).
+  The diagram above predates E18.
 
 ### Bindings
 
@@ -167,16 +169,16 @@ Each language uses its standard binding tool, over one shared Rust layer:
 - **`sdm-host`**, plain Rust, written once: encodes control messages as versioned JSON, hands data over as Arrow, owns native resource lifetimes, contains panics, and sets the threading rules; it schedules no domain work.
   Its calls take and give control messages as bytes with the attachments each names (Phase 1 decision E13, pending owner confirmation).
 - **Python:** a thin PyO3 binding built with maturin as `abi3` wheels; it converts types, maps errors to Python classes, releases the GIL while the core runs, and passes Arrow through the standard PyCapsule interface without copying.
-  For pyarrow older than 14, Arrow crosses through `_export_to_c` instead of PyCapsule.
+  On the epic branch that is the only path: the `pyarrow>=14.0.1` floor guarantees it, and the `_export_to_c` fallback for pyarrow older than 14 is dropped (Phase 1 decision E16, approved by owner 2026-10-08).
 - **Java:** a thin `jni-rs` binding loaded from the JAR (JDK 17 and 21); it maps errors to Java classes and passes Arrow through Arrow Java's C Data module without copying.
-- **Native safety:** first-party domain crates forbid `unsafe` Rust; only the binding and host adapters and external dependencies (Arrow, the PQL wrapper) contain native code, and they are tested explicitly.
+- **Native safety:** first-party domain crates forbid `unsafe` Rust; only the binding and host adapters and external dependencies (Arrow; the PQL wrapper is superseded by Phase 1 decision E18, approved by owner 2026-10-08) contain native code, and they are tested explicitly.
   Semantic callbacks into the host are forbidden; Arrow release callbacks are allowed.
-  C++ exceptions are translated inside the PQL wrapper.
+  C++ exceptions are translated inside the PQL wrapper (superseded by E18: no C++ is linked).
   A Rust panic is contained at each exported entry and invalidates its run.
   Aborts and memory corruption are tested in subprocesses, not claimed recoverable.
   Memory has one owner and an explicit release, and the threading model is written down.
 - **Java runtime flags:** users run with `--enable-native-access` (Java warns without it from JDK 24 and will later refuse) and the flag Arrow Java needs; the Java consumer's environment must allow both.
-- **PQL's C++ is linked into both native libraries** with its symbols kept private, so a Python process that also loads the PQL team's own package gets no clashes.
+- **PQL's C++ is linked into both native libraries** with its symbols kept private, so a Python process that also loads the PQL team's own package gets no clashes (superseded by Phase 1 decision E18, approved by owner 2026-10-08: no PQL C++ is linked).
 - **Platforms and versions:** the owner decided the native coverage in Phase 0 (decision 2 and `phase-0/support-matrix.md`): Python wheels as above, and Java natives for Linux x86_64 and aarch64 plus macOS, to confirm with the Java consumer.
   pyarrow 8, as Databricks Runtime 14.3 ships, is upgraded by the `pyarrow>=10.0.1` floor (raised to 14.0.1 on the epic branch by Phase 1 decision E16).
   Dropping any further platform or version, or moving to `manylinux_2_28`, is an explicit owner decision, never a side effect.
@@ -207,12 +209,12 @@ The names and boundaries below are the target ownership, not a reason to rename 
 | Crate | Holds | From today's tree |
 |---|---|---|
 | `sdm-contract` | Versioned types: the type set, operations, Step, request and response schemas, data requests and provider capabilities, errors and warnings, exact scalar encodings; no orchestration | New, folding in `protocol` |
-| `pql` (from the PQL team) | Rust crate wrapping the C++ PQL core | External dependency, pinned by version and digest; replaces the interim parser |
+| `pql` (from the PQL team) | Rust crate wrapping the C++ PQL core | Superseded by Phase 1 decision E18, approved by owner 2026-10-08: not planned; this client's parser stays |
 | `sdm-data` | Catalog queries and view retrieval per source, typed data requests, SQL for each dialect, provider capabilities, the in-memory fallback | Keep the dialect backends behind a provider interface; drop the capture and render scaffolding |
 | `sdm-schema` | Canonical schema, inference over Arrow, source-neutral metric and semantic view interpretation | Keep the engine; move catalog SQL to `sdm-data`; drop the pandas column models and dtype parsing; YAML through a library |
 | `sdm-engine` | Modules for time (one calendar, the date parsing rules recorded in Phase 0, `DateOffset`, time zones), random streams, sampling (plan, neighbor sampler, graph store) and labels (kernels and windows) | Merges today's time, random, sampling and label code with one value model; time on a library, not a pandas date-inference clone; Arrow compute where answers allow |
 | `sdm-request` | Modules for materialization, session state, decomposition, limits, payload encoding, response decoding and result layout | Keep the logic; drop the CPython sort and `json.dumps` size emulation |
-| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the interim PQL parser (crate `sdm-pql-interim`, Phase 1 decision A3, pending owner confirmation) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
+| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the PQL parser (crate `sdm-pql-interim` until Phase 1 task T1.6b renames it; Phase 1 decision A3, pending owner confirmation, and Phase 1 decision E18, approved by owner 2026-10-08) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
 | `sdm-testkit` | Contract runner, provider conformance kit, fixtures | Dev-only; nothing in the shipped crates |
 | `sdm-host` | Control-message codecs, Arrow handoff, native resource lifetime, panic containment, threading; no domain scheduling | New, written once |
 | `sdm-py`, `sdm-jni` | Thin PyO3 and `jni-rs` bindings over `sdm-host`: convert types, map errors, release the GIL | Rewrite `sdm-py` much slimmer; new `sdm-jni` |
@@ -225,7 +227,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 |---|---|
 | Columnar data and kernels | `arrow` crates, including `arrow-cast`, `arrow-ord`, `arrow-arith`, `arrow-select`, `arrow-row` and `arrow-ipc` |
 | Decimals and big integers | Arrow's decimal types and `arrow-buffer`'s `i256`, under the contract's exact-encoding policy |
-| PQL parsing | The PQL team's Rust crate over its C++ core (so every build also compiles and links C++) |
+| PQL parsing | This client's own Rust parser, no C++ (Phase 1 decision E18, approved by owner 2026-10-08; the PQL team's crate over its C++ core is superseded) |
 | Dates, times, zones | `jiff`, with the host's ordered zone lookup roots and a bundled fallback, the source and version recorded per zone; `chrono` only as Arrow's transitive dependency and `chrono-tz` banned (Phase 1 decision A7, pending owner confirmation): it met DT-1 and DT-2 on every T0.6 zone and `DateOffset` answer, where `chrono-tz` failed. Instants past `jiff`'s range use civil arithmetic and are never refused for that reason (Phase 1 decision E6, pending owner confirmation). Inside the core, one instant and one span type in nanoseconds, columns kept as Arrow arrays, conversions checked (Phase 1 decision F3, approved by owner 2026-10-08) |
 | YAML (metric and semantic views) | A maintained YAML 1.2 crate such as `saphyr` or `yaml-rust2` (not the archived `serde_yaml`); behavior differences go through the register |
 | JSON | `serde`, `serde_json` |
@@ -240,7 +242,6 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 `cargo-deny` checks advisories, licenses, bans and sources in L0, starting from the first attempt's `deny.toml` and toolchain file.
 The wheel and JAR ship third-party notices, including for statically linked C++.
 Dependency updates are reviewed changes made only at slice gates, with `arrow`, `pyo3` and `jni` updated together (today Arrow 58, `pyo3` 0.28 and `duckdb` 1.10506.0: Phase 1 decision B-D2, pending owner confirmation).
-The PQL crate and its C++ artifact are pinned by version and digest.
 
 On the Python side, pandas and pyarrow stay as host dependencies, and the old engine is deleted on the epic branch in Phase 5.
 
@@ -273,16 +274,16 @@ Every entry names the old and new behavior, the affected inputs and contract cas
 | Keep (part of the promise) | Drop (by recorded decision) |
 |---|---|
 | The random streams of the reference (numpy `RandomState` and `default_rng` where it uses them, `std::mt19937` for neighbor draws), pinned in Phase 0; keeping `default_rng` means porting its generator too; their vectors are never re-recorded to pass a dependency bump (Phase 1 decision F4, approved by owner 2026-10-08) | CPython's sort order around NaN scores (NaN ranks last) |
-| Label arithmetic as today: float32 Kahan sums in row order | The size limit counted as `json.dumps` bytes (count the bytes sent) |
+| Label arithmetic as today: float32 Kahan sums in row order, compared exactly, in Rust over fetched Arrow (Phase 1 decision E19, approved by owner 2026-10-08) | The size limit counted as `json.dumps` bytes (count the bytes sent) |
 | `DateOffset` month-end rules | Python object protocols inside the core |
-| PQL codes, spans and grammar quirks, as agreed with the PQL team | Errors as Python class paths |
+| PQL codes, spans and grammar quirks, as the reference gives them (Phase 1 decision E18, approved by owner 2026-10-08; no PQL-team agreement) | Errors as Python class paths |
 | PQL date-literal rules, written down | Silent nulls or internal errors for types the old code mishandled |
 | Today's public exception and warning classes and codes | Time zone rules ignored after 2037 |
 | Text-column timestamp detection, under the reference pandas major (pandas 3: Phase 1 decision H1, approved by owner 2026-10-08) | |
 | Integer widths in payloads | |
 | Payload equality after parsing; SQL per database as reviewed golden files | |
 
-Each needs its own decision, not a blanket rule: answers that differ between pandas 1.5, 2 and 3, SQL text changes, and YAML 1.1 values such as `yes` and `on`.
+Each needs its own decision, not a blanket rule: answers that differ between pandas 2 and 3 (pandas 1.5 left with Phase 1 decision E16, approved by owner 2026-10-08), SQL text changes, and YAML 1.1 values such as `yes` and `on`.
 A difference only one runtime shows is a register entry naming that runtime, never an exclusion (Phase 1 decision H1, approved by owner 2026-10-08).
 
 ## 6. Testing
@@ -294,10 +295,10 @@ A difference only one runtime shows is a register entry naming that runtime, nev
 | L2 Contract corpus | One shared list of cases, run in each language: a public call and its inputs in; ordered data requests, SQL and typed parameters, payload, result, warnings and error kind, code, details and cause out; row order compared only where the operation defines it; SQL traces compared only for SQL providers, and data-request traces checked against their own contract (against the reference, statement count and each statement's result gate, with order only under a total `ORDER BY`, while typed parameters and raw SQL text are diagnostic; the core's SQL is pinned by goldens: Phase 1 decision H9, approved by owner 2026-10-08); pickles written by the reference load in the new client, and new state carries a version; a coverage matrix is generated from the scope manifest (per language) over the case inventory for the current slice, with representative nested shapes and one generated refusal case per unsupported type, and an empty cell fails | CI on every push (subset, for feedback); local, before each slice gate (all) |
 | L3 Differential generator | Random public-API inputs compared with the reference (decision 5), installed in its own environment, before and after the old code is deleted | Local, before each slice gate |
 | L4 SQL goldens and provider kit | Reviewed SQL per database, executed on DuckDB, SQLite and Postgres; the local providers pass the conformance kit | CI, on every push to `rust-core` and phase branches |
-| L5 Conversion tables | Each language's native-to-Arrow table, on pandas 1.5, 2 and 3, in CI cells named by runtime from `phase-0/support-matrix.md` (Phase 1 decision H1, approved by owner 2026-10-08); the same tables loaded into DuckDB, SQLite and Postgres reach the core with identical Arrow schemas, values, null masks, order and required metadata from Python's drivers and Java's JDBC, checked against expected values (large integers, decimal scale, timestamp units, nested nulls, list widths, dictionaries) | CI, on every push to `rust-core` and phase branches |
+| L5 Conversion tables | Each language's native-to-Arrow table, on pandas 2 and 3 (pandas 1.5 left with Phase 1 decision E16, approved by owner 2026-10-08), in CI cells named by runtime from `phase-0/support-matrix.md` (Phase 1 decision H1, approved by owner 2026-10-08); the same tables loaded into DuckDB, SQLite and Postgres reach the core with identical Arrow schemas, values, null masks, order and required metadata from Python's drivers and Java's JDBC, checked against expected values (large integers, decimal scale, timestamp units, nested nulls, list widths, dictionaries) | CI, on every push to `rust-core` and phase branches |
 | L6 Live matrix | The scenarios in the scope manifest (per language) over the case inventory, on Databricks, Snowflake and Lakebase (Databricks' managed Postgres), plus the Databricks job matrix (one-time jobs across Databricks runtimes, compared with the reference's results); old versus new, and Python versus Java on the same data | Local, before the S2 slice gate and the switch, epic merge and release gates |
 | L7 Performance | Offline, on recorded runs: query counts equal; CPU per scenario at most today's (aim well below; the first attempt measured about half), no scenario above 1.1 times; boundary overhead per in-memory run within a small fixed bound; the control-message size cap; zero-copy and "no pandas in providers" checks; import time and native library size within set limits; live: push-down median over at least five interleaved runs, caches off, within 10% on Databricks and Snowflake | Local: offline before each slice gate; live at switch and release gates only |
-| L8 Packaging and safety | The real wheel and JAR install and load in clean containers (JDK 17 and 21, every platform in the declared support matrix); exported symbols, private C++ symbols and minimum system library versions checked; a Python process loading both this client and the PQL team's package; `sdm-host` under sanitizers; panic, C++ error, crash and leak tests in each language; HTTP retry, timeout and redaction tests | Focused checks whenever bindings or native dependencies change; the full platform matrix before the epic merges |
+| L8 Packaging and safety | The real wheel and JAR install and load in clean containers (JDK 17 and 21, every platform in the declared support matrix); exported symbols and minimum system library versions checked (private C++ symbols and a process loading the PQL team's package as well are superseded by Phase 1 decision E18, approved by owner 2026-10-08); `sdm-host` under sanitizers; panic, C++ error, crash and leak tests in each language; HTTP retry, timeout and redaction tests | Focused checks whenever bindings or native dependencies change; the full platform matrix before the epic merges |
 
 - **Scope manifests:** Python and Java each have a scope manifest (per language) over the case inventory.
   Python gates require the Python and pure-Rust checks; Java-only checks (such as JDBC conversion equality in L5) block only Java shipping, but a shared-core defect they expose blocks the affected path.
@@ -339,7 +340,7 @@ A difference only one runtime shows is a register entry naming that runtime, nev
 | Phase 2 | The dataframe-engine comparison at entry; S1, moving only the code S1 needs off the Python value model and onto the contract; the provider conformance kit, the minimal non-SQL test provider and the swapped data layer | Slice gate |
 | Phase 3 | S2 and the Python switch for S0, S1 and S2 paths, on the epic branch | Switch gate |
 | Phase 4 | S3, moving the rest of the code as its paths need it | Slice gate and switch gate |
-| Phase 5 | Switch to the PQL crate release; delete the interim parser and the old engine on the epic branch; release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
+| Phase 5 | Delete the old engine on the epic branch (the switch to the PQL crate and deleting this client's parser are superseded by Phase 1 decision E18, approved by owner 2026-10-08); release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
 
 ## 9. Process rules
 
@@ -372,8 +373,8 @@ Where things live: the reference worktree at `~/code/sdmc-reference`; the baseli
 | Risk | Mitigation |
 |---|---|
 | The Java consumer's environment can't load a native library | Check it with the consumer before Java packaging; if it can't, the owner decides Java's scope |
-| The PQL Rust crate isn't ready when needed | The interim parser, held to the shared conformance suite |
-| The C++ PQL core complicates every build and can crash across the boundary | See the PQL asks in section 3; exercise their artifact as soon as it exists; load and crash tests in L8 |
+| The PQL Rust crate isn't ready when needed | Retired by Phase 1 decision E18, approved by owner 2026-10-08: this client's parser is permanent, held to the conformance suite |
+| The C++ PQL core complicates every build and can crash across the boundary | Retired by Phase 1 decision E18, approved by owner 2026-10-08: no PQL C++ is linked |
 | A native library builds but doesn't load on some platform | Phase 1a installs a real wheel; L8 installs the real artifacts in clean containers whenever native code changes, and for every platform before the epic merges |
 | Native wheels silently drop a platform or version Python supports today | Phase 0 records today's support; any drop is an explicit owner decision |
 | The Java consumer's environment disallows the needed runtime flags | Confirm `--enable-native-access` and Arrow Java's flag with the consumer before Java packaging |

@@ -36,8 +36,9 @@ sdm-contract = { path = "../../crates/sdm-contract" }
 sdm-core = { path = "../../crates/sdm-core" }
 sdm-host = { path = "../../crates/sdm-host" }
 
-# Not the workspace lints: unsafe code is denied rather than forbidden, so the
-# Arrow FFI sites can allow it locally.
+# Not the workspace lints: unsafe code is denied rather than forbidden, so a
+# site that needed it could allow it locally, with a reason. The crate has
+# none: Arrow crosses through arrow-pyarrow and the PyCapsule interface.
 [lints.rust]
 unsafe_code = "deny"
 

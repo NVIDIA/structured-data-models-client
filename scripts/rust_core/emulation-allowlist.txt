@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # The modules allowed to emulate Python behavior, one path per line, relative
-# to the repository root (Phase 1 design, "Interim parser"; decisions A4
+# to the repository root (Phase 1 design, "PQL parser"; decisions A4
 # and E9).
 # Emulation is banned everywhere else; each addition needs an owner-approved
-# decisions row (H21), and the list expires with sdm-pql-interim. The
+# decisions row (H21), and the list is permanent, with no expiry (E18). The
 # vocabulary scan (T1.10c) reads it.
 #
 # The line: emulation is copying a library's incidental behavior, such as a
