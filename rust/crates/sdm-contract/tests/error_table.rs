@@ -64,6 +64,7 @@ fn the_lists_of_codes_and_kinds_are_whole_and_spelled_as_serde_spells_them() {
         assert_eq!(spelled, format!("\"{}\"", kind.as_str()));
     }
     let mut codes = ErrorCode::ALL.to_vec();
+    codes.sort();
     codes.dedup();
     assert_eq!(codes.len(), ErrorCode::ALL.len());
     let mut kinds = ErrorKind::ALL.to_vec();

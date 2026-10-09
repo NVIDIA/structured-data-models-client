@@ -439,7 +439,13 @@ class PredictiveQuery:
     def _refusal(
         self, messages: list[str], profile: Profile
     ) -> StructuredDataError:
-        r"""The refusal of a query the language does not accept."""
+        r"""The refusal of a query the language does not accept.
+
+        The hints below recognise the refusal by the old validator's wording.
+        On the core route the messages are the core's diagnostics, whose
+        wording is not promised, so a hint may not appear there; S0 parity is
+        the validity and the code, never the text.
+        """
         reasons = (
             '; '.join(
                 _without_the_validator_trace(message) for message in messages
