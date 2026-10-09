@@ -15,7 +15,12 @@
 //! holds:
 //!
 //! - no property is named as SQL or an expression (`DENIED`), anywhere,
-//!   the typed values included;
+//!   the typed values included, matched against the whole name and against
+//!   each of its `_`-separated parts, so `predicate_expr` is refused;
+//! - a property typed as a reviewed typed value is refused also when its
+//!   name, or a part of it, is `filter` or `order` (`DENIED_FOR_VALUES`):
+//!   a scalar or a field there would be a condition or an ordering in
+//!   disguise, where the vocabulary has typed structures for both;
 //! - text (a string, at any depth of lists, maps, options or newtypes) is
 //!   held only by a property named as an identifier the request refers to
 //!   (`IDENTIFIERS`), the nearest property naming it;
@@ -51,6 +56,10 @@ const DENIED: &[&str] = &[
     "raw",
     "dialect",
 ];
+
+/// Names refused, beyond `DENIED`, for a property typed as a reviewed typed
+/// value.
+const DENIED_FOR_VALUES: &[&str] = &["filter", "order"];
 
 /// Text properties that name what a request refers to.
 const IDENTIFIERS: &[&str] = &[
@@ -92,6 +101,15 @@ enum Finding {
 struct Walk<'a> {
     defs: &'a Map<String, Value>,
     found: Vec<Finding>,
+}
+
+/// Whether `name`, whole or by any `_`-separated part, is one of `denied`
+/// (or, for a typed value, of `DENIED_FOR_VALUES` too).
+fn denied(name: &str, typed_value: bool) -> bool {
+    let name = name.to_ascii_lowercase();
+    let listed =
+        |word: &str| DENIED.contains(&word) || (typed_value && DENIED_FOR_VALUES.contains(&word));
+    listed(&name) || name.split('_').any(listed)
 }
 
 /// The definition a local `$ref` names.
@@ -137,7 +155,16 @@ impl Walk<'_> {
             inner.push(def.to_owned());
             match self.defs.get(def) {
                 None => self.found.push(Finding::Any(format!("{at} (missing)"))),
-                Some(target) if TYPED_VALUES.contains(&def) => self.names_only(target, &at, &inner),
+                Some(target) if TYPED_VALUES.contains(&def) => {
+                    // The property holding a typed value is named for what
+                    // it holds; a condition or an ordering never is one.
+                    if let Some(property) = name
+                        && denied(property, true)
+                    {
+                        self.found.push(Finding::Denied(at.clone()));
+                    }
+                    self.names_only(target, &at, &inner)
+                }
                 Some(target) => self.classify(target, &at, name, &inner),
             }
         }
@@ -180,7 +207,7 @@ impl Walk<'_> {
         if let Some(properties) = map.get("properties").and_then(Value::as_object) {
             for (property, child) in properties {
                 let at = format!("{path}/{property}");
-                if DENIED.contains(&property.to_ascii_lowercase().as_str()) {
+                if denied(property, false) {
                     self.found.push(Finding::Denied(at.clone()));
                 }
                 self.classify(child, &at, Some(property), seen);
@@ -199,7 +226,7 @@ impl Walk<'_> {
                 for (key, child) in map {
                     if key == "properties" {
                         for (property, _) in child.as_object().into_iter().flatten() {
-                            if DENIED.contains(&property.to_ascii_lowercase().as_str()) {
+                            if denied(property, false) {
                                 self.found
                                     .push(Finding::Denied(format!("{path}/{property}")));
                             }
@@ -263,8 +290,9 @@ fn data_requests_hold_no_expression_or_sql() {
 
 #[test]
 fn the_lists_do_not_overlap() {
-    let denied: BTreeSet<_> = DENIED.iter().collect();
-    assert!(IDENTIFIERS.iter().all(|name| !denied.contains(name)));
+    let refused: BTreeSet<_> = DENIED.iter().chain(DENIED_FOR_VALUES).collect();
+    assert!(IDENTIFIERS.iter().all(|name| !refused.contains(name)));
+    assert!(IDENTIFIERS.iter().all(|name| !denied(name, true)));
 }
 
 #[test]
@@ -462,4 +490,72 @@ fn text_in_an_untagged_variant_is_refused() {
 #[test]
 fn text_in_a_flattened_struct_is_refused() {
     refused::<Flattened>("FilterText");
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct FilterScalar {
+    table: String,
+    filter: sdm_contract::Scalar,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct PredicateField {
+    table: String,
+    predicate_expr: sdm_contract::Field,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct OrderValues {
+    table: String,
+    sort_order: Option<Vec<sdm_contract::Scalar>>,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct RawSql {
+    table: String,
+    raw_sql: Vec<u8>,
+}
+
+#[test]
+fn a_typed_value_named_as_a_filter_is_refused() {
+    refused::<FilterScalar>("Denied(\"#/filter -> Scalar\")");
+}
+
+#[test]
+fn a_typed_value_named_with_a_part_of_an_expression_is_refused() {
+    refused::<PredicateField>("Denied(\"#/predicate_expr\")");
+    refused::<PredicateField>("Denied(\"#/predicate_expr -> Field\")");
+}
+
+#[test]
+fn typed_values_under_an_order_are_refused_at_any_depth() {
+    refused::<OrderValues>("Denied(\"#/sort_order/items -> Scalar\")");
+}
+
+#[test]
+fn a_part_of_a_name_is_read_on_any_property() {
+    refused::<RawSql>("Denied(\"#/raw_sql\")");
+}
+
+#[test]
+fn the_vocabulary_s_own_order_and_filters_are_typed_structures() {
+    // `order` holds a tie-break of named columns and flags, and `filters`
+    // the typed filters; neither is a typed value, so both pass.
+    let found = findings(&schema::<DataRequest>());
+    assert!(
+        found
+            .iter()
+            .all(|f| !matches!(f, Finding::Denied(_) | Finding::Text(_))),
+        "{found:#?}"
+    );
+    let at = |field: &str| {
+        found
+            .iter()
+            .any(|f| matches!(f, Finding::Identifier(p) if p.contains(field)))
+    };
+    assert!(at("/order") && at("/seed_column"), "{found:#?}");
 }
