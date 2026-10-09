@@ -44,6 +44,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import tomllib
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import l0_deps  # noqa: E402
 import l0_scan  # noqa: E402
@@ -258,6 +260,11 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm-host on a domain crate below sdm-core',
         lambda m: m.edge('sdm-host', 'sdm-engine'),
         'sdm-host -> sdm-engine',
+    )
+    case(
+        'control: sdm-host on sdm-data, which it builds for a run (E30)',
+        lambda m: m.edge('sdm-host', 'sdm-data'),
+        None,
     )
     case(
         'sdm-py on sdm-core (E21)',
@@ -664,14 +671,6 @@ def scan_cases(results: list[Result]) -> None:
         'hold `select a from t`',
     )
     sql(
-        'an ORDER BY clause in sdm-request',
-        lambda r: append(
-            r / crates / 'sdm-request/src/lib.rs',
-            '\nconst Q: &str = "x ORDER BY y NULLS LAST";\n',
-        ),
-        'hold `ORDER BY y NULLS`',
-    )
-    sql(
         'a provider match in sdm-request',
         lambda r: append(
             r / crates / 'sdm-request/src/lib.rs',
@@ -687,67 +686,21 @@ def scan_cases(results: list[Result]) -> None:
         ),
         None,
     )
-    engine = 'sdm-engine/src/lib.rs'
-    for name, code, fragment in (
-        (
-            'a condition assembled by format!',
-            'pub fn f(c: &str) -> String { format!("{c} > 0 and {c} is not null") }',
-            '{c} > 0 and',
-        ),
-        (
-            'a lowercase cast',
-            'const Q: &str = "cast(t as timestamp)";',
-            'cast(t as',
-        ),
-        ('a count', 'const Q: &str = "count(*) from";', 'count(*'),
-        (
-            'a query joined from words',
-            'pub fn f(t: &str) -> String { ["select", "*", "from", t].join(" ") }',
-            'select * from',
-        ),
-        (
-            'a query by concat!',
-            'const Q: &str = concat!("select ", "x", " from ", "t");',
-            'select x from',
-        ),
-        (
-            'a query by format! pieces',
-            'pub fn f() -> String { format!("{} {}", "select x", "from t") }',
-            'select x from',
-        ),
-        (
-            'a query added with +',
-            'pub fn f(t: &str) -> String { "select a ".to_owned() + "from " + t }',
-            'select a from',
-        ),
-        (
-            'a provider name in a string',
-            'const B: &str = "duckdb";',
-            '`duckdb`',
-        ),
-        (
-            'text brought in',
-            'const Q: &str = include_str!("q.sql");',
-            'include_str',
-        ),
-    ):
 
-        def seed_sql(root: Path, code: str = code) -> None:
-            append(root / crates / engine, f'\n{code}\n')
+    def test_module_file(root: Path) -> None:
+        append(
+            root / crates / 'sdm-engine/src/lib.rs',
+            '\n#[cfg(test)]\nmod query_tests;\n',
+        )
+        (root / crates / 'sdm-engine/src/query_tests.rs').write_text(
+            'const Q: &str = "SELECT a FROM t WHERE b = 1";\n'
+        )
 
-        sql(name, seed_sql, fragment)
-    sql(
-        'control: English that is not SQL',
-        lambda r: append(
-            r / crates / engine,
-            '\nconst M: &str = "the column is missing from the schema, so select another";\n',
-        ),
-        None,
-    )
+    sql('control: SQL in a test module of its own file', test_module_file, None)
 
-    # The reviews' reproductions (fix rounds 2 and 3), as code the scan
-    # reads: `bare` is a message built outside any diagnostic, `error` the
-    # same text as a CoreError's message, `panic` as a panic's.
+    # SQL's unambiguous shapes outside diagnostic text (decision E28):
+    # `bare` is a message built outside any diagnostic, `error` the same
+    # text as a CoreError's message.
     def bare(text: str) -> str:
         return f'pub fn m(c: &str) -> String {{ format!("{text}") }}'
 
@@ -760,92 +713,46 @@ def scan_cases(results: list[Result]) -> None:
             '    )\n}'
         )
 
-    def panic(text: str) -> str:
-        return f'pub fn p(c: &str) {{ panic!("{text}") }}'
-
-    english = (
-        'required field is null',
-        'the seed time in column {c} is null',
-        'the key set is past the row limit {n}',
-        'could not select a column from {c}',
-        'a window where {c} is unset',
-        'order by time is required',
-        'came from a Spark job',
-        'the key is null or missing',
-    )
-    diagnostics = (
-        'the tie-break orders by {c} desc, nulls last',
-        'the {c} is null and {c} is required',
-        'the window column {c} is null or the anchor is null and the seed is late',
-        'expected {c} > 0 and below the cap',
-        'order by {c}, then by key',
-        'count(*) of {c} overflowed',
-        'Where {c} = 0 the sampler stops',
-        'expected an ORDER BY clause',
-        'cannot select {c} from the request: it is unknown',
-        'the column {c} is null or {c} is null',
-        'a limit of {n} rows was passed',
-        'the cast of {c} as a timestamp overflowed',
-        'cannot insert into {t}: it is full',
-        'could not delete from {t}',
-        'could not create table {t} twice',
-        'cannot update {t} set to {c}',
-        'select {c} from {t} first',
-        'expected {lo} <= {hi} or an empty window',
-        '{c} = {c} is not supported',
-        'expected {c} or {c} in (0, 1)',
-        'the value {c} is not in (the list)',
-        'values ({n}) out of range',
-        'in the order by clause',
-        'partition by {c} is not supported here',
-    )
-    passing = [
-        *(code for text in english for code in (bare(text), error(text))),
-        'pub const M: &str = "required field is null";',
-        panic('the key is null or missing'),
-        *(error(text) for text in diagnostics),
-        'pub fn f(x: Option<u8>) { x.expect("the seed is set"); }',
-        'pub fn f(a: u8) { assert!(a > 0, "{a} > 0 and not null"); }',
-        'pub fn f(a: u8, b: u8) { assert_eq!(a, b, "where {a} = {b} the run ends"); }',
-    ]
+    engine = 'sdm-engine/src/lib.rs'
+    held = 'the strings of a statement hold'
     failing = [
-        (bare('{column} >= {lower}'), '{column} >= {lower}'),
-        (bare('where {column} between'), 'where {column} between'),
-        (bare('limit {count}'), 'limit {count}'),
-        (bare('{c} in (1, 2)'), '{c} in ('),
-        (bare('order by {c} desc'), 'order by {c} desc'),
-        (bare('insert into {t}'), 'insert into {t}'),
+        ('const Q: &str = "cast(t as timestamp)";', 'cast(t as'),
+        ('const Q: &str = "count(*) from";', 'count(*'),
+        (
+            'pub fn f(t: &str) -> String { ["select", "*", "from", t].join(" ") }',
+            'select * from',
+        ),
+        (
+            'const Q: &str = concat!("select ", "x", " from ", "t");',
+            'select x from',
+        ),
+        (
+            'pub fn f() -> String { format!("{} {}", "select x", "from t") }',
+            'select x from',
+        ),
+        (
+            'pub fn f(t: &str) -> String { "select a ".to_owned() + "from " + t }',
+            'select a from',
+        ),
+        ('const B: &str = "duckdb";', '`duckdb`'),
+        ('pub const S: &str = "Spark";', 'hold `Spark`'),
+        ('const Q: &str = include_str!("q.sql");', 'include_str'),
         (bare('drop table {t}'), 'drop table {t}'),
-        (error('{c} > 0 and {c} is not null'), '{c} > 0 and {c} is not null'),
+        (bare('query failed: SELECT {c} FROM {t}'), 'SELECT {c} FROM {t}'),
         (
-            'pub fn p(t: &str) { panic!("select * from {t} where x = 1") }',
-            'select * from {t} where',
-        ),
-        ('pub const K: &str = "ORDER BY";', 'hold `ORDER BY`'),
-        (
-            'pub fn f(count: u8) { assert!(!format!("LIMIT {count}").is_empty()); }',
-            'LIMIT {count}',
-        ),
-        (
-            'pub fn f(a: u8) { assert_eq!(format!("SELECT {a}"), "x", "the select"); }',
-            'SELECT {a}',
-        ),
-        ('pub fn f(v: Option<u8>) { v.expect("SELECT 1"); }', 'SELECT 1'),
-        (
-            'pub fn f(v: Option<u8>, t: &str) { v.expect(&format!("SELECT * FROM {t} T")); }',
-            'SELECT * FROM {t} T',
-        ),
-        (error('query failed: SELECT {c} FROM {t}'), 'SELECT {c} FROM {t}'),
-        (
-            error('select max(a) as m from {t} where b'),
+            bare('select max(a) as m from {t} where b'),
             'select max(a) as m from {t} where',
         ),
-        (error('insert into {t} (a, b) values'), 'insert into {t} ('),
-        (error('delete from {t} where a = 1'), 'delete from {t} where'),
-        (error('create table {t} (a int)'), 'create table {t} ('),
-        (error('cast({c} as timestamp)'), 'cast({c} as timestamp)'),
-        (error('count(*) from {t}'), 'count(*) from'),
-        (error('with q as (select 1)'), 'with q as (select'),
+        (bare('insert into {t} (a, b) values'), 'insert into {t} ('),
+        (bare('delete from {t} where a = 1'), 'delete from {t} where'),
+        (bare('create table {t} (a int)'), 'create table {t} ('),
+        (bare('cast({c} as timestamp)'), 'cast({c} as timestamp)'),
+        (bare('with q as (select 1)'), 'with q as (select'),
+        (bare('coalesce({c}, 0)'), 'coalesce({c},'),
+        (bare('where exists (select 1)'), 'exists (select'),
+        (bare('values (?, ?)'), 'values (?,'),
+        ('pub const Q: &str = "SELECT 1";', 'SELECT 1'),
+        ('pub const Q: &str = r#"SELECT\n  a\nFROM t"#;', 'SELECT a FROM t'),
         *(
             (bare(f'select a from {{t}}{tail}'), 'select a from {t}')
             for tail in (
@@ -862,79 +769,80 @@ def scan_cases(results: list[Result]) -> None:
             )
         ),
         (bare('select a from ({t})'), 'select a from'),
-        (bare('a = ?'), 'a = ?'),
-        (error('coalesce({c}, 0)'), 'coalesce({c},'),
-        (error('where exists (select 1)'), 'exists (select'),
-        (error('values (?, ?)'), 'values (?,'),
-        (bare('partition by {c}'), 'partition by {c}'),
-        (bare('offset {n}'), 'offset {n}'),
-        ('pub const Q: &str = r#"SELECT\n  a\nFROM t"#;', 'SELECT a FROM t'),
-        (
-            'pub const T: &str = "The FROM clause names the table";',
-            'hold `FROM`',
-        ),
-        ('pub const S: &str = "Spark";', 'hold `Spark`'),
-    ]
-    # Fix round 4: turbofish commas, escapes, and an alias without `as`.
-    held = 'the strings of a statement hold'
-    passing += [
-        'pub fn f(x: u8, y: u8, c: u8) { assert!(same::<A, B>(&x, &y), "values differ for {c}"); }',
-        'pub fn f(x: u8, y: u8, c: u8) { assert!(same::<A, B>(&x, &y), "values differ where {c} = 0"); }',
-        'pub fn f(a: u8, b: u8, c: u8, d: u8, k: u8) { assert!(a < b && c > d, "the key {k} is null or missing"); }',
-        'pub fn f(a: u8, b: u8, c: u8, d: u8) { assert!(a < b && c > d, "expected {c} > 0 and below the cap"); }',
-        'pub fn f(a: u8, b: u8, c: u8) { assert_eq!(f::<Vec<(A, B)>, C>(a), b, "where {c} = 0 the run stops"); }',
-        'pub fn f(a: u8, c: u8) { assert!(g::<fn(A) -> B, C>(a), "where {c} = 0"); }',
-        error('the line\\nwhere {c} is unset'),
-        bare('a field\\tis null'),
-        error('order by time\\nis required'),
-    ]
-    failing += [
-        (
-            'pub fn f(count: u8, expected: u8) { assert!(same::<String, String>(&format!("LIMIT {count}"), expected)); }',
-            'LIMIT {count}',
-        ),
-        (
-            'pub fn f(n: u8, y: u8) { assert!(same::<Vec<(A, B)>, C>(&format!("LIMIT {n}"), y)); }',
-            'LIMIT {n}',
-        ),
-        (
-            'pub fn f(n: u8, x: u8) { assert_eq!(f::<A, B>(format!("LIMIT {n}")), x, "msg"); }',
-            'LIMIT {n}',
-        ),
-        (
-            'pub fn f(n: u8) { assert!(same :: < A, B > (format!("LIMIT {n}")), "ok"); }',
-            'LIMIT {n}',
-        ),
-        (
-            'pub fn f(n: u8) { assert!(g::<fn(A) -> B, C>(format!("LIMIT {n}")), "ok"); }',
-            'LIMIT {n}',
-        ),
-        (
-            'pub fn f(n: u8) { assert!(check(|m: HashMap<String, u8>| format!("limit {n}")), "ok"); }',
-            'limit {n}',
-        ),
-        (bare('select {c}\\nfrom {t}\\nwhere {c} is not null'), held),
-        (bare('select {c}\\nfrom {t}'), held),
-        (bare('select {c}\\tfrom {t}'), held),
-        (bare('select {c}\\r\\nfrom {t} where x'), held),
-        (bare('select {c} \\\n    from {t}'), held),
-        (bare('select\\x20{c}\\x20from {t}'), held),
-        (bare('select\\u{20}*\\u{20}from {t}'), held),
-        ('pub const Q: &[u8] = b"select a\\nfrom t";', held),
         (bare('select * from {t} t'), 'select * from {t} t'),
         (
             bare('select {c} from {t} t where t.k = 1'),
-            'select {c} from {t} t where',
-        ),
-        (error('select * from {t} t'), 'select * from {t} t'),
-        (
-            error('select {c} from {t} t where t.k = 1'),
             'select {c} from {t} t where',
         ),
         (
             bare('select a, b from {t} t join u on x'),
             'select a, b from {t} t join',
         ),
+        # Escapes decoded and continuations joined (fix round 4).
+        (bare('select {c}\\nfrom {t}\\nwhere {c} is not null'), held),
+        (bare('select {c}\\tfrom {t}'), held),
+        (bare('select {c}\\r\\nfrom {t} where x'), held),
+        (bare('select {c} \\\n    from {t}'), held),
+        (bare('select\\x20{c}\\x20from {t}'), held),
+        (bare('select\\u{20}*\\u{20}from {t}'), held),
+        ('pub const Q: &[u8] = b"select a\\nfrom t";', held),
+        # An assertion's condition and operands are code, past a turbofish
+        # whose commas separate nothing; a bare `<` makes every argument
+        # code (fix round 4).
+        (
+            'pub fn f(t: u8, y: String) { assert!(same::<String, String>(&format!("SELECT * FROM {t} WHERE x"), y)); }',
+            'SELECT * FROM {t} WHERE',
+        ),
+        (
+            'pub fn f(t: u8, y: u8) { assert!(same::<Vec<(A, B)>, C>(&format!("SELECT * FROM {t} WHERE x"), y)); }',
+            'SELECT * FROM {t} WHERE',
+        ),
+        (
+            'pub fn f(t: u8, x: u8) { assert_eq!(f::<A, B>(format!("SELECT * FROM {t} WHERE x")), x, "msg"); }',
+            'SELECT * FROM {t} WHERE',
+        ),
+        (
+            'pub fn f(t: u8) { assert!(same :: < A, B > (format!("SELECT * FROM {t} WHERE x")), "ok"); }',
+            'SELECT * FROM {t} WHERE',
+        ),
+        (
+            'pub fn f(t: u8) { assert!(g::<fn(A) -> B, C>(format!("SELECT * FROM {t} WHERE x")), "ok"); }',
+            'SELECT * FROM {t} WHERE',
+        ),
+        (
+            'pub fn f(t: u8) { assert!(check(|m: HashMap<String, u8>| format!("select * from {t} where x")), "ok"); }',
+            'select * from {t} where',
+        ),
+        (
+            'pub fn f(a: u8, t: u8) { assert_eq!(format!("SELECT {a} FROM {t}"), "x", "the select"); }',
+            'SELECT {a} FROM {t}',
+        ),
+    ]
+    english = (
+        'required field is null',
+        'the seed time in column {c} is null',
+        'could not select a column from {c}',
+        'order by time is required',
+        'came from a Spark job',
+        '{column} >= {lower}',
+        '{c} > 0 and {c} is not null',
+        'select {c} from {t} first',
+    )
+    passing = [
+        *(code for text in english for code in (bare(text), error(text))),
+        # Diagnostic text is exempt entirely, through the helpers that build
+        # a CoreError too (decision E28).
+        error('select * from {t} where x = 1'),
+        'pub fn p(t: &str) { panic!("select * from {t} where x = 1") }',
+        'pub fn f(v: Option<u8>) { v.expect("SELECT 1"); }',
+        'pub fn f(a: u8) { assert!(a > 0, "select a from t where a = {a}"); }',
+        'pub fn f() -> CoreError { invalid("expected a window where start <= end") }',
+        'pub fn f(lo: u8, hi: u8) -> CoreError { let m = format!("window start {lo} > end {hi}"); invalid(m) }',
+        'pub fn f(e: CoreError) -> CoreError { e.with_field("rule", Detail::text("by time desc, then key, nulls last")) }',
+        'pub fn f(e: CoreError) -> CoreError { e.with_field("rule", "order by {c} desc nulls last") }',
+        'pub fn f(c: &str) -> CoreError { CoreError::new(K, C, format!("{c} > 0 and {c} is not null in the window")) }',
+        'pub fn f(c: &str) -> CoreError { protocol(C, format!("select {c} from {t} where it is set")) }',
+        '#[cfg(test)]\nmod more_tests {\n    const Q: &str = "SELECT a FROM t WHERE b = 1";\n}',
     ]
     for number, code in enumerate(passing):
 
@@ -1626,7 +1534,7 @@ def clippy_bans(config: dict[str, Any]) -> set[str]:
 
 def clippy_case(results: list[Result]) -> None:
     rust = REPO_ROOT / 'rust'
-    config = l0_scan.tomllib.loads((rust / 'clippy.toml').read_text())
+    config = tomllib.loads((rust / 'clippy.toml').read_text())
     banned = clippy_bans(config)
     missing, extra = banned - BANNED_USES.keys(), BANNED_USES.keys() - banned
     results.append(

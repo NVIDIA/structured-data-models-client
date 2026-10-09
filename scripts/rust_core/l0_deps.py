@@ -13,8 +13,9 @@ features, every target platform) and checks:
 - each crate's first-party dependencies, of any kind, are among those the
   design's "Data access" section draws: ``sdm-core`` over ``sdm-request``,
   ``sdm-engine``, ``sdm-schema``, ``sdm-data``, ``sdm-wire`` and the parser;
-  nothing below ``sdm-core`` on it; ``sdm-host`` over ``sdm-core`` and
-  ``sdm-contract``; ``sdm-py`` on exactly ``sdm-host`` and ``sdm-contract``
+  nothing below ``sdm-core`` on it; ``sdm-host`` over ``sdm-core``,
+  ``sdm-data`` (it builds a run's data layer, E30) and ``sdm-contract``;
+  ``sdm-py`` on exactly ``sdm-host`` and ``sdm-contract``
   (E21); ``sdm-testkit`` over ``sdm-host``;
 - the parser rule: only ``sdm-core`` depends on the parser crate, and only
   its adapter (``src/pql.rs``, and ``src/test_ops.rs``, compiled only with
@@ -79,7 +80,9 @@ CLASSES: dict[str, str] = {
 PARSER = 'sdm-pql-interim'
 # The first-party crates each crate may depend on, directly, by any kind of
 # edge: the design's graph ("Data access"), with sdm-contract the leaf every
-# crate shares.
+# crate shares. A domain crate's set is the transitive closure of the chain
+# drawn below it, so sdm-core may take sdm-engine directly; sdm-host, the
+# binding and the test kit take only the edges drawn for them.
 ALLOWED: dict[str, frozenset[str]] = {
     'sdm-contract': frozenset(),
     'sdm-pql-interim': frozenset(),
@@ -101,7 +104,9 @@ ALLOWED: dict[str, frozenset[str]] = {
             PARSER,
         }
     ),
-    'sdm-host': frozenset({'sdm-core', 'sdm-contract'}),
+    # sdm-host builds the concrete data layer for a run (E30); it reaches
+    # sdm-engine's Zones through sdm-core's re-export, never directly.
+    'sdm-host': frozenset({'sdm-core', 'sdm-data', 'sdm-contract'}),
     'sdm-py': frozenset({'sdm-host', 'sdm-contract'}),
     'sdm-testkit': frozenset({'sdm-host', 'sdm-contract'}),
 }

@@ -25,16 +25,18 @@ graph; these check the text:
   joined): the string literals of each statement are read together, so
   a clause split across one ``format!``, ``concat!``, ``join`` or ``+`` is
   seen, as is a provider's name as a whole literal, an identifier naming a
-  dialect, a backend or SQL, and ``include_str!``. SQL is told from English
-  by its structure, never by a list of messages (``_SQL_SYNTAX``): a
-  clause keyword with an operand in SQL position, or punctuation only SQL
-  writes; that holds in error and diagnostic text too, so a message cannot
-  carry SQL. Keywords in capitals count too, outside diagnostic text, the
-  arguments of an error or diagnostic constructor (``_DIAGNOSTIC_CALL``).
-  It cannot see SQL assembled across statements (pieces bound to names
+  dialect, a backend or SQL, and ``include_str!``. Only SQL's unambiguous
+  shapes count (``_SQL_STRONG``), such as a ``select … from`` with a clause
+  or ``cast(… as type)``, and only outside diagnostic text, the arguments
+  of an error or diagnostic constructor or helper (``_DIAGNOSTIC_CALL``),
+  which is exempt entirely; ``#[cfg(test)]`` modules, in the file or their
+  own, are not read (decision E28, approved by owner 2026-10-09). It
+  cannot see SQL assembled across statements (pieces bound to names
   first), from data that is not a literal in these crates (another crate's
-  constants, values built at run time), from bytes, or English-shaped SQL
-  with no operand in place (``select a column from``); review covers those.
+  constants, values built at run time), from bytes, or shapes it does not
+  hold; review covers those. The structural guard beside it is
+  ``sdm-contract``'s ``tests/data_vocabulary.rs``: no field of the
+  data-request vocabulary holds an expression or a SQL string.
 - ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
   no test dropped by a deselect or ignore option or a conftest's ignore
   list, and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
@@ -386,8 +388,7 @@ def check_vocabulary(root: Path) -> list[str]:
 # numeric literal, a call such as `max(a)`, or a word. Literals are joined
 # one per line, so `^` is the start of a literal.
 #
-# Strong evidence is SQL no message writes, and holds everywhere,
-# diagnostic text included:
+# Only shapes no sentence writes count (decision E28):
 # - `select <operands> from <operand>`, then a clause, a continuation
 #   (`,`, `)`, a join, `union`, `using`, `limit`, `having`, `qualify`) or
 #   the end, either in capitals or at the start of a literal or after
@@ -399,31 +400,21 @@ def check_vocabulary(root: Path) -> list[str]:
 #   `with x as (select`;
 # - `cast(… as <type>)`, `count(*) from`, `row_number() over`,
 #   `over (partition by`, `union all`, `information_schema`,
-#   `tablesample`, `using sample`;
-# - two predicates joined by `and` or `or`, at least one of them a
-#   comparison, `in (`, `like` or `between` (`{c} > 0 and {c} is not
-#   null`).
-# Weak evidence is SQL a sentence can also be, and holds outside diagnostic
-# text only: a comparison on a placeholder (`{c} >= {lower}`), `where
-# <operand>` with a comparison, `between`, `in (`, `like` or a null test,
-# `order`/`group`/`partition by <operand>` with `,`, `asc`, `desc`,
-# `nulls` or `)`, a null test joined by `and`/`or` to a predicate or on a
-# placeholder, a placeholder with `in (`, `like` or `between`, `nulls
-# first`/`last`, `count(*)`, a join on an operand, `limit <n>` opening a
-# literal or after an ordering, `insert into`/`delete from`/`create table`
-# on an operand, `select … from` anywhere, and keywords in capitals.
-# Ambiguous on purpose: a message that opens with `select {c} from {t}`
-# or holds two predicates one of which compares (`{a} > 0 and {b} < 9`)
-# fails; it can be worded otherwise, and SQL could not be told from it.
+#   `tablesample`, `using sample`.
+# Predicates, orderings, null tests and keywords in capitals are left to
+# review: a message writes them too (`{c} > 0 and {c} is not null`).
 #
-# Diagnostic text is the message arguments of an error or diagnostic
-# constructor: every argument of `CoreError`'s constructors, `panic!`,
-# `unreachable!`, `todo!`, `unimplemented!`, `.expect`, `.context`,
-# `.with_context` and `#[error]`; for `assert!` the arguments after the
-# condition, and for `assert_eq!`/`assert_ne!` (and the `debug_` forms)
-# those after the two operands, which are code. A turbofish's type
-# arguments nest when the arguments are split; where a bare `<` after a name
-# leaves the end of the code unclear, no argument is diagnostic text.
+# Diagnostic text is exempt entirely: the arguments of an error or
+# diagnostic constructor or helper, every argument of `CoreError`'s
+# constructors, the helpers that build one (`DIAGNOSTIC_HELPERS`),
+# `.with_field`, `.caused_by`, `Detail::text`, `panic!`, `unreachable!`,
+# `todo!`, `unimplemented!`, `.expect`, `.context`, `.with_context` and
+# `#[error]`; for `assert!` the arguments after the condition, and for
+# `assert_eq!`/`assert_ne!` (and the `debug_` forms) those after the two
+# operands, which are code. A turbofish's type arguments nest when the
+# arguments are split; where a bare `<` after a name leaves the end of the
+# code unclear, no argument is diagnostic text. A message bound to a name
+# first and passed on later is read as code.
 _O = (
     r'(?:\{[^}]*\}|\*|\?|\$\d+|\'[^\']*\'|\d+(?:\.\d+)?'
     r'|\w+\s*\([^()]*\)|[\w."]+)'
@@ -443,10 +434,6 @@ _SELECT = (
     rf'(?:\s+{_O}(?:{_CONTINUE}|\s+\w+{_CLAUSE_NEXT})|\s*\(|\s*$)'
     rf'|select\s+(?:distinct\s+)?\*\s+from\s+{_O}\s+\w+\s*$'
 )
-_COMPARISON = (
-    rf'{_O}\s*{_CMP}\s*{_O}|{_O}\s+(?:not\s+)?(?:in\s*\(|like\b|between\b)'
-)
-_PREDICATE = rf'(?:{_COMPARISON}|{_O}\s+is\s+(?:not\s+)?null\b)'
 _SQL_STRONG = re.compile(
     r'(?m)'
     rf'(?i:(?:^|[:(`\'"])\s*{_SELECT})'
@@ -469,38 +456,6 @@ _SQL_STRONG = re.compile(
     r'|(?i:\bover\s*\(\s*(?:partition|order)\s+by\b)'
     r'|(?i:\bunion\s+all\b|\b(?:information_schema|tablesample)\b'
     r'|\busing\s+sample\b)'
-    rf'|(?i:(?:{_COMPARISON})\s+(?:and|or)\s+{_PREDICATE})'
-    rf'|(?i:{_PREDICATE}\s+(?:and|or)\s+(?:{_COMPARISON}))'
-)
-_SQL_WEAK = re.compile(
-    r'(?mi)'
-    rf'\{{[^}}]*\}}\s*{_CMP}\s*{_O}|{_O}\s*{_CMP}\s*\{{[^}}]*\}}'
-    rf'|{_O}\s*{_CMP}\s*(?:\?|\$\d+)(?!\w)'
-    rf'|\bwhere\s+{_O}\s*(?:{_CMP}|\b(?:not\s+)?(?:in\s*\(|like\b|between\b)'
-    r'|\bis\s+(?:not\s+)?null\b)'
-    rf'|\b(?:order|group|partition)\s+by\s+{_O}\s*(?:,|\basc\b|\bdesc\b|'
-    r'\bnulls\b|\))'
-    r'|\b(?:order|group|partition)\s+by\s+\{[^}]*\}\s*$'
-    rf'|{_O}\s+is\s+(?:not\s+)?null\s+(?:and|or)\s+{_PREDICATE}'
-    rf'|\b(?:and|or)\s+{_O}\s+is\s+(?:not\s+)?null\b'
-    r'|\{[^}]*\}\s+is\s+(?:not\s+)?null\s+(?:and|or)\b'
-    r'|\{[^}]*\}\s+(?:not\s+)?(?:in\s*\(|like\b|between\b)'
-    rf'|\b(?:insert\s+into|delete\s+from)\s+{_O}'
-    r'|\b(?:create|drop|alter)\s+(?:or\s+replace\s+)?'
-    rf'(?:temp(?:orary)?\s+)?(?:table|view)\s+{_O}'
-    r'|\bnulls\s+(?:first|last)\b|\bcount\s*\(\s*(?:\*|distinct\b)'
-    rf'|\b(?:inner|left|right|full|cross)\s+(?:outer\s+)?join\s+{_O}'
-    rf'|\bjoin\s+{_O}\s+(?:\w+\s+)?(?:on|using)\s*[\w.("{{]'
-    r'|(?:^\s*|\b(?:asc|desc|first|last)\s+|\)\s*)(?:limit|offset)\s+'
-    r'(?:\{[^}]*\}|\d+|\?|\$\d+)'
-    rf'|\b{_SELECT}'
-)
-_SQL_KEYWORDS = re.compile(
-    r'\b(SELECT|FROM|WHERE|JOIN|UNION|GROUP\s+BY|ORDER\s+BY|PARTITION\s+BY|'
-    r'LIMIT|OFFSET|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|WITH|CAST|COALESCE|'
-    r'ROW_NUMBER|OVER|QUALIFY|TABLESAMPLE|USING\s+SAMPLE|DESCRIBE|PRAGMA|'
-    r'INFORMATION_SCHEMA|NULLS\s+(?:FIRST|LAST)|IS\s+(?:NOT\s+)?NULL|DISTINCT|'
-    r'COUNT\s*\(|MIN\s*\(|MAX\s*\()(?![A-Za-z0-9_])'
 )
 # A provider's name as a whole literal is a provider match; in a sentence
 # ("came from a Spark job") it is prose.
@@ -509,8 +464,20 @@ _PROVIDER_LITERAL = re.compile(
     r'bigquery|redshift|lakebase)\s*$'
 )
 # The diagnostic constructors, and how many leading arguments are code.
+# The helpers in the core that build a CoreError from a message.
+DIAGNOSTIC_HELPERS = (
+    'invalid',
+    'internal',
+    'unsupported',
+    'protocol',
+    'out_of_range',
+    'refused',
+    'refused_by',
+)
 _DIAGNOSTIC_CALL = re.compile(
     r'\bCoreError\s*::\s*\w+\s*\('
+    rf'|\b(?:{"|".join(DIAGNOSTIC_HELPERS)})\s*\('
+    r'|\.\s*(?:with_field|caused_by)\s*\(|\bDetail\s*::\s*text\s*\('
     r'|\b(?P<assert>assert|debug_assert)\s*!\s*\('
     r'|\b(?P<pair>assert_eq|assert_ne|debug_assert_eq|debug_assert_ne)\s*!\s*\('
     r'|\b(?:panic|unreachable|todo|unimplemented)\s*!\s*\('
@@ -647,19 +614,40 @@ def statements(source: Source) -> Iterable[Statement]:
 
 
 def sql_evidence(statement: Statement) -> str | None:
-    """The SQL a statement's literals hold, or None."""
-    match = (
-        _SQL_STRONG.search(statement.text)
-        or _SQL_WEAK.search(statement.prose)
-        or _SQL_KEYWORDS.search(statement.prose)
-    )
-    if match:
-        return ' '.join(match.group(0).split())
+    """The SQL a statement's literals outside diagnostic text hold, or None."""
+    match = _SQL_STRONG.search(statement.prose)
+    return ' '.join(match.group(0).split()) if match else None
+
+
+def provider_literal(statement: Statement) -> str | None:
+    """A provider's name a statement holds as a whole literal, or None."""
     for literal in statement.literals:
         provider = _PROVIDER_LITERAL.match(literal)
         if provider:
             return provider.group(1)
     return None
+
+
+_TEST_MODULE_FILE = re.compile(
+    r'#\[cfg\(test\)\]\s*(?:pub(?:\([a-z]+\))?\s+)?mod\s+(\w+)\s*;'
+)
+
+
+def test_module_files(src: Path) -> set[Path]:
+    """The files of ``#[cfg(test)] mod name;`` declarations under ``src``."""
+    found: set[Path] = set()
+    for path in rust_files(src):
+        skeleton = read_rust(path.read_text()).skeleton
+        parent = (
+            path.parent
+            if path.name in ('lib.rs', 'main.rs', 'mod.rs')
+            else path.parent / path.stem
+        )
+        for name in _TEST_MODULE_FILE.findall(skeleton):
+            module = parent / name
+            found.update({module.with_suffix('.rs'), module / 'mod.rs'})
+            found.update(p for p in rust_files(module) if module.is_dir())
+    return found
 
 
 PROVIDER_WORDS = frozenset(
@@ -687,14 +675,23 @@ def check_sql(root: Path) -> list[str]:
         if not src.is_dir():
             problems.append(f'{src.relative_to(root)}: missing')
             continue
+        tests = test_module_files(src)
         for path in rust_files(src):
             source = read_rust(path.read_text())
             rel = path.relative_to(root)
-            for statement in statements(source):
-                evidence = sql_evidence(statement)
+            found = [
+                (statement.offset, provider_literal(statement))
+                for statement in statements(source)
+            ]
+            if path not in tests:  # SQL's shapes, outside test modules
+                found += [
+                    (statement.offset, sql_evidence(statement))
+                    for statement in statements(without_test_modules(source))
+                ]
+            for offset, evidence in sorted(found, key=lambda f: f[0]):
                 if evidence:
                     problems.append(
-                        f'{rel}:{source.line(statement.offset)}: the strings '
+                        f'{rel}:{source.line(offset)}: the strings '
                         f'of a statement hold `{evidence}`, SQL or a '
                         "provider's name; SQL and providers are sdm-data's "
                         'alone'
