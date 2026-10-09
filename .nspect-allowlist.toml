@@ -17,11 +17,11 @@
 #
 # **The paths are historical on purpose.** The scan reads the repository's
 # history, not just its current tree, so entries remain for files that have
-# since been renamed or deleted: the packages were renamed from `sdm-*` to
-# `structured-data-models-*`, `qa/` is gone, and the credential-shaped literals
-# themselves were replaced with interpolated constants. A scan of the current
-# tree finds nothing at all. Removing an entry because its file no longer
-# exists puts the finding straight back.
+# since been renamed or deleted: the package directories were renamed, `qa/`
+# is gone, and the credential-shaped literals themselves were replaced with
+# interpolated constants. A scan of the current tree finds nothing at all.
+# Removing an entry because its file no longer exists puts the finding
+# straight back.
 #
 # Each value is listed in both maskings a report may use, since a value that
 # does not match the one the scanner prints suppresses nothing.
