@@ -2,18 +2,30 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Publishing to PyPI, without a credential that can be stolen.
+# Publishing to PyPI, without a stored credential.
 #
-# There is no API token anywhere in this workflow or in the repository's
-# secrets. PyPI's Trusted Publishing exchanges this job's OIDC identity for a
-# short-lived, single-use upload token, and the same identity signs a PEP 740
-# attestation that a consumer can verify back to this workflow, this repository
-# and this tag. A token in a secret proves that whoever holds it can upload; an
-# attestation proves where the artifact came from.
+# There is no API token in this workflow or in the repository's secrets. PyPI's
+# Trusted Publishing exchanges this job's OIDC identity for a PyPI token minted
+# on the spot and good for about fifteen minutes, which the upload then uses
+# for every file. That token is worth stealing while it lives; what does not
+# exist is a long-lived one sitting in a secret for anyone who ever gets read
+# access to it.
 #
-# The release runs in two jobs on purpose. `build` has no privileges and no
-# id-token, so a compromised build dependency cannot reach the publishing
-# identity; `publish` has the identity and runs nothing but the upload action.
+# The same identity signs a PEP 740 attestation that a consumer can verify back
+# to this repository. An attestation proves the upload came from a publisher
+# this repository authorized. It does not pin the workflow or the tag: the
+# verifier takes those from PyPI's own provenance and cross-checks only the
+# repository, so a second Trusted Publisher configured here would verify just
+# as cleanly.
+#
+# `publish` is the only job that can reach the publishing identity, because it
+# is the only one with `id-token: write`. `build` has `contents: read` to check
+# the tree out and `actions: read` to ask whether CI passed, and nothing more,
+# so a compromised build dependency cannot upload anything itself. It can still
+# decide what the privileged job uploads, because it is what produces the
+# distributions; the split limits who holds the credential, not what gets built.
+# `verify` adds no permission. `attach-sbom` has `contents: write`, which is
+# what lets it create the GitHub Release and attach the inventory to it.
 name: publish
 
 on:
@@ -41,7 +53,7 @@ jobs:
       # built at all.
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -77,7 +89,7 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_SHA is on main and its CI passed"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
 
@@ -104,9 +116,16 @@ jobs:
 
       # aarch64 is built under emulation on the x86-64 runner, the same way the
       # GitLab `wheels` job builds it, so the two cannot disagree on the set.
-      - uses: docker/setup-qemu-action@v4
+      # The image is pinned as well as the action. Left to its default, this
+      # step pulls `tonistiigi/binfmt:latest` and runs it with `--privileged`
+      # on the runner that then builds the native wheels, so a moving tag on
+      # that image reaches the release even though the action cannot. Nothing
+      # updates this digest automatically, since dependabot does not read a
+      # workflow input; it is raised by hand with the action.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
 
       # The engine is a native build and needs one wheel per interpreter and
       # platform. It is not optional: structured-data-models-client[relational] pins it by exact
@@ -114,7 +133,7 @@ jobs:
       # uninstallable for the release it names. What is built, and the smoke
       # test each wheel must pass, is the engine's `[tool.cibuildwheel]`.
       - name: Build the relational engine's wheels
-        uses: pypa/cibuildwheel@v4.2.1
+        uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
         with:
           package-dir: packages/structured-data-models-relational-engine
           output-dir: dist
@@ -193,7 +212,7 @@ jobs:
             exit 1
           }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: distributions
           path: dist/
@@ -205,7 +224,7 @@ jobs:
     permissions:
       id-token: write          # the only privilege here, and the reason there is no token
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: distributions
           path: dist/
@@ -214,10 +233,117 @@ jobs:
       - name: Keep only the distributions
         run: rm -f dist/sbom.cyclonedx.json dist/notes.md
 
+      # The mutable layer inside the pinned action. This action is pinned by
+      # commit, but it generates a Docker action whose image is
+      # `ghcr.io/pypa/gh-action-pypi-publish:<the pinned sha>`, and a GHCR tag
+      # is mutable however it is named. There is no input to pull it by digest,
+      # so short of forking the action there is no supported way to pin it, and
+      # repointing that tag would change the code that runs in the job holding
+      # `id-token: write`. The trust boundary for the upload is therefore the
+      # pypa organization, not just the commit below. Writing the upload by
+      # hand to avoid it would put less-reviewed code in the same place, which
+      # is the worse trade.
+      #
+      # It is not the only mutable thing the release runs. `ubuntu-latest` is
+      # reimaged on its own schedule, and everything this workflow installs
+      # from PyPI resolves at release time: `pip` itself, the build and
+      # packaging tools, the PEP 517 build requirements behind them, the whole
+      # dependency graph the SBOM step installs to inventory it, and the
+      # verifier's own dependencies, which the pin below does not reach.
+      # Pinning every `uses:` does not make a release hermetic and is not
+      # claimed to.
+      #
+      # What this one does not leave unguarded is the bytes of the files it is
+      # given: `verify` below checks what PyPI attested against the artifacts
+      # `build` produced, so an image that altered one of them on its way to
+      # the index fails there.
       - name: Publish with Trusted Publishing and attest the artifacts
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           attestations: true
+
+  # An attestation nobody checks is a claim. The release workflow signs these
+  # files, so the release workflow is where the signature is checked. It cannot
+  # run before anyone installs them, because an attestation is only on the
+  # index once the upload is done; what it catches is a release whose
+  # signatures are wrong, while the release is still minutes old and whoever
+  # cut it is still watching.
+  #
+  # It checks the files `build` produced, not copies fetched back from PyPI.
+  # The verifier takes either, and the difference matters here: the provenance
+  # always comes from PyPI, so handing it the local artifact asks whether each
+  # file this workflow built is byte-for-byte what PyPI attested. Handing it
+  # `pypi:<name>` would download the attested file and compare it against its
+  # own attestation, which passes by construction even if the upload step
+  # swapped the bytes.
+  #
+  # The question it does not ask is whether PyPI holds anything else. It walks
+  # the artifacts this build produced, not the release's file list on the
+  # index, so an upload that published all of them faithfully and added a
+  # sixth file would pass here. Catching that means diffing the index's file
+  # set against a build manifest, which is a network call that can fail a
+  # release for reasons that are not about signatures; the residual is named
+  # rather than guarded.
+  #
+  # What it establishes is still narrower than it looks, and the prose
+  # elsewhere is written to match: a PEP 740 attestation proves these exact
+  # bytes were published by a Trusted Publisher of this repository and have not
+  # been altered since. It is not build provenance, and `--repository` is the
+  # only constraint the verifier accepts. The workflow filename in the
+  # attestation comes from PyPI's own provenance rather than from anything
+  # asserted here, so this does not distinguish one workflow in this repository
+  # from another.
+  verify:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: distributions
+          path: dist/
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Every distribution this build produced verifies against this repository
+        run: |
+          set -euo pipefail
+          # Pinned, unlike the build-time tools above, because this one is the
+          # check rather than the thing being checked: a verifier resolved at
+          # release time could pass without verifying, or drop the subcommand
+          # and block a release that is fine. Upstream says the CLI is not a
+          # stable interface, so raise this deliberately. The pin is on this
+          # package only; what it resolves underneath is not pinned.
+          python -m pip install pypi-attestations==0.0.30
+          # The same two files the publish job drops, for the same reason:
+          # they are release assets and were never uploaded to the index.
+          rm -f dist/sbom.cyclonedx.json dist/notes.md
+
+          failed=0
+          for path in dist/*; do
+            name=$(basename "$path")
+            verified=
+            # A file is on PyPI the moment the upload returns, but its
+            # provenance is served through a cache that can take a few seconds
+            # to catch up, and the files do not all become visible at once.
+            # Every file gets its own retries, so one slow entry cannot be
+            # reported as unsigned.
+            for attempt in 1 2 3 4 5; do
+              if python -m pypi_attestations verify pypi \
+                   --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+                   "$path"; then
+                verified=yes
+                break
+              fi
+              sleep $((attempt * 10))
+            done
+            if [ -z "$verified" ]; then
+              echo "::error::$name does not verify as published by $GITHUB_REPOSITORY"
+              failed=1
+            fi
+          done
+          exit $failed
 
   # The SBOM is generated during the build and stripped from the upload,
   # because PyPI takes distributions and nothing else. Without this job it
@@ -231,7 +357,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: distributions
           path: dist/

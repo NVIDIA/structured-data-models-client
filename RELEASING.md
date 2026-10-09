@@ -79,17 +79,30 @@ then creates the GitHub Release for the tag with those notes and attaches the
 SBOM to it, so the dependency inventory outlives the ninety days an Actions
 artifact gets.
 
-**There is no PyPI token.** Publishing authenticates with the workflow's OIDC
-identity, which is why the `publish` job is the only one holding `id-token:
-write` and runs nothing but the upload. If you find yourself wanting to add a
-token, something is wrong with the trusted-publisher configuration instead.
+**There is no stored PyPI token.** Publishing authenticates with the
+workflow's OIDC identity, which PyPI exchanges for a token minted on the spot
+and good for about fifteen minutes. That is why `publish` is the only job
+holding `id-token: write`. If you find yourself wanting to add a token to the
+repository's secrets, something is wrong with the trusted-publisher
+configuration instead.
 
 ## After
 
-```bash
-pip download --no-deps structured-data-models-client==1.2.0 -d /tmp/verify
-python -m pypi_attestations verify pypi /tmp/verify/*.whl
-```
+The `verify` job has already checked every distribution this workflow built
+against this repository's identity, so there is nothing to confirm by hand. It runs beside
+the job that creates the GitHub Release rather than before it: an upload
+cannot be undone, and a release whose SBOM never got attached because a cache
+was cold is worse than one whose verification has to be re-run. A red `verify`
+on a green `publish` means the files are on PyPI and something about their
+attestations needs looking at, not that the release did not happen.
+
+It checks the artifacts the build produced against the provenance PyPI
+serves, which is the stronger direction: for each file this workflow built, it
+answers whether PyPI attested those exact bytes. It does not compare the
+index's file list against the build, so it would not notice an upload that
+published all of them faithfully and added one more. SECURITY.md's "Verifying
+a release" section is the same command written for a consumer, who starts from
+the file they downloaded instead.
 
 ## Yanking
 
