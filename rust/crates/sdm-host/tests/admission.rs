@@ -7,6 +7,12 @@
 //! the set is refused by name, a bounded representative of each. A run-end
 //! array of every family the set takes is decoded through `HostRun` (E17).
 
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test code: reads the register, and Arrow's field metadata is a HashMap"
+)]
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, mpsc};
 

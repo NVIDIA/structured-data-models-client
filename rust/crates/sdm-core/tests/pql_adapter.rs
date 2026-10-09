@@ -7,6 +7,12 @@
 //! literal the interim parser cannot read yet is no answer at all; and an
 //! accepted query is handed on in the validated-query format.
 
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test code: times the bounded-time refusals against a wall clock"
+)]
+
 use std::collections::BTreeMap;
 
 use sdm_contract::facts::PlatformFacts;

@@ -8,6 +8,11 @@
 //! the reference's answer through the adapter, accepted, or refused with
 //! the same error codes and spans.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads the journey file"
+)]
+
 use std::collections::BTreeMap;
 use std::path::Path;
 

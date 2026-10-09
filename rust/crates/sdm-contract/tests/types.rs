@@ -5,6 +5,12 @@
 //! The closed type set: every type in it comes in from Arrow and goes back
 //! out unchanged, and a type outside it is refused by name.
 
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test code: reads its vector file, and Arrow's field metadata is a HashMap"
+)]
+
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;

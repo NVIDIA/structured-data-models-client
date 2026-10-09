@@ -18,6 +18,11 @@
 //! no entry merged into `rust-core` changes, and that a lock holds at most
 //! one working entry, is checked by `scripts/rust_core/contract_lock.py`.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads and, with SDM_CONTRACT_WRITE, rewrites the committed schema and lock"
+)]
+
 use std::path::{Path, PathBuf};
 
 use sdm_contract::{

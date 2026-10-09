@@ -19,6 +19,11 @@
 //! `tests/pql/known-differing.json`. Any other difference fails, and so does
 //! a pinned part that agrees, so the list can only shrink.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads the corpus file"
+)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 

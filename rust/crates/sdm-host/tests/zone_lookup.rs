@@ -6,6 +6,11 @@
 //! directories built from the vendored 2026c files; the runner's own zone
 //! database is never read.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: builds fixture zone directories from the vendored files"
+)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};

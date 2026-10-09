@@ -12,6 +12,12 @@
 //! payload, reaches an error's message, fields or cause, or stderr, which
 //! the last test captures from a child process.
 
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test code: reruns its own binary for the abort test, and Arrow's field metadata is a HashMap"
+)]
+
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 

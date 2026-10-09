@@ -7,6 +7,11 @@
 //! tree the parser accepts round-trips through the validated-query format,
 //! and text one level deeper is refused by its reader.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads the crate's sources to find where stacks grow"
+)]
+
 use std::path::{Path, PathBuf};
 
 use sdm_contract::facts::PlatformFacts;

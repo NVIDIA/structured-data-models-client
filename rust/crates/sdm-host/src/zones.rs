@@ -67,6 +67,13 @@ impl ZoneResolver {
         let roots = roots
             .into_iter()
             .map(|root| {
+                // The one file-system read in the domain and shipped crates:
+                // the host names its lookup roots in HostFacts, and the
+                // resolver reads the zone database each one holds (E24).
+                #[allow(
+                    clippy::disallowed_methods,
+                    reason = "reads the zone lookup roots the host names (E24)"
+                )]
                 let db = TimeZoneDatabase::from_dir(&root.path).ok();
                 (root, db)
             })

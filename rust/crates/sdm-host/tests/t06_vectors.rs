@@ -15,6 +15,11 @@
 //!   probe's `chrono` answers; any difference is listed in
 //!   `docs/design/rust-core/phase-1/dependencies.md` and named here.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads the vector file and the vendored zone directory"
+)]
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

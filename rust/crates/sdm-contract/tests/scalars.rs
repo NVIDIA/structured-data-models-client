@@ -9,6 +9,11 @@
 //! test `tests/test_rust_contract.py` decodes it with only `json` and
 //! `decimal`.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads and, with SDM_CONTRACT_WRITE, rewrites its vector file"
+)]
+
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
