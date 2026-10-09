@@ -1454,7 +1454,6 @@ dependencies = [
  "pyo3",
  "pyo3-log",
  "sdm-contract",
- "sdm-core",
  "sdm-host",
 ]
 

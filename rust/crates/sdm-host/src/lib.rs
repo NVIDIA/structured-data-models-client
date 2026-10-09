@@ -18,5 +18,14 @@ pub mod zones;
 pub use admission::{OFFSET_CAPACITY, admit, admit_with_capacity, admitted_type};
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
 pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain};
-pub use sdm_core::Attachments;
+/// The types a binding hands across, so a binding depends on `sdm-host`
+/// and on `sdm-contract` for types, never on `sdm-core` (decision E21).
+pub use sdm_core::{ArrowData, Attachment, Attachments};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
+
+/// The composition root a binding starts its runs with. Today's root is
+/// empty, with no SQL compiler registered; T1.11a builds the data layer in
+/// it here, where every binding reaches it (decisions E21, H14).
+pub fn default_root() -> sdm_core::CompositionRoot {
+    sdm_core::CompositionRoot::default()
+}

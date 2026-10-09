@@ -24,7 +24,7 @@ doctest = false
 [features]
 # Operations only tests reach; the shipped wheel leaves it off, and the
 # binding's tests build a wheel with it on.
-test-ops = ["sdm-host/test-ops", "sdm-contract/test-ops", "sdm-core/test-ops"]
+test-ops = ["sdm-host/test-ops", "sdm-contract/test-ops"]
 
 [dependencies]
 arrow-array = { workspace = true, features = ["ffi"] }
@@ -32,8 +32,9 @@ arrow-pyarrow.workspace = true
 arrow-schema = { workspace = true, features = ["ffi"] }
 pyo3.workspace = true
 pyo3-log.workspace = true
+# Among first-party crates, sdm-host and, for types only, sdm-contract;
+# never sdm-core (decision E21).
 sdm-contract = { path = "../../crates/sdm-contract" }
-sdm-core = { path = "../../crates/sdm-core" }
 sdm-host = { path = "../../crates/sdm-host" }
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so a

@@ -11,12 +11,53 @@ object with ``__arrow_c_stream__``; out, an :class:`ArrowStream`. Only
 """
 
 from collections.abc import Mapping
-from typing import Protocol, final
+from typing import Literal, Protocol, final
+
+#: The codes an error of the core carries, the contract's ``ErrorCode``, in
+#: its order; each kind a code may carry is fixed in ``sdm-contract``
+#: (``ErrorCode::kinds``).
+_Code = Literal[
+    'INVALID_REQUEST',
+    'UNSUPPORTED_REQUEST',
+    'INVALID_RESPONSE',
+    'INVALID_CONFIGURATION',
+    'TRANSPORT_ERROR',
+    'INTERNAL_ERROR',
+    'UNKNOWN_MODEL',
+    'MISSING_EXTRA',
+    'INVALID_SCHEMA',
+    'SESSIONS_UNSUPPORTED',
+    'UNSUPPORTED_TYPE',
+    'VALUE_OUT_OF_RANGE',
+    'PROVIDER_SCHEMA_MISMATCH',
+    'PROVIDER_ERROR',
+    'UNKNOWN_REPLY',
+    'REPLY_MISSING',
+    'WRONG_REPLY',
+    'RUN_FINISHED',
+    'RUN_CANCELLED',
+    'RUN_POISONED',
+    'RUN_BUSY',
+    'INVALID_MESSAGE',
+]
+#: The kinds of an error of the core, the contract's ``ErrorKind``.
+_Kind = Literal[
+    'invalid_request',
+    'unsupported',
+    'not_found',
+    'data_source',
+    'model_endpoint',
+    'cancelled',
+    'protocol',
+    'internal',
+]
 
 #: The contract version this build speaks.
 CONTRACT_VERSION: int
 #: Whether this build has the test-only operations; the shipped wheel has not.
 TEST_OPS: bool
+#: Every code an error of the core may carry, in the contract's order.
+ERROR_CODES: tuple[_Code, ...]
 
 class _ArrowStreamExportable(Protocol):
     def __arrow_c_stream__(
@@ -42,8 +83,11 @@ _Outgoing = tuple[bytes, dict[int, _AttachmentOut]]
 class CoreError(Exception):
     """An error the core returned, as its ``error`` control message."""
 
-    kind: str
-    code: str
+    kind: _Kind
+    code: _Code
+    #: Whether the same call may succeed if tried again; carried from
+    #: provider and transport errors, false otherwise.
+    retryable: bool
     control: bytes
     attachments: dict[int, _AttachmentOut]
 

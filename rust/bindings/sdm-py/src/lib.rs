@@ -32,19 +32,21 @@ use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyBytes, PyCapsule, PyDict, PyMapping};
+use pyo3::types::{PyBytes, PyCapsule, PyDict, PyMapping, PyTuple};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, ErrorCode, ErrorKind};
-use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot};
-use sdm_host::{HostRun, Outgoing, Unreadable, Unreadables, read};
+use sdm_host::{
+    ArrowData, Attachment, Attachments, HostRun, Outgoing, Unreadable, Unreadables, default_root,
+    read,
+};
 
 create_exception!(
     sdm_client._native,
     CoreError,
     PyException,
     "An error the core returned. `control` holds its `error` control \
-     message and `attachments` the attachments that message names; `kind` \
-     and `code` are read from it."
+     message and `attachments` the attachments that message names; `kind`, \
+     `code` and `retryable` are read from it."
 );
 
 /// The bridge from `log` records to Python's `logging`, installed at the
@@ -177,10 +179,10 @@ fn outgoing<'py>(py: Python<'py>, out: Outgoing) -> PyResult<(Py<PyBytes>, Py<Py
 /// and code are read from the message; its text is theirs alone, so a
 /// traceback carries no message the core wrote (decision H17).
 fn core_error(py: Python<'_>, out: Outgoing) -> PyErr {
-    let (kind, code) = match read(&out) {
-        Ok(ControlMessage::Error { error }) => (error.kind, error.code),
+    let (kind, code, retryable) = match read(&out) {
+        Ok(ControlMessage::Error { error }) => (error.kind, error.code, error.retryable),
         // HostRun gives only error messages here.
-        _ => (ErrorKind::Internal, ErrorCode::InternalError),
+        _ => (ErrorKind::Internal, ErrorCode::InternalError, false),
     };
     let (kind, code) = (kind.as_str(), code.as_str());
     let err = CoreError::new_err(format!("{kind}: {code}"));
@@ -188,6 +190,7 @@ fn core_error(py: Python<'_>, out: Outgoing) -> PyErr {
         let value = err.value(py);
         value.setattr("kind", kind)?;
         value.setattr("code", code)?;
+        value.setattr("retryable", retryable)?;
         value.setattr("control", PyBytes::new(py, &out.control))?;
         value.setattr("attachments", attachments_to_python(py, out.attachments)?)?;
         Ok(())
@@ -275,12 +278,7 @@ impl Run {
         let (attachments, unreadable) = attachments_from_python(attachments)?;
         let message = message.to_vec();
         core_call(py, || {
-            HostRun::start_reading(
-                &CompositionRoot::default(),
-                &message,
-                attachments,
-                &unreadable,
-            )
+            HostRun::start_reading(&default_root(), &message, attachments, &unreadable)
         })?
         .map(|run| Run { run })
         .map_err(|out| core_error(py, out))
@@ -348,6 +346,10 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add("CONTRACT_VERSION", CONTRACT_VERSION)?;
     module.add("TEST_OPS", cfg!(feature = "test-ops"))?;
+    module.add(
+        "ERROR_CODES",
+        PyTuple::new(py, ErrorCode::ALL.map(ErrorCode::as_str))?,
+    )?;
     module.add("CoreError", py.get_type::<CoreError>())?;
     module.add_class::<ArrowStream>()?;
     module.add_class::<Run>()?;

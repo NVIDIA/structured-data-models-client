@@ -287,6 +287,7 @@ def test_an_error_past_the_cap_is_raised_whole_from_its_attachment() -> None:
         run.next()
     found = raised.value
     assert (found.kind, found.code) == ('data_source', 'PROVIDER_ERROR')
+    assert found.retryable is True
     attached = messages.read(found.control)
     assert attached['message'] == 'attached'
     whole = found.attachments[attached['attachment']]

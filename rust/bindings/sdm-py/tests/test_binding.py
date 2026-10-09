@@ -82,6 +82,33 @@ def test_the_contract_version_is_the_contract_crate_s() -> None:
     assert messages.CONTRACT == _native.CONTRACT_VERSION
 
 
+def test_the_error_codes_are_the_contract_s_in_its_order() -> None:
+    source = (REPO / 'rust/crates/sdm-contract/src/error.rs').read_text()
+    listed = re.search(
+        r'pub const ALL: \[ErrorCode; \d+\] = \[(.*?)\];', source, re.S
+    )
+    assert listed
+    variants = re.findall(r'ErrorCode::(\w+)', listed.group(1))
+    screaming = [re.sub(r'(?<!^)(?=[A-Z])', '_', v).upper() for v in variants]
+    assert isinstance(_native.ERROR_CODES, tuple)
+    assert list(_native.ERROR_CODES) == screaming
+    tree = ast.parse(STUB.read_text())
+    stubbed = next(
+        node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == '_Code'
+    )
+    assert isinstance(stubbed, ast.Subscript)
+    assert isinstance(stubbed.slice, ast.Tuple)
+    assert [
+        element.value
+        for element in stubbed.slice.elts
+        if isinstance(element, ast.Constant)
+    ] == screaming
+
+
 def test_a_query_is_validated_through_a_run() -> None:
     for query, accepted in [
         ('PREDICT users.age FOR EACH users.id', True),
@@ -105,6 +132,7 @@ def test_an_error_the_run_returns_is_raised_as_core_error() -> None:
         run.next()
     error = raised.value
     assert (error.kind, error.code) == ('protocol', 'RUN_FINISHED')
+    assert error.retryable is False
     assert str(error) == 'protocol: RUN_FINISHED'
     message = messages.read(error.control)
     assert message['message'] == 'error'
