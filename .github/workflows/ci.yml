@@ -211,10 +211,47 @@ jobs:
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
       # and twine refuses anything that is not a distribution.
       - run: pip install --upgrade twine && twine check dist/*.whl
+      # The engine wheel built here is tagged linux_x86_64 and installs on no
+      # other platform. The ones to install are engine-wheels' below.
+      - run: rm dist/structured_data_models_relational_engine-*.whl
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wheels
           path: dist/
+
+  # The engine's manylinux wheels, from the same `[tool.cibuildwheel]` table
+  # the release reads, each architecture on a runner of its own rather than
+  # under emulation. Databricks serverless runs on aarch64 as often as on
+  # x86-64, and each wheel is smoke-tested on the architecture it targets.
+  engine-wheels:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The engine pins its siblings by exact version, which exist only as
+      # wheels on disk; see the release workflow.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: _sibling_wheels
+      - uses: pypa/cibuildwheel@e090b81e30c4d855ea63bf4b6e59204c09a101ae # v4.2.1
+        env:
+          CIBW_ARCHS_LINUX: ${{ matrix.arch }}
+        with:
+          package-dir: packages/structured-data-models-relational-engine
+          output-dir: wheelhouse
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: engine-wheels-${{ matrix.arch }}
+          path: wheelhouse/
 
   # The suite has only ever run against the source tree. What users install is
   # a wheel, and the difference is where packaging bugs live: a module left out
