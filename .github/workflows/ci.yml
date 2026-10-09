@@ -67,6 +67,21 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The binding with its test-only operations, as its tests build it.
       - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
+      # The L0 guards (T1.10c): the crate graph (l0_deps.py), and the
+      # vocabulary, SQL-fragment, skip and ignore, clippy-ban and step-variant
+      # scans (l0_scan.py). The bans themselves are enforced by the clippy
+      # runs above, from rust/clippy.toml.
+      - name: L0 graph, bans and scans
+        run: |
+          python3 scripts/rust_core/l0_deps.py
+          python3 scripts/rust_core/l0_scan.py
+        working-directory: .
+      # Each guard passes on the tree and fails on a fixture seeded with the
+      # fault it exists for, and clippy refuses each banned item in a fixture
+      # crate under rust/clippy.toml.
+      - name: L0 self-tests
+        run: python3 scripts/rust_core/selftest.py
+        working-directory: .
       # The contract schema: regenerated from the types and compared with the
       # committed file, locked to the current version; no entry merged into
       # rust-core rewritten, and at most one working entry, which is why this
