@@ -856,12 +856,19 @@ CHECKS: dict[str, Callable[[Path], list[str]]] = {
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n', 1)[0])
+    # Checked here, not by argparse's choices, which before Python 3.14
+    # refuse an empty list. No checks named means all of them.
     parser.add_argument(
-        'checks', nargs='*', choices=[*CHECKS, 'all'], default=['all']
+        'checks', nargs='*', help=f'any of {", ".join(CHECKS)}; all by default'
     )
     parser.add_argument('--root', type=Path, default=REPO_ROOT)
     args = parser.parse_args(argv)
-    names = list(CHECKS) if 'all' in args.checks else args.checks
+    unknown = sorted(set(args.checks) - {*CHECKS, 'all'})
+    if unknown:
+        parser.error(f'unknown checks: {", ".join(unknown)}')
+    names = (
+        list(CHECKS) if not args.checks or 'all' in args.checks else args.checks
+    )
     failed = False
     for name in names:
         problems = CHECKS[name](args.root)
