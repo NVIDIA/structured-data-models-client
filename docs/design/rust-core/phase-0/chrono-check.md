@@ -76,7 +76,7 @@ Owner decision 30 settled these classes; the register entries are in `register.y
 1. M3 (DT-3): the core does not reproduce the int64 wrap; Phase 1 checks the `Timestamp.min` sentinel and handles the no-time marker explicitly.
 2. M4 (DT-1): zone rules keep applying after 2099; the 2099 cutoff of `chrono-tz` 0.10.4 is not accepted.
 3. M5 (DT-2): the core uses the host's zone database with a bundled fallback, and tests pin and record its version.
-4. M2 (DT-5) goes to the PQL asks; M1 needs no entry.
+4. M2 (DT-5) goes to the PQL asks; M1 needs no entry. (The asks are superseded by Phase 1 decision E18 (owner, 2026-10-08); this client's parser keeps D8.)
 
 ## What remains for Phase 1
 

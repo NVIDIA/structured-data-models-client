@@ -10,6 +10,8 @@ All of the work happens on an epic branch and stays experimental until the owner
 
 ![New architecture](images/architecture.png)
 
+The diagram above predates Phase 1 decision E18: no PQL-team crate or PQL C++ is part of the plan.
+
 ## 1. What changes from the original proposal
 
 | Original proposal | New plan | Why |
@@ -33,8 +35,7 @@ The owner made these before any code:
    Java is a second binding on the same core, built so the core stays language-neutral, never at Python's expense.
 2. **Scope:** Python supports every backend it supports today (Databricks, Snowflake, Lakebase, Postgres, SQLite, DuckDB and in-memory frames, including files read from Amazon S3).
    Java starts with DuckDB, SQLite, Postgres and Databricks.
-   Platforms: the client becomes one CPython `abi3` wheel per platform (3.10 and later, no sdist) for Linux x86_64 and aarch64 (`manylinux2014`, and `musllinux_1_2` if feasible; no PQL C++ is linked since Phase 1 decision E18, approved by owner 2026-10-08), macOS (10.12 x86_64, 11.0 arm64) and Windows x86_64, with `pyarrow>=10.0.1` and `pandas>=1.5`.
-   On the epic branch: Python 3.10 to 3.14, `pandas>=2.2`, `numpy>=1.26` and `pyarrow>=14.0.1`, with Arrow through the PyCapsule interface only (Phase 1 decision E16, approved by owner 2026-10-08); `main` keeps today's floors until the epic merges.
+   Platforms: the client becomes one CPython `abi3` wheel per platform (3.10 and later, no sdist) for Linux x86_64 and aarch64 (`manylinux2014`, and `musllinux_1_2` if feasible; no PQL C++ is linked since Phase 1 decision E18, approved by owner 2026-10-08), macOS (10.12 x86_64, 11.0 arm64) and Windows x86_64, with `pyarrow>=10.0.1` and `pandas>=1.5` on `main` until the epic merges, and on the epic branch Python 3.10 to 3.14, `pandas>=2.2`, `numpy>=1.26` and `pyarrow>=14.0.1`, with Arrow through the PyCapsule interface only (Phase 1 decision E16, approved by owner 2026-10-08).
    Dropped by the owner: 32-bit, Windows on Arm, other architectures, PyPy, GraalPy and free-threaded CPython; Java natives are Linux x86_64 and aarch64 plus macOS, and only tested environments are claimed (`phase-0/support-matrix.md`, decisions G1 to G14).
 3. **Regressions:** refusing an input the old Python client accepted is a regression, and so is dropping a platform or version Python supports today, unless the owner decides it explicitly.
    Java on Snowflake is not prioritized, so it is not held to this yet.
@@ -162,6 +163,8 @@ The drift risk is less in the grammar than in the code around it (tree building,
 ### Bindings
 
 ![Bindings](images/bindings.png)
+
+The diagram above predates Phase 1 decision E18: no PQL C++ is linked.
 
 The core is plain Rust and doesn't know which language loads it.
 Each language uses its standard binding tool, over one shared Rust layer:

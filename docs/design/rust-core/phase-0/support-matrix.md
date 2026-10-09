@@ -104,26 +104,27 @@ The Rust core ships inside the `structured-data-models-client` wheel (plan secti
 | Item | Proposal |
 |---|---|
 | Interpreter | CPython only, `abi3-py310` (tag `cp310-abi3`): one wheel per platform for 3.10, 3.11, 3.12, 3.13, 3.14 and later, each tested in L8 |
-| Linux | `manylinux2014` (glibc 2.17) for x86_64 and aarch64, falling back to `manylinux_2_28` only if the PQL C++ build needs it (G6) |
-| Linux musl | `musllinux_1_2` for x86_64 and aarch64, if the PQL team's static libraries build there (G5) |
+| Linux | `manylinux2014` (glibc 2.17) for x86_64 and aarch64, falling back to `manylinux_2_28` only if the PQL C++ build needs it (G6; the PQL C++ condition superseded by Phase 1 decision E18 (owner, 2026-10-08)) |
+| Linux musl | `musllinux_1_2` for x86_64 and aarch64, if the PQL team's static libraries build there (G5; the PQL condition superseded by Phase 1 decision E18 (owner, 2026-10-08)) |
 | macOS | x86_64 (macOS 10.12 or later, Rust's floor) and arm64 (macOS 11.0 or later) (G4) |
 | Windows | `win_amd64` (G2) |
 | Not built | 32-bit Windows, Windows on Arm, Linux i686, armv7, ppc64le, s390x, PyPy, GraalPy, free-threaded CPython (G3, G7, G8) |
 | sdist | None, as for the engine today, so a platform without a wheel fails at resolution (G12) |
-| pyarrow | A new client dependency, `pyarrow>=10.0.1`; Arrow crosses by PyCapsule from pyarrow 14 and by `_export_to_c` below it (G9) |
-| pandas | `pandas>=1.5` unchanged, with pandas 1.5 added to L5's conversion tests (G10) |
-| NumPy | Unchanged; the core does not use it |
+| pyarrow | A new client dependency, `pyarrow>=10.0.1`; Arrow crosses by PyCapsule from pyarrow 14 and by `_export_to_c` below it (G9; superseded by Phase 1 decision E16 (owner, 2026-10-08): `pyarrow>=14.0.1`, PyCapsule only, on the epic branch) |
+| pandas | `pandas>=1.5` unchanged, with pandas 1.5 added to L5's conversion tests (G10; superseded by Phase 1 decision E16 (owner, 2026-10-08): `pandas>=2.2` on the epic branch, L5 on pandas 2 and 3) |
+| NumPy | Unchanged; the core does not use it (superseded by Phase 1 decision E16 (owner, 2026-10-08): `numpy>=1.26` on the epic branch) |
 | OpenSSL | None linked into the core; HTTP stays in the host, so the Databricks aarch64 FIPS abort cannot recur through the core |
 | Build and test | Native Arm runners instead of QEMU for aarch64; each wheel installed and loaded in a clean container per platform (L8) |
 | Java JAR | Native libraries for linux-x86_64 and linux-aarch64 (same glibc floor as the Python wheel) and macOS x86_64 and arm64, on JDK 17 and 21; Windows only if the Java consumer needs it (G13) |
 
-Each platform added here must also be in the PQL asks ([pql-asks.md](pql-asks.md)).
+Each platform added here must also be in the PQL asks ([pql-asks.md](pql-asks.md)); superseded by Phase 1 decision E18 (owner, 2026-10-08): the asks are retired, and no PQL C++ conditions a platform.
 
 What the proposal gains over today: `kumo-relational` and `Schema.from_source` on Python 3.14 and later, and on macOS, Windows and musl if those are built; none of these is a decision, but each needs L8 coverage before it is claimed.
 
 ## Gaps and owner decisions
 
 Each gap compares the proposal with today's support; each needs an owner decision before Phase 1a builds its first wheel.
+The PQL C++ and PQL-ask conditions in G2, G4, G5, G6 and G12 are superseded by Phase 1 decision E18 (owner, 2026-10-08): no PQL C++ is linked.
 
 **G1. The base client stops being pure Python.**
 Today `pip install structured-data-models-client` installs anywhere CPython runs, from a `py3-none-any` wheel.
@@ -162,6 +163,7 @@ Recommendation: drop for now and revisit when a free-threaded stable ABI exists;
 Today the base client needs no pyarrow, and on DBR 14.3 LTS and serverless env 1 a tabular-only install keeps the shipped pyarrow 8.
 Recommendation: require `pyarrow>=10.0.1`, the engine's floor today, so one floor covers every path; on those two runtimes the install then upgrades pyarrow, as `[relational]` already does (observed working, to 25.0.1).
 The alternative is to support pyarrow 8 through `_export_to_c` and test it in L5, which keeps tabular users on those runtimes from upgrading.
+G9 and G10 are superseded by Phase 1 decision E16 (owner, 2026-10-08): `pyarrow>=14.0.1`, `pandas>=2.2` and `numpy>=1.26` on the epic branch, PyCapsule only; `main` keeps today's floors until the epic merges.
 
 **G10. pandas 1.5.**
 The client declares `pandas>=1.5`, and pandas below 2.0 is, by hypothesis, what a tabular-only install keeps on DBR 14.3 to 16.4 and serverless env 1 to 3, but the plan's L5 tests only pandas 2 and 3.
