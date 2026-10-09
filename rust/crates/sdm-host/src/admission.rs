@@ -271,39 +271,111 @@ fn rebase(offsets: &[i64], capacity: usize) -> Option<(usize, OffsetBuffer<i32>)
     Some((start, OffsetBuffer::new(ScalarBuffer::from(rebased))))
 }
 
-/// The physical index of each row of a run-end array, in row order: a
-/// run's index once for each of its rows the array's slice covers, or
-/// `None` if the run ends do not cover those rows.
-fn run_indices<R: RunEndIndexType>(run: &RunArray<R>) -> Option<Vec<u64>> {
+/// The runs of a run-end array the array's slice covers, in row order:
+/// each run's physical index and how many of its rows the slice holds, or
+/// `None` if the run ends do not cover those rows. Only the runs inside
+/// the slice are read.
+fn runs<R: RunEndIndexType>(run: &RunArray<R>) -> Option<(&ArrayRef, Vec<(usize, usize)>)> {
     let ends = run.run_ends();
+    let mut picks = Vec::new();
+    if ends.is_empty() {
+        return Some((run.values(), picks));
+    }
     let stop = ends.offset().checked_add(ends.len())?;
+    let first = run.get_start_physical_index();
+    let last = run.get_end_physical_index();
     let mut row = ends.offset();
-    let mut indices = Vec::with_capacity(ends.len());
-    for (physical, end) in ends.values().iter().enumerate() {
-        if row >= stop {
-            break;
-        }
+    for (physical, end) in (first..).zip(ends.values().get(first..=last)?) {
         let end = end.to_usize()?.min(stop);
         if end > row {
-            let index = u64::try_from(physical).ok()?;
-            indices.extend(std::iter::repeat_n(index, end.checked_sub(row)?));
+            picks.push((physical, end.checked_sub(row)?));
             row = end;
         }
     }
-    (row == stop).then_some(indices)
+    (row == stop).then_some((run.values(), picks))
 }
 
-/// A run-end array decoded: each row its run's value, a null run's rows
-/// null.
-fn decode_runs<R: RunEndIndexType>(
-    run: &RunArray<R>,
-) -> Result<ArrayRef, arrow_schema::ArrowError> {
-    let indices = run_indices(run).ok_or_else(|| {
-        arrow_schema::ArrowError::InvalidArgumentError(
-            "a run-end array's run ends do not cover its rows".into(),
-        )
-    })?;
-    arrow_select::take::take(run.values().as_ref(), &UInt64Array::from(indices), None)
+/// Adds `times` the size the elements `start..end` of `array` take at each
+/// level with int32 offsets (string or binary bytes, list or map items) to
+/// that level's total, numbering the levels in the order the type is
+/// walked; `None` if a size cannot be read or a total passes usize.
+fn tally(
+    array: &dyn Array,
+    (start, end): (usize, usize),
+    times: usize,
+    totals: &mut Vec<usize>,
+    level: &mut usize,
+) -> Option<()> {
+    fn span<O: ArrowNativeType>(offsets: &[O], start: usize, end: usize) -> Option<(usize, usize)> {
+        Some((
+            offsets.get(start)?.to_usize()?,
+            offsets.get(end)?.to_usize()?,
+        ))
+    }
+    fn add(
+        totals: &mut Vec<usize>,
+        level: &mut usize,
+        (from, to): (usize, usize),
+        times: usize,
+    ) -> Option<()> {
+        if totals.len() <= *level {
+            totals.resize(*level + 1, 0);
+        }
+        let size = to.checked_sub(from)?.checked_mul(times)?;
+        totals[*level] = totals[*level].checked_add(size)?;
+        *level += 1;
+        Some(())
+    }
+    match array.data_type() {
+        DataType::Utf8 => {
+            let offsets = array.as_string::<i32>().value_offsets();
+            add(totals, level, span(offsets, start, end)?, times)
+        }
+        DataType::Binary => {
+            let offsets = array.as_binary::<i32>().value_offsets();
+            add(totals, level, span(offsets, start, end)?, times)
+        }
+        DataType::List(_) => {
+            let list = array.as_list::<i32>();
+            let items = span(list.value_offsets(), start, end)?;
+            add(totals, level, items, times)?;
+            tally(list.values().as_ref(), items, times, totals, level)
+        }
+        DataType::Map(..) => {
+            let map = array.as_map();
+            let items = span(map.value_offsets(), start, end)?;
+            add(totals, level, items, times)?;
+            tally(map.entries(), items, times, totals, level)
+        }
+        // Its own offsets cannot pass int32's; its items' can.
+        DataType::LargeList(_) => {
+            let list = array.as_list::<i64>();
+            let items = span(list.value_offsets(), start, end)?;
+            tally(list.values().as_ref(), items, times, totals, level)
+        }
+        DataType::FixedSizeList(_, size) => {
+            let size = usize::try_from(*size).ok()?;
+            let items = (start.checked_mul(size)?, end.checked_mul(size)?);
+            let values = array.as_fixed_size_list().values();
+            tally(values.as_ref(), items, times, totals, level)
+        }
+        DataType::Struct(_) => array
+            .as_struct()
+            .columns()
+            .iter()
+            .try_for_each(|c| tally(c.as_ref(), (start, end), times, totals, level)),
+        // `take` copies no values of any other type into int32 offsets.
+        _ => Some(()),
+    }
+}
+
+/// A failed `take`: values past int32 offsets are `past`, which a split
+/// between rows may cure; anything else is internal.
+fn taken(error: arrow_schema::ArrowError, past: Fail) -> Fail {
+    match error {
+        arrow_schema::ArrowError::OffsetOverflowError(_) => past,
+        other => Fail::Refused(internal("", &other)),
+    }
 }
 
 fn widen_offsets(offsets: &[i32]) -> Vec<i64> {
@@ -630,21 +702,50 @@ impl Admit {
             (DataType::Dictionary(_, _), _) => {
                 // Decoded: each key's value, a null key a null.
                 let dictionary = array.as_any_dictionary();
-                let decoded =
-                    arrow_select::take::take(dictionary.values().as_ref(), dictionary.keys(), None)
-                        .map_err(rebuilt)?;
+                let (values, keys) = (dictionary.values(), dictionary.keys());
+                let picks: Vec<(usize, usize)> = if values.is_empty() {
+                    // Every key is null.
+                    Vec::new()
+                } else {
+                    let normalized = dictionary.normalized_keys();
+                    (0..keys.len())
+                        .filter(|row| keys.is_valid(*row))
+                        .map(|row| (normalized[row], 1))
+                        .collect()
+                };
+                if !self.fits_taken(values, &picks) {
+                    return Err(past());
+                }
+                let decoded = arrow_select::take::take(values.as_ref(), keys, None)
+                    .map_err(|e| taken(e, past()))?;
                 self.array(column, &decoded, admitted)?
             }
             (DataType::RunEndEncoded(run_ends, _), _) => {
-                let decoded = match run_ends.data_type() {
-                    DataType::Int16 => decode_runs(array.as_run::<Int16Type>()),
-                    DataType::Int32 => decode_runs(array.as_run::<Int32Type>()),
-                    DataType::Int64 => decode_runs(array.as_run::<Int64Type>()),
-                    other => Err(arrow_schema::ArrowError::CastError(format!(
-                        "run ends of type {other}"
-                    ))),
+                let (values, picks) = match run_ends.data_type() {
+                    DataType::Int16 => runs(array.as_run::<Int16Type>()),
+                    DataType::Int32 => runs(array.as_run::<Int32Type>()),
+                    DataType::Int64 => runs(array.as_run::<Int64Type>()),
+                    _ => None,
                 }
-                .map_err(rebuilt)?;
+                .ok_or_else(|| {
+                    rebuilt(arrow_schema::ArrowError::InvalidArgumentError(
+                        "a run-end array's run ends do not cover its rows".into(),
+                    ))
+                })?;
+                if !self.fits_taken(values, &picks) {
+                    return Err(past());
+                }
+                // Decoded: each row its run's value, a null run's rows null.
+                let indices = picks
+                    .iter()
+                    .map(|(physical, rows)| u64::try_from(*physical).map(|p| (p, *rows)))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| past())?
+                    .into_iter()
+                    .flat_map(|(physical, rows)| std::iter::repeat_n(physical, rows))
+                    .collect::<UInt64Array>();
+                let decoded = arrow_select::take::take(values.as_ref(), &indices, None)
+                    .map_err(|e| taken(e, past()))?;
                 self.array(column, &decoded, admitted)?
             }
             _ => {
@@ -653,6 +754,22 @@ impl Admit {
                 ))));
             }
         })
+    }
+
+    /// Whether taking `values` at `picks`, each a physical index and how
+    /// many rows repeat it, keeps every level with int32 offsets within the
+    /// capacity; checked before `take` builds anything. A null value takes
+    /// nothing.
+    fn fits_taken(&self, values: &ArrayRef, picks: &[(usize, usize)]) -> bool {
+        let mut totals = Vec::new();
+        picks
+            .iter()
+            .filter(|(physical, _)| values.is_valid(*physical))
+            .try_for_each(|(physical, rows)| {
+                let range = (*physical, physical.checked_add(1)?);
+                tally(values.as_ref(), range, *rows, &mut totals, &mut 0)
+            })
+            .is_some_and(|()| totals.iter().all(|total| *total <= self.capacity))
     }
 
     /// A list of `item` over the rows `offsets` span of `values`.

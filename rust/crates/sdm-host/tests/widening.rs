@@ -20,9 +20,10 @@ use arrow_array::types::{
     Int64Type, Time64MicrosecondType, TimestampMicrosecondType,
 };
 use arrow_array::{
-    Array, ArrayRef, BinaryViewArray, Date64Array, Decimal32Array, Decimal64Array, DictionaryArray,
-    DurationMillisecondArray, DurationSecondArray, Float16Array, Int64Array, LargeListArray,
-    LargeStringArray, RecordBatch, StringViewArray, Time32MillisecondArray, Time32SecondArray,
+    Array, ArrayRef, BinaryArray, BinaryViewArray, Date64Array, Decimal32Array, Decimal64Array,
+    DictionaryArray, DurationMillisecondArray, DurationSecondArray, Float16Array, Int8Array,
+    Int16Array, Int32Array, Int64Array, LargeListArray, LargeStringArray, ListArray, RecordBatch,
+    RunArray, StringArray, StringViewArray, Time32MillisecondArray, Time32SecondArray,
 };
 use arrow_buffer::{OffsetBuffer, ScalarBuffer};
 use arrow_schema::{DataType, Field, TimeUnit};
@@ -337,4 +338,105 @@ fn a_single_value_past_the_offset_capacity_is_refused_by_name() {
     view.append_value("far too long");
     let err = admit_with_capacity(&data(Arc::new(view.finish())), 9).unwrap_err();
     assert_eq!(text(&err, "arrow_type"), DataType::Utf8View.to_string());
+}
+
+fn nullable(column: ArrayRef) -> ArrowData {
+    let batch = RecordBatch::try_from_iter_with_nullable([("c", column, true)]).unwrap();
+    ArrowData::new(batch.schema(), vec![batch])
+}
+
+/// Each admitted batch's `c`, read as strings, every batch's offsets
+/// within `capacity`.
+fn split_strings(out: &ArrowData, capacity: i32) -> Vec<Option<String>> {
+    assert!(out.batches.len() > 1, "split between rows");
+    out.batches
+        .iter()
+        .flat_map(|b| {
+            let column = b.column(0).as_string::<i32>();
+            assert!(*column.offsets().last().unwrap() <= capacity);
+            column
+                .iter()
+                .map(|v| v.map(str::to_owned))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[test]
+fn decoded_runs_and_dictionaries_past_the_offset_capacity_split_between_rows() {
+    // Small utf8 values, whose decoded rows would pass the capacity: the
+    // admitted type is the values' own, so only the check before `take`
+    // sees it.
+    let values = StringArray::from(vec![Some("aaaa"), Some("bb"), None]);
+    let runs = RunArray::<Int32Type>::try_new(&Int32Array::from(vec![3, 4, 6]), &values).unwrap();
+    let out = admit_with_capacity(&nullable(Arc::new(runs)), 9).unwrap();
+    let read = split_strings(&out, 9);
+    let expected = ["aaaa", "aaaa", "aaaa", "bb"]
+        .map(|v| Some(v.to_owned()))
+        .into_iter()
+        .chain([None, None])
+        .collect::<Vec<_>>();
+    assert_eq!(read, expected);
+
+    // A dictionary of text stays a dictionary; one of bytes is decoded.
+    let bytes: DictionaryArray<Int8Type> = DictionaryArray::try_new(
+        Int8Array::from(vec![Some(0), None, Some(0), Some(1), Some(0)]),
+        Arc::new(BinaryArray::from(vec![&b"aaaa"[..], &b"bbbb"[..]])),
+    )
+    .unwrap();
+    let out = admit_with_capacity(&nullable(Arc::new(bytes)), 9).unwrap();
+    assert!(out.batches.len() > 1);
+    let mut read = Vec::new();
+    for batch in &out.batches {
+        let column = batch.column(0).as_binary::<i32>();
+        assert!(*column.offsets().last().unwrap() <= 9);
+        read.extend(column.iter().map(|v| v.map(<[u8]>::to_vec)));
+    }
+    let a = Some(b"aaaa".to_vec());
+    assert_eq!(
+        read,
+        [a.clone(), None, a.clone(), Some(b"bbbb".to_vec()), a]
+    );
+
+    // A list's text inside the runs counts too.
+    let lists = ListArray::try_new(
+        Arc::new(Field::new("item", DataType::Utf8, true)),
+        OffsetBuffer::new(ScalarBuffer::from(vec![0, 2])),
+        Arc::new(StringArray::from(vec!["aaaa", "bbbb"])),
+        None,
+    )
+    .unwrap();
+    let runs = RunArray::<Int16Type>::try_new(&Int16Array::from(vec![2]), &lists).unwrap();
+    let out = admit_with_capacity(&nullable(Arc::new(runs)), 9).unwrap();
+    assert_eq!(out.batches.len(), 2);
+    for batch in &out.batches {
+        let list = batch.column(0).as_list::<i32>();
+        assert_eq!(
+            list.value(0).as_string::<i32>().iter().collect::<Vec<_>>(),
+            [Some("aaaa"), Some("bbbb")]
+        );
+    }
+}
+
+#[test]
+fn a_single_decoded_value_past_the_offset_capacity_is_refused_by_name() {
+    let values = StringArray::from(vec!["far too long"]);
+    let runs = RunArray::<Int64Type>::try_new(&Int64Array::from(vec![2]), &values).unwrap();
+    let received = runs.data_type().clone();
+    let err = admit_with_capacity(&nullable(Arc::new(runs)), 9).unwrap_err();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::ValueOutOfRange)
+    );
+    assert_eq!(text(&err, "column"), "c");
+    assert_eq!(text(&err, "arrow_type"), received.to_string());
+    let bytes: DictionaryArray<Int8Type> = DictionaryArray::try_new(
+        Int8Array::from(vec![0]),
+        Arc::new(BinaryArray::from(vec![&b"far too long"[..]])),
+    )
+    .unwrap();
+    let received = bytes.data_type().clone();
+    let err = admit_with_capacity(&nullable(Arc::new(bytes)), 9).unwrap_err();
+    assert_eq!(err.code, ErrorCode::ValueOutOfRange);
+    assert_eq!(text(&err, "arrow_type"), received.to_string());
 }
