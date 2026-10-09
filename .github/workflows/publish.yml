@@ -21,8 +21,11 @@
 # `publish` is the only job that can reach the publishing identity, because it
 # is the only one with `id-token: write`. `build` has `contents: read` to check
 # the tree out and `actions: read` to ask whether CI passed, and nothing more,
-# so a compromised build dependency cannot publish. `verify` and `attach-sbom`
-# run after the upload and need neither.
+# so a compromised build dependency cannot upload anything itself. It can still
+# decide what the privileged job uploads, because it is what produces the
+# distributions; the split limits who holds the credential, not what gets built.
+# `verify` adds no permission. `attach-sbom` has `contents: write`, which is
+# what lets it create the GitHub Release and attach the inventory to it.
 name: publish
 
 on:
@@ -230,20 +233,26 @@ jobs:
       - name: Keep only the distributions
         run: rm -f dist/sbom.cyclonedx.json dist/notes.md
 
-      # The one piece of the release that cannot be pinned from here. This
-      # action is pinned by commit, but it generates a Docker action whose
-      # image is `ghcr.io/pypa/gh-action-pypi-publish:<the pinned sha>`, and a
-      # GHCR tag is mutable however it is named. There is no input to pull it
-      # by digest, so repointing that tag would change the code that runs in
-      # the job holding `id-token: write`. The trust boundary is therefore the
-      # pypa organization, not just the commit above. Writing the upload by
+      # The mutable layer inside the pinned action. This action is pinned by
+      # commit, but it generates a Docker action whose image is
+      # `ghcr.io/pypa/gh-action-pypi-publish:<the pinned sha>`, and a GHCR tag
+      # is mutable however it is named. There is no input to pull it by digest,
+      # so short of forking the action there is no supported way to pin it, and
+      # repointing that tag would change the code that runs in the job holding
+      # `id-token: write`. The trust boundary for the upload is therefore the
+      # pypa organization, not just the commit below. Writing the upload by
       # hand to avoid it would put less-reviewed code in the same place, which
-      # is the worse trade, and there is no supported way to pin the digest
-      # without forking the action. Recorded here so nobody reads the digests
-      # above and concludes that everything the release executes is immutable.
-      # What this does not leave unguarded is the bytes: the `verify` job below
-      # checks what PyPI attested against the artifacts `build` produced, so an
-      # image that altered a distribution on its way to the index fails there.
+      # is the worse trade.
+      #
+      # It is not the only mutable thing the release runs: `ubuntu-latest` is
+      # reimaged on its own schedule, and the build installs `build`, `twine`
+      # and `cyclonedx-bom` from PyPI at release time. Pinning every `uses:`
+      # does not make a release hermetic and is not claimed to.
+      #
+      # What this one does not leave unguarded is the bytes of the files it is
+      # given: `verify` below checks what PyPI attested against the artifacts
+      # `build` produced, so an image that altered one of them on its way to
+      # the index fails there.
       - name: Publish with Trusted Publishing and attest the artifacts
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
@@ -258,12 +267,19 @@ jobs:
   #
   # It checks the files `build` produced, not copies fetched back from PyPI.
   # The verifier takes either, and the difference matters here: the provenance
-  # always comes from PyPI, so handing it the local artifact asks whether what
-  # PyPI attested is byte-for-byte what this workflow built. Handing it
+  # always comes from PyPI, so handing it the local artifact asks whether each
+  # file this workflow built is byte-for-byte what PyPI attested. Handing it
   # `pypi:<name>` would download the attested file and compare it against its
   # own attestation, which passes by construction even if the upload step
-  # swapped the bytes. That is the one risk the step below the publish action
-  # describes, so this is where it gets caught.
+  # swapped the bytes.
+  #
+  # The question it does not ask is whether PyPI holds anything else. It walks
+  # the artifacts this build produced, not the release's file list on the
+  # index, so an upload that published all of them faithfully and added a
+  # sixth file would pass here. Catching that means diffing the index's file
+  # set against a build manifest, which is a network call that can fail a
+  # release for reasons that are not about signatures; the residual is named
+  # rather than guarded.
   #
   # What it establishes is still narrower than it looks, and the prose
   # elsewhere is written to match: a PEP 740 attestation proves these exact

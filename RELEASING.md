@@ -97,9 +97,11 @@ on a green `publish` means the files are on PyPI and something about their
 attestations needs looking at, not that the release did not happen.
 
 It checks the artifacts the build produced against the provenance PyPI
-serves, which is the stronger direction: it answers whether what reached the
-index is byte-for-byte what was built here. SECURITY.md's "Verifying a
-release" section is the same command written for a consumer, who starts from
+serves, which is the stronger direction: for each file this workflow built, it
+answers whether PyPI attested those exact bytes. It does not compare the
+index's file list against the build, so it would not notice an upload that
+published all of them faithfully and added one more. SECURITY.md's "Verifying
+a release" section is the same command written for a consumer, who starts from
 the file they downloaded instead.
 
 ## Yanking
