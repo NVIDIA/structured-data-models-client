@@ -17,7 +17,7 @@ A row changes with the dependency, in the same commit.
 | `half` | 2 | `sdm-host` tests only | Use a library | Builds the `float16` values the widening tests admit; Arrow's own `f16` type |
 | `chrono` | 0.4 (transitive) | none directly | Not used | Only Arrow's own dependency; first-party code uses `jiff` (A7) |
 | `chrono-tz` | none | none | Banned | Expands rules only to 2099 and embeds its database at build time, so it fails DT-1 and DT-2 (T0.6); `cargo-deny` refuses it |
-| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | 1 | contract, host, `sdm-testkit` (cases and observations), later all | Use a library | Control messages are versioned JSON (plan section 3) |
+| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`; `raw_value` in `sdm-testkit`) | 1 | contract, host, `sdm-testkit` (cases and observations), later all | Use a library | Control messages are versioned JSON (plan section 3); `raw_value` lets the case loader keep an entity key's integer literal of any size as its digits, never through a double, and only adds `RawValue` |
 | `schemars` | 1 | contract | Use a library | Generates the committed JSON Schema from the serde types, so the schema cannot drift from the code |
 | `thiserror` | 2 | first-party crates | Use a library | Typed errors; `anyhow` stays out of first-party crates other than `sdm-testkit` |
 | `indexmap` | 2 | where output order matters | Use a library | Insertion order for anything that reaches an output; `HashMap` iteration is banned there |
