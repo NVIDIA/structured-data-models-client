@@ -6,9 +6,11 @@
 //! `schema.utils`: types, units, problem types, aggregations and operators.
 //! Each is written as Python writes its value.
 
+// Only documentation passes through: an attribute taken whole (`$doc:meta`)
+// could be an `allow` of a clippy ban, which l0_scan.py refuses.
 macro_rules! str_enum {
-    ($(#[$doc:meta])* $name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
-        $(#[$doc])*
+    ($(#[doc = $doc:literal])* $name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
+        $(#[doc = $doc])*
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum $name {
             $($variant),+
