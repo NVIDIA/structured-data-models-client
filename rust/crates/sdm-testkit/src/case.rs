@@ -11,8 +11,10 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer};
 use serde_json::Value;
+use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
 /// The case format this loader reads.
@@ -103,13 +105,40 @@ pub struct Materialize {
     pub anchor_time: Option<String>,
 }
 
-/// One entity key: an integer of either sign's range, or text.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
+/// One entity key: a JSON integer literal of any size, kept as its
+/// digits, or text. A number with a fraction or an exponent, `1.0`
+/// included, is refused, as the Python loader refuses it; nothing passes
+/// through a double.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Index {
-    Signed(i64),
-    Unsigned(u64),
+    Integer(String),
     Text(String),
+}
+
+/// Whether `text` is a JSON integer literal: `-?(0|[1-9][0-9]*)`.
+fn is_integer_literal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    !digits.is_empty()
+        && digits.bytes().all(|byte| byte.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'))
+}
+
+impl<'de> Deserialize<'de> for Index {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Index, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let text = raw.get().trim();
+        if text.starts_with('"') {
+            serde_json::from_str(text)
+                .map(Index::Text)
+                .map_err(D::Error::custom)
+        } else if is_integer_literal(text) {
+            Ok(Index::Integer(text.to_string()))
+        } else {
+            Err(D::Error::custom(
+                "an index is a JSON integer literal or a string",
+            ))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]

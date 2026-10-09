@@ -18,7 +18,9 @@ sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
 duckdb.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# raw_value, to read an entity key's integer literal of any size as its
+# digits; it only adds `RawValue`, changing no other reading.
+serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the

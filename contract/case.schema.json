@@ -105,7 +105,7 @@
       }
     },
     "materialize": {
-      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text).",
+      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text). An index is a JSON integer literal of any size, read without loss, or a string; both case loaders refuse a number written with a fraction or an exponent, 1.0 included, which JSON Schema alone would count as an integer.",
       "type": "object",
       "additionalProperties": false,
       "required": ["indices"],

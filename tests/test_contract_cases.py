@@ -19,6 +19,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -312,3 +313,37 @@ def test_python_cores_answer_is_held_to_its_own_outcome(
         's0.refuse.unknown-column: python-core: outcome against core: '
         "expected ('success', None), observed ('refusal', 'INVALID_REQUEST')"
     ) in run.stdout
+
+
+def test_an_index_is_an_integer_literal_of_any_size_or_text(
+    tmp_path: Path,
+) -> None:
+    # The same literals sdm-testkit's tests/s0_cases.rs reads.
+    literals = json.loads(
+        (ROOT / 'contract/tests/index_literals.json').read_text()
+    )
+    case = json.loads((CASES / 's0/s0.accept.sum-window.json').read_text())
+    case['input']['materialize']['indices'] = ['@index@']
+    template = json.dumps(case)
+
+    def load(literal: str) -> Any:
+        path = tmp_path / 'case.json'
+        path.write_text(template.replace('"@index@"', literal))
+        [(loaded, _)] = run_python.load_cases([path])
+        return loaded
+
+    for literal in literals['accepted']:
+        loaded = load(literal)
+        [index] = loaded['input']['materialize']['indices']
+        assert index == json.loads(literal), literal
+        assert type(index) is type(json.loads(literal))
+        # As a decimal index, every digit is kept.
+        loaded['input']['materialize']['indices_as'] = 'decimal'
+        if isinstance(index, int):
+            [decimal] = run_python._materialize_arguments(
+                loaded['input']['materialize']
+            )['indices']
+            assert decimal == Decimal(literal) and str(decimal) == literal
+    for literal in literals['refused']:
+        with pytest.raises(run_python.RunnerFailure):
+            load(literal)

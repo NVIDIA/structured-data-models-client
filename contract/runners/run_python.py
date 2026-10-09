@@ -112,6 +112,19 @@ def _invalid(validate: Any, document: Any) -> str | None:
     return f'{where} fails {error.validator!r}'
 
 
+def _indices(given: dict[str, Any]) -> str | None:
+    r"""An entity key is a JSON integer literal of any size, or a string.
+
+    JSON Schema counts ``1.0`` as an integer; ``json`` reads it as a float,
+    and a bool is no index either, so the type read is checked too, as
+    sdm-testkit's loader refuses any number with a fraction or exponent.
+    """
+    for position, value in enumerate(given['materialize']['indices']):
+        if type(value) not in (int, str):
+            return f'input/materialize/indices/{position} is not an integer'
+    return None
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -135,7 +148,7 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
     for path in case_files(paths):
         data = path.read_bytes()
         case = json.loads(data)
-        problem = _invalid(validate, case)
+        problem = _invalid(validate, case) or _indices(case['input'])
         if problem is not None:
             raise RunnerFailure(f'{path.name}: not a case: {problem}')
         if case['id'] in seen:
@@ -190,6 +203,10 @@ def load_inventory(path: Path = INVENTORY) -> dict[str, Any]:
     problem = _invalid(validator('inventory'), inventory)
     if problem is not None:
         raise RunnerFailure(f'{path.name}: not the inventory: {problem}')
+    for entry in inventory['cases']:
+        problem = _indices(entry) if 'materialize' in entry else None
+        if problem is not None:
+            raise RunnerFailure(f'{path.name}: {entry["id"]}: {problem}')
     ids = [entry['id'] for entry in inventory['cases']]
     if len(ids) != len(set(ids)):
         raise RunnerFailure(f'{path.name}: a case id repeats')

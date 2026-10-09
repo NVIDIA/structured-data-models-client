@@ -137,3 +137,45 @@ fn a_case_without_a_core_operation_is_this_hosts_failure() {
     case.core = None;
     assert!(host::run(&case).is_err());
 }
+
+/// `contract/tests/index_literals.json`, which the Python loader's tests
+/// read too.
+fn index_literals() -> serde_json::Value {
+    let path = cases_dir().join("../tests/index_literals.json");
+    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+}
+
+/// The accepted case with `literal` as its one index, written as is.
+fn with_index(name: &str, literal: &str) -> Result<case::Index, String> {
+    let mut case = accepted();
+    case["input"]["materialize"]["indices"] = serde_json::json!(["@index@"]);
+    let text = serde_json::to_string(&case)
+        .unwrap()
+        .replace("\"@index@\"", literal);
+    let directory = scratch(name);
+    let path = directory.join("case.json");
+    std::fs::write(&path, text).unwrap();
+    let loaded = case::load(&[path]);
+    std::fs::remove_dir_all(&directory).unwrap();
+    loaded
+        .map(|mut loaded| loaded.remove(0).case.input.materialize.indices.remove(0))
+        .map_err(|error| error.to_string())
+}
+
+#[test]
+fn an_index_is_an_integer_literal_of_any_size_or_text() {
+    let literals = index_literals();
+    for literal in literals["accepted"].as_array().unwrap() {
+        let literal = literal.as_str().unwrap();
+        let index = with_index("index-accepted", literal).unwrap();
+        let expected = match serde_json::from_str::<serde_json::Value>(literal) {
+            Ok(serde_json::Value::String(text)) => case::Index::Text(text),
+            _ => case::Index::Integer(literal.to_string()),
+        };
+        assert_eq!(index, expected, "{literal}");
+    }
+    for literal in literals["refused"].as_array().unwrap() {
+        let literal = literal.as_str().unwrap();
+        assert!(with_index("index-refused", literal).is_err(), "{literal}");
+    }
+}
