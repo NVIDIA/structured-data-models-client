@@ -7,12 +7,18 @@ these packages. All five distributions share one version and one entry.
 
 ## Unreleased
 
+### Changed
+
+- The Databricks example notebook is now a get-started notebook,
+  `examples/databricks/kumo_relational_quickstart.ipynb`, in place of
+  `adventureworks_relational.ipynb`. It deploys the model to a serving
+  endpoint, loads the AdventureWorks sample tables into your schema, and
+  checks each prediction against what actually happened.
+
 ### Fixed
 
 - A Databricks metric view name may hold a part SQL reads only quoted, such as
   the catalog in `my-catalog.sales.metrics`, without backticks.
-- The AdventureWorks Databricks notebook no longer raises `NameError` when a
-  metric view is set.
 
 ## 1.0.0 - 2026-10-08
 
