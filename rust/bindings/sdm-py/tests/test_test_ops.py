@@ -150,6 +150,67 @@ def test_a_second_call_while_one_is_in_the_run_is_refused_as_busy() -> None:
     assert len(first) == 1
 
 
+def _with_handler(handler: logging.Handler) -> logging.Logger:
+    logger = logging.getLogger('sdm_core.test_ops')
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    _native.reset_log_cache()
+    return logger
+
+
+def test_a_handler_that_raises_is_reported_and_the_answer_delivered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # pyo3-log leaves a handler's exception pending; the binding reports it
+    # through sys.unraisablehook, as logging reports a handler's failure,
+    # and still returns the step the run gave.
+    reported: list[BaseException | None] = []
+    monkeypatch.setattr(
+        sys, 'unraisablehook', lambda hook: reported.append(hook.exc_value)
+    )
+
+    class Raising(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            raise RuntimeError(CANARY)
+
+    handler = Raising()
+    logger = _with_handler(handler)
+    try:
+        run = _native.Run.start(
+            messages.operation_for_tests('log', hold_ms=0), {}
+        )
+        done = messages.read(run.next()[0])
+    finally:
+        logger.removeHandler(handler)
+    assert done['result'] == {'op': 'test', 'rows': 0}
+    assert len(reported) == 1
+    assert isinstance(reported[0], RuntimeError)
+    with pytest.raises(_native.CoreError) as finished:
+        run.next()
+    assert finished.value.code == 'RUN_FINISHED'
+
+
+def test_a_handler_that_calls_into_its_own_run_is_refused_as_busy() -> None:
+    codes: list[str] = []
+    run = _native.Run.start(messages.operation_for_tests('log', hold_ms=0), {})
+
+    class Reentering(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            try:
+                run.next()
+            except _native.CoreError as refused:
+                codes.append(refused.code)
+
+    handler = Reentering()
+    logger = _with_handler(handler)
+    try:
+        done = messages.read(run.next()[0])
+    finally:
+        logger.removeHandler(handler)
+    assert codes == ['RUN_BUSY']
+    assert done['step'] == 'done'
+
+
 def test_a_forced_abort_is_reported_and_never_recovered() -> None:
     result = _child(
         """

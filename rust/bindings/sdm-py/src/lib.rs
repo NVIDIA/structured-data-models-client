@@ -59,6 +59,23 @@ fn logging(py: Python<'_>) -> Option<&pyo3_log::ResetHandle> {
         .as_ref()
 }
 
+/// Runs a core call with the GIL released. The logging bridge calls
+/// Python's `logging` from inside it, and pyo3-log leaves an exception a
+/// handler raised set in the thread's error indicator rather than
+/// returning it; one left there would make this call's own answer fail
+/// as Python's `SystemError` after the run had already moved on. So a
+/// handler's exception is reported as `logging` reports its own handler
+/// failures, through `sys.unraisablehook`, and the call's answer is
+/// delivered. The exception is the handler's, not the core's, and holds
+/// nothing the core wrote but the event.
+fn core_call<T: Send>(py: Python<'_>, call: impl FnOnce() -> T + Send) -> T {
+    let answer = py.detach(call);
+    if let Some(raised) = PyErr::take(py) {
+        raised.write_unraisable(py, None);
+    }
+    answer
+}
+
 /// Forgets the logger levels the bridge has cached, so a change to the
 /// `logging` configuration takes effect; the Python host calls it at each
 /// run start (decision H8). Before the first core call there is no cache.
@@ -263,15 +280,17 @@ impl Run {
             }
         };
         let message = message.to_vec();
-        py.detach(|| HostRun::start(&CompositionRoot::default(), &message, attachments))
-            .map(|run| Run { run })
-            .map_err(|out| core_error(py, out))
+        core_call(py, || {
+            HostRun::start(&CompositionRoot::default(), &message, attachments)
+        })
+        .map(|run| Run { run })
+        .map_err(|out| core_error(py, out))
     }
 
     /// The run's next step, as `(control, attachments)`.
     fn next(&self, py: Python<'_>) -> PyResult<(Py<PyBytes>, Py<PyDict>)> {
         logging(py);
-        match py.detach(|| self.run.next()) {
+        match core_call(py, || self.run.next()) {
             Ok(out) => outgoing(py, out),
             Err(out) => Err(core_error(py, out)),
         }
@@ -288,12 +307,12 @@ impl Run {
         logging(py);
         let message = message.to_vec();
         let result = match attachments_from_python(attachments) {
-            Ok(attachments) => py.detach(|| self.run.reply(&message, attachments)),
+            Ok(attachments) => core_call(py, || self.run.reply(&message, attachments)),
             Err(Unread::Python(error)) => return Err(error),
             // An Arrow attachment that could not be read still ends the
             // fetch it answers, as sdm-host decides (decision H16).
             Err(Unread::Arrow(id, failure)) => {
-                py.detach(|| self.run.reply_unreadable(&message, id, failure))
+                core_call(py, || self.run.reply_unreadable(&message, id, failure))
             }
         };
         result.map_err(|out| core_error(py, out))
@@ -302,15 +321,14 @@ impl Run {
     /// Cancels the run; its attachments are released.
     fn cancel(&self, py: Python<'_>) -> PyResult<()> {
         logging(py);
-        py.detach(|| self.run.cancel())
-            .map_err(|out| core_error(py, out))
+        core_call(py, || self.run.cancel()).map_err(|out| core_error(py, out))
     }
 
     /// Takes an attachment the run made and a step named: `bytes`, an
     /// [`ArrowStream`], or `None` when the run holds no such id.
     fn take_attachment(&self, py: Python<'_>, id: u32) -> PyResult<Option<Py<PyAny>>> {
         logging(py);
-        match py.detach(|| self.run.take_attachment(AttachmentId(id))) {
+        match core_call(py, || self.run.take_attachment(AttachmentId(id))) {
             Ok(Some(attachment)) => to_python(py, attachment).map(Some),
             Ok(None) => Ok(None),
             Err(out) => Err(core_error(py, out)),
@@ -321,7 +339,7 @@ impl Run {
     /// `(control, attachments)`, or `None` when there are none.
     fn take_warnings(&self, py: Python<'_>) -> PyResult<Option<(Py<PyBytes>, Py<PyDict>)>> {
         logging(py);
-        match py.detach(|| self.run.take_warnings()) {
+        match core_call(py, || self.run.take_warnings()) {
             Ok(Some(out)) => outgoing(py, out).map(Some),
             Ok(None) => Ok(None),
             Err(out) => Err(core_error(py, out)),
