@@ -21,12 +21,13 @@ use arrow_array::types::{
 };
 use arrow_array::{
     Array, ArrayRef, BinaryArray, BinaryViewArray, Date64Array, Decimal32Array, Decimal64Array,
-    DictionaryArray, DurationMillisecondArray, DurationSecondArray, Float16Array, Int8Array,
-    Int16Array, Int32Array, Int64Array, LargeListArray, LargeStringArray, ListArray, RecordBatch,
-    RunArray, StringArray, StringViewArray, Time32MillisecondArray, Time32SecondArray,
+    DictionaryArray, DurationMillisecondArray, DurationSecondArray, FixedSizeListArray,
+    Float16Array, Int8Array, Int16Array, Int32Array, Int64Array, LargeListArray, LargeStringArray,
+    ListArray, RecordBatch, RunArray, StringArray, StringViewArray, StructArray,
+    Time32MillisecondArray, Time32SecondArray,
 };
 use arrow_buffer::{OffsetBuffer, ScalarBuffer};
-use arrow_schema::{DataType, Field, TimeUnit};
+use arrow_schema::{DataType, Field, Fields, TimeUnit};
 use half::f16;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_core::ArrowData;
@@ -439,4 +440,88 @@ fn a_single_decoded_value_past_the_offset_capacity_is_refused_by_name() {
     let err = admit_with_capacity(&nullable(Arc::new(bytes)), 9).unwrap_err();
     assert_eq!(err.code, ErrorCode::ValueOutOfRange);
     assert_eq!(text(&err, "arrow_type"), received.to_string());
+}
+
+/// `values` in runs [1, 4] (slot 0 once, slot 1 three times), admitted at
+/// capacity 9: split between rows, every value and null kept.
+fn split_runs_of(values: &dyn Array) -> ArrowData {
+    let runs = RunArray::<Int32Type>::try_new(&Int32Array::from(vec![1, 4]), values).unwrap();
+    let out = admit_with_capacity(&nullable(Arc::new(runs)), 9).unwrap();
+    assert!(out.batches.len() > 1, "{}: split", values.data_type());
+    let validity: Vec<bool> = out
+        .batches
+        .iter()
+        .flat_map(|b| {
+            (0..b.num_rows())
+                .map(|row| b.column(0).is_valid(row))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        validity,
+        [true, false, false, false],
+        "{}",
+        values.data_type()
+    );
+    out
+}
+
+/// The utf8 bytes an admitted column holds, through structs and lists.
+fn utf8_bytes(array: &dyn Array) -> i32 {
+    match array.data_type() {
+        DataType::Utf8 => {
+            let offsets = array.as_string::<i32>().offsets();
+            offsets.last().unwrap() - offsets[0]
+        }
+        DataType::Struct(_) => array
+            .as_struct()
+            .columns()
+            .iter()
+            .map(|c| utf8_bytes(c.as_ref()))
+            .sum(),
+        DataType::List(_) => utf8_bytes(array.as_list::<i32>().values().as_ref()),
+        DataType::FixedSizeList(..) => utf8_bytes(array.as_fixed_size_list().values().as_ref()),
+        _ => 0,
+    }
+}
+
+#[test]
+fn a_null_struct_or_fixed_size_list_slot_counts_its_children_when_decoded() {
+    // `take` copies the children under a null struct or fixed-size list
+    // slot, so their bytes count toward the capacity.
+    let text = || -> ArrayRef { Arc::new(StringArray::from(vec!["a", "bbbbbbbb"])) };
+    let nulls = || Some(arrow_buffer::NullBuffer::from(vec![true, false]));
+    let record = StructArray::try_new(
+        Fields::from(vec![Field::new("s", DataType::Utf8, true)]),
+        vec![text()],
+        nulls(),
+    )
+    .unwrap();
+    let fixed = FixedSizeListArray::try_new(
+        Arc::new(Field::new("item", DataType::Utf8, true)),
+        1,
+        text(),
+        nulls(),
+    )
+    .unwrap();
+    let list = ListArray::try_new(
+        Arc::new(Field::new("item", DataType::Utf8, true)),
+        OffsetBuffer::new(ScalarBuffer::from(vec![0, 1, 2])),
+        text(),
+        None,
+    )
+    .unwrap();
+    let listed = StructArray::try_new(
+        Fields::from(vec![Field::new("l", list.data_type().clone(), true)]),
+        vec![Arc::new(list)],
+        nulls(),
+    )
+    .unwrap();
+    for values in [&record as &dyn Array, &fixed, &listed] {
+        let out = split_runs_of(values);
+        for batch in &out.batches {
+            let bytes = utf8_bytes(batch.column(0).as_ref());
+            assert!(bytes <= 9, "{}: {bytes} bytes", values.data_type());
+        }
+    }
 }

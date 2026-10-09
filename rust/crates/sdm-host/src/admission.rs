@@ -326,6 +326,9 @@ fn tally(
         *level += 1;
         Some(())
     }
+    // Below the top level a null value's bytes count too: `take` skips
+    // them in a struct's string child but not where it copies ranges, and
+    // counting too much only splits sooner.
     match array.data_type() {
         DataType::Utf8 => {
             let offsets = array.as_string::<i32>().value_offsets();
@@ -371,10 +374,10 @@ fn tally(
 
 /// A failed `take`: values past int32 offsets are `past`, which a split
 /// between rows may cure; anything else is internal.
-fn taken(error: arrow_schema::ArrowError, past: Fail) -> Fail {
+fn taken(column: &str, error: arrow_schema::ArrowError, past: Fail) -> Fail {
     match error {
         arrow_schema::ArrowError::OffsetOverflowError(_) => past,
-        other => Fail::Refused(internal("", &other)),
+        other => Fail::Refused(internal(column, &other)),
     }
 }
 
@@ -717,7 +720,7 @@ impl Admit {
                     return Err(past());
                 }
                 let decoded = arrow_select::take::take(values.as_ref(), keys, None)
-                    .map_err(|e| taken(e, past()))?;
+                    .map_err(|e| taken(column, e, past()))?;
                 self.array(column, &decoded, admitted)?
             }
             (DataType::RunEndEncoded(run_ends, _), _) => {
@@ -745,7 +748,7 @@ impl Admit {
                     .flat_map(|(physical, rows)| std::iter::repeat_n(physical, rows))
                     .collect::<UInt64Array>();
                 let decoded = arrow_select::take::take(values.as_ref(), &indices, None)
-                    .map_err(|e| taken(e, past()))?;
+                    .map_err(|e| taken(column, e, past()))?;
                 self.array(column, &decoded, admitted)?
             }
             _ => {
@@ -758,13 +761,22 @@ impl Admit {
 
     /// Whether taking `values` at `picks`, each a physical index and how
     /// many rows repeat it, keeps every level with int32 offsets within the
-    /// capacity; checked before `take` builds anything. A null value takes
-    /// nothing.
+    /// capacity; checked before `take` builds anything. A null string,
+    /// binary, list or map value takes nothing; `take` copies a null struct
+    /// or fixed-size list slot's children all the same, so they count.
     fn fits_taken(&self, values: &ArrayRef, picks: &[(usize, usize)]) -> bool {
+        let skips_nulls = matches!(
+            values.data_type(),
+            DataType::Utf8
+                | DataType::Binary
+                | DataType::List(_)
+                | DataType::LargeList(_)
+                | DataType::Map(..)
+        );
         let mut totals = Vec::new();
         picks
             .iter()
-            .filter(|(physical, _)| values.is_valid(*physical))
+            .filter(|(physical, _)| !skips_nulls || values.is_valid(*physical))
             .try_for_each(|(physical, rows)| {
                 let range = (*physical, physical.checked_add(1)?);
                 tally(values.as_ref(), range, *rows, &mut totals, &mut 0)
