@@ -18,9 +18,10 @@ shipped (design, "Packaging"). Either way it:
   (decision F7);
 - with `--manylinux`, reads the wheel with `auditwheel show` and fails unless
   it is manylinux2014 (`manylinux_2_17`) or older;
-- writes beside the wheel `<wheel>.json`, its identity: SHA-256, commit,
-  features, toolchain, maturin version and the target flags, which a runner
-  records as the identity of the build it ran.
+- writes beside the wheel `<wheel>.json`, its identity: the SHA-256 of the
+  wheel and of the extension module in it, commit, features, toolchain,
+  maturin version and the target flags, which a runner records as the
+  identity of the build it ran.
 
     scripts/rust_core/native_wheel.py --out DIR [--test-ops] [--manylinux]
 
@@ -39,6 +40,7 @@ import re
 import shlex
 import subprocess
 import sys
+import zipfile
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 CLIENT = REPO / 'packages/structured-data-models-client'
@@ -121,6 +123,37 @@ def _rustc_flags(log: str) -> list[str]:
     return flags
 
 
+def target_cpu_refusal(
+    environment: dict[str, str], configs: dict[str, str], flags: list[str]
+) -> str | None:
+    """Why the build's target flags are refused, or `None`: a build log
+    with no rustc invocation read from it, or `target-cpu` set anywhere,
+    which ties the wheel to the build machine's processor (decision F7)."""
+    if not any(flag.startswith('-C opt-level') for flag in flags):
+        return 'no rustc invocation was read from the build log'
+    sources = [*environment.values(), *configs.values(), *flags]
+    if any('target-cpu' in text for text in sources):
+        return (
+            'a target-cpu flag is set, which ties the wheel to the build '
+            f"machine's processor (decision F7): {environment} {flags}"
+        )
+    return None
+
+
+def _native_sha256(wheel: pathlib.Path) -> str:
+    """The SHA-256 of the extension module inside the wheel: unlike the
+    wheel's, it is the same for every build of one commit, since maturin's
+    SBOM in the wheel carries a serial number and a timestamp."""
+    with zipfile.ZipFile(wheel) as archive:
+        (name,) = [
+            n
+            for n in archive.namelist()
+            if n.startswith('sdm_client/_native')
+            and n.endswith(('.so', '.pyd'))
+        ]
+        return hashlib.sha256(archive.read(name)).hexdigest()
+
+
 def _manylinux(wheel: pathlib.Path) -> str:
     """`auditwheel show`'s reading of the wheel; fails past manylinux2014."""
     shown = _run('auditwheel', 'show', str(wheel))
@@ -191,18 +224,14 @@ def main() -> int:
     wheel = built[0]
 
     flags = _rustc_flags(log)
-    if not any(flag.startswith('-C opt-level') for flag in flags):
-        sys.exit('no rustc invocation was read from the build log')
-    sources = [*environment.values(), *configs.values(), *flags]
-    if any('target-cpu' in text for text in sources):
-        sys.exit(
-            'a target-cpu flag is set, which ties the wheel to the build '
-            f"machine's processor (decision F7): {environment} {flags}"
-        )
+    refusal = target_cpu_refusal(environment, configs, flags)
+    if refusal:
+        sys.exit(refusal)
 
     identity = {
         'wheel': wheel.name,
         'sha256': hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        'native_sha256': _native_sha256(wheel),
         'commit': _run('git', 'rev-parse', 'HEAD', cwd=REPO).strip(),
         # A build from a tree with changes is not the commit's build.
         'tree_clean': not _run(

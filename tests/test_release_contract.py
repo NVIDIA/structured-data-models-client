@@ -1215,7 +1215,23 @@ class TestDistributionCoherence:
                 ]
                 if not lower or max(lower) < floor:
                     wrong.append(f'{name}: {text} (floor {floor})')
-        assert len(named) >= 9, named
+        # Every place one is named, so a requirement that moves or goes is
+        # seen here rather than passing for lack of anything to check.
+        assert sorted(named) == sorted(
+            [
+                'structured-data-models-client: pandas>=2.2',
+                'structured-data-models-client: numpy>=1.26',
+                'structured-data-models-client: pyarrow>=14.0.1',
+                'structured-data-models-connectors: pandas>=2.2',
+                'structured-data-models-connectors: pyarrow>=14.0.1',
+                'structured-data-models-pql: numpy>=1.26',
+                'structured-data-models-pql: pandas>=2.2',
+                'structured-data-models-relational-engine: numpy>=1.26,<2.0',
+                'structured-data-models-relational-engine: numpy>=1.26',
+                'structured-data-models-relational-engine: pandas>=2.2',
+                'structured-data-models-relational-engine: pyarrow>=14.0.1',
+            ]
+        ), named
         assert not wrong, 'below the supported floor:\n' + '\n'.join(wrong)
 
     def test_every_distribution_declares_the_same_licence(self):

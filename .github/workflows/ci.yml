@@ -138,8 +138,13 @@ jobs:
             -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
             -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
             "$MANYLINUX" bash -euo pipefail -c '
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+              # rustup-init 1.29.0, checked against its published SHA-256.
+              curl --proto "=https" --tlsv1.2 -sSf -o /tmp/home/rustup-init \
+                https://static.rust-lang.org/rustup/archive/1.29.0/x86_64-unknown-linux-gnu/rustup-init
+              echo "4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10  /tmp/home/rustup-init" \
+                | sha256sum -c -
+              chmod +x /tmp/home/rustup-init
+              /tmp/home/rustup-init -y --profile minimal --default-toolchain none --no-modify-path
               export PATH="$CARGO_HOME/bin:$PATH"
               (cd rust && rustup toolchain install)
               /opt/python/cp312-cp312/bin/python -m venv /tmp/home/maturin

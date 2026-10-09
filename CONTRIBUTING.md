@@ -42,7 +42,9 @@ python3.12 -m venv .venv
 On the Rust core's epic branch the client carries the core, the native module
 `sdm_client._native`, and builds with maturin: installing it, editable
 included, compiles `rust/bindings/sdm-py` and needs the Rust toolchain
-`rust/rust-toolchain.toml` pins. The binding's own tests run against an
+`rust/rust-toolchain.toml` pins. pip runs that build from the client's
+directory, where rustup does not see the pin, so set
+`RUSTUP_TOOLCHAIN=1.97.0` (the pinned channel) when installing it. The binding's own tests run against an
 installed build and say which one it is; those of the test-only operations
 need a build with them:
 
