@@ -65,12 +65,18 @@ jobs:
           workspaces: rust
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The binding with its test-only operations, as its tests build it.
+      - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
       # The contract schema: regenerated from the types and compared with the
       # committed file, locked to the current version; no entry merged into
       # rust-core rewritten, and at most one working entry, which is why this
       # job checks out every branch (for the merge base with rust-core).
       - run: cargo test -p sdm-contract --locked --test schema_lock
       - run: python3 scripts/rust_core/contract_lock.py
+        working-directory: .
+      # The client wheel's notices for the Rust crates it links, regenerated
+      # from Cargo.lock and compared with the committed file.
+      - run: python3 scripts/rust_core/rust_notices.py --check
         working-directory: .
 
   rust-deny:
@@ -99,21 +105,91 @@ jobs:
           workspaces: rust
       - run: cargo test --workspace --locked
 
+  # The client wheel, which carries the core as sdm_client._native (design,
+  # "Packaging"). maturin, at the version native_wheel.py pins, builds it in
+  # a manylinux2014 container run with docker rather than through an
+  # action: the x86_64 cp310-abi3 wheel that ships, and a second with the
+  # test-only operations for the binding's tests, which never leaves this
+  # job. native_wheel.py records each build's target flags and fails on
+  # target-cpu, and reads each with auditwheel show. The binding's tests
+  # then run on the host, at the E16 floor. Every job that installs the
+  # client takes it from this job's artifact.
+  native-wheel:
+    runs-on: ubuntu-latest
+    env:
+      MANYLINUX: quay.io/pypa/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+      # As the runner's user, so the cache can read rust/target afterwards,
+      # with the runner's crate registry, which the cache restores.
+      - name: Build the wheels in manylinux2014
+        run: |
+          mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
+            -v "$PWD:/io" -w /io \
+            -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
+            -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
+            "$MANYLINUX" bash -euo pipefail -c '
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+              export PATH="$CARGO_HOME/bin:$PATH"
+              (cd rust && rustup toolchain install)
+              /opt/python/cp312-cp312/bin/python -m venv /tmp/home/maturin
+              /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
+              export PATH="/tmp/home/maturin/bin:$PATH"
+              python scripts/rust_core/native_wheel.py --out native --manylinux
+              python scripts/rust_core/native_wheel.py --out native-test-ops --test-ops --manylinux
+            '
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      # The binding's tests, at the E16 floor: every file on the test-ops
+      # build, and the file any build passes on the wheel that ships.
+      - name: The binding's tests
+        run: |
+          floor="pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4"
+          for build in test-ops production; do
+            python -m venv "/tmp/$build"
+            wheel=$([ "$build" = test-ops ] && ls native-test-ops/*.whl || ls native/*.whl)
+            "/tmp/$build/bin/pip" install --quiet pytest $floor \
+              ./packages/structured-data-models-api ./packages/structured-data-models-pql "$wheel"
+          done
+          /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
+            -p no:cacheprovider --native-build test-ops
+          /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
+            -p no:cacheprovider --native-build production
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-wheel
+          path: native/
+
   typecheck:
     runs-on: ubuntu-latest
+    needs: native-wheel
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
       # The engine needs its runtime dependencies present to be checked at all,
       # and a toolchain to install. It ships py.typed exactly like the other
       # four, so leaving it out would make the gate narrower than the promise.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
       - run: pip install --upgrade pip mypy
+      # The client from the native wheel; its stub, _native.pyi, ships in it.
       - run: |
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
-            -e './packages/structured-data-models-client' \
+            "$(ls native/*.whl)" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
             -e './packages/structured-data-models-relational-engine'
       # Every session a source takes too, so each driver's types are its own
@@ -130,6 +206,7 @@ jobs:
   # reached a release through a promise nothing checked.
   test:
     runs-on: ubuntu-latest
+    needs: native-wheel
     strategy:
       fail-fast: false
       matrix:
@@ -156,13 +233,18 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
       # databricks is here for its driver, not for a server: those tests mock
       # the connection. Without the driver, importing the backend raises and
-      # every test covering it skips.
+      # every test covering it skips. The client is the native wheel's, the
+      # one abi3 build every interpreter here installs.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
-            -e './packages/structured-data-models-client[test]' \
+            "$(ls native/*.whl)[test]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
       - run: |
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
@@ -171,6 +253,7 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
+    needs: native-wheel
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
@@ -193,6 +276,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
       # ruff is here for the root suite, not for linting: the test that
       # checks the engine ignore-list note shells out to it and skips
@@ -217,7 +304,7 @@ jobs:
       # The client's suite again, with an engine present. The test job installs
       # none, so every client test that needs one skips there and runs nowhere.
       - run: |
-          pip install -e './packages/structured-data-models-client[test]'
+          pip install "$(ls native/*.whl)[test]"
           python -m pytest packages/structured-data-models-client/tests -q \
             -m 'not live_nim and not live_warehouse'
       # And the root suite, which holds the relational wire snapshots. They
@@ -227,6 +314,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    needs: native-wheel
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -237,12 +325,18 @@ jobs:
       # Each distribution builds in an isolated environment holding only the
       # build backend. That catches what no test can, because it fails before a
       # test could run: a version resolved by importing the package root cannot
-      # produce a wheel at all.
+      # produce a wheel at all. The client is the exception: it carries the
+      # core, so it is the wheel native-wheel built, taken as it is.
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
       - run: |
-          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors structured-data-models-relational-engine; do
+          for package in structured-data-models-api structured-data-models-pql structured-data-models-connectors structured-data-models-relational-engine; do
             echo "building $package"
             ( cd "packages/$package" && python -m build --wheel --outdir "$GITHUB_WORKSPACE/dist" . )
           done
+          cp native/*.whl dist/
       # Every distribution carries the one version they are released together
       # at, read from what was just built rather than written here.
       - run: |
@@ -312,6 +406,13 @@ jobs:
                   f'a downstream type checker ignores its annotations entirely'
               )
           print('four distributions imported from site-packages, all typed')
+
+          # The core is in the installed client, not merely in the checkout;
+          # found without importing it, which only a core route does.
+          import importlib.util
+          spec = importlib.util.find_spec('sdm_client._native')
+          assert spec and 'site-packages' in spec.origin, spec
+          print(f'the core ships in the client: {pathlib.Path(spec.origin).name}')
           EOF
       - working-directory: /tmp
         run: |
