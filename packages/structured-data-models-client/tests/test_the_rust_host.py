@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import ast
 import json
+import math
+import struct
 import warnings
 import zoneinfo
 from decimal import Decimal
@@ -31,6 +33,7 @@ from sdm_client.errors import StructuredDataError
 
 ROOT = Path(__file__).resolve().parents[3]
 EDGES = ROOT / 'rust/crates/sdm-contract/tests/scalar_edges.json'
+FLOATS = ROOT / 'rust/crates/sdm-contract/tests/float_text.json'
 STUB = (
     ROOT / 'packages/structured-data-models-client/src/sdm_client/_native.pyi'
 )
@@ -52,8 +55,11 @@ def test_every_scalar_edge_decodes_exactly() -> None:
             assert value.as_tuple().exponent == -edge['s']
             digits = edge['v'].lstrip('-')
             assert ''.join(map(str, value.as_tuple().digits)) == digits
-        elif edge['t'] in ('f32', 'f64') and edge['v'] not in ('NaN',):
+        elif edge['t'] == 'f64' and edge['v'] != 'NaN':
             assert value == float(edge['v'])
+        elif edge['t'] == 'f32' and edge['v'] != 'NaN':
+            width = struct.unpack('>f', struct.pack('>f', float(edge['v'])))
+            assert value == width[0]
         elif edge['t'] in ('ts', 'duration', 'time64', 'date32'):
             assert isinstance(value, codec.Temporal)
             assert value.value == int(edge['v'])
@@ -83,6 +89,26 @@ def test_a_scalar_the_contract_does_not_hold_is_refused_without_its_text(
     assert CANARY not in str(refused.value)
 
 
+def test_float_text_reads_at_its_width_as_the_core_reads_it() -> None:
+    # The vectors sdm-contract's float_text.rs checks the core against.
+    document = json.loads(FLOATS.read_text(encoding='utf-8'))
+    assert document['format'] == 'sdm-float-text/1'
+    for vector in document['vectors']:
+        scalar = {'t': vector['t'], 'v': vector['v']}
+        if vector.get('refused'):
+            with pytest.raises(codec.CodecError):
+                codec.decode_scalar(scalar)
+            continue
+        value = codec.decode_scalar(scalar)
+        if vector.get('nan'):
+            assert math.isnan(value), scalar
+            continue
+        width = '>f' if vector['t'] == 'f32' else '>d'
+        assert struct.pack(width, value).hex() == vector['bits'], scalar
+    # A float32 widens exactly: 0.1 read at its width is not the double 0.1.
+    assert codec.decode_scalar({'t': 'f32', 'v': '0.1'}) == 0.10000000149011612
+
+
 def test_the_encoder_writes_only_what_the_decoder_reads() -> None:
     written = codec.timestamp(-(2**63), 'us', 'UTC')
     assert codec.decode_scalar(written) == codec.Temporal(
@@ -92,6 +118,7 @@ def test_the_encoder_writes_only_what_the_decoder_reads() -> None:
         lambda: codec.timestamp(2**63, 'us', None),
         lambda: codec.timestamp(0, 'ms', None),
         lambda: codec.timestamp(0, 'us', ''),
+        lambda: codec.timestamp(0, 'us', 42),  # type: ignore[arg-type]
         lambda: codec.integer('u8', 256),
         lambda: codec.integer('i64', True),
     ]:
@@ -147,45 +174,85 @@ def test_zone_roots_follow_zoneinfo_s_order_with_their_versions(
     assert roots[: len(system)] == system
 
 
-def test_the_local_zone_is_named_or_left_out(
+#: ``TZ`` settings and the local zone each gives over no zone roots: a POSIX
+#: string the host's parser takes keeps the zone; anything else is no zone.
+TZ_SETTINGS: list[tuple[str, dict[str, str] | None]] = [
+    ('<+03>-3', {'posix': '<+03>-3'}),
+    ('JST-9', {'posix': 'JST-9'}),
+    ('UTC0', {'posix': 'UTC0'}),
+    ('EST5EDT,M3.2.0,M11.1.0', {'posix': 'EST5EDT,M3.2.0,M11.1.0'}),
+    ('CET-1CEST,M3.5.0,M10.5.0/3', {'posix': 'CET-1CEST,M3.5.0,M10.5.0/3'}),
+    ('GMT0BST,M3.5.0/1,M10.5.0', {'posix': 'GMT0BST,M3.5.0/1,M10.5.0'}),
+    ('UTC', {'iana': 'UTC'}),
+    # A daylight name with no rule.
+    ('CET-1CEST', None),
+    ('GMT0BST', None),
+    ('EST5EDT', None),
+    # Malformed offsets and rules, and hours out of range.
+    ('ABC99', None),
+    ('XYZ25', None),
+    ('EST5EDT,garbage,garbage', None),
+    ('<+03', None),
+    ('EST', None),
+    ('Mars/Olympus', None),
+    ('../../etc/passwd', None),
+    ('', None),
+]
+
+
+def test_the_local_zone_is_named_only_as_the_host_reads_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    for setting, expected in TZ_SETTINGS:
+        monkeypatch.setenv('TZ', setting)
+        assert facts.local_zone([], _native.is_posix_zone) == expected, setting
+    # An IANA name a root holds, with or without the leading colon, wins
+    # over the POSIX reading (EST5EDT is both).
     (tmp_path / 'Europe').mkdir()
     (tmp_path / 'Europe' / 'Berlin').write_bytes(b'TZif')
+    (tmp_path / 'EST5EDT').write_bytes(b'TZif')
     roots = [{'path': str(tmp_path), 'version': None}]
-    for setting, expected in [
-        ('Europe/Berlin', {'iana': 'Europe/Berlin'}),
-        (':Europe/Berlin', {'iana': 'Europe/Berlin'}),
-        ('UTC', {'iana': 'UTC'}),
-        ('EST5EDT,M3.2.0,M11.1.0', {'posix': 'EST5EDT,M3.2.0,M11.1.0'}),
-        ('JST-9', {'posix': 'JST-9'}),
-        ('Mars/Olympus', None),
-        ('../../etc/passwd', None),
-        ('', None),
+    for setting, name in [
+        ('Europe/Berlin', 'Europe/Berlin'),
+        (':Europe/Berlin', 'Europe/Berlin'),
+        ('EST5EDT', 'EST5EDT'),
     ]:
         monkeypatch.setenv('TZ', setting)
-        assert facts.local_zone(roots) == expected, setting
+        assert facts.local_zone(roots, _native.is_posix_zone) == {'iana': name}
 
 
-def test_a_posix_local_zone_the_host_names_is_one_the_core_reads(
+@pytest.mark.parametrize(('setting', 'expected'), TZ_SETTINGS)
+def test_no_tz_setting_refuses_a_run_and_a_valid_one_keeps_its_zone(
     monkeypatch: pytest.MonkeyPatch,
+    setting: str,
+    expected: dict[str, str] | None,
 ) -> None:
-    for setting in ('EST5EDT,M3.2.0,M11.1.0', 'JST-9', '<+0330>-3:30'):
-        monkeypatch.setenv('TZ', setting)
-        assert facts.local_zone([]) == {'posix': setting}
-        finished = run(
-            {
-                'op': 'validate_query',
-                'query': 1,
-                'schema': 2,
-                'profile': {'name': 'RELATIONAL', 'model': None},
-            },
-            {
-                1: codec.attachment('PREDICT t.c FOR EACH t.id'),
-                2: codec.attachment({'tables': [], 'links': []}),
-            },
-        )
-        assert finished.result['op'] == 'validate_query'
+    monkeypatch.setenv('TZ', setting)
+    # No root holds a name, so a run's facts are exactly the table's.
+    monkeypatch.setattr(facts, 'zone_roots', list)
+    sent: list[Any] = []
+    real = facts.host_facts
+
+    def spy(is_posix: Any) -> dict[str, Any]:
+        built = real(is_posix)
+        sent.append(built['local_zone'])
+        return built
+
+    monkeypatch.setattr(facts, 'host_facts', spy)
+    finished = run(
+        {
+            'op': 'validate_query',
+            'query': 1,
+            'schema': 2,
+            'profile': {'name': 'RELATIONAL', 'model': None},
+        },
+        {
+            1: codec.attachment('PREDICT t.c FOR EACH t.id'),
+            2: codec.attachment({'tables': [], 'links': []}),
+        },
+    )
+    assert finished.result['op'] == 'validate_query'
+    assert sent == [expected]
 
 
 def test_the_platform_s_year_padding_is_read_from_strftime() -> None:
@@ -196,7 +263,7 @@ def test_the_platform_s_year_padding_is_read_from_strftime() -> None:
         datetime.date(1, 1, 1).strftime('%Y') == '0001'
     )
     assert platform['os'] in ('linux', 'darwin', 'windows')
-    now = facts.host_facts()['now']
+    now = facts.host_facts(_native.is_posix_zone)['now']
     assert (now['t'], now['unit'], now['zone']) == ('ts', 'us', 'UTC')
 
 

@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import re
+import struct
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -104,7 +106,7 @@ def decode_scalar(scalar: Any) -> Any:
     if tag in ('f32', 'f64'):
         if not isinstance(value, str) or not _FLOAT.match(value):
             raise CodecError(f'{tag}: not a float')
-        return float(value)
+        return _float32(value) if tag == 'f32' else _float64(value)
     if tag in _DECIMALS:
         precision, scale = scalar.get('p'), scalar.get('s')
         number = _digits(tag, value)
@@ -150,6 +152,62 @@ def decode_scalar(scalar: Any) -> Any:
     raise CodecError('a scalar of an unknown tag')
 
 
+def _float64(text: str) -> float:
+    r"""``text`` read as a double; finite text that overflows is refused."""
+    value = float(text)
+    if math.isinf(value) and text not in ('inf', '-inf'):
+        raise CodecError('f64: finite text past the largest double')
+    return value
+
+
+def _bits32(value: float) -> int:
+    return int.from_bytes(struct.pack('>f', value), 'big')
+
+
+def _of_bits32(bits: int) -> float:
+    return float(struct.unpack('>f', bits.to_bytes(4, 'big'))[0])
+
+
+def _float32(text: str) -> float:
+    r"""``text`` rounded to the nearest float32, as a Python float.
+
+    Rounding the text to a double first and the double to a float32 can
+    round twice: when the double lands exactly halfway between two
+    float32s while the text does not, the text itself decides, read
+    exactly as a :class:`~decimal.Decimal`. Finite text that rounds past the
+    largest float32 is refused, as the core refuses it.
+    """
+    wide = float(text)
+    if math.isnan(wide):
+        return wide
+    if math.isinf(wide) and text in ('inf', '-inf'):
+        return wide
+    try:
+        narrow = _of_bits32(_bits32(wide))
+    except OverflowError:
+        raise CodecError('f32: finite text past the largest float32') from None
+    if math.isinf(narrow):
+        raise CodecError('f32: finite text past the largest float32')
+    if narrow == wide:
+        return narrow
+    # The float32 on the double's side of ``narrow`` (bits count magnitude
+    # within a sign), and the point halfway to it, exact as a double.
+    step = 1 if abs(wide) > abs(narrow) else -1
+    other = _of_bits32(_bits32(narrow) + step)
+    halfway = (narrow + other) / 2
+    if wide != halfway:
+        return narrow
+    exact, middle = Decimal(text), Decimal(halfway)
+    if exact == middle:
+        return narrow  # A true tie: struct rounded it to even.
+    nearer_other = (exact > middle) == (other > narrow)
+    if not nearer_other:
+        return narrow
+    if math.isinf(other):
+        raise CodecError('f32: finite text past the largest float32')
+    return other
+
+
 def integer(tag: str, value: int) -> dict[str, Any]:
     r"""An integer scalar of width ``tag`` (``i8`` to ``u64``)."""
     if isinstance(value, bool) or not isinstance(value, int):
@@ -161,8 +219,11 @@ def integer(tag: str, value: int) -> dict[str, Any]:
 
 
 def timestamp(value: int, unit: str, zone: str | None) -> dict[str, Any]:
-    r"""A ``ts`` scalar: ``value`` in ``unit`` since the epoch, in ``zone``."""
-    if unit not in _UNITS or (zone is not None and not zone):
+    r"""A ``ts`` scalar: ``value`` in ``unit`` since the epoch, in ``zone``,
+    which is none or non-empty text."""
+    if unit not in _UNITS or (
+        zone is not None and (not isinstance(zone, str) or not zone)
+    ):
         raise CodecError('ts: unit or zone out of range')
     return {**integer('i64', value), 't': 'ts', 'unit': unit, 'zone': zone}
 
