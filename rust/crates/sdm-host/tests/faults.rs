@@ -26,7 +26,7 @@ use arrow_array::{
     TimestampNanosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema};
+use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Operation, ProfileName, ProfileSpec, QuerySchema, ValidateQuery};
 use sdm_contract::run::{FetchOutcome, FetchReply, ReplyId, StartRun};
@@ -35,7 +35,7 @@ use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind,
     Field as ContractField, HostFacts, Scalar, Unit,
 };
-use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot, RunState};
+use sdm_core::{ArrowData, Attachment, Attachments, RunState};
 use sdm_host::{HostRun, Outgoing, Unreadable, Unreadables, encode, read};
 
 fn start_message(operation: Operation) -> Vec<u8> {
@@ -87,11 +87,10 @@ fn fetching(expect: ExpectedSchema) -> HostRun {
             filters: vec![],
             limit: None,
         },
-        sql: None,
-        expect,
+        plan: FetchPlan::Host { expect },
     };
     let run = HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &start_message(Operation::Test(TestOperation::Fetch {
             fetch: AttachmentId(1),
         })),
@@ -439,7 +438,7 @@ fn an_unreadable_attachment_s_message_is_checked_before_the_run_changes() {
         ),
     ]);
     let err = HostRun::start_reading(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &validate,
         attachments,
         &unread(3, Unreadable::Producer),
@@ -452,7 +451,7 @@ fn an_unreadable_attachment_s_message_is_checked_before_the_run_changes() {
 
 fn panicking(at: PanicAt, payload: &str) -> Result<HostRun, CoreError> {
     HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &start_message(Operation::Test(TestOperation::Panic {
             at,
             payload: payload.into(),
@@ -503,7 +502,7 @@ fn an_error_carrying_fields_panic_does_not_poison_a_finished_run() {
     let claimed = CoreError::new(ErrorKind::DataSource, ErrorCode::ProviderError, "failed")
         .with_field("panic", Detail::Scalar(Scalar::Bool(true)));
     let run = HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &start_message(Operation::Test(TestOperation::Fail {
             error: AttachmentId(1),
         })),
@@ -523,7 +522,7 @@ const CANARY: &str = "CANARY-7f3a";
 #[test]
 fn canaries_reach_no_error() {
     let mut errors = Vec::new();
-    let root = CompositionRoot::default();
+    let root = sdm_host::default_root();
     let validate = Operation::ValidateQuery(ValidateQuery {
         query: AttachmentId(1),
         schema: AttachmentId(2),

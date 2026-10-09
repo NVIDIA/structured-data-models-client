@@ -12,5 +12,8 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+sdm-contract = { path = "../sdm-contract" }
+
 [lints]
 workspace = true

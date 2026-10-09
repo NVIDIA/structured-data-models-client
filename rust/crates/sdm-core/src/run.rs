@@ -27,10 +27,12 @@ use std::task::{Context, Poll, Waker};
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
-use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError, SqlStatement};
+use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderError};
 use sdm_contract::ops::OperationResult;
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
+
+use crate::compose::DataAccess;
 
 /// Data that travels beside a control message.
 #[derive(Debug, Clone)]
@@ -144,24 +146,36 @@ fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
 #[derive(Clone)]
 pub struct Asker {
     shared: Arc<Mutex<Shared>>,
+    /// The run's data access, for an operation that names a provider.
+    data: Option<DataAccess>,
 }
 
 impl Asker {
-    /// The answer to one data request, with its compiled statement for a
-    /// SQL provider and the schema it expects back.
-    pub fn fetch(
-        &self,
-        request: DataRequest,
-        sql: Option<SqlStatement>,
-        expect: ExpectedSchema,
-    ) -> Ask {
+    /// The answer to one data request, planned by the run's data layer for
+    /// its provider (decision H14); a request the plan refuses, or an
+    /// operation that names no provider, is the error.
+    pub fn fetch(&self, request: DataRequest) -> Result<Ask, CoreError> {
+        let Some(data) = &self.data else {
+            return Err(internal(
+                "the operation asked for data and names no provider",
+            ));
+        };
+        let plan = data.plan(&request)?;
+        Ok(self.ask_planned(request, plan))
+    }
+
+    /// The answer to `request`, asked with `plan` in place of the data
+    /// layer's: for the test-only operations, which drive plans of any size
+    /// or shape.
+    #[cfg(feature = "test-ops")]
+    pub(crate) fn fetch_planned(&self, request: DataRequest, plan: FetchPlan) -> Ask {
+        self.ask_planned(request, plan)
+    }
+
+    fn ask_planned(&self, request: DataRequest, plan: FetchPlan) -> Ask {
         Ask {
             shared: Arc::clone(&self.shared),
-            state: AskState::New(Asked::Fetch {
-                request,
-                sql,
-                expect,
-            }),
+            state: AskState::New(Asked::Fetch(Box::new((request, plan)))),
         }
     }
 
@@ -230,11 +244,8 @@ fn exhausted(shared: &mut Shared, what: &str) -> CoreError {
 }
 
 enum Asked {
-    Fetch {
-        request: DataRequest,
-        sql: Option<SqlStatement>,
-        expect: ExpectedSchema,
-    },
+    /// Boxed: a request and its plan are far larger than a model call.
+    Fetch(Box<(DataRequest, FetchPlan)>),
     Call {
         endpoint: Endpoint,
         content_type: String,
@@ -272,16 +283,10 @@ impl Future for Ask {
                 shared.next_reply = next;
                 let id = ReplyId(next);
                 match asked {
-                    Asked::Fetch {
-                        request,
-                        sql,
-                        expect,
-                    } => shared.fetches.push(FetchStep {
-                        id,
-                        request,
-                        sql,
-                        expect,
-                    }),
+                    Asked::Fetch(asked) => {
+                        let (request, plan) = *asked;
+                        shared.fetches.push(FetchStep { id, request, plan })
+                    }
                     Asked::Call {
                         endpoint,
                         content_type,
@@ -329,14 +334,31 @@ fn protocol(code: ErrorCode, message: impl Into<String>) -> CoreError {
 
 impl Run {
     /// The run of the body `make` returns, given the [`Asker`] it asks
-    /// through. Nothing of the body runs before the first [`Run::next`].
+    /// through, for an operation that names no provider. Nothing of the
+    /// body runs before the first [`Run::next`].
     pub fn new<F>(make: impl FnOnce(Asker) -> F) -> Self
+    where
+        F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
+    {
+        Run::build(None, make)
+    }
+
+    /// [`Run::new`], for an operation whose data requests `data` plans.
+    pub fn with_data<F>(data: DataAccess, make: impl FnOnce(Asker) -> F) -> Self
+    where
+        F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
+    {
+        Run::build(Some(data), make)
+    }
+
+    fn build<F>(data: Option<DataAccess>, make: impl FnOnce(Asker) -> F) -> Self
     where
         F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
     {
         let shared = Arc::new(Mutex::new(Shared::default()));
         let body = make(Asker {
             shared: Arc::clone(&shared),
+            data,
         });
         Self {
             state: State::Ready,
@@ -432,7 +454,10 @@ impl Run {
                 let step = match (fetches.is_empty(), calls.len()) {
                     (false, 0) => {
                         self.state = State::AwaitingFetch(
-                            fetches.iter().map(|f| (f.id, f.expect.clone())).collect(),
+                            fetches
+                                .iter()
+                                .map(|f| (f.id, f.plan.expect().clone()))
+                                .collect(),
                         );
                         Step::Fetch { requests: fetches }
                     }
@@ -636,21 +661,25 @@ pub(crate) fn internal(message: &str) -> CoreError {
 #[cfg(test)]
 mod tests {
     use sdm_contract::ErrorCode;
-    use sdm_contract::data::{DataRequest, ExpectedSchema};
+    use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema, FetchPlan};
     use sdm_contract::run::Endpoint;
 
     use super::{Attachment, Run, RunState, lock};
 
     fn describe() -> DataRequest {
-        DataRequest::Describe { tables: vec![] }
+        DataRequest::Describe {
+            tables: vec![],
+            part: DescribePart::Tables,
+        }
     }
 
     #[test]
     fn running_out_of_reply_ids_is_an_internal_error() {
         let mut run = Run::new(|asker| async move {
-            asker
-                .fetch(describe(), None, ExpectedSchema::Discover {})
-                .await;
+            let plan = FetchPlan::Host {
+                expect: ExpectedSchema::Discover {},
+            };
+            asker.ask_planned(describe(), plan).await;
             unreachable!("never answered")
         });
         lock(&run.shared).next_reply = u32::MAX;

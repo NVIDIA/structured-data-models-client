@@ -4,6 +4,7 @@
 
 //! Every state of the Run state machine and every illegal transition.
 
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -12,16 +13,38 @@ use std::task::Poll;
 
 use arrow_array::RecordBatch;
 use arrow_schema::Schema;
-use sdm_contract::data::{DataRequest, ExpectedSchema, ProviderError};
+use sdm_contract::data::{
+    DataRequest, DescribePart, Determinism, ProviderCapabilities, ProviderChoice, ProviderError,
+};
 use sdm_contract::ops::{OperationResult, QueryValidation};
 use sdm_contract::run::{Endpoint, ReplyId};
 use sdm_contract::{CoreError, CoreWarning, ErrorCode, ErrorKind, Step};
-use sdm_core::{ArrowData, Asker, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
+use sdm_core::{
+    ArrowData, Asker, Attachment, CompositionRoot, FetchResult, ModelResult, Reply, Run, RunState,
+};
 
 fn describe(table: &str) -> DataRequest {
     DataRequest::Describe {
         tables: vec![table.to_owned()],
+        part: DescribePart::Columns,
     }
+}
+
+/// A run whose data requests a host provider answers, through `sdm-data`'s
+/// data layer.
+fn data_run<F>(make: impl FnOnce(Asker) -> F) -> Run
+where
+    F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
+{
+    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let host = ProviderChoice::Host {
+        capabilities: ProviderCapabilities {
+            optional: BTreeSet::new(),
+            max_keys_per_request: None,
+            sampling: Determinism::Unseeded,
+        },
+    };
+    Run::with_data(root.data_access(&host).unwrap(), make)
 }
 
 fn rows(n: usize) -> FetchResult {
@@ -85,10 +108,10 @@ fn done(seen: Vec<String>) -> OperationResult {
 
 /// Two fetches awaited together, then one model call, then the result.
 fn scripted() -> Run {
-    Run::new(|asker: Asker| async move {
+    data_run(|asker: Asker| async move {
         asker.warn(warning("FIRST"));
-        let a = asker.fetch(describe("a"), None, ExpectedSchema::Discover {});
-        let b = asker.fetch(describe("b"), None, ExpectedSchema::Discover {});
+        let a = asker.fetch(describe("a"))?;
+        let b = asker.fetch(describe("b"))?;
         let (a, b) = join(a, b).await;
         asker.warn(warning("SECOND"));
         let answer = asker
@@ -187,7 +210,7 @@ fn a_scripted_operation_runs_to_done() {
 
 #[test]
 fn a_finished_run_refuses_every_call() {
-    let mut run = Run::new(|_| async {
+    let mut run = data_run(|_| async {
         Ok(OperationResult::ValidateQuery(QueryValidation {
             accepted: true,
             diagnostics: vec![],
@@ -289,11 +312,9 @@ fn droppable(dropped: Arc<AtomicBool>) -> Run {
             self.0.store(true, Ordering::SeqCst);
         }
     }
-    Run::new(move |asker: Asker| async move {
+    data_run(move |asker: Asker| async move {
         let _flag = Flag(dropped);
-        asker
-            .fetch(describe("a"), None, ExpectedSchema::Discover {})
-            .await;
+        asker.fetch(describe("a"))?.await;
         Ok(done(vec![]))
     })
 }
@@ -377,10 +398,8 @@ fn the_host_can_end_a_run_it_cannot_answer() {
 
 #[test]
 fn an_operation_error_finishes_the_run() {
-    let mut run = Run::new(|asker: Asker| async move {
-        let reply = asker
-            .fetch(describe("a"), None, ExpectedSchema::Discover {})
-            .await;
+    let mut run = data_run(|asker: Asker| async move {
+        let reply = asker.fetch(describe("a"))?.await;
         match reply {
             Reply::Fetch(FetchResult::Error(e)) => Err(CoreError::provider(&e)),
             _ => Ok(done(vec![])),
@@ -399,10 +418,8 @@ fn an_operation_error_finishes_the_run() {
 
 #[test]
 fn a_panicking_body_poisons_the_run() {
-    let mut run = Run::new(|asker: Asker| async move {
-        asker
-            .fetch(describe("a"), None, ExpectedSchema::Discover {})
-            .await;
+    let mut run = data_run(|asker: Asker| async move {
+        asker.fetch(describe("a"))?.await;
         panic!("a defect");
     });
     let ids = fetch_ids(&run.next().unwrap());
@@ -434,7 +451,7 @@ fn the_host_can_poison_a_run() {
 
 #[test]
 fn a_body_that_waits_on_nothing_or_on_too_much_is_an_internal_error() {
-    let mut run = Run::new(|_| async {
+    let mut run = data_run(|_| async {
         std::future::pending::<()>().await;
         Ok(done(vec![]))
     });
@@ -445,8 +462,8 @@ fn a_body_that_waits_on_nothing_or_on_too_much_is_an_internal_error() {
     );
     assert_eq!(run.state(), RunState::Finished);
 
-    let mut run = Run::new(|asker: Asker| async move {
-        let a = asker.fetch(describe("a"), None, ExpectedSchema::Discover {});
+    let mut run = data_run(|asker: Asker| async move {
+        let a = asker.fetch(describe("a"))?;
         let b = asker.call_model(Endpoint::Predict, "application/json".into(), vec![]);
         join(a, b).await;
         Ok(done(vec![]))
@@ -460,17 +477,11 @@ fn a_body_that_waits_on_nothing_or_on_too_much_is_an_internal_error() {
 fn each_part_of_the_body_runs_once_however_many_steps() {
     let resumed = Arc::new(AtomicUsize::new(0));
     let counter = Arc::clone(&resumed);
-    let mut run = Run::new(move |asker: Asker| async move {
+    let mut run = data_run(move |asker: Asker| async move {
         let mut seen = 0;
         for i in 0..200 {
             counter.fetch_add(1, Ordering::SeqCst);
-            let reply = asker
-                .fetch(
-                    describe(&format!("t{i}")),
-                    None,
-                    ExpectedSchema::Discover {},
-                )
-                .await;
+            let reply = asker.fetch(describe(&format!("t{i}")))?.await;
             seen += row_count(&reply);
         }
         Ok(done(vec![seen.to_string()]))
@@ -494,7 +505,7 @@ fn each_part_of_the_body_runs_once_however_many_steps() {
 
 #[test]
 fn a_transport_error_reaches_the_body() {
-    let mut run = Run::new(|asker: Asker| async move {
+    let mut run = data_run(|asker: Asker| async move {
         match asker
             .call_model(Endpoint::Predict, "application/json".into(), b"{}".to_vec())
             .await
@@ -524,23 +535,20 @@ fn a_transport_error_reaches_the_body() {
 
 #[test]
 fn a_key_set_travels_as_an_attachment() {
-    let mut run = Run::new(|asker: Asker| async move {
+    let mut run = data_run(|asker: Asker| async move {
         let keys = asker.attach(Attachment::Bytes(vec![1, 2, 3]))?;
         asker
-            .fetch(
-                DataRequest::Describe {
-                    tables: vec![keys.0.to_string()],
-                },
-                None,
-                ExpectedSchema::Discover {},
-            )
+            .fetch(DataRequest::Describe {
+                tables: vec![keys.0.to_string()],
+                part: DescribePart::Columns,
+            })?
             .await;
         Ok(done(vec![]))
     });
     let Step::Fetch { requests } = run.next().unwrap() else {
         panic!()
     };
-    let DataRequest::Describe { tables } = &requests[0].request else {
+    let DataRequest::Describe { tables, .. } = &requests[0].request else {
         panic!()
     };
     let id = sdm_contract::data::AttachmentId(tables[0].parse().unwrap());

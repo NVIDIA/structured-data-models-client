@@ -11,8 +11,9 @@
 //! kind check is `CoreError::transport`'s, tested in `sdm-contract`.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError};
+use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderError};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::run::{FetchOutcome, FetchReply, ReplyId, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation};
@@ -20,7 +21,7 @@ use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar,
     Unit,
 };
-use sdm_core::{Attachment, CompositionRoot, Run};
+use sdm_core::{Attachment, Run};
 use sdm_host::{Attachments, HostRun, Outgoing, ZoneResolver, encode, read};
 
 fn start_message(operation: TestOperation) -> Vec<u8> {
@@ -76,7 +77,7 @@ fn an_outgoing_error_outside_the_table_is_internal_naming_the_pair() {
         };
         let run = HostRun::with(
             Run::new(move |_| async move { Err(error) }),
-            ZoneResolver::new([]),
+            Arc::new(ZoneResolver::new([])),
         );
         let written = error_of(&run.next().unwrap_err());
         assert_eq!(
@@ -96,7 +97,7 @@ fn an_outgoing_error_in_the_table_is_written_as_it_is() {
             let error = CoreError::new(kind, code, "m");
             let run = HostRun::with(
                 Run::new(move |_| async move { Err(error) }),
-                ZoneResolver::new([]),
+                Arc::new(ZoneResolver::new([])),
             );
             let written = error_of(&run.next().unwrap_err());
             assert_eq!((written.kind, written.code), (kind, code));
@@ -106,7 +107,7 @@ fn an_outgoing_error_in_the_table_is_written_as_it_is() {
 
 fn fail_start(error: &CoreError) -> Result<HostRun, Outgoing> {
     HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &start_message(TestOperation::Fail {
             error: AttachmentId(1),
         }),
@@ -143,7 +144,7 @@ fn an_error_message_sent_to_the_core_is_refused() {
         error: any_pair(ErrorKind::DataSource, ErrorCode::RunBusy),
     })
     .unwrap();
-    let refused = HostRun::start(&CompositionRoot::default(), &message, Attachments::new());
+    let refused = HostRun::start(&sdm_host::default_root(), &message, Attachments::new());
     assert_eq!(
         error_of(&refused.err().expect("refused")).code,
         ErrorCode::InvalidMessage
@@ -161,12 +162,13 @@ fn fetch_run() -> HostRun {
             filters: vec![],
             limit: None,
         },
-        sql: None,
-        expect: ExpectedSchema::Discover {},
+        plan: FetchPlan::Host {
+            expect: ExpectedSchema::Discover {},
+        },
         echo: false,
     };
     let run = HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &start_message(TestOperation::Fetch {
             fetch: AttachmentId(1),
         }),

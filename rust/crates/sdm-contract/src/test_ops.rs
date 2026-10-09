@@ -13,8 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::data::{AttachmentId, DataRequest, ExpectedSchema, SqlStatement};
+use crate::data::{AttachmentId, DataRequest, FetchPlan};
 use crate::ops::AttachmentKind;
+use crate::scalar::Scalar;
 
 /// A test-only operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +40,10 @@ pub enum TestOperation {
     Log { hold_ms: u64 },
     /// Aborts the process at its first step: what no host can contain.
     Abort,
+    /// Resolves `zone` through the run's zones and finishes with its UTC
+    /// offset at `at`, a `ts` scalar, in `TestResult::offset_seconds`; an
+    /// unknown zone fails the run.
+    Zone { zone: String, at: Scalar },
 }
 
 /// Where a test-only operation panics.
@@ -61,20 +66,22 @@ impl TestOperation {
             | TestOperation::Finish { result: id }
             | TestOperation::Fail { error: id }
             | TestOperation::Warn { warnings: id } => vec![(*id, AttachmentKind::Bytes)],
-            TestOperation::Panic { .. } | TestOperation::Log { .. } | TestOperation::Abort => {
-                vec![]
-            }
+            TestOperation::Panic { .. }
+            | TestOperation::Log { .. }
+            | TestOperation::Abort
+            | TestOperation::Zone { .. } => vec![],
         }
     }
 }
 
-/// The fetch a test operation asks.
+/// The fetch a test operation asks: the request, and the plan it is asked
+/// with, in place of the one a data layer would make, so a test can drive
+/// a plan of any size or shape.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TestFetch {
     pub request: DataRequest,
-    pub sql: Option<SqlStatement>,
-    pub expect: ExpectedSchema,
+    pub plan: FetchPlan,
     /// Whether the admitted data comes back, attached, so a binding's tests
     /// can export what the core holds.
     #[serde(default)]
@@ -90,4 +97,7 @@ pub struct TestResult {
     /// The attachment holding the admitted data, when the fetch echoes it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<AttachmentId>,
+    /// The `zone` operation's answer: the zone's UTC offset in seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset_seconds: Option<i32>,
 }

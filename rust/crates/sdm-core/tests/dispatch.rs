@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use sdm_contract::data::{
-    AttachmentId, DataRequest, Determinism, Dialect, OptionalRequest, ProviderCapabilities,
-    ProviderChoice, SqlStatement,
+    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema,
+    FetchPlan, OptionalRequest, ProviderCapabilities, ProviderChoice, SqlStatement,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -20,9 +20,33 @@ use sdm_contract::run::StartRun;
 use sdm_contract::{
     CONTRACT_VERSION, CoreError, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
 };
-use sdm_core::compose::{DataAccess, SqlCompiler};
 use sdm_core::profiles::{Mode, Profile, QueryFeatures, check_capabilities, codes as model};
-use sdm_core::{Attachment, Attachments, CompositionRoot, RunState, start};
+use sdm_core::{
+    Attachment, Attachments, CompositionRoot, RunState, UnknownZone, Zones,
+    start as start_with_zones,
+};
+
+/// Zones that hold nothing: these runs resolve none.
+struct NoZones;
+
+impl Zones for NoZones {
+    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, UnknownZone> {
+        Err(UnknownZone)
+    }
+}
+
+fn start(
+    root: &CompositionRoot,
+    start: StartRun,
+    attachments: Attachments,
+) -> Result<sdm_core::Run, CoreError> {
+    start_with_zones(root, start, attachments, Arc::new(NoZones))
+}
+
+/// The root a binding gets, over `sdm-data`'s data layer.
+fn root() -> CompositionRoot {
+    CompositionRoot::new(Arc::new(sdm_data::Data::new()))
+}
 
 fn facts() -> HostFacts {
     HostFacts {
@@ -116,7 +140,7 @@ fn run_of(root: &CompositionRoot, operation: Operation) -> Result<sdm_core::Run,
 #[test]
 fn another_contract_version_is_refused_before_a_run_exists() {
     let err = start(
-        &CompositionRoot::default(),
+        &root(),
         StartRun {
             contract: CONTRACT_VERSION + 1,
             facts: facts(),
@@ -149,7 +173,7 @@ fn a_clock_that_is_not_a_timestamp_in_utc_is_refused() {
         let mut bad = facts();
         bad.now = now.clone();
         let err = start(
-            &CompositionRoot::default(),
+            &root(),
             StartRun {
                 contract: CONTRACT_VERSION,
                 facts: bad,
@@ -165,7 +189,7 @@ fn a_clock_that_is_not_a_timestamp_in_utc_is_refused() {
 
 #[test]
 fn every_operation_dispatches_to_a_run() {
-    let root = CompositionRoot::default();
+    let root = root();
     let mut run = run_of(&root, validate()).unwrap();
     assert_eq!(run.state(), RunState::Ready);
     // The schema has no table t, which the parser behind the adapter says.
@@ -190,81 +214,128 @@ fn every_operation_dispatches_to_a_run() {
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
 }
 
+/// A data layer that plans every request as one statement, to show that the
+/// root's one data layer is what every run plans through.
 struct Fake;
 
-impl SqlCompiler for Fake {
-    fn compile(&self, _: &DataRequest) -> Result<SqlStatement, CoreError> {
-        Ok(SqlStatement {
-            dialect: Dialect::Duckdb,
-            text: "SELECT 1".into(),
-            params: vec![],
+impl DataLayer for Fake {
+    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
+        Ok(capabilities(&[OptionalRequest::CountRows]))
+    }
+
+    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
+        Ok(FetchPlan::Sql {
+            statements: vec![SqlStatement {
+                dialect: Dialect::Duckdb,
+                text: "SELECT 1".into(),
+                params: vec![],
+            }],
+            expect: ExpectedSchema::Discover {},
         })
     }
 }
 
-#[test]
-fn the_composition_root_picks_a_built_in_dialect_or_a_host_provider() {
-    let empty = CompositionRoot::default();
-    let duckdb = ProviderChoice::Sql {
-        dialect: Dialect::Duckdb,
-    };
-    let err = empty.data_access(&duckdb).err().unwrap();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-    );
-    assert!(run_of(&empty, describe(duckdb.clone())).is_err());
-
-    let root = CompositionRoot::default().with_dialect(Dialect::Duckdb, Arc::new(Fake));
-    let access = root.data_access(&duckdb).unwrap();
-    let sql = access
-        .prepare(&DataRequest::CountRows {
-            table: "t".into(),
-            filters: vec![],
-        })
-        .unwrap()
-        .unwrap();
-    assert_eq!(sql.text, "SELECT 1");
-    let sqlite = ProviderChoice::Sql {
-        dialect: Dialect::Sqlite,
-    };
-    assert!(
-        root.data_access(&sqlite).is_err(),
-        "only registered dialects"
-    );
-}
-
-#[test]
-fn a_host_provider_is_asked_only_for_what_it_declared() {
-    let access = DataAccess::Host(ProviderCapabilities {
-        optional: BTreeSet::from([OptionalRequest::Preview]),
+fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
+    ProviderCapabilities {
+        optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
         sampling: Determinism::SeededStable,
-    });
-    let scan = DataRequest::Scan {
+    }
+}
+
+fn count() -> DataRequest {
+    DataRequest::CountRows {
+        table: "t".into(),
+        filters: vec![],
+    }
+}
+
+fn scan() -> DataRequest {
+    DataRequest::Scan {
         table: "t".into(),
         columns: vec![],
         filters: vec![],
         limit: None,
+    }
+}
+
+fn named(err: &CoreError, field: &str) -> String {
+    match err.fields.get(field) {
+        Some(sdm_contract::Detail::Scalar(Scalar::Utf8(text))) => text.clone(),
+        other => panic!("no {field}: {other:?} in {err:?}"),
+    }
+}
+
+#[test]
+fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
+    let root = root();
+    let duckdb = ProviderChoice::Sql {
+        dialect: Dialect::Duckdb,
     };
-    assert_eq!(access.prepare(&scan).unwrap(), None, "scan is the minimum");
-    let describe = DataRequest::Describe { tables: vec![] };
-    assert_eq!(access.prepare(&describe).unwrap(), None);
-    let preview = DataRequest::Preview {
-        table: "t".into(),
-        columns: vec![],
-        limit: 10,
-    };
-    assert_eq!(access.prepare(&preview).unwrap(), None, "declared");
-    let count = DataRequest::CountRows {
-        table: "t".into(),
-        filters: vec![],
-    };
-    let err = access.prepare(&count).unwrap_err();
+    let access = root.data_access(&duckdb).unwrap();
+    // The dialect declares what sdm-data renders for it; an undeclared
+    // optional request is refused by name before it is planned.
+    let err = access.plan(&count()).unwrap_err();
     assert_eq!(
         (err.kind, err.code),
         (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
+    assert_eq!(named(&err, "request"), "count_rows");
+    let err = access.plan(&scan()).unwrap_err();
+    assert_eq!(err.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(named(&err, "request"), "scan");
+    assert_eq!(named(&err, "dialect"), "duckdb");
+
+    let sqlite = ProviderChoice::Sql {
+        dialect: Dialect::Sqlite,
+    };
+    let err = root.data_access(&sqlite).err().unwrap();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+    );
+    assert_eq!(named(&err, "dialect"), "sqlite");
+    assert!(run_of(&root, describe(sqlite)).is_err());
+
+    // Swapping the data layer replaces the root's one value.
+    let swapped = CompositionRoot::new(Arc::new(Fake));
+    let access = swapped.data_access(&duckdb).unwrap();
+    let FetchPlan::Sql { statements, .. } = access.plan(&count()).unwrap() else {
+        panic!("not the swapped layer's plan");
+    };
+    assert_eq!(statements[0].text, "SELECT 1");
+}
+
+#[test]
+fn a_host_provider_is_asked_only_for_what_it_declared() {
+    let host = ProviderChoice::Host {
+        capabilities: capabilities(&[OptionalRequest::Preview]),
+    };
+    let access = root().data_access(&host).unwrap();
+    let pass = |request: DataRequest| {
+        assert_eq!(
+            access.plan(&request).unwrap(),
+            FetchPlan::Host {
+                expect: ExpectedSchema::Discover {}
+            }
+        );
+    };
+    pass(scan());
+    pass(DataRequest::Describe {
+        tables: vec![],
+        part: DescribePart::Tables,
+    });
+    pass(DataRequest::Preview {
+        table: "t".into(),
+        columns: vec![],
+        limit: 10,
+    });
+    let err = access.plan(&count()).unwrap_err();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+    );
+    assert_eq!(named(&err, "request"), "count_rows");
 }
 
 #[test]
@@ -378,7 +449,7 @@ fn each_missing_capability_gives_its_code_in_order() {
 
 fn start_with(operation: Operation, attachments: Attachments) -> Result<sdm_core::Run, CoreError> {
     start(
-        &CompositionRoot::default(),
+        &root(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

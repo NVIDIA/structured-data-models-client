@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/4",
+  "$id": "sdm-contract/5",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -1044,7 +1044,9 @@
         "count_rows",
         "key_counts",
         "time_bounds",
-        "sample_entities"
+        "sample_entities",
+        "neighbors",
+        "lookup"
       ]
     },
     "Determinism": {
@@ -1267,7 +1269,7 @@
       ]
     },
     "FetchStep": {
-      "description": "One data request of a fetch step.",
+      "description": "One data request of a fetch step, with how the run's provider answers\nit: the SQL statements its data layer planned, or the request passed to\na host provider, and the schema the answer must have.",
       "type": "object",
       "properties": {
         "id": {
@@ -1276,33 +1278,22 @@
         "request": {
           "$ref": "#/$defs/DataRequest"
         },
-        "sql": {
-          "description": "The compiled statement, for a SQL provider.",
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SqlStatement"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "expect": {
-          "$ref": "#/$defs/ExpectedSchema"
+        "plan": {
+          "$ref": "#/$defs/FetchPlan"
         }
       },
       "additionalProperties": false,
       "required": [
         "id",
         "request",
-        "expect"
+        "plan"
       ]
     },
     "DataRequest": {
       "description": "A typed request for data.",
       "oneOf": [
         {
-          "description": "The catalog: the tables named (all when empty), their columns,\ndeclared keys and foreign keys.",
+          "description": "One part of the catalog for the tables named (all when empty).",
           "type": "object",
           "properties": {
             "tables": {
@@ -1310,6 +1301,9 @@
               "items": {
                 "type": "string"
               }
+            },
+            "part": {
+              "$ref": "#/$defs/DescribePart"
             },
             "request": {
               "type": "string",
@@ -1319,7 +1313,8 @@
           "additionalProperties": false,
           "required": [
             "request",
-            "tables"
+            "tables",
+            "part"
           ]
         },
         {
@@ -1418,22 +1413,13 @@
           ]
         },
         {
-          "description": "Rows per key value, for duplicate-key checks.",
+          "description": "For each key, in order, one row: its position, the table's rows, the\nkey's distinct values among rows holding all of it, and the rows\nmissing any part of it, as the reference's single `UNION ALL` reads\nthem.",
           "type": "object",
           "properties": {
-            "table": {
-              "type": "string"
-            },
-            "key": {
+            "keys": {
               "type": "array",
               "items": {
-                "type": "string"
-              }
-            },
-            "filters": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/Filter"
+                "$ref": "#/$defs/TableKey"
               }
             },
             "request": {
@@ -1444,25 +1430,17 @@
           "additionalProperties": false,
           "required": [
             "request",
-            "table",
-            "key",
-            "filters"
+            "keys"
           ]
         },
         {
-          "description": "The smallest and largest value of a time column.",
+          "description": "For each time column, in order, one row: its position and the\nsmallest and largest `CAST(column AS TIMESTAMP)`, as the reference's\nsingle `UNION ALL` reads them.",
           "type": "object",
           "properties": {
-            "table": {
-              "type": "string"
-            },
-            "column": {
-              "type": "string"
-            },
-            "filters": {
+            "columns": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/Filter"
+                "$ref": "#/$defs/TableColumn"
               }
             },
             "request": {
@@ -1473,13 +1451,11 @@
           "additionalProperties": false,
           "required": [
             "request",
-            "table",
-            "column",
-            "filters"
+            "columns"
           ]
         },
         {
-          "description": "A seeded sample of `n` entities of `table` by `key`.",
+          "description": "A seeded sample of `n` entities of `table` by `key`: `columns` in\norder, from the rows meeting every filter.",
           "type": "object",
           "properties": {
             "table": {
@@ -1499,6 +1475,18 @@
             "seed": {
               "$ref": "#/$defs/Scalar"
             },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
             "request": {
               "type": "string",
               "const": "sample_entities"
@@ -1510,8 +1498,134 @@
             "table",
             "key",
             "n",
-            "seed"
+            "seed",
+            "columns",
+            "filters"
           ]
+        },
+        {
+          "description": "The rows of `table` whose `key` equals a seed's key, `columns` in\norder after the seed's batch position (decision H15). `seeds` holds\nthe columns `key` and `batch` and the seed time columns `window`\nnames. With `per_seed`, at most that many rows per seed, first in\n`order`, and the result is ordered by `(batch, order)`; without it,\nthere is no `order` and the result is unordered.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "seeds": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "window": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Window"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "per_seed": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "order": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TieBreak"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "request": {
+              "type": "string",
+              "const": "neighbors"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "columns",
+            "seeds"
+          ]
+        },
+        {
+          "description": "One row per seed whose key `table` holds, `columns` in order after\nthe seed's batch position and the count of rows holding its key;\nwhich row of a key several rows hold is not defined.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "seeds": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "request": {
+              "type": "string",
+              "const": "lookup"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "columns",
+            "seeds"
+          ]
+        }
+      ]
+    },
+    "DescribePart": {
+      "description": "Which part of the catalog a `describe` reads.",
+      "oneOf": [
+        {
+          "description": "The source's table names: one row per table.",
+          "type": "string",
+          "const": "tables"
+        },
+        {
+          "description": "Each table's columns, with their declared types, nullability and\nprimary-key flags.",
+          "type": "string",
+          "const": "columns"
+        },
+        {
+          "description": "Each table's declared primary and unique keys.",
+          "type": "string",
+          "const": "keys"
+        },
+        {
+          "description": "Each table's declared foreign keys.",
+          "type": "string",
+          "const": "foreign_keys"
+        },
+        {
+          "description": "The tables' indexes, which feed the reference's \"Missing N indices\"\nwarning.",
+          "type": "string",
+          "const": "indexes"
         }
       ]
     },
@@ -2073,8 +2187,175 @@
         "inclusive"
       ]
     },
+    "TableKey": {
+      "description": "Columns of a table that together make a key.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "columns"
+      ]
+    },
+    "TableColumn": {
+      "description": "A column of a table.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
+    },
+    "Window": {
+      "description": "The rows of a `neighbors` request in time: the window column between\nthe bounds a seed gives. A row whose window column is NULL is not\nreturned when a window is set.",
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string"
+        },
+        "lower": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SeedBound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SeedBound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "column"
+      ]
+    },
+    "SeedBound": {
+      "description": "One bound of a `neighbors` window: a seed time column, compared with the\nwindow column in the source's own `CAST(column AS TIMESTAMP)` wall clock.",
+      "type": "object",
+      "properties": {
+        "seed_column": {
+          "description": "A zone-less `timestamp[ns]` column of the seed key set.",
+          "type": "string"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "seed_column",
+        "inclusive"
+      ]
+    },
+    "TieBreak": {
+      "description": "The total order a `neighbors` request keeps per seed, built by the core\nfrom the reference's rule (design, \"Data access\").",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TieTerm"
+      }
+    },
+    "TieTerm": {
+      "description": "One term of a [`TieBreak`].",
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string"
+        },
+        "as_timestamp": {
+          "description": "Order by `CAST(column AS TIMESTAMP)`, the source's wall clock,\nrather than the column's own values.",
+          "type": "boolean"
+        },
+        "descending": {
+          "type": "boolean"
+        },
+        "nulls_last": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "column",
+        "as_timestamp",
+        "descending",
+        "nulls_last"
+      ]
+    },
+    "FetchPlan": {
+      "description": "How a provider answers one request (decision H14): SQL statements run\nin order on one session, the last one's rows the answer, or the typed\nrequest itself, passed to a host provider that answers it; either way\nwith the Arrow schema the whole plan returns, and answered with one\nattachment holding every row.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "statements": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SqlStatement"
+              }
+            },
+            "expect": {
+              "$ref": "#/$defs/ExpectedSchema"
+            },
+            "plan": {
+              "type": "string",
+              "const": "sql"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "plan",
+            "statements",
+            "expect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expect": {
+              "$ref": "#/$defs/ExpectedSchema"
+            },
+            "plan": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "plan",
+            "expect"
+          ]
+        }
+      ]
+    },
     "SqlStatement": {
-      "description": "A request compiled for a SQL provider.",
+      "description": "One statement a SQL provider runs.",
       "type": "object",
       "properties": {
         "dialect": {
@@ -2098,7 +2379,7 @@
       ]
     },
     "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the provider binds (for\nexample by registering the attachment as a relation).",
+      "description": "A statement's parameter: a scalar, or a key set the provider binds\nunder `relation`, the name the statement's text reads it by (for\nexample by registering the attachment as a relation for the statement).",
       "oneOf": [
         {
           "type": "object",
@@ -2123,6 +2404,9 @@
             "keys": {
               "$ref": "#/$defs/KeySet"
             },
+            "relation": {
+              "type": "string"
+            },
             "param": {
               "type": "string",
               "const": "key_set"
@@ -2131,7 +2415,8 @@
           "additionalProperties": false,
           "required": [
             "param",
-            "keys"
+            "keys",
+            "relation"
           ]
         }
       ]

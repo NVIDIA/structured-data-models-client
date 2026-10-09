@@ -13,8 +13,10 @@ use std::sync::{Arc, Barrier};
 
 use arrow_array::{ArrayRef, LargeStringArray, RecordBatch, new_null_array};
 use arrow_schema::{DataType, IntervalUnit};
-use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError};
-use sdm_contract::data::{Dialect, ProviderChoice};
+use sdm_contract::data::{AttachmentId, DataRequest, ProviderError};
+use sdm_contract::data::{
+    DescribePart, Determinism, Dialect, ProviderCapabilities, ProviderChoice,
+};
 use sdm_contract::facts::{PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::Dtype;
 use sdm_contract::ops::{
@@ -29,9 +31,7 @@ use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind,
     HostFacts, Scalar, Step, Unit,
 };
-use sdm_core::{
-    ArrowData, Attachment, CompositionRoot, FetchResult, ModelResult, Reply, Run, RunState,
-};
+use sdm_core::{ArrowData, Attachment, FetchResult, ModelResult, Reply, Run, RunState};
 use sdm_host::{
     Attachments, HostRun, Outgoing, ZoneResolver, ZoneSource, contain, decode, encode, read,
 };
@@ -113,7 +113,7 @@ fn validate_attachments(query: &str, schema: &QuerySchema) -> Attachments {
 /// Starts a `validate_query` run for `query` over the users table.
 fn start_validate(query: &str, zone_roots: Vec<ZoneRootFact>) -> Result<HostRun, Outgoing> {
     HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &start_message(validate_op(), zone_roots),
         validate_attachments(query, &users()),
     )
@@ -168,7 +168,7 @@ fn step(out: &Outgoing) -> Step {
 }
 
 fn host_run(run: Run) -> HostRun {
-    HostRun::with(run, ZoneResolver::new([]))
+    HostRun::with(run, Arc::new(ZoneResolver::new([])))
 }
 
 fn is_panic(error: &CoreError) -> bool {
@@ -196,7 +196,7 @@ fn a_query_validates_from_bytes_to_bytes() {
 
 #[test]
 fn a_run_starts_only_from_a_start_message_the_core_takes() {
-    let root = CompositionRoot::default();
+    let root = sdm_host::default_root();
     let cancel = encode(&ControlMessage::Cancel {}).unwrap();
     let err = HostRun::start(&root, &cancel, no_attachments())
         .core()
@@ -316,15 +316,22 @@ fn table(column: ArrayRef) -> ArrowData {
 /// A run that fetches twice and answers with the type of each column it
 /// was handed, through a validation result's diagnostics.
 fn fetching_run() -> Run {
-    Run::new(|asker| async move {
+    let host = ProviderChoice::Host {
+        capabilities: ProviderCapabilities {
+            optional: Default::default(),
+            max_keys_per_request: None,
+            sampling: Determinism::Unseeded,
+        },
+    };
+    let access = sdm_host::default_root().data_access(&host).unwrap();
+    Run::with_data(access, |asker| async move {
         let mut seen = Vec::new();
         for _ in 0..2 {
             let reply = asker
-                .fetch(
-                    DataRequest::Describe { tables: vec![] },
-                    None,
-                    ExpectedSchema::Discover {},
-                )
+                .fetch(DataRequest::Describe {
+                    tables: vec![],
+                    part: DescribePart::Tables,
+                })?
                 .await;
             seen.push(match reply {
                 Reply::Fetch(FetchResult::Data(data)) => {
@@ -638,7 +645,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
         }),
         vec![],
     );
-    let root = CompositionRoot::default();
+    let root = sdm_host::default_root();
     let err = HostRun::start(
         &root,
         &predict,

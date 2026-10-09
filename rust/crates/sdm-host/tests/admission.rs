@@ -36,7 +36,9 @@ use arrow_schema::{
     DataType, Field, Fields, IntervalUnit, Schema, TimeUnit, UnionFields, UnionMode,
 };
 use half::f16;
-use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema};
+use sdm_contract::data::{
+    AttachmentId, DataRequest, DescribePart, Determinism, ProviderCapabilities, ProviderChoice,
+};
 use sdm_contract::ops::{OperationResult, QueryValidation};
 use sdm_contract::run::{FetchOutcome, FetchReply};
 use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Step};
@@ -740,14 +742,21 @@ fn plain(values: &ArrayRef, indices: &[u64]) -> ArrayRef {
 /// receives it, admitted.
 fn through_host_run(data: ArrowData) -> ArrowData {
     let (send, receive) = mpsc::channel();
+    let host = ProviderChoice::Host {
+        capabilities: ProviderCapabilities {
+            optional: BTreeSet::new(),
+            max_keys_per_request: None,
+            sampling: Determinism::Unseeded,
+        },
+    };
+    let access = sdm_host::default_root().data_access(&host).unwrap();
     let run = HostRun::with(
-        Run::new(move |asker| async move {
+        Run::with_data(access, move |asker| async move {
             let reply = asker
-                .fetch(
-                    DataRequest::Describe { tables: vec![] },
-                    None,
-                    ExpectedSchema::Discover {},
-                )
+                .fetch(DataRequest::Describe {
+                    tables: vec![],
+                    part: DescribePart::Tables,
+                })?
                 .await;
             if let Reply::Fetch(FetchResult::Data(data)) = reply {
                 send.send(data).unwrap();
@@ -757,7 +766,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
                 diagnostics: vec![],
             }))
         }),
-        ZoneResolver::new([]),
+        Arc::new(ZoneResolver::new([])),
     );
     let ControlMessage::Step(Step::Fetch { requests }) = read(&run.next().unwrap()).unwrap() else {
         panic!("the run fetches");

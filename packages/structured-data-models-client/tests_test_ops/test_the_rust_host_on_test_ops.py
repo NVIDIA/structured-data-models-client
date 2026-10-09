@@ -183,8 +183,7 @@ def test_a_provider_error_raises_with_no_driver_exception_chained() -> None:
             'filters': [],
             'limit': None,
         },
-        'sql': None,
-        'expect': {'expect': 'discover'},
+        'plan': {'plan': 'host', 'expect': {'expect': 'discover'}},
     }
     with pytest.raises(StructuredDataError) as raised:
         run(

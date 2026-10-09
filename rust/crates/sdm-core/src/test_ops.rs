@@ -5,11 +5,13 @@
 //! The bodies of the test-only operations (`sdm_contract::test_ops`), built
 //! only with the `test-ops` feature, which a shipped build leaves off.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, HostFacts, Scalar};
+use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_engine::time::Zones;
 
 use crate::attached::take_json;
 use crate::profiles::Profile;
@@ -20,12 +22,13 @@ pub(crate) fn run(
     operation: TestOperation,
     attachments: &mut Attachments,
     facts: HostFacts,
+    zones: Arc<dyn Zones>,
 ) -> Result<Run, CoreError> {
     Ok(match operation {
         TestOperation::Fetch { fetch } => {
             let fetch: TestFetch = take_json(attachments, fetch)?;
             Run::new(move |asker| async move {
-                match asker.fetch(fetch.request, fetch.sql, fetch.expect).await {
+                match asker.fetch_planned(fetch.request, fetch.plan).await {
                     Reply::Fetch(FetchResult::Data(data)) => {
                         let rows = data.batches.iter().map(|b| b.num_rows() as u64).sum();
                         let data = if fetch.echo {
@@ -33,7 +36,11 @@ pub(crate) fn run(
                         } else {
                             None
                         };
-                        Ok(OperationResult::Test(TestResult { rows, data }))
+                        Ok(OperationResult::Test(TestResult {
+                            rows,
+                            data,
+                            offset_seconds: None,
+                        }))
                     }
                     Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
                     Reply::Model(_) => Err(internal("a fetch was answered by the model")),
@@ -67,6 +74,7 @@ pub(crate) fn run(
                 Ok(OperationResult::Test(TestResult {
                     rows: 0,
                     data: None,
+                    offset_seconds: None,
                 }))
             })
         }
@@ -98,8 +106,49 @@ pub(crate) fn run(
             Ok(OperationResult::Test(TestResult {
                 rows: 0,
                 data: None,
+                offset_seconds: None,
             }))
         }),
         TestOperation::Abort => Run::new(|_| async { std::process::abort() }),
+        // The zones the host passed are the ones the run resolves with: the
+        // answer is the offset the run's own zones give (decision H14).
+        TestOperation::Zone { zone, at } => Run::new(move |_| async move {
+            let instant = match at {
+                Scalar::Timestamp {
+                    unit: Unit::Us,
+                    value,
+                    ..
+                } => jiff::Timestamp::from_microsecond(value),
+                Scalar::Timestamp {
+                    unit: Unit::Ns,
+                    value,
+                    ..
+                } => jiff::Timestamp::from_nanosecond(i128::from(value)),
+                _ => {
+                    return Err(CoreError::new(
+                        ErrorKind::InvalidRequest,
+                        ErrorCode::InvalidRequest,
+                        "the zone operation reads a ts scalar",
+                    ));
+                }
+            }
+            .map_err(|_| internal("the instant is out of the zone database's range"))?;
+            let found = zones.zone(&zone).map_err(|_| unknown_zone())?;
+            Ok(OperationResult::Test(TestResult {
+                rows: 0,
+                data: None,
+                offset_seconds: Some(found.to_offset(instant).seconds()),
+            }))
+        }),
     })
+}
+
+/// A zone name the run's zones do not hold. The name is left out: it can
+/// come from the data or the caller (decision H17).
+fn unknown_zone() -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "a time zone is not in the host's zone lookup roots or the bundled database",
+    )
 }

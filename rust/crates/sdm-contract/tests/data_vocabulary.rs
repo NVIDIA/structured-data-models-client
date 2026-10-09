@@ -53,7 +53,15 @@ const DENIED: &[&str] = &[
 ];
 
 /// Text properties that name what a request refers to.
-const IDENTIFIERS: &[&str] = &["table", "tables", "column", "columns", "key"];
+const IDENTIFIERS: &[&str] = &[
+    "table",
+    "tables",
+    "column",
+    "columns",
+    "key",
+    // A column of a `neighbors` request's seed key set (decision H15).
+    "seed_column",
+];
 
 /// Definitions that are reviewed typed values, not request structure: their
 /// text is a scalar's encoded value, a field's name, type or Arrow metadata.

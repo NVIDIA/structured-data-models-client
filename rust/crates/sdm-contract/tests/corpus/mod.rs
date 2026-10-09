@@ -8,8 +8,9 @@
 use std::collections::BTreeMap;
 
 use sdm_contract::data::{
-    AttachmentId, Bound, DataRequest, Dialect, ExpectedSchema, Filter, KeySet, ProviderError,
-    SqlParam, SqlStatement,
+    AttachmentId, Bound, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, Filter,
+    KeySet, ProviderError, SeedBound, SqlParam, SqlStatement, TableColumn, TableKey, TieBreak,
+    TieTerm, Window,
 };
 use sdm_contract::facts::{LocalZone, PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::{
@@ -54,6 +55,33 @@ pub fn keys() -> KeySet {
             nullable: false,
             metadata: BTreeMap::new(),
         }],
+    }
+}
+
+/// A seed key set: `key`, `batch`, and the seed time columns named.
+pub fn seeds(times: &[&str]) -> KeySet {
+    let field = |name: &str, column_type: ColumnType| Field {
+        name: name.into(),
+        column_type,
+        nullable: false,
+        metadata: BTreeMap::new(),
+    };
+    let mut columns = vec![
+        field("key", ColumnType::Int64),
+        field("batch", ColumnType::Int64),
+    ];
+    columns.extend(times.iter().map(|name| {
+        field(
+            name,
+            ColumnType::Timestamp {
+                unit: Unit::Ns,
+                zone: None,
+            },
+        )
+    }));
+    KeySet {
+        attachment: AttachmentId(4),
+        columns,
     }
 }
 
@@ -133,18 +161,124 @@ pub fn messages() -> Vec<ControlMessage> {
                     ],
                     limit: None,
                 },
-                sql: Some(SqlStatement {
-                    dialect: Dialect::Duckdb,
-                    text: "SELECT id, at FROM orders WHERE id IN (SELECT id FROM keys)".into(),
-                    params: vec![
-                        SqlParam::KeySet { keys: keys() },
-                        SqlParam::Value {
-                            value: Scalar::UInt64(u64::MAX),
-                        },
-                    ],
-                }),
-                expect: ExpectedSchema::Discover {},
+                plan: FetchPlan::Sql {
+                    statements: vec![SqlStatement {
+                        dialect: Dialect::Duckdb,
+                        text: "SELECT id, at FROM orders WHERE id IN (SELECT id FROM keys)".into(),
+                        params: vec![
+                            SqlParam::KeySet {
+                                keys: keys(),
+                                relation: "keys".into(),
+                            },
+                            SqlParam::Value {
+                                value: Scalar::UInt64(u64::MAX),
+                            },
+                        ],
+                    }],
+                    expect: ExpectedSchema::Discover {},
+                },
             }],
+        }),
+        ControlMessage::Step(Step::Fetch {
+            requests: vec![
+                FetchStep {
+                    id: ReplyId(2),
+                    request: DataRequest::Neighbors {
+                        table: "orders".into(),
+                        key: "user_id".into(),
+                        columns: vec!["order_id".into(), "ts".into()],
+                        seeds: seeds(&["anchor"]),
+                        window: Some(Window {
+                            column: "ts".into(),
+                            lower: None,
+                            upper: Some(SeedBound {
+                                seed_column: "anchor".into(),
+                                inclusive: true,
+                            }),
+                        }),
+                        per_seed: Some(32),
+                        order: Some(TieBreak(vec![
+                            TieTerm {
+                                column: "ts".into(),
+                                as_timestamp: true,
+                                descending: true,
+                                nulls_last: true,
+                            },
+                            TieTerm {
+                                column: "order_id".into(),
+                                as_timestamp: false,
+                                descending: false,
+                                nulls_last: true,
+                            },
+                        ])),
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
+                FetchStep {
+                    id: ReplyId(3),
+                    request: DataRequest::Lookup {
+                        table: "users".into(),
+                        key: "user_id".into(),
+                        columns: vec!["age".into()],
+                        seeds: seeds(&[]),
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
+                FetchStep {
+                    id: ReplyId(4),
+                    request: DataRequest::SampleEntities {
+                        table: "users".into(),
+                        key: vec!["user_id".into()],
+                        n: 10_000,
+                        seed: Scalar::UInt64(42),
+                        columns: vec!["user_id".into()],
+                        filters: vec![Filter::NotNull {
+                            column: "user_id".into(),
+                        }],
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
+                FetchStep {
+                    id: ReplyId(5),
+                    request: DataRequest::TimeBounds {
+                        columns: vec![TableColumn {
+                            table: "orders".into(),
+                            column: "ts".into(),
+                        }],
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
+                FetchStep {
+                    id: ReplyId(6),
+                    request: DataRequest::KeyCounts {
+                        keys: vec![TableKey {
+                            table: "orders".into(),
+                            columns: vec!["order_id".into()],
+                        }],
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
+                FetchStep {
+                    id: ReplyId(7),
+                    request: DataRequest::Describe {
+                        tables: vec![],
+                        part: DescribePart::Indexes,
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
+            ],
         }),
         ControlMessage::FetchReply(FetchReply {
             id: ReplyId(1),

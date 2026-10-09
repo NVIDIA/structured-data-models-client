@@ -1409,7 +1409,10 @@ version = "1.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
+ "jiff",
  "sdm-contract",
+ "sdm-data",
+ "sdm-engine",
  "sdm-pql-interim",
  "serde",
  "serde_json",
@@ -1421,10 +1424,16 @@ dependencies = [
 [[package]]
 name = "sdm-data"
 version = "1.0.0"
+dependencies = [
+ "sdm-contract",
+]
 
 [[package]]
 name = "sdm-engine"
 version = "1.0.0"
+dependencies = [
+ "jiff",
+]
 
 [[package]]
 name = "sdm-host"
@@ -1440,6 +1449,7 @@ dependencies = [
  "regex",
  "sdm-contract",
  "sdm-core",
+ "sdm-data",
  "serde",
  "serde_json",
  "thiserror",

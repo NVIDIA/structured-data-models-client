@@ -58,7 +58,8 @@ use crate::zones::{ZoneResolver, ZoneRoot, ZoneSource};
 pub struct HostRun {
     run: Mutex<Run>,
     ids: AttachmentIds,
-    zones: ZoneResolver,
+    /// The zones of the run's host facts, which the core resolves with.
+    zones: Arc<ZoneResolver>,
 }
 
 /// What a contained call failed with: an error, or a panic, which
@@ -257,24 +258,29 @@ impl HostRun {
             // another contract (H25). The core checks the attachments.
             sdm_core::dispatch::check_contract(start.contract)?;
             check_local_zone(start.facts.local_zone.as_ref())?;
-            let zones = ZoneResolver::new(start.facts.zone_roots.iter().map(|root| ZoneRoot {
-                path: root.path.clone().into(),
-                version: root.version.clone(),
-            }));
+            let zones = Arc::new(ZoneResolver::new(start.facts.zone_roots.iter().map(
+                |root| ZoneRoot {
+                    path: root.path.clone().into(),
+                    version: root.version.clone(),
+                },
+            )));
             if let Some((&id, &failure)) = unreadable.first_key_value() {
                 let envelope = with_stand_ins(attachments, unreadable);
                 check_attachments(&start.operation.attachments(), &envelope)?;
                 return Err(unreadable_error(id, failure));
             }
-            let run = sdm_core::start(root, *start, attachments)?;
+            // The core resolves zones through the host's own resolver, the
+            // one whose sources the host records (decision H14).
+            let core_zones: Arc<dyn sdm_core::Zones> = zones.clone();
+            let run = sdm_core::start(root, *start, attachments, core_zones)?;
             Ok(HostRun::with(run, zones))
         })
         .map_err(|failure| start_error(&failure.error))
     }
 
     /// The host run of a core run built directly, as tests and the
-    /// pure-Rust test host build one.
-    pub fn with(run: Run, zones: ZoneResolver) -> HostRun {
+    /// pure-Rust test host build one, with the zones it was built with.
+    pub fn with(run: Run, zones: Arc<ZoneResolver>) -> HostRun {
         HostRun {
             ids: run.attachment_ids(),
             run: Mutex::new(run),

@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, Int64Array, RecordBatch};
 use sdm_contract::data::{
-    AttachmentId, DataRequest, Dialect, ExpectedSchema, ProviderError, SqlStatement,
+    AttachmentId, DataRequest, Dialect, ExpectedSchema, FetchPlan, ProviderError, SqlStatement,
 };
 use sdm_contract::facts::{LocalZone, PlatformFacts};
 use sdm_contract::ops::{
@@ -31,7 +31,7 @@ use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, CoreWarning, Detail, ErrorCode,
     ErrorKind, Field, HostFacts, Scalar, Step, Unit,
 };
-use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot};
+use sdm_core::{ArrowData, Attachment, Attachments};
 use sdm_host::{CONTROL_CAP, HostRun, Outgoing, decode, encode, read};
 
 fn facts(local_zone: Option<LocalZone>) -> HostFacts {
@@ -65,7 +65,7 @@ fn json(value: &impl serde::Serialize) -> Attachment {
 
 fn start(operation: Operation, attachments: Attachments) -> Result<HostRun, CoreError> {
     HostRun::start(
-        &CompositionRoot::default(),
+        &sdm_host::default_root(),
         &encode(&start_message(operation, None)).unwrap(),
         attachments,
     )
@@ -185,7 +185,7 @@ fn a_start_envelope_is_capped_and_its_attachments_are_not() {
             start_message(validate(Some("m".repeat(pad))), None)
         });
         let bytes = serde_json::to_vec(&message).unwrap();
-        let started = HostRun::start(&CompositionRoot::default(), &bytes, attachments());
+        let started = HostRun::start(&sdm_host::default_root(), &bytes, attachments());
         match started {
             Ok(run) => {
                 assert!(!refused);
@@ -244,12 +244,14 @@ fn wide_fetch(pad: usize) -> TestFetch {
             filters: vec![],
             limit: None,
         },
-        sql: Some(SqlStatement {
-            dialect: Dialect::Duckdb,
-            text: format!("SELECT * FROM orders{}", " ".repeat(pad)),
-            params: vec![],
-        }),
-        expect: ExpectedSchema::Schema { fields },
+        plan: FetchPlan::Sql {
+            statements: vec![SqlStatement {
+                dialect: Dialect::Duckdb,
+                text: format!("SELECT * FROM orders{}", " ".repeat(pad)),
+                params: vec![],
+            }],
+            expect: ExpectedSchema::Schema { fields },
+        },
     }
 }
 
@@ -258,8 +260,7 @@ fn fetch_step(fetch: &TestFetch) -> ControlMessage {
         requests: vec![FetchStep {
             id: ReplyId(1),
             request: fetch.request.clone(),
-            sql: fetch.sql.clone(),
-            expect: fetch.expect.clone(),
+            plan: fetch.plan.clone(),
         }],
     })
 }
@@ -309,6 +310,7 @@ fn a_fetch_step_with_a_wide_plan_arrives_whole_either_side_of_the_cap() {
                 result: OperationResult::Test(TestResult {
                     rows: 3,
                     data: None,
+                    offset_seconds: None,
                 })
             })
         );
@@ -508,7 +510,7 @@ fn a_local_zone_may_be_an_iana_name_or_a_posix_tz_string() {
     };
     let begin = |zone: LocalZone| {
         HostRun::start(
-            &CompositionRoot::default(),
+            &sdm_host::default_root(),
             &encode(&start_message(validate(None), Some(zone))).unwrap(),
             attachments(),
         )
@@ -548,7 +550,7 @@ fn a_start_from_another_contract_version_is_refused_for_its_version_first() {
     start.contract = CONTRACT_VERSION + 1;
     let err = error(
         HostRun::start(
-            &CompositionRoot::default(),
+            &sdm_host::default_root(),
             &encode(&message).unwrap(),
             Attachments::from([(AttachmentId(9), json(&"stray"))]),
         )

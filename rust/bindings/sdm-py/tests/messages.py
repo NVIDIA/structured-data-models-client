@@ -14,7 +14,7 @@ import json
 from typing import Any
 
 #: The contract version these messages are written for.
-CONTRACT = 4
+CONTRACT = 5
 
 FACTS: dict[str, Any] = {
     'now': {'t': 'ts', 'unit': 'us', 'zone': 'UTC', 'v': '1767225600000000'},
@@ -81,8 +81,7 @@ def fetch(
             'filters': [],
             'limit': None,
         },
-        'sql': None,
-        'expect': expect,
+        'plan': {'plan': 'host', 'expect': expect},
         'echo': echo,
     }
     return operation_for_tests('fetch', fetch=1), {1: encoded(request)}

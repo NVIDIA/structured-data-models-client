@@ -19,7 +19,9 @@ test-ops = ["sdm-contract/test-ops", "sdm-pql-interim/test-ops"]
 [dependencies]
 arrow-array.workspace = true
 arrow-schema.workspace = true
+jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
+sdm-engine = { path = "../sdm-engine" }
 sdm-pql-interim = { path = "../sdm-pql-interim" }
 serde.workspace = true
 serde_json.workspace = true
@@ -27,6 +29,7 @@ stacker.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+sdm-data = { path = "../sdm-data" }
 serde_stacker.workspace = true
 
 [lints]

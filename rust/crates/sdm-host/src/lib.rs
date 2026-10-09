@@ -23,9 +23,9 @@ pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone
 pub use sdm_core::{ArrowData, Attachment, Attachments};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
 
-/// The composition root a binding starts its runs with. Today's root is
-/// empty, with no SQL compiler registered; T1.11a builds the data layer in
-/// it here, where every binding reaches it (decisions E21, H14).
+/// The composition root a binding starts its runs with: the one data layer,
+/// `sdm-data`'s, built here where every binding reaches it (decisions E21,
+/// H14, E30).
 pub fn default_root() -> sdm_core::CompositionRoot {
-    sdm_core::CompositionRoot::default()
+    sdm_core::CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::new()))
 }

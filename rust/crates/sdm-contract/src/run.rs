@@ -35,7 +35,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::data::{AttachmentId, DataRequest, ExpectedSchema, ProviderError, SqlStatement};
+use crate::data::{AttachmentId, DataRequest, FetchPlan, ProviderError};
 use crate::error::{CoreError, CoreWarning, ErrorKind};
 use crate::facts::HostFacts;
 use crate::ops::{Operation, OperationResult};
@@ -61,15 +61,15 @@ pub enum Step {
     },
 }
 
-/// One data request of a fetch step.
+/// One data request of a fetch step, with how the run's provider answers
+/// it: the SQL statements its data layer planned, or the request passed to
+/// a host provider, and the schema the answer must have.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FetchStep {
     pub id: ReplyId,
     pub request: DataRequest,
-    /// The compiled statement, for a SQL provider.
-    pub sql: Option<SqlStatement>,
-    pub expect: ExpectedSchema,
+    pub plan: FetchPlan,
 }
 
 /// Which model endpoint a call goes to.

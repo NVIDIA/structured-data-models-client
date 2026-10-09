@@ -4,9 +4,12 @@
 
 //! Operation dispatch: a typed operation to the body of its run.
 
+use std::sync::Arc;
+
 use sdm_contract::ops::{Operation, OperationResult, QuerySchema, SourceDescription, SourceSpec};
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_engine::time::Zones;
 
 use crate::attached::{check_attachments, take_json};
 use crate::compose::CompositionRoot;
@@ -29,15 +32,18 @@ pub fn check_contract(contract: u32) -> Result<(), CoreError> {
     .with_field("contract", Detail::Scalar(Scalar::UInt32(contract))))
 }
 
-/// The run of `start`'s operation, with the attachments the start names.
-/// A contract version other than this build's, host facts the contract
-/// does not allow, or attachments other than the ones the operation names,
-/// are refused before any run exists. Input-sized fields are read from their
-/// attachments here (decision H5).
+/// The run of `start`'s operation, with the attachments the start names
+/// and the zones of the host's facts (decision H14): the run resolves zone
+/// names through `zones` and nothing else. A contract version other than
+/// this build's, host facts the contract does not allow, attachments other
+/// than the ones the operation names, or a provider the root's data layer
+/// cannot serve, are refused before any run exists. Input-sized fields are
+/// read from their attachments here (decision H5).
 pub fn start(
     root: &CompositionRoot,
     start: StartRun,
     attachments: Attachments,
+    zones: Arc<dyn Zones>,
 ) -> Result<Run, CoreError> {
     check_contract(start.contract)?;
     // The clock is an instant in UTC, spelled as the contract spells it (E5).
@@ -50,6 +56,10 @@ pub fn start(
         .with_field("field", Detail::text("facts.now")));
     }
     check_attachments(&start.operation.attachments(), &attachments)?;
+    // Only the test-only operations resolve a zone yet; T1.25's time module
+    // and T1.6b's local-zone year take them from here.
+    #[cfg(not(feature = "test-ops"))]
+    let _ = zones;
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
@@ -64,8 +74,8 @@ pub fn start(
         }
         Operation::DescribeSource(request) => {
             let _source: SourceSpec = take_json(&mut attachments, request.source)?;
-            let _access = root.data_access(&request.provider)?;
-            Run::new(|_| async { Err(not_yet("describe_source")) })
+            let access = root.data_access(&request.provider)?;
+            Run::with_data(access, |_| async { Err(not_yet("describe_source")) })
         }
         Operation::Materialize(request) => {
             let _schema: SourceDescription = take_json(&mut attachments, request.schema)?;
@@ -81,15 +91,17 @@ pub fn start(
                 )
                 .with_field("field", Detail::text("seed")));
             }
-            let _access = root.data_access(&request.provider)?;
-            Run::new(|_| async { Err(not_yet("materialize")) })
+            let access = root.data_access(&request.provider)?;
+            Run::with_data(access, |_| async { Err(not_yet("materialize")) })
         }
         Operation::Predict(request) => {
             let _query: String = take_json(&mut attachments, request.state.query)?;
             Run::new(|_| async { Err(not_yet("predict")) })
         }
         #[cfg(feature = "test-ops")]
-        Operation::Test(operation) => crate::test_ops::run(operation, &mut attachments, facts)?,
+        Operation::Test(operation) => {
+            crate::test_ops::run(operation, &mut attachments, facts, zones)?
+        }
     })
 }
 
