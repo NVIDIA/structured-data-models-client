@@ -11,6 +11,7 @@ future fix cannot be applied to one file and forgotten in the others.
 column seeded from it detects the widening the moment it happens.
 """
 
+import importlib
 import sqlite3
 import uuid
 import warnings
@@ -429,16 +430,16 @@ def _shape_graph(backend: str, path: str, edges: list) -> rfm.Graph:
 
 def _sampled(graph: rfm.Graph, entity: str) -> dict[str, tuple]:
     r"""Each table's nodes per hop, and which rows each entity reached."""
-    from sdm_relational_engine.rfm.backend.duckdb import DuckDBSampler
-    from sdm_relational_engine.rfm.backend.local.sampler import LocalSampler
-    from sdm_relational_engine.rfm.backend.sqlite import SQLiteSampler
-
-    backend = graph[entity].backend
-    sampler_cls = {
-        'duckdb': DuckDBSampler,
-        'local': LocalSampler,
-        'sqlite': SQLiteSampler,
-    }[str(backend)]
+    # Import only this graph's sampler, so one backend's driver is enough.
+    module, name = {
+        'duckdb': ('duckdb', 'DuckDBSampler'),
+        'local': ('local.sampler', 'LocalSampler'),
+        'sqlite': ('sqlite', 'SQLiteSampler'),
+    }[str(graph[entity].backend)]
+    sampler_cls = getattr(
+        importlib.import_module(f'sdm_relational_engine.rfm.backend.{module}'),
+        name,
+    )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', UserWarning)  # Missing indices.
         sampler = sampler_cls(graph, verbose=False)
