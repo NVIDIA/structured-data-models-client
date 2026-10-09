@@ -13,6 +13,7 @@ a query is accepted or refused as on the old route, with the same code.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import textwrap
@@ -22,7 +23,6 @@ from typing import Any
 
 import pandas as pd
 import pytest
-import yaml
 from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client import (
@@ -71,13 +71,21 @@ REFUSED = 'PREDICT users.nope FOR EACH users.id'
 def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() -> (
     None
 ):
-    manifest = yaml.safe_load(MANIFEST.read_text(encoding='utf-8'))
-    layer = {op['id']: op['layer'] for op in manifest['operations']}
-    core = [
-        path['id']
-        for path in manifest['paths']
-        if layer[path['id'].split('/')[0]] == 'core'
-    ]
+    # Read without a YAML library, which the installed-wheel job lacks:
+    # each operation's `- id:` line is followed by its `layer:`, and a
+    # path's ID is operation/mode/backend.
+    text = MANIFEST.read_text(encoding='utf-8')
+    operations, rest = text.split('\npaths:\n')
+    paths = rest.split('\ncells:\n')[0]
+    layer = dict(
+        re.findall(
+            r'^- id: (\S+)\n(?:  .*\n)*?  layer: (\w+)$', operations, re.M
+        )
+    )
+    assert len(layer) == 26
+    ids = re.findall(r'^- id: (\S+)$', paths, re.M)
+    assert len(ids) == 281
+    core = [path for path in ids if layer[path.split('/')[0]] == 'core']
     assert list(_routing.PATHS) == core
     assert set(_routing.ROUTES) == set(core)
     # Every default is the old code until the Phase 3 switch.
