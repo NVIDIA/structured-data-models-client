@@ -27,6 +27,31 @@ and acknowledges externally reported issues addressed under its coordinated
 disclosure policy. See the
 [PSIRT policies](https://www.nvidia.com/en-us/security/psirt-policies/) page.
 
+## Verifying a release
+
+Every file on PyPI is signed when it is published. There is no NVIDIA signing
+key to fetch: the signer is this repository's release workflow, and the
+signature is a [PEP 740](https://peps.python.org/pep-0740/) attestation issued
+to that workflow's short-lived identity and recorded in Sigstore's transparency
+log. Verifying one tells you the bytes you downloaded were built and published
+by `.github/workflows/publish.yml` here, and not by anyone else.
+
+```bash
+pip install pypi-attestations
+pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify
+python -m pypi_attestations verify pypi \
+  --repository https://github.com/NVIDIA/structured-data-models-client \
+  /tmp/verify/*.whl
+```
+
+Pass `--repository`. Without it the check still confirms the file was signed,
+but not by whom, and a valid signature from an unrelated project would pass.
+The same command verifies any of the five packages; name the file you want to
+check.
+
+What this does not tell you is whether the release is free of defects or
+vulnerabilities. It establishes integrity and origin, and nothing more.
+
 ## Supported versions
 
 The client is distributed as five packages: `structured-data-models-client`, `structured-data-models-api`,

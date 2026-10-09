@@ -86,10 +86,11 @@ token, something is wrong with the trusted-publisher configuration instead.
 
 ## After
 
-```bash
-pip download --no-deps structured-data-models-client==1.2.0 -d /tmp/verify
-python -m pypi_attestations verify pypi /tmp/verify/*.whl
-```
+The `verify` job has already checked every published file against this
+repository's identity, and the release is not created until it passes, so
+there is nothing to confirm by hand. To reproduce what it did, or to answer
+someone who asks, SECURITY.md's "Verifying a release" section is the same
+command written for a consumer.
 
 ## Yanking
 
