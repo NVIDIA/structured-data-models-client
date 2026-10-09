@@ -63,6 +63,15 @@ def _run(*command: str, **kwargs: object) -> str:
     ).stdout
 
 
+def _toolchain() -> str:
+    """The toolchain rust/rust-toolchain.toml pins."""
+    text = (REPO / 'rust/rust-toolchain.toml').read_text()
+    found = re.search(r'^channel = "([^"]+)"', text, re.MULTILINE)
+    if not found:
+        sys.exit('rust/rust-toolchain.toml names no channel')
+    return found.group(1)
+
+
 def _cargo_configs() -> dict[str, str]:
     """Every Cargo configuration file a build in rust/ reads."""
     found = {}
@@ -161,9 +170,16 @@ def main() -> int:
         command += ['--features', 'test-ops']
     if arguments.manylinux:
         command += ['--compatibility', 'manylinux2014']
-        command += ['--interpreter', 'python3.10']
+    # maturin runs cargo from the client's directory, where rustup sees no
+    # toolchain file, so the pin is passed on.
+    pinned = {**os.environ, 'RUSTUP_TOOLCHAIN': _toolchain()}
     build = subprocess.run(
-        command, cwd=CLIENT, capture_output=True, text=True, check=False
+        command,
+        cwd=CLIENT,
+        env=pinned,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     log = build.stdout + build.stderr
     if build.returncode != 0:
@@ -194,7 +210,7 @@ def main() -> int:
         ).strip(),
         'features': ['test-ops'] if arguments.test_ops else [],
         'maturin': version,
-        'rustc': _run('rustc', '--version', cwd=REPO / 'rust').strip(),
+        'rustc': _run('rustc', '--version', env=pinned).strip(),
         'target_flags': {
             'environment': environment,
             'cargo_config': sorted(configs),
