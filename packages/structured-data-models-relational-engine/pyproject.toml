@@ -279,9 +279,6 @@ ignore = [
 "tests/client/test_client_security.py" = ["N815"]
 # ANTLR's `ErrorListener` calls `syntaxError(...)` by that exact name.
 "tests/test_pql_quoted_identifiers.py" = ["N802"]
-# Databricks injects `dbutils`/`spark`/`display` into notebooks (F821), and
-# each cell repeats its own imports so it stays runnable on its own (E402).
-"**/examples/**/notebooks/*.ipynb" = ["F821", "E402"]
 
 [tool.ruff.lint.pydocstyle]
 convention="google"

@@ -221,8 +221,8 @@ jobs:
 
   # The engine's manylinux wheels, from the same `[tool.cibuildwheel]` table
   # the release reads, each architecture on a runner of its own rather than
-  # under emulation. Databricks serverless runs on aarch64 as often as on
-  # x86-64, and each wheel is smoke-tested on the architecture it targets.
+  # under emulation. Databricks serverless compute can run on either
+  # architecture, and each wheel is smoke-tested on the architecture it targets.
   engine-wheels:
     needs: build
     strategy:

@@ -5,6 +5,15 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
+## Unreleased
+
+### Fixed
+
+- A Databricks metric view name may hold a part SQL reads only quoted, such as
+  the catalog in `my-catalog.sales.metrics`, without backticks.
+- The AdventureWorks Databricks notebook no longer raises `NameError` when a
+  metric view is set.
+
 ## 1.0.0 - 2026-10-08
 
 First public release. The five distributions are versioned and published
