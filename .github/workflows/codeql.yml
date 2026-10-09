@@ -8,11 +8,16 @@
 # to build a tag whose CI run did not succeed. What would land in that contract
 # is not the findings, which GitHub reports as a separate `Code scanning
 # results` check, but this job's own failures: an extraction, build, query or
-# upload error. Those have little to do with the commit and would block a
-# release, so they are kept out of the gate.
+# upload error. Some of those are the commit's fault, since this job compiles
+# the engine from the checkout, and some are upstream's or the upload's. Mixing
+# the second kind into the release gate is what this avoids.
 #
-# It also needs a weekly run, which `ci.yml` has no reason to have. Queries
-# arrive on upstream's schedule rather than with a change here.
+# The weekly run does not bring new queries. Pinning the action by digest pins
+# the CodeQL bundle with it, so the query set changes when dependabot raises
+# that digest, and merging it scans on push anyway. What the schedule is for is
+# narrower: a default branch that has not been touched in a month still carries
+# a recent scan, and a workflow that has quietly stopped working says so
+# without waiting for the next pull request.
 #
 # Results need GitHub code scanning, which needs Advanced Security while this
 # repository is internal and is included once it is public.
