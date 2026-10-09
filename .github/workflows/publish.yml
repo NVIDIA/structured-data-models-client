@@ -104,9 +104,16 @@ jobs:
 
       # aarch64 is built under emulation on the x86-64 runner, the same way the
       # GitLab `wheels` job builds it, so the two cannot disagree on the set.
+      # The image is pinned as well as the action. Left to its default, this
+      # step pulls `tonistiigi/binfmt:latest` and runs it with `--privileged`
+      # on the runner that then builds the native wheels, so a moving tag on
+      # that image reaches the release even though the action cannot. Nothing
+      # updates this digest automatically, since dependabot does not read a
+      # workflow input; it is raised by hand with the action.
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
 
       # The engine is a native build and needs one wheel per interpreter and
       # platform. It is not optional: structured-data-models-client[relational] pins it by exact
@@ -221,10 +228,16 @@ jobs:
 
   # An attestation nobody checks is a claim. The release workflow signs these
   # files, so the release workflow is where the signature is checked, before
-  # anything announces the release as real. This runs the command SECURITY.md
-  # gives consumers, against the index they install from, constrained to this
-  # repository: an attestation that verifies against some other workflow is a
-  # failure here, not a pass.
+  # anyone installs them. This runs the command SECURITY.md gives consumers,
+  # against the index they install from.
+  #
+  # What it establishes is narrower than it looks, and the prose elsewhere is
+  # written to match: a PEP 740 attestation proves these exact bytes were
+  # published by a Trusted Publisher of this repository and have not been
+  # altered since. It is not build provenance, and `--repository` is the only
+  # constraint the verifier accepts. The workflow filename in the attestation
+  # comes from PyPI's own provenance rather than from anything asserted here,
+  # so this does not distinguish one workflow in this repository from another.
   verify:
     needs: publish
     runs-on: ubuntu-latest
@@ -241,30 +254,35 @@ jobs:
       - name: Every published file verifies against this repository
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pypi-attestations
+          # Pinned, unlike the build-time tools above, because this one is the
+          # check rather than the thing being checked: a verifier resolved at
+          # release time could pass without verifying, or drop the subcommand
+          # and block a release that is fine. Upstream says the CLI is not a
+          # stable interface, so raise this deliberately.
+          python -m pip install pypi-attestations==0.0.30
           # The same two files the publish job drops, for the same reason:
           # they are release assets and were never uploaded to the index.
           rm -f dist/sbom.cyclonedx.json dist/notes.md
 
-          verify() {
-            python -m pypi_attestations verify pypi \
-              --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "pypi:$1"
-          }
-
-          # A file is on PyPI the moment the upload returns, but its provenance
-          # is served through a cache that can take a few seconds to catch up.
-          # One file absorbs that wait on behalf of the rest, so a cold cache
-          # costs the release one delay instead of thirty.
-          for path in dist/*; do probe=$(basename "$path"); break; done
-          for attempt in 1 2 3 4 5; do
-            if verify "$probe"; then break; fi
-            sleep $((attempt * 10))
-          done
-
           failed=0
           for path in dist/*; do
             name=$(basename "$path")
-            if ! verify "$name"; then
+            verified=
+            # A file is on PyPI the moment the upload returns, but its
+            # provenance is served through a cache that can take a few seconds
+            # to catch up, and the files do not all become visible at once.
+            # Every file gets its own retries, so one slow entry cannot be
+            # reported as unsigned.
+            for attempt in 1 2 3 4 5; do
+              if python -m pypi_attestations verify pypi \
+                   --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+                   "pypi:$name"; then
+                verified=yes
+                break
+              fi
+              sleep $((attempt * 10))
+            done
+            if [ -z "$verified" ]; then
               echo "::error::$name does not verify as published by $GITHUB_REPOSITORY"
               failed=1
             fi
@@ -278,7 +296,7 @@ jobs:
   # ninety days and then did not. Attached to the release, where it lasts as
   # long as the release does.
   attach-sbom:
-    needs: verify
+    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -29,12 +29,11 @@ disclosure policy. See the
 
 ## Verifying a release
 
-Every file on PyPI is signed when it is published. There is no NVIDIA signing
-key to fetch: the signer is this repository's release workflow, and the
-signature is a [PEP 740](https://peps.python.org/pep-0740/) attestation issued
-to that workflow's short-lived identity and recorded in Sigstore's transparency
-log. Verifying one tells you the bytes you downloaded were built and published
-by `.github/workflows/publish.yml` here, and not by anyone else.
+Every file this project publishes to PyPI carries a
+[PEP 740](https://peps.python.org/pep-0740/) attestation. There is no NVIDIA
+signing key to fetch: the signature is issued to the short-lived identity of
+this repository's release workflow and recorded in Sigstore's transparency
+log.
 
 ```bash
 pip install pypi-attestations
@@ -44,13 +43,16 @@ python -m pypi_attestations verify pypi \
   /tmp/verify/*.whl
 ```
 
-Pass `--repository`. Without it the check still confirms the file was signed,
-but not by whom, and a valid signature from an unrelated project would pass.
-The same command verifies any of the five packages; name the file you want to
+`--repository` is not optional: without it the command refuses to verify a
+file published from a repository at all, and with the wrong one it fails. The
+same command verifies any of the five packages; name the file you want to
 check.
 
-What this does not tell you is whether the release is free of defects or
-vulnerabilities. It establishes integrity and origin, and nothing more.
+A passing check tells you these exact bytes were published to PyPI by an
+authorized Trusted Publisher of this repository, and have not been altered
+since. That is integrity and origin. It is not build provenance: it does not
+establish how the bytes were produced, and it does not tell you the release is
+free of defects or vulnerabilities.
 
 ## Supported versions
 

@@ -2,10 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Actions are referenced by commit digest, so a moving tag cannot change what
-# runs in the release workflow. A digest goes stale rather than wrong, which is
-# why this exists: `github-actions` updates arrive weekly as reviewable pull
-# requests, and dependabot rewrites the digest and the version comment together.
+# Actions are referenced by commit digest, so a moving tag cannot change which
+# action code runs. A digest goes stale rather than wrong, which is why this
+# exists: `github-actions` updates arrive weekly as reviewable pull requests,
+# and dependabot rewrites the digest and the version comment together. It does
+# not read a workflow input, so the binfmt image `publish.yml` pins there is
+# raised by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions

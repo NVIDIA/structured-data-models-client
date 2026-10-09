@@ -87,10 +87,15 @@ token, something is wrong with the trusted-publisher configuration instead.
 ## After
 
 The `verify` job has already checked every published file against this
-repository's identity, and the release is not created until it passes, so
-there is nothing to confirm by hand. To reproduce what it did, or to answer
-someone who asks, SECURITY.md's "Verifying a release" section is the same
-command written for a consumer.
+repository's identity, so there is nothing to confirm by hand. It runs beside
+the job that creates the GitHub Release rather than before it: an upload
+cannot be undone, and a release whose SBOM never got attached because a cache
+was cold is worse than one whose verification has to be re-run. A red `verify`
+on a green `publish` means the files are on PyPI and something about their
+attestations needs looking at, not that the release did not happen.
+
+To reproduce what it did, SECURITY.md's "Verifying a release" section is the
+same command written for a consumer.
 
 ## Yanking
 
