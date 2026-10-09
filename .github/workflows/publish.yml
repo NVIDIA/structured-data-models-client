@@ -7,9 +7,12 @@
 # There is no API token anywhere in this workflow or in the repository's
 # secrets. PyPI's Trusted Publishing exchanges this job's OIDC identity for a
 # short-lived, single-use upload token, and the same identity signs a PEP 740
-# attestation that a consumer can verify back to this workflow, this repository
-# and this tag. A token in a secret proves that whoever holds it can upload; an
-# attestation proves where the artifact came from.
+# attestation that a consumer can verify back to this repository. A token in a
+# secret proves that whoever holds it can upload; an attestation proves the
+# upload came from a publisher this repository authorized. It does not pin the
+# workflow or the tag: the verifier takes those from PyPI's own provenance and
+# cross-checks only the repository, so a second Trusted Publisher configured
+# here would verify just as cleanly.
 #
 # The release runs in two jobs on purpose. `build` has no privileges and no
 # id-token, so a compromised build dependency cannot reach the publishing
@@ -221,15 +224,28 @@ jobs:
       - name: Keep only the distributions
         run: rm -f dist/sbom.cyclonedx.json dist/notes.md
 
+      # The one piece of the release that cannot be pinned from here. This
+      # action is pinned by commit, but it generates a Docker action whose
+      # image is `ghcr.io/pypa/gh-action-pypi-publish:<the pinned sha>`, and a
+      # GHCR tag is mutable however it is named. There is no input to pull it
+      # by digest, so repointing that tag would change the code that runs in
+      # the job holding `id-token: write`. The trust boundary is therefore the
+      # pypa organization, not just the commit above. Writing the upload by
+      # hand to avoid it would put less-reviewed code in the same place, which
+      # is the worse trade. Recorded here so nobody reads the digests above and
+      # concludes that everything the release executes is immutable.
       - name: Publish with Trusted Publishing and attest the artifacts
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           attestations: true
 
   # An attestation nobody checks is a claim. The release workflow signs these
-  # files, so the release workflow is where the signature is checked, before
-  # anyone installs them. This runs the command SECURITY.md gives consumers,
-  # against the index they install from.
+  # files, so the release workflow is where the signature is checked. It cannot
+  # run before anyone installs them, because an attestation is only on the
+  # index once the upload is done; what it catches is a release whose
+  # signatures are wrong, while the release is still minutes old and whoever
+  # cut it is still watching. This runs the command SECURITY.md gives
+  # consumers, against the index they install from.
   #
   # What it establishes is narrower than it looks, and the prose elsewhere is
   # written to match: a PEP 740 attestation proves these exact bytes were
