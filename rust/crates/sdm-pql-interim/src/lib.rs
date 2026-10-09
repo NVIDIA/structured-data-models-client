@@ -6,12 +6,12 @@
 //! syntax tree and seven validators (`archive/rust-core-attempt-1`,
 //! `rust/crates/pql`), ported behind `sdm-core`'s adapter.
 //!
-//! Only `sdm_core::pql` uses this crate, and it is deleted when the PQL
-//! team's crate takes its place behind the same adapter. It parses a query
-//! ([`parse`]) and resolves it against a schema ([`resolve`]); whether the
-//! model on the other end can answer the resolved query is asked by the
-//! core, not here, except for the two filter capabilities resolution itself
-//! consults ([`Filters`]).
+//! Only `sdm_core::pql` uses this crate. The parser is permanent (decision
+//! E18): T1.6b completes it and gives the crate a permanent name. It parses
+//! a query ([`parse`]) and resolves it against a schema ([`resolve`]);
+//! whether the model on the other end can answer the resolved query is
+//! asked by the core, not here, except for the two filter capabilities
+//! resolution itself consults ([`Filters`]).
 //!
 //! Python behavior is emulated only in the modules listed in
 //! `scripts/rust_core/emulation-allowlist.txt`: [`pyint`], Python's limit of

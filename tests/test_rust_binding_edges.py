@@ -6,8 +6,9 @@
 
 Among first-party crates, ``sdm-py`` depends only on ``sdm-host`` and, for
 types, ``sdm-contract``, never on ``sdm-core``; every third-party dependency
-it has is one ``dependencies.md`` lists for it. T1.10c's ``l0_deps.py``
-checks the whole graph; this holds the binding's edges until then.
+it has is one ``dependencies.md`` lists for it. From T1.10c,
+``scripts/rust_core/l0_deps.py`` checks the whole first-party graph, the
+binding's edges included; this test keeps the third-party half.
 """
 
 from __future__ import annotations
