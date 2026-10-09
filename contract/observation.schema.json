@@ -52,7 +52,7 @@
                 "properties": {
                   "handle": {"type": "integer", "minimum": 0},
                   "sql": {"type": ["string", "null"]},
-                  "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/typed"}},
+                  "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/parameter"}},
                   "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
                   "error": {"type": ["string", "null"]}
                 }
@@ -97,10 +97,12 @@
           "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound through the API (without). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["statements", "bindings"],
+          "required": ["statements", "bindings", "compared", "differing"],
           "properties": {
             "statements": {"type": "integer", "minimum": 0},
-            "bindings": {"type": "integer", "minimum": 0}
+            "bindings": {"type": "integer", "minimum": 0},
+            "compared": {"description": "How many captured statements' text was compared with the text DuckDB logged for it: all but a PRAGMA, which DuckDB logs as its table function; 0 without the capture.", "type": "integer", "minimum": 0},
+            "differing": {"description": "The positions of compared statements whose logged text differs from the captured one.", "type": "array", "items": {"type": "integer", "minimum": 0}}
           }
         }
       }
@@ -187,6 +189,13 @@
       "additionalProperties": false,
       "required": ["type", "value"],
       "properties": {"type": {"type": "string"}, "value": {"type": "string"}}
+    },
+    "parameter": {
+      "description": "A statement's parameter: typed, with its name when the statement binds parameters by name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {"name": {"type": "string"}, "type": {"type": "string"}, "value": {"type": "string"}}
     },
     "arrow_schema": {
       "type": "array",

@@ -28,7 +28,10 @@ dispatch tests read the reference's own ``sdm_connectors`` and engine.
 
 from __future__ import annotations
 
+import copy
 import importlib.util
+import json
+import subprocess
 import sys
 from datetime import datetime
 from decimal import Decimal
@@ -347,14 +350,159 @@ def test_the_control_over_duckdb_and_its_query_log() -> None:
 
 # --- conservation on base.regression -----------------------------------------------
 
+Run = list[dict[str, Any]]
 
-@pytest.mark.parametrize('mode', ['python-old'])
-def test_capture_conserves_base_regression(mode: str) -> None:
+
+@pytest.fixture(scope='module')
+def pair() -> tuple[Run, Run]:
+    r"""``base.regression`` on this environment's runner, with the capture
+    and without."""
     cases = run_python.inventory_cases(['base.regression'])
-    on = run_python.run(mode, cases, None, driver_capture=True)
-    off = run_python.run(mode, cases, None, driver_capture=False)
-    assert capture_check.check(on, off) == []
+    on = run_python.run('python-old', cases, None, driver_capture=True)
+    off = run_python.run('python-old', cases, None, driver_capture=False)
+    return on, off
+
+
+def test_capture_conserves_base_regression(pair: tuple[Run, Run]) -> None:
+    on, off = pair
+    assert capture_check.check(on, off, ['base.regression']) == []
     assert on[0]['outcome']['result'] == 'success'
     assert on[0]['outcome']['stage'] == 'predict'
     assert len(on[0]['driver']['capture']['statements']) == 16
     assert len(on[0]['driver']['capture']['bindings']) == 3
+    logged = on[0]['driver']['query_log']
+    assert (logged['compared'], logged['differing']) == (14, [])
+
+
+def _metadata(run: Run) -> dict[str, Any]:
+    metadata: dict[str, Any] = run[0]['public']['payloads'][0]['parsed'][
+        'metadata'
+    ]
+    return metadata
+
+
+def test_only_the_request_id_s_value_is_left_out(pair: tuple[Run, Run]) -> None:
+    on, off = copy.deepcopy(pair)
+    # Another random value of the same type passes.
+    _metadata(on)['request_id'] = 'sdm-000000000000'
+    assert capture_check.check(on, off) == []
+    # Deleted from one run only: fails.
+    del _metadata(on)['request_id']
+    problems = capture_check.check(on, off)
+    assert any('request_id' in p for p in problems), problems
+    # Deleted from both: the field's absence is compared, and agrees.
+    del _metadata(off)['request_id']
+    assert capture_check.check(on, off) == []
+    # Of another type in one run: fails.
+    on, off = copy.deepcopy(pair)
+    _metadata(on)['request_id'] = {'number': '7'}
+    problems = capture_check.check(on, off)
+    assert any('request_id' in p for p in problems), problems
+    # Any other metadata field still counts.
+    on, off = copy.deepcopy(pair)
+    _metadata(on)['source_query'] = 'PREDICT x'
+    assert capture_check.check(on, off) != []
+
+
+def test_missing_or_repeated_evidence_fails(pair: tuple[Run, Run]) -> None:
+    on, off = pair
+    assert capture_check.check([], []) != []
+    assert capture_check.check(on, []) != []
+    assert capture_check.check([], off) != []
+    twice = capture_check.check(on + on, off + off)
+    assert any('more than once' in p for p in twice), twice
+    missing = capture_check.check(on, off, ['base.regression', 'base.binary'])
+    assert missing == ['base.binary: required, and not in both runs']
+
+
+def test_a_capture_off_observation_in_the_captured_run_fails(
+    pair: tuple[Run, Run], tmp_path: Path
+) -> None:
+    on, off = pair
+    for name, run in (('on', off), ('off', off)):
+        (tmp_path / name).write_text(
+            ''.join(json.dumps(item) + '\n' for item in run)
+        )
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(RUNNERS / 'capture_check.py'),
+            '--on',
+            str(tmp_path / 'on'),
+            '--off',
+            str(tmp_path / 'off'),
+            '--require',
+            'base.regression',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 1, done.stderr
+    assert 'capture: FAILED' in done.stdout
+    assert 'Traceback' not in done.stderr
+    assert 'the capture was off' in done.stderr
+    # And two empty files fail too.
+    for name in ('on', 'off'):
+        (tmp_path / name).write_text('')
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(RUNNERS / 'capture_check.py'),
+            '--on',
+            str(tmp_path / 'on'),
+            '--off',
+            str(tmp_path / 'off'),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 1 and 'capture: FAILED' in done.stdout
+
+
+def test_a_statement_text_other_than_the_one_run_fails(
+    pair: tuple[Run, Run],
+) -> None:
+    on, off = copy.deepcopy(pair)
+    on[0]['driver']['query_log']['differing'] = [3]
+    assert any('ran as text other' in p for p in capture_check.check(on, off))
+
+
+# --- what a connection hands back as it is ------------------------------------------
+
+
+def test_a_connection_s_arrow_reader_passes_through_unchanged() -> None:
+    def read(capturing: bool) -> tuple[type, pa.Table, list[str]]:
+        log = run_python.DriverLog()
+        connection = duckdb.connect()
+        handle = (
+            run_python.capture(connection, log) if capturing else connection
+        )
+        reader = handle.execute('select 1 AS a, 2 AS b').arrow()
+        return type(reader), reader.read_all(), log.incomplete
+
+    plain_type, plain, _ = read(False)
+    captured_type, captured, incomplete = read(True)
+    assert captured_type is plain_type
+    assert captured.equals(plain)
+    # The reader is the caller's to consume, so the capture says it could
+    # not record it, rather than read it first.
+    assert incomplete == ['arrow']
+
+
+def test_named_parameters_are_recorded_by_name_and_value() -> None:
+    log = run_python.DriverLog()
+    proxy = run_python.capture(duckdb.connect(), log)
+    plain = duckdb.connect().execute('select $value', {'value': 7}).fetchall()
+    assert proxy.execute('select $value', {'value': 7}).fetchall() == plain
+    assert proxy.execute(
+        query='select $value + 1', parameters={'value': 7}
+    ).fetchall() == [(8,)]
+    assert log.statements[0]['parameters'] == [
+        {'name': 'value', 'type': 'builtins.int', 'value': '7'}
+    ]
+    assert log.statements[1]['sql'] == 'select $value + 1'
+    assert log.statements[1]['parameters'] == [
+        {'name': 'value', 'type': 'builtins.int', 'value': '7'}
+    ]

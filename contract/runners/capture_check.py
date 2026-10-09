@@ -7,21 +7,31 @@ r"""Checks the driver capture on a runner's observations (design, "Driver
 capture"; decision Q2):
 
     python contract/runners/capture_check.py --on FILE --off FILE
+        [--require CASE]...
 
 ``--on`` holds a run with the capture, ``--off`` the same cases run with
-``--no-capture``. It holds, case by case:
+``--no-capture``; each ``--require`` names a case both must hold (T1.11a's
+evidence is ``--require base.regression``). Empty files, a case id twice in
+one file, the two files holding different cases, or a capture-off
+observation in ``--on`` fail. It holds, case by case:
 
 - completeness: the capture recorded every statement it saw and could
-  record every result read, and its statement and binding counts equal
-  DuckDB's own query log;
+  record every result read, its statement and binding counts equal
+  DuckDB's own query log, and each statement's text equals the logged
+  text where DuckDB logs it as written (every statement but a ``PRAGMA``,
+  which DuckDB logs as its table function);
 - conservation: capture on and off give the same public projection (the
   outcome, warnings, public ``Schema``, each request the scripted endpoint
   received, and the public result) and the same query-log counts, so the
   capture changed no value and no execution count.
 
-A payload is compared parsed, leaving out only ``metadata.request_id``,
-which the client draws at random for every request (:data:`RANDOM_PATHS`);
-its raw SHA-256 differs with it, so it is not compared.
+A payload is compared parsed. Only the value of ``metadata.request_id``,
+which the client draws at random for every request, is left out
+(:data:`RANDOM_PATHS`): the field must be present or absent in both runs
+alike, with a value of the same JSON type. The payload's raw SHA-256
+differs with that value, so it is not compared. This exclusion is
+PROPOSED and waits for the owner's approval at T1.11e (decision E35); it
+is not an approved comparison rule.
 """
 
 from __future__ import annotations
@@ -33,8 +43,25 @@ import sys
 from pathlib import Path
 from typing import Any
 
-#: The payload paths the client fills at random, left out of conservation.
+#: The payload paths the client fills at random, whose value (not presence
+#: or type) is left out of conservation. PROPOSED, not approved: the owner
+#: decides at T1.11e (decision E35; design, T1.11a row).
 RANDOM_PATHS = (('metadata', 'request_id'),)
+
+
+def _json_type(value: Any) -> str:
+    r"""A parsed value's JSON type; a number is ``{"number": text}``."""
+    if isinstance(value, dict) and set(value) == {'number'}:
+        return 'number'
+    if isinstance(value, dict):
+        return 'object'
+    if isinstance(value, list):
+        return 'array'
+    if isinstance(value, bool):
+        return 'boolean'
+    if value is None:
+        return 'null'
+    return 'string'
 
 
 def _payloads(public: dict[str, Any]) -> list[Any]:
@@ -45,8 +72,12 @@ def _payloads(public: dict[str, Any]) -> list[Any]:
             node = parsed
             for part in path[:-1]:
                 node = node.get(part) if isinstance(node, dict) else None
-            if isinstance(node, dict):
-                node.pop(path[-1], None)
+            # Only the value: an absent field stays absent, and a present
+            # one keeps its type, so a deleted or retyped field differs.
+            if isinstance(node, dict) and path[-1] in node:
+                node[path[-1]] = {
+                    'excluded value of type': _json_type(node[path[-1]])
+                }
         found.append((payload['method'], payload['path'], parsed))
     return found
 
@@ -60,7 +91,10 @@ def projection(observation: dict[str, Any]) -> dict[str, Any]:
         'schema': public['schema'],
         'payloads': _payloads(public),
         'result': public['result'],
-        'query_log': observation['driver']['query_log'],
+        'query_log': {
+            key: observation['driver']['query_log'][key]
+            for key in ('statements', 'bindings')
+        },
     }
 
 
@@ -81,6 +115,11 @@ def complete(observation: dict[str, Any]) -> list[str]:
         problems.append(
             f'{len(capture["bindings"])} bindings captured, '
             f'{logged["bindings"]} in the query log'
+        )
+    if logged['differing']:
+        problems.append(
+            f'statements {logged["differing"]} ran as text other than the '
+            'capture recorded'
         )
     return problems
 
@@ -105,12 +144,31 @@ def _first_difference(on: Any, off: Any, path: str) -> str | None:
     return None if on == off else f'{path}: differs'
 
 
-def check(on: list[dict[str, Any]], off: list[dict[str, Any]]) -> list[str]:
-    r"""Every problem with the capture over two runs of the same cases."""
+def _cases(run: list[dict[str, Any]], name: str) -> list[str]:
+    ids = [item['case'] for item in run]
     problems = []
+    if not ids:
+        problems.append(f'the {name} run holds no case')
+    repeated = sorted({case for case in ids if ids.count(case) > 1})
+    if repeated:
+        problems.append(f'the {name} run holds {repeated} more than once')
+    return problems
+
+
+def check(
+    on: list[dict[str, Any]],
+    off: list[dict[str, Any]],
+    required: tuple[str, ...] | list[str] = (),
+) -> list[str]:
+    r"""Every problem with the capture over two runs of the same cases,
+    each case in ``required`` among them."""
+    problems = _cases(on, 'captured') + _cases(off, 'uncaptured')
     by_case = {item['case']: item for item in off}
     if [item['case'] for item in on] != [item['case'] for item in off]:
         problems.append('the two runs hold different cases')
+    for case in required:
+        if case not in by_case or case not in {i['case'] for i in on}:
+            problems.append(f'{case}: required, and not in both runs')
     for item in on:
         case = item['case']
         problems.extend(f'{case}: {p}' for p in complete(item))
@@ -139,19 +197,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--on', type=Path, required=True)
     parser.add_argument('--off', type=Path, required=True)
+    parser.add_argument('--require', action='append', default=[])
     arguments = parser.parse_args(argv)
     on, off = _read(arguments.on), _read(arguments.off)
-    problems = check(on, off)
+    problems = check(on, off, arguments.require)
     for problem in problems:
         print(problem, file=sys.stderr)
     for item in on:
         capture = item['driver']['capture']
         logged = item['driver']['query_log']
+        if capture is None:
+            continue
         print(
             f'{item["case"]}: {len(capture["statements"])} statements and '
             f'{len(capture["bindings"])} bindings captured on '
             f'{capture["cursors"]} derived cursors; query log '
-            f'{logged["statements"]} and {logged["bindings"]}'
+            f'{logged["statements"]} and {logged["bindings"]}; '
+            f'{logged["compared"]} statement texts compared with it'
         )
     print('capture: ' + ('FAILED' if problems else 'complete and conserving'))
     return 1 if problems else 0

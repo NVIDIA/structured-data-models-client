@@ -65,7 +65,7 @@ import platform
 import subprocess
 import sys
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -524,11 +524,14 @@ def _sibling(name: str) -> Any:
 #: The methods that read a statement's result, by what they give back.
 _ROWS = ('fetchall', 'fetchmany')
 _ROW = ('fetchone',)
-_ARROW = ('to_arrow_table', 'fetch_arrow_table', 'arrow')
+_ARROW = ('to_arrow_table', 'fetch_arrow_table')
 #: Results the capture cannot record without consuming them or changing
 #: what the caller gets; reading one makes the capture incomplete, which
 #: fails the case rather than drop a result.
 _UNRECORDED = (
+    # A connection's arrow() gives a RecordBatchReader, which the capture
+    # cannot read without consuming what the caller reads.
+    'arrow',
     'fetch_record_batch',
     'to_arrow_reader',
     'fetchdf',
@@ -569,6 +572,19 @@ def _typed(value: Any) -> dict[str, Any]:
         'type': f'{kind.__module__}.{kind.__qualname__}',
         'value': repr(value),
     }
+
+
+def _parameters(parameters: Any) -> list[dict[str, Any]] | None:
+    r"""A statement's parameters as recorded: in order, each typed, and a
+    named one with its name."""
+    if parameters is None:
+        return None
+    if isinstance(parameters, Mapping):
+        return [
+            {'name': str(name), **_typed(value)}
+            for name, value in parameters.items()
+        ]
+    return [_typed(value) for value in parameters]
 
 
 def _rows_digest(rows: list[Any]) -> str:
@@ -661,17 +677,15 @@ class _Captured:
         return _Captured(derived, self._log)
 
     def execute(self, *arguments: Any, **keywords: Any) -> Any:
-        given = list(arguments) + list(keywords.values())
-        query = given[0] if given else None
-        parameters = given[1] if len(given) > 1 else None
+        # Bound as the driver binds them: execute(query, parameters=None).
+        query = keywords.get('query', arguments[0] if arguments else None)
+        parameters = keywords.get(
+            'parameters', arguments[1] if len(arguments) > 1 else None
+        )
         statement: dict[str, Any] = {
             'handle': self._handle,
             'sql': query if isinstance(query, str) else None,
-            'parameters': (
-                None
-                if parameters is None
-                else [_typed(value) for value in parameters]
-            ),
+            'parameters': _parameters(parameters),
             'results': [],
             'error': None,
         }
@@ -726,9 +740,6 @@ class _Captured:
 
     def fetch_arrow_table(self, *arguments: Any, **keywords: Any) -> Any:
         return self._read('fetch_arrow_table', *arguments, **keywords)
-
-    def arrow(self, *arguments: Any, **keywords: Any) -> Any:
-        return self._read('arrow', *arguments, **keywords)
 
     def register(self, name: Any, value: Any) -> Any:
         binding: dict[str, Any] = {
@@ -803,6 +814,31 @@ _Captured.__module__ = 'duckdb.sdm_capture'
 def capture(connection: Any, log: DriverLog) -> Any:
     r"""``connection`` as the capture hands it to a source."""
     return _Captured(connection, log)
+
+
+def _logged_texts(
+    log: DriverLog | None, logged: list[str]
+) -> tuple[int, list[int]]:
+    r"""Each captured statement's text against the text DuckDB logged for
+    it, in order: how many were compared, and the positions that differ.
+    A ``PRAGMA`` is not compared, since DuckDB logs it as the table
+    function it runs; binding names are the same in both, being one run's.
+    With no capture, or counts that differ (which completeness reports),
+    nothing is compared."""
+    ran = [text for text in logged if text]
+    if log is None or len(ran) != len(log.statements):
+        return 0, []
+    compared, differing = 0, []
+    for position, (statement, text) in enumerate(
+        zip(log.statements, ran, strict=True)
+    ):
+        sql = statement['sql']
+        if sql is None or sql.lstrip().upper().startswith('PRAGMA'):
+            continue
+        compared += 1
+        if sql != text:
+            differing.append(position)
+    return compared, differing
 
 
 def enable_query_log(connection: Any) -> None:
@@ -1007,11 +1043,14 @@ def _call(
             {'method': method, 'path': path, **_payload(body)}
             for method, path, body in received.requests
         ]
+    compared, differing = _logged_texts(log, logged)
     driver = {
         'capture': log.record() if log is not None else None,
         'query_log': {
             'statements': sum(1 for text in logged if text),
             'bindings': sum(1 for text in logged if not text),
+            'compared': compared,
+            'differing': differing,
         },
     }
     return (
