@@ -318,12 +318,13 @@ jobs:
       # The Databricks and Snowflake drivers are for the offline tests of those
       # backends, which skip whole modules without them; pyyaml reads the
       # semantic-view fixtures, and `explain` carries the SDK the explanation
-      # tests fake around.
+      # tests fake around. jsonschema validates the contract's cases and
+      # observations, which the root suite checks.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*'
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
-            pyyaml
+            pyyaml jsonschema
           pip install -e './packages/structured-data-models-relational-engine[test,explain]'
       # The same marker filter as the internal pipeline. The live NIM and live
       # warehouse tests need credentials this job does not have, so they are
@@ -348,7 +349,7 @@ jobs:
       # needs the engine, so they run here rather than in the test job, until
       # T1.18 moves them to contract-python. DuckDB at the reference's version.
       - run: |
-          pip install duckdb==1.5.6 jsonschema
+          pip install duckdb==1.5.6
           python -m pytest contract/tests -q
 
   build:
