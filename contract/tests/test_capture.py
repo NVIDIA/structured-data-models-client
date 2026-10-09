@@ -110,7 +110,8 @@ def test_graph_from_duckdb_takes_the_proxy_as_its_connection() -> None:
     assert isinstance(proxy, duckdb.DuckDBPyConnection)
     graph = Graph.from_duckdb(proxy, infer_metadata=False, verbose=False)
     assert sorted(graph.tables) == ['orders', 'users']
-    assert all(t._connection is proxy for t in graph.tables.values())
+    connections = [t._connection for t in graph.tables.values()]  # type: ignore[attr-defined]
+    assert all(c is proxy for c in connections)
     assert getattr(graph, '_connection', None) is None
     assert log.statements[0]['sql'].startswith('SELECT table_name FROM')
 
@@ -196,7 +197,7 @@ class ScriptedConnection:
 
 ScriptedConnection.__module__ = 'duckdb.scripted'
 
-_ANSWERS = {
+_ANSWERS: dict[str, list[list[tuple[Any, ...]]]] = {
     'rows': [[(1, 'x'), (2, None)], [(3, "a'b")], [(4, '')]],
     'empty': [[]],
     'with parameters': [[(7, 'p')]],
