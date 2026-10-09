@@ -91,6 +91,7 @@ RUST_TREE = (
     'rust/clippy.toml',
     'rust/crates',
     'rust/bindings',
+    '.github/workflows/ci.yml',
 )
 
 
@@ -707,7 +708,7 @@ def scan_cases(results: list[Result]) -> None:
         (
             'a query by concat!',
             'const Q: &str = concat!("select ", "x", " from ", "t");',
-            'select  x  from',
+            'select x from',
         ),
         (
             'a query by format! pieces',
@@ -717,7 +718,7 @@ def scan_cases(results: list[Result]) -> None:
         (
             'a query added with +',
             'pub fn f(t: &str) -> String { "select a ".to_owned() + "from " + t }',
-            'select a  from',
+            'select a from',
         ),
         (
             'a provider name in a string',
@@ -743,9 +744,26 @@ def scan_cases(results: list[Result]) -> None:
         ),
         None,
     )
-    # Diagnostics in English pass, bare and as an error's message; the
-    # same SQL in an error still fails (fix round 2).
-    for phrase in (
+
+    # The reviews' reproductions (fix rounds 2 and 3), as code the scan
+    # reads: `bare` is a message built outside any diagnostic, `error` the
+    # same text as a CoreError's message, `panic` as a panic's.
+    def bare(text: str) -> str:
+        return f'pub fn m(c: &str) -> String {{ format!("{text}") }}'
+
+    def error(text: str) -> str:
+        return (
+            'pub fn e(c: &str) -> sdm_contract::CoreError {\n'
+            '    sdm_contract::CoreError::new(\n'
+            '        sdm_contract::ErrorCode::InvalidRequest,\n'
+            f'        format!("{text}"),\n'
+            '    )\n}'
+        )
+
+    def panic(text: str) -> str:
+        return f'pub fn p(c: &str) {{ panic!("{text}") }}'
+
+    english = (
         'required field is null',
         'the seed time in column {c} is null',
         'the key set is past the row limit {n}',
@@ -753,61 +771,122 @@ def scan_cases(results: list[Result]) -> None:
         'a window where {c} is unset',
         'order by time is required',
         'came from a Spark job',
-    ):
-        bare = f'pub fn m(c: &str, n: u64) -> String {{ format!("{phrase}") }}'
-        if '{' not in phrase:
-            bare = f'pub const M: &str = "{phrase}";'
-        in_error = (
-            'pub fn e(c: &str, n: u64) -> sdm_contract::CoreError {\n'
-            '    sdm_contract::CoreError::new(\n'
-            '        sdm_contract::ErrorCode::InvalidRequest,\n'
-            f'        format!("{phrase}"),\n'
-            '    )\n}'
-        )
-        for where, code in (('bare', bare), ('in CoreError::new', in_error)):
-
-            def seed_prose(root: Path, code: str = code) -> None:
-                append(root / crates / engine, f'\n{code}\n')
-
-            sql(f'control: "{phrase}", {where}', seed_prose, None)
-    for name, code, fragment in (
+        'the key is null or missing',
+    )
+    diagnostics = (
+        'the tie-break orders by {c} desc, nulls last',
+        'the {c} is null and {c} is required',
+        'the window column {c} is null or the anchor is null and the seed is late',
+        'expected {c} > 0 and below the cap',
+        'order by {c}, then by key',
+        'count(*) of {c} overflowed',
+        'Where {c} = 0 the sampler stops',
+        'expected an ORDER BY clause',
+        'cannot select {c} from the request: it is unknown',
+        'the column {c} is null or {c} is null',
+        'a limit of {n} rows was passed',
+        'the cast of {c} as a timestamp overflowed',
+        'cannot insert into {t}: it is full',
+        'could not delete from {t}',
+        'could not create table {t} twice',
+        'cannot update {t} set to {c}',
+        'select {c} from {t} first',
+        'expected {lo} <= {hi} or an empty window',
+        '{c} = {c} is not supported',
+        'expected {c} or {c} in (0, 1)',
+        'the value {c} is not in (the list)',
+        'values ({n}) out of range',
+        'in the order by clause',
+        'partition by {c} is not supported here',
+    )
+    passing = [
+        *(code for text in english for code in (bare(text), error(text))),
+        'pub const M: &str = "required field is null";',
+        panic('the key is null or missing'),
+        *(error(text) for text in diagnostics),
+        'pub fn f(x: Option<u8>) { x.expect("the seed is set"); }',
+        'pub fn f(a: u8) { assert!(a > 0, "{a} > 0 and not null"); }',
+        'pub fn f(a: u8, b: u8) { assert_eq!(a, b, "where {a} = {b} the run ends"); }',
+    ]
+    failing = [
+        (bare('{column} >= {lower}'), '{column} >= {lower}'),
+        (bare('where {column} between'), 'where {column} between'),
+        (bare('limit {count}'), 'limit {count}'),
+        (bare('{c} in (1, 2)'), '{c} in ('),
+        (bare('order by {c} desc'), 'order by {c} desc'),
+        (bare('insert into {t}'), 'insert into {t}'),
+        (bare('drop table {t}'), 'drop table {t}'),
+        (error('{c} > 0 and {c} is not null'), '{c} > 0 and {c} is not null'),
         (
-            'a condition in an error message',
-            'pub fn e(c: &str) -> sdm_contract::CoreError {\n'
-            '    sdm_contract::CoreError::new(\n'
-            '        sdm_contract::ErrorCode::InvalidRequest,\n'
-            '        format!("{c} > 0 and {c} is not null"),\n'
-            '    )\n}',
-            '{c} > 0 and',
-        ),
-        (
-            'a query in a panic',
             'pub fn p(t: &str) { panic!("select * from {t} where x = 1") }',
             'select * from {t} where',
         ),
+        ('pub const K: &str = "ORDER BY";', 'hold `ORDER BY`'),
         (
-            'a SQL keyword in capitals outside a message',
-            'pub const K: &str = "ORDER BY";',
-            'hold `ORDER BY`',
+            'pub fn f(count: u8) { assert!(!format!("LIMIT {count}").is_empty()); }',
+            'LIMIT {count}',
         ),
-    ):
+        (
+            'pub fn f(a: u8) { assert_eq!(format!("SELECT {a}"), "x", "the select"); }',
+            'SELECT {a}',
+        ),
+        ('pub fn f(v: Option<u8>) { v.expect("SELECT 1"); }', 'SELECT 1'),
+        (
+            'pub fn f(v: Option<u8>, t: &str) { v.expect(&format!("SELECT * FROM {t} T")); }',
+            'SELECT * FROM {t} T',
+        ),
+        (error('query failed: SELECT {c} FROM {t}'), 'SELECT {c} FROM {t}'),
+        (
+            error('select max(a) as m from {t} where b'),
+            'select max(a) as m from {t} where',
+        ),
+        (error('insert into {t} (a, b) values'), 'insert into {t} ('),
+        (error('delete from {t} where a = 1'), 'delete from {t} where'),
+        (error('create table {t} (a int)'), 'create table {t} ('),
+        (error('cast({c} as timestamp)'), 'cast({c} as timestamp)'),
+        (error('count(*) from {t}'), 'count(*) from'),
+        (error('with q as (select 1)'), 'with q as (select'),
+        *(
+            (bare(f'select a from {{t}}{tail}'), 'select a from {t}')
+            for tail in (
+                ' natural join u',
+                ', u',
+                ' qualify x',
+                ' having x',
+                ' union select b',
+                ' limit 3',
+                ' right join u',
+                ' full join u',
+                ' cross join u',
+                ' using (k)',
+            )
+        ),
+        (bare('select a from ({t})'), 'select a from'),
+        (bare('a = ?'), 'a = ?'),
+        (error('coalesce({c}, 0)'), 'coalesce({c},'),
+        (error('where exists (select 1)'), 'exists (select'),
+        (error('values (?, ?)'), 'values (?,'),
+        (bare('partition by {c}'), 'partition by {c}'),
+        (bare('offset {n}'), 'offset {n}'),
+        ('pub const Q: &str = r#"SELECT\n  a\nFROM t"#;', 'SELECT a FROM t'),
+        (
+            'pub const T: &str = "The FROM clause names the table";',
+            'hold `FROM`',
+        ),
+        ('pub const S: &str = "Spark";', 'hold `Spark`'),
+    ]
+    for number, code in enumerate(passing):
 
-        def seed_sql_error(root: Path, code: str = code) -> None:
+        def seed_pass(root: Path, code: str = code) -> None:
             append(root / crates / engine, f'\n{code}\n')
 
-        sql(name, seed_sql_error, fragment)
+        sql(f'control {number}: {" ".join(code.split())[:70]}', seed_pass, None)
+    for code, fragment in failing:
 
-    def keyword_in_message(root: Path) -> None:
-        append(
-            root / crates / engine,
-            '\npub fn e() -> sdm_contract::CoreError {\n'
-            '    sdm_contract::CoreError::new(\n'
-            '        sdm_contract::ErrorCode::InvalidRequest,\n'
-            '        "expected an ORDER BY clause",\n'
-            '    )\n}\n',
-        )
+        def seed_fail(root: Path, code: str = code) -> None:
+            append(root / crates / engine, f'\n{code}\n')
 
-    sql('control: a keyword named in a message', keyword_in_message, None)
+        sql(f'SQL: {" ".join(code.split())[:70]}', seed_fail, fragment)
 
     skips_tree = (
         'rust/crates/sdm-contract',
@@ -913,6 +992,35 @@ def scan_cases(results: list[Result]) -> None:
         ),
         None,
     )
+    for name, path, text, token in (
+        (
+            'a test deselected in a Rust job',
+            'contract/tests/test_runners.py',
+            '\n# run as: pytest --de'
+            + 'select contract/tests/test_runners.py::test_x\n',
+            '--de' + 'select',
+        ),
+        (
+            'a test file ignored by path',
+            'rust/bindings/sdm-py/tests/test_binding.py',
+            '\n# pytest --ig'
+            + 'nore=rust/bindings/sdm-py/tests/test_binding.py\n',
+            '--ig' + 'nore',
+        ),
+        (
+            'a conftest dropping a test file',
+            f'{client_tests}/conftest.py',
+            '\ncollect_ig' + 'nore = ["test_the_routing_seam.py"]\n',
+            'collect_ig' + 'nore',
+        ),
+    ):
+
+        def seed_deselect(
+            root: Path, path: str = path, text: str = text
+        ) -> None:
+            append(root / path, text)
+
+        skips(name, seed_deselect, f'`{token}`')
     skips(
         'a skip marker through an imported mark',
         lambda r: append(
@@ -1114,6 +1222,78 @@ def scan_cases(results: list[Result]) -> None:
         ),
         'outside an attribute',
     )
+    for name, code in (
+        (
+            'a lint passed to an allow as a macro metavariable',
+            'macro_rules! permit { ($lint:path, $item:item) => { #[allow($lint)] $item } }\n'
+            'permit!(clippy::disallowed_methods, pub fn environment() '
+            '{ let _ = std::env::var("SYNTHETIC"); });',
+        ),
+        (
+            "a lint's name passed as a macro metavariable",
+            'macro_rules! permit { ($l:ident, $item:item) => { #[allow(clippy::$l)] $item } }\n'
+            'permit!(disallowed_methods, pub fn environment() '
+            '{ let _ = std::env::var("SYNTHETIC"); });',
+        ),
+        (
+            'a whole attribute as a macro metavariable',
+            'macro_rules! wa { ($a:meta, $i:item) => { #[$a] $i } }',
+        ),
+        (
+            'an attribute built by cfg_attr from a metavariable',
+            'macro_rules! wa { ($a:meta, $i:item) => { #[cfg_attr(all(), $a)] $i } }',
+        ),
+        (
+            'a lint named in capitals',
+            '#[allow(clippy::DISALLOWED_METHODS)]\nfn g() {}',
+        ),
+    ):
+
+        def seed_macro(root: Path, code: str = code) -> None:
+            append(root / run, f'\n{code}\n')
+
+        bans(name, seed_macro, f'{run}:')
+
+    for name, code in (
+        (
+            'a module read from outside src',
+            '#[path = "../tests/helper.rs"]\nmod helper;',
+        ),
+        ('code included from outside src', 'include!("../tests/helper.rs");'),
+    ):
+
+        def seed_outside(root: Path, code: str = code) -> None:
+            append(root / run, f'\n{code}\n')
+
+        bans(name, seed_outside, 'brings in code from outside')
+
+    def cargo_config(root: Path) -> None:
+        append(
+            root / 'rust/.cargo/config.toml',
+            '[build]\nrustflags = ["-A", "clippy::disallowed_methods"]\n',
+        )
+
+    bans('rustflags allowing a ban', cargo_config, 'rust/.cargo/config.toml:2')
+    for name, setting in (
+        (
+            'RUSTFLAGS allowing a ban in CI',
+            'RUSTFLAGS: -Aclippy::disallowed_methods',
+        ),
+        (
+            'clippy pointed at another configuration in CI',
+            'CLIPPY_CONF_DIR: /tmp',
+        ),
+        ('lints capped in CI', "RUSTFLAGS: '--cap-lints warn'"),
+    ):
+
+        def seed_ci(root: Path, setting: str = setting) -> None:
+            edit(
+                root / l0_scan.CI_FILE,
+                'permissions:\n  contents: read\n',
+                f'permissions:\n  contents: read\n\nenv:\n  {setting}\n',
+            )
+
+        bans(name, seed_ci, f'{l0_scan.CI_FILE}:')
     zones = 'rust/crates/sdm-host/src/zones.rs'
     statement = 'let db = TimeZoneDatabase::from_dir(&root.path).ok();'
     bans(
@@ -1350,6 +1530,17 @@ BYPASSES = {
         'macro_rules! wa { ($a:meta, $i:item) => { #[$a] $i } }\n'
         'wa!(allow(clippy::disallowed_methods), pub fn bypass_macro() '
         '{ let _ = std::env::var("X"); });\n'
+    ),
+    'a lint passed to an allow as a macro metavariable': (
+        'macro_rules! permit { ($lint:path, $item:item) => { #[allow($lint)] $item } }\n'
+        'permit!(clippy::disallowed_methods, pub fn bypass_metavariable() '
+        '{ let _ = std::env::var("SYNTHETIC"); });\n'
+    ),
+    "a lint's name passed as a macro metavariable": (
+        'macro_rules! permit_named { ($l:ident, $item:item) => '
+        '{ #[allow(clippy::$l)] $item } }\n'
+        'permit_named!(disallowed_methods, pub fn bypass_named() '
+        '{ let _ = std::env::var("SYNTHETIC"); });\n'
     ),
     "a block in sdm-host's allowed initializer": (
         'pub fn bypass_block(root: &Root) {\n'

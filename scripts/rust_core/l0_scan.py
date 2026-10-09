@@ -34,7 +34,8 @@ graph; these check the text:
   constants, values built at run time), from bytes, or English-shaped SQL
   with no operand in place (``select a column from``); review covers those.
 - ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
-  and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
+  no test dropped by a deselect or ignore option or a conftest's ignore
+  list, and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
   ``contract/``, the client tests that touch ``_rust`` or ``_native`` (and
   the ``conftest.py`` files over them), or the CI jobs that run the core or
   its tests, chosen by what they run (``CI_SCOPE_MARKS``: cargo, the
@@ -52,7 +53,11 @@ graph; these check the text:
   ``sdm-host``'s one allow on its one statement reading the zone lookup
   roots (decision E24); a test file may allow them, with a reason. It also
   refuses an ``allow`` or ``expect`` of them outside an attribute, as a
-  macro would pass one into an attribute it builds. It also refuses,
+  macro would pass one into an attribute it builds, any allow, expect or
+  attribute a macro metavariable fills (``#[allow($lint)]``,
+  ``#[allow(clippy::$l)]``, ``#[$meta]``), ``#[path]`` and ``include!`` in
+  shipped source, and rustflags or CI settings that allow or cap lints or
+  point clippy at another configuration. It also refuses,
   lexically, a ``Zoned`` parsed from text in shipped code
   (``parse::<Zoned>``, ``: Zoned = ….parse()``, ``Zoned::from_str``), which
   looks its zone up in jiff's global database through a trait clippy
@@ -375,49 +380,111 @@ def check_vocabulary(root: Path) -> list[str]:
 # Whether a statement's literals are SQL is decided by SQL's structure, not
 # by its words, since diagnostics use the same words in English ("the field
 # is null", "order by time is required", "could not select a column from
-# {c}"). Two kinds of evidence:
+# {c}"). An operand is a `{…}` placeholder, `*`, `?`, `$n`, a quoted or
+# numeric literal, a call such as `max(a)`, or a word. Literals are joined
+# one per line, so `^` is the start of a literal.
 #
-# - Syntax, which holds everywhere, diagnostics included: a clause keyword
-#   with an operand where SQL puts one (`{c} > 0 and`, `where {c} = `,
-#   `select x from t`, `order by {c} desc`, `insert into {t}`, a null test
-#   joined by `and` or `or`), or punctuation only SQL writes (`count(*)`,
-#   `cast(… as type)`, `row_number() over`, `nulls last`, `union all`).
-#   An operand is a `{…}` placeholder, `*`, `?`, `$n`, or a word.
-# - Keywords in capitals (`SELECT`, `ORDER BY`, `IS NULL`), which hold
-#   outside diagnostic text only: a message may name a SQL keyword in prose,
-#   but never carry SQL syntax.
+# Strong evidence is SQL no message writes, and holds everywhere,
+# diagnostic text included:
+# - `select <operands> from <operand>`, then a clause, a continuation
+#   (`,`, `)`, a join, `union`, `using`, `limit`, `having`, `qualify`) or
+#   the end, either in capitals or at the start of a literal or after
+#   `:`, `(` or a quote; a `SELECT <literal>` opening a literal
+#   (`SELECT 1`); `SELECT … FROM {t} T`, a table with an alias;
+# - `insert into <operand>` then `(`, `values` or `select`; `delete from
+#   <operand> where`; `truncate table`; `update … set … =`; `create`,
+#   `drop` or `alter` of a table or view then `(`, `as select` or the end;
+#   `with x as (select`;
+# - `cast(… as <type>)`, `count(*) from`, `row_number() over`,
+#   `over (partition by`, `union all`, `information_schema`,
+#   `tablesample`, `using sample`;
+# - two predicates joined by `and` or `or`, at least one of them a
+#   comparison, `in (`, `like` or `between` (`{c} > 0 and {c} is not
+#   null`).
+# Weak evidence is SQL a sentence can also be, and holds outside diagnostic
+# text only: a comparison on a placeholder (`{c} >= {lower}`), `where
+# <operand>` with a comparison, `between`, `in (`, `like` or a null test,
+# `order`/`group`/`partition by <operand>` with `,`, `asc`, `desc`,
+# `nulls` or `)`, a null test joined by `and`/`or` to a predicate or on a
+# placeholder, a placeholder with `in (`, `like` or `between`, `nulls
+# first`/`last`, `count(*)`, a join on an operand, `limit <n>` opening a
+# literal or after an ordering, `insert into`/`delete from`/`create table`
+# on an operand, `select … from` anywhere, and keywords in capitals.
+# Ambiguous on purpose: a message that opens with `select {c} from {t}`
+# or holds two predicates one of which compares (`{a} > 0 and {b} < 9`)
+# fails; it can be worded otherwise, and SQL could not be told from it.
 #
-# Diagnostic text is a literal inside the arguments of an error or
-# diagnostic constructor: `CoreError::new` and its other constructors,
-# `panic!`, `assert!` and its forms, `unreachable!`, `todo!`,
-# `unimplemented!`, `.expect(…)`, `.context(…)` and `.with_context(…)`, and
-# thiserror's `#[error("…")]`.
-_O = r'(?:\{[^}]*\}|\*|\?|\$\d+|[\w."]+)'  # an operand
-_SQL_SYNTAX = re.compile(
-    r'(?i)'
-    r'\{[^}]*\}\s*(?:=|<>|!=|<=|>=|<|>)\s*\S+\s+(?:and|or)\b'
-    rf'|\bselect\s+(?:distinct\s+)?{_O}(?:\s*,\s*{_O})*\s+from'
-    r'(?:\s+(?:\{[^}]*\}|[\w."]+)(?:\s+(?:where|group|order|limit|join|'
-    r'inner|left|as)\b|\s*$)|\s*$)'
-    r'|\bcount\s*\(\s*(?:\*|distinct\b)'
-    r'|\bcast\s*\([^()]*?\s+as\s+\w+'
-    r'|\b(?:row_number|dense_rank|rank|ntile|lag|lead)\s*\(\s*\)\s*over\b'
-    r'|\bover\s*\(\s*(?:partition|order)\s+by\b'
-    rf'|\b(?:insert\s+into|delete\s+from|truncate\s+table)\s+{_O}'
-    rf'|\bupdate\s+{_O}\s+set\s+{_O}\s*='
-    r'|\b(?:create|drop|alter)\s+(?:or\s+replace\s+)?(?:temp(?:orary)?\s+)?'
-    rf'(?:table|view|index|schema)\s+(?:if\s+(?:not\s+)?exists\s+)?{_O}'
-    r'|\bnulls\s+(?:first|last)\b|\bunion\s+all\b'
-    r'|\b(?:information_schema|tablesample)\b|\busing\s+sample\b'
-    rf'|\b(?:inner|left|right|full|cross)\s+(?:outer\s+)?join\s+{_O}'
-    rf'|\bjoin\s+{_O}\s+(?:\w+\s+)?(?:on|using)\s*[\w.("{{]'
-    rf'|\bwhere\s+{_O}\s*(?:=|<>|!=|<=|>=|<|>|\bin\s*\(|\blike\b|'
-    r'\bis\s+(?:not\s+)?null\b)'
+# Diagnostic text is the message arguments of an error or diagnostic
+# constructor: every argument of `CoreError`'s constructors, `panic!`,
+# `unreachable!`, `todo!`, `unimplemented!`, `.expect`, `.context`,
+# `.with_context` and `#[error]`; for `assert!` the arguments after the
+# condition, and for `assert_eq!`/`assert_ne!` (and the `debug_` forms)
+# those after the two operands, which are code.
+_O = (
+    r'(?:\{[^}]*\}|\*|\?|\$\d+|\'[^\']*\'|\d+(?:\.\d+)?'
+    r'|\w+\s*\([^()]*\)|[\w."]+)'
+)
+_OS = rf'{_O}(?:\s+as\s+\w+)?(?:\s*,\s*{_O}(?:\s+as\s+\w+)?)*'
+_CMP = r'(?:=|<>|!=|<=|>=|<|>)'
+_CONTINUE = (
+    r'(?i:\s*[,)]|\s+(?:where|group|order|limit|offset|having|qualify|join|'
+    r'inner|left|right|full|cross|natural|union|using|as|on)\b|\s*$)'
+)
+_SELECT = (
+    rf'select\s+(?:distinct\s+)?{_OS}\s+from'
+    rf'(?:\s+{_O}{_CONTINUE}|\s*\(|\s*$)'
+)
+_COMPARISON = (
+    rf'{_O}\s*{_CMP}\s*{_O}|{_O}\s+(?:not\s+)?(?:in\s*\(|like\b|between\b)'
+)
+_PREDICATE = rf'(?:{_COMPARISON}|{_O}\s+is\s+(?:not\s+)?null\b)'
+_SQL_STRONG = re.compile(
+    r'(?m)'
+    rf'(?i:(?:^|[:(`\'"])\s*{_SELECT})'
+    r'|\bSELECT\s+(?:DISTINCT\s+)?'
+    rf'{_OS}\s+FROM\s+{_O}(?:{_CONTINUE}|\s+\w+\s*$)'
+    r'|(?i:^\s*select\s+(?:\*|\{[^}]*\}|\d+|\'[^\']*\'|\?|\$\d+)'
+    r'\s*(?:as\s+\w+\s*)?$)'
+    rf'|(?i:\binsert\s+into\s+{_O}\s*(?:\(|values\b|select\b|by\s+name\b))'
+    rf'|(?i:\bdelete\s+from\s+{_O}\s+where\b|\btruncate\s+table\s+{_O})'
+    rf'|(?i:\bupdate\s+{_O}\s+set\s+{_O}\s*=)'
+    r'|(?i:\b(?:create|drop|alter)\s+(?:or\s+replace\s+)?'
+    r'(?:temp(?:orary)?\s+)?(?:table|view|index|schema)\s+'
+    rf'(?:if\s+(?:not\s+)?exists\s+)?{_O}\s*(?:\(|as\s+select\b|$))'
+    r'|(?i:\bwith\s+\w+\s+as\s*\(\s*select\b|\bexists\s*\(\s*select\b)'
+    rf'|(?i:\b(?:coalesce|nullif|ifnull|greatest|least)\s*\(\s*{_O}\s*,)'
+    r'|(?i:\bvalues\s*\(\s*(?:\?|\$\d+|\{[^}]*\})\s*,)'
+    r'|(?i:\bcast\s*\([^()]*?\s+as\s+\w+(?:\s*\([^()]*\))?\s*\))'
+    r'|(?i:\bcount\s*\(\s*(?:\*|distinct\b[^()]*)\)\s+from\b)'
+    r'|(?i:\b(?:row_number|dense_rank|rank|ntile|lag|lead)\s*\(\s*\)\s*over\b)'
+    r'|(?i:\bover\s*\(\s*(?:partition|order)\s+by\b)'
+    r'|(?i:\bunion\s+all\b|\b(?:information_schema|tablesample)\b'
+    r'|\busing\s+sample\b)'
+    rf'|(?i:(?:{_COMPARISON})\s+(?:and|or)\s+{_PREDICATE})'
+    rf'|(?i:{_PREDICATE}\s+(?:and|or)\s+(?:{_COMPARISON}))'
+)
+_SQL_WEAK = re.compile(
+    r'(?mi)'
+    rf'\{{[^}}]*\}}\s*{_CMP}\s*{_O}|{_O}\s*{_CMP}\s*\{{[^}}]*\}}'
+    rf'|{_O}\s*{_CMP}\s*(?:\?|\$\d+)(?!\w)'
+    rf'|\bwhere\s+{_O}\s*(?:{_CMP}|\b(?:not\s+)?(?:in\s*\(|like\b|between\b)'
+    r'|\bis\s+(?:not\s+)?null\b)'
     rf'|\b(?:order|group|partition)\s+by\s+{_O}\s*(?:,|\basc\b|\bdesc\b|'
     r'\bnulls\b|\))'
-    rf'|{_O}\s+is\s+(?:not\s+)?null\s+(?:and|or)\b'
+    r'|\b(?:order|group|partition)\s+by\s+\{[^}]*\}\s*$'
+    rf'|{_O}\s+is\s+(?:not\s+)?null\s+(?:and|or)\s+{_PREDICATE}'
     rf'|\b(?:and|or)\s+{_O}\s+is\s+(?:not\s+)?null\b'
-    r'|\bwith\s+\w+\s+as\s*\(\s*select\b'
+    r'|\{[^}]*\}\s+is\s+(?:not\s+)?null\s+(?:and|or)\b'
+    r'|\{[^}]*\}\s+(?:not\s+)?(?:in\s*\(|like\b|between\b)'
+    rf'|\b(?:insert\s+into|delete\s+from)\s+{_O}'
+    r'|\b(?:create|drop|alter)\s+(?:or\s+replace\s+)?'
+    rf'(?:temp(?:orary)?\s+)?(?:table|view)\s+{_O}'
+    r'|\bnulls\s+(?:first|last)\b|\bcount\s*\(\s*(?:\*|distinct\b)'
+    rf'|\b(?:inner|left|right|full|cross)\s+(?:outer\s+)?join\s+{_O}'
+    rf'|\bjoin\s+{_O}\s+(?:\w+\s+)?(?:on|using)\s*[\w.("{{]'
+    r'|(?:^\s*|\b(?:asc|desc|first|last)\s+|\)\s*)(?:limit|offset)\s+'
+    r'(?:\{[^}]*\}|\d+|\?|\$\d+)'
+    rf'|\b{_SELECT}'
 )
 _SQL_KEYWORDS = re.compile(
     r'\b(SELECT|FROM|WHERE|JOIN|UNION|GROUP\s+BY|ORDER\s+BY|PARTITION\s+BY|'
@@ -432,10 +499,12 @@ _PROVIDER_LITERAL = re.compile(
     r'(?i)^\s*(duckdb|postgres(ql)?|snowflake|databricks|sqlite|spark|'
     r'bigquery|redshift|lakebase)\s*$'
 )
+# The diagnostic constructors, and how many leading arguments are code.
 _DIAGNOSTIC_CALL = re.compile(
     r'\bCoreError\s*::\s*\w+\s*\('
-    r'|\b(?:panic|assert|assert_eq|assert_ne|debug_assert|debug_assert_eq|'
-    r'debug_assert_ne|unreachable|todo|unimplemented)\s*!\s*\('
+    r'|\b(?P<assert>assert|debug_assert)\s*!\s*\('
+    r'|\b(?P<pair>assert_eq|assert_ne|debug_assert_eq|debug_assert_ne)\s*!\s*\('
+    r'|\b(?:panic|unreachable|todo|unimplemented)\s*!\s*\('
     r'|\.\s*(?:expect|context|with_context)\s*\('
     r'|#\s*\[\s*error\s*\('
 )
@@ -444,26 +513,35 @@ _LITERAL = re.compile(r'^b?r?(#*)"(?s:(.*))"\1$')
 
 
 def diagnostic_spans(source: Source) -> list[tuple[int, int]]:
-    """The argument spans of the error and diagnostic constructors."""
+    """The message arguments of the error and diagnostic constructors."""
     spans = []
     skeleton = source.skeleton
     for match in _DIAGNOSTIC_CALL.finditer(skeleton):
-        depth, j = 1, match.end()
+        code_args = (
+            1 if match.group('assert') else 2 if match.group('pair') else 0
+        )
+        depth, j, start = 1, match.end(), match.end()
         while j < len(skeleton) and depth:
-            if skeleton[j] == '(':
+            char = skeleton[j]
+            if char in '([{':
                 depth += 1
-            elif skeleton[j] == ')':
+            elif char in ')]}':
                 depth -= 1
+            elif char == ',' and depth == 1 and code_args:
+                code_args -= 1
+                start = j + 1
             j += 1
-        spans.append((match.end(), j))
+        if code_args:
+            continue  # no message argument
+        spans.append((start, j))
     return spans
 
 
 @dataclass(frozen=True)
 class Statement:
     offset: int
-    text: str  # every literal, joined by spaces
-    prose: str  # the literals outside diagnostic text, joined
+    text: str  # every literal, one per line
+    prose: str  # the literals outside diagnostic text, one per line
     literals: tuple[str, ...]
 
 
@@ -497,17 +575,19 @@ def statements(source: Source) -> Iterable[Statement]:
             index += 1
         if parts and first is not None:
             yield Statement(
-                first, ' '.join(parts), ' '.join(prose), tuple(parts)
+                first, '\n'.join(parts), '\n'.join(prose), tuple(parts)
             )
 
 
 def sql_evidence(statement: Statement) -> str | None:
     """The SQL a statement's literals hold, or None."""
-    match = _SQL_SYNTAX.search(statement.text) or _SQL_KEYWORDS.search(
-        statement.prose
+    match = (
+        _SQL_STRONG.search(statement.text)
+        or _SQL_WEAK.search(statement.prose)
+        or _SQL_KEYWORDS.search(statement.prose)
     )
     if match:
-        return match.group(0)
+        return ' '.join(match.group(0).split())
     for literal in statement.literals:
         provider = _PROVIDER_LITERAL.match(literal)
         if provider:
@@ -589,6 +669,10 @@ SKIP_TOKENS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ('expected' + 'Failure', re.compile(r'\bexpected' + r'Failure\b')),
     (_S + 'Test', re.compile(r'\.' + _S + r'Test\b')),
     ('continue-on-' + 'error', re.compile(r'\bcontinue-on-' + r'error\b')),
+    # Deselection drops a test as surely as a skip does.
+    ('--de' + 'select', re.compile(r'--de' + r'select\b')),
+    ('--ig' + 'nore', re.compile(r'--ig' + r'nore(?:-glob)?[=\s]')),
+    ('collect_ig' + 'nore', re.compile(r'\bcollect_ig' + r'nore(?:_glob)?\b')),
 )
 # In Python only: a bare call of the skip function, however pytest or the
 # function was imported or aliased. Rust's iterator method of that name is
@@ -853,13 +937,36 @@ def _group(text: str, start: int) -> str:
     return text[start : j - 1]
 
 
-def ban_switches(attribute: Attribute) -> set[str]:
-    """The bans an attribute turns off, inside `cfg_attr` too."""
+METAVARIABLE = 'a macro metavariable'
+
+
+def level_switches(text: str) -> set[str]:
+    """The bans the `allow(…)`s and `expect(…)`s in `text` turn off.
+
+    `text` has no whitespace. A lint named by a macro metavariable
+    (`allow($lint)`, `allow(clippy::$l)`) could be any lint, so it counts.
+    """
     switches: set[str] = set()
-    for match in _LEVEL.finditer(attribute.text):
-        for item in _group(attribute.text, match.end()).split(','):
-            if item in BAN_SWITCHES:
-                switches.add(item)
+    for match in _LEVEL.finditer(text):
+        for item in _group(text, match.end()).split(','):
+            if item.lower() in BAN_SWITCHES:
+                switches.add(item.lower())
+            elif '$' in item:
+                switches.add(METAVARIABLE)
+    return switches
+
+
+def ban_switches(attribute: Attribute) -> set[str]:
+    """The bans an attribute turns off, inside `cfg_attr` too.
+
+    An attribute that is itself a metavariable (`#[$meta]`), or that
+    `cfg_attr` builds from one, may be any allow, so it counts too.
+    """
+    switches = level_switches(attribute.text)
+    if re.match(r'#!?\[\$', attribute.text) or re.search(
+        r'cfg_attr\(.*,\$', attribute.text
+    ):
+        switches.add(METAVARIABLE)
     return switches
 
 
@@ -900,6 +1007,14 @@ def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
                 'on its one statement (E24)'
             )
     if shipped:
+        # Code brought in from outside src/ would be read as test code.
+        for match in re.finditer(
+            r'#!?\[\s*path\s*=|\binclude\s*!', source.skeleton
+        ):
+            problems.append(
+                f'{rel}:{source.line(match.start())}: `{match.group(0)}` brings '
+                'in code from outside the scanned source'
+            )
         # An allow outside an attribute reaches one through a macro
         # (`wa!(allow(clippy::disallowed_methods), fn f() {…})`); in shipped
         # code it is a switch wherever it stands.
@@ -912,8 +1027,8 @@ def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
             )
         compact = re.sub(r'\s+', '', bare)
         for match in _LEVEL.finditer(compact):
-            items = _group(compact, match.end()).split(',')
-            for lint in sorted(set(items) & BAN_SWITCHES):
+            end = match.end() + len(_group(compact, match.end())) + 1
+            for lint in sorted(level_switches(compact[match.start() : end])):
                 problems.append(
                     f'{rel}: `{match.group(1)}({lint})` outside an attribute, '
                     'as a macro would pass it, turns a ban off in shipped code'
@@ -968,6 +1083,36 @@ def workspace_crates(root: Path) -> list[str]:
     return names
 
 
+# Settings outside the code that would lower the bans: a lint allowed or
+# capped through rustflags, or clippy pointed at another configuration.
+_SUPPRESSING_SETTING = re.compile(
+    r'(?:-A|--allow)[\s=",\']*(?:clippy::|warnings\b)'
+    r'|--cap-lints|CLIPPY_CONF_DIR'
+)
+CARGO_CONFIGS = (
+    Path('.cargo/config.toml'),
+    Path('.cargo/config'),
+    Path('rust/.cargo/config.toml'),
+    Path('rust/.cargo/config'),
+)
+
+
+def suppression_settings(root: Path) -> list[str]:
+    problems = []
+    for rel in (*CARGO_CONFIGS, CI_FILE):
+        path = root / rel
+        if not path.is_file():
+            continue
+        text = path.read_text()
+        for match in _SUPPRESSING_SETTING.finditer(text):
+            line = text.count('\n', 0, match.start()) + 1
+            problems.append(
+                f'{rel}:{line}: `{match.group(0)}` lowers or redirects the '
+                'clippy bans outside the code'
+            )
+    return problems
+
+
 def check_bans(root: Path) -> list[str]:
     problems: list[str] = []
     workspace = root / 'rust/clippy.toml'
@@ -976,6 +1121,7 @@ def check_bans(root: Path) -> list[str]:
     base = tomllib.loads(workspace.read_text())
     base_types = ban_paths(base, 'disallowed-types')
     base_methods = ban_paths(base, 'disallowed-methods')
+    problems += suppression_settings(root)
     for missing in sorted(REQUIRED_TYPES - base_types):
         problems.append(
             f'rust/clippy.toml: the type ban on {missing} is missing'
