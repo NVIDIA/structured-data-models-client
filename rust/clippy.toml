@@ -29,8 +29,9 @@
 # - A Zoned parsed from text (`str::parse::<Zoned>`, `Zoned::from_str`)
 #   looks its zone up in the global database through a trait clippy cannot
 #   ban; l0_scan.py's bans check refuses those spellings in shipped code.
-#   It is a lexical scan: a parse whose target type is only inferred is
-#   not seen.
+#   It is a lexical scan: a parse whose target type is only inferred, such
+#   as `s.parse()` returned as `Result<Zoned, _>` or `Option<Zoned>`, is
+#   not seen, and review covers it.
 # - The rand entries are marked allow-invalid: rand is not a workspace
 #   dependency, so they are inert until something adds it, and then they
 #   apply. selftest.py's clippy fixture uses every other entry.

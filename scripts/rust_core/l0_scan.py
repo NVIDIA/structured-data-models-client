@@ -22,18 +22,26 @@ graph; these check the text:
   ``sdm-engine`` or ``sdm-request`` (migration plan, "Ownership"). It is a
   lexical scan: the string literals of each statement are read together, so
   a clause split across one ``format!``, ``concat!``, ``join`` or ``+`` is
-  seen, in any case, as is a provider's name in a string, an identifier
-  naming a dialect, a backend or SQL, and ``include_str!``. It cannot see
-  SQL assembled across statements (pieces bound to names first), from data
-  that is not a literal in these crates (another crate's constants, values
-  built at run time), or from bytes; review covers those.
+  seen, as is a provider's name as a whole literal, an identifier naming a
+  dialect, a backend or SQL, and ``include_str!``. SQL is told from English
+  by its structure, never by a list of messages (``_SQL_SYNTAX``): a
+  clause keyword with an operand in SQL position, or punctuation only SQL
+  writes; that holds in error and diagnostic text too, so a message cannot
+  carry SQL. Keywords in capitals count too, outside diagnostic text, the
+  arguments of an error or diagnostic constructor (``_DIAGNOSTIC_CALL``).
+  It cannot see SQL assembled across statements (pieces bound to names
+  first), from data that is not a literal in these crates (another crate's
+  constants, values built at run time), from bytes, or English-shaped SQL
+  with no operand in place (``select a column from``); review covers those.
 - ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
   and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
   ``contract/``, the client tests that touch ``_rust`` or ``_native`` (and
   the ``conftest.py`` files over them), or the CI jobs that run the core or
   its tests, chosen by what they run (``CI_SCOPE_MARKS``: cargo, the
   contract, these scripts, the native wheel, the client), whole jobs and
-  single steps alike (design, "Workspace rules"). The tokens are ``SKIP_TOKENS``, matched
+  single steps alike (design, "Workspace rules"). A job that runs the core's
+  tests only through a wrapper whose name gives nothing away (``make
+  test``) would not be chosen; such a job needs a mark added here. The tokens are ``SKIP_TOKENS``, matched
   exactly (decision E24), so ``skip_while`` and ``#[schemars(skip)]`` pass;
   they are written in pieces here, since the ban covers this file.
 - ``bans``: the clippy bans are configured for every domain and shipped
@@ -43,9 +51,14 @@ graph; these check the text:
   or ``clippy::all``, however spaced and inside ``cfg_attr`` too, but
   ``sdm-host``'s one allow on its one statement reading the zone lookup
   roots (decision E24); a test file may allow them, with a reason. It also
-  refuses, lexically, a ``Zoned`` parsed from text in shipped code, which
+  refuses an ``allow`` or ``expect`` of them outside an attribute, as a
+  macro would pass one into an attribute it builds. It also refuses,
+  lexically, a ``Zoned`` parsed from text in shipped code
+  (``parse::<Zoned>``, ``: Zoned = ….parse()``, ``Zoned::from_str``), which
   looks its zone up in jiff's global database through a trait clippy
-  cannot ban.
+  cannot ban. A parse whose target is only inferred, such as ``s.parse()``
+  returned as ``Result<Zoned, _>`` or ``Option<Zoned>``, is not seen; review
+  covers it.
 - ``steps``: ``Step`` has exactly the three variants ``fetch``,
   ``call_model`` and ``done``, in the Rust source and in the locked schema:
   no step asks the host for language behavior (migration plan, L0).
@@ -359,42 +372,103 @@ def check_vocabulary(root: Path) -> list[str]:
 
 # --- SQL fragments ------------------------------------------------------------
 
-_SQL_CLAUSE = re.compile(
+# Whether a statement's literals are SQL is decided by SQL's structure, not
+# by its words, since diagnostics use the same words in English ("the field
+# is null", "order by time is required", "could not select a column from
+# {c}"). Two kinds of evidence:
+#
+# - Syntax, which holds everywhere, diagnostics included: a clause keyword
+#   with an operand where SQL puts one (`{c} > 0 and`, `where {c} = `,
+#   `select x from t`, `order by {c} desc`, `insert into {t}`, a null test
+#   joined by `and` or `or`), or punctuation only SQL writes (`count(*)`,
+#   `cast(… as type)`, `row_number() over`, `nulls last`, `union all`).
+#   An operand is a `{…}` placeholder, `*`, `?`, `$n`, or a word.
+# - Keywords in capitals (`SELECT`, `ORDER BY`, `IS NULL`), which hold
+#   outside diagnostic text only: a message may name a SQL keyword in prose,
+#   but never carry SQL syntax.
+#
+# Diagnostic text is a literal inside the arguments of an error or
+# diagnostic constructor: `CoreError::new` and its other constructors,
+# `panic!`, `assert!` and its forms, `unreachable!`, `todo!`,
+# `unimplemented!`, `.expect(…)`, `.context(…)` and `.with_context(…)`, and
+# thiserror's `#[error("…")]`.
+_O = r'(?:\{[^}]*\}|\*|\?|\$\d+|[\w."]+)'  # an operand
+_SQL_SYNTAX = re.compile(
+    r'(?i)'
+    r'\{[^}]*\}\s*(?:=|<>|!=|<=|>=|<|>)\s*\S+\s+(?:and|or)\b'
+    rf'|\bselect\s+(?:distinct\s+)?{_O}(?:\s*,\s*{_O})*\s+from'
+    r'(?:\s+(?:\{[^}]*\}|[\w."]+)(?:\s+(?:where|group|order|limit|join|'
+    r'inner|left|as)\b|\s*$)|\s*$)'
+    r'|\bcount\s*\(\s*(?:\*|distinct\b)'
+    r'|\bcast\s*\([^()]*?\s+as\s+\w+'
+    r'|\b(?:row_number|dense_rank|rank|ntile|lag|lead)\s*\(\s*\)\s*over\b'
+    r'|\bover\s*\(\s*(?:partition|order)\s+by\b'
+    rf'|\b(?:insert\s+into|delete\s+from|truncate\s+table)\s+{_O}'
+    rf'|\bupdate\s+{_O}\s+set\s+{_O}\s*='
+    r'|\b(?:create|drop|alter)\s+(?:or\s+replace\s+)?(?:temp(?:orary)?\s+)?'
+    rf'(?:table|view|index|schema)\s+(?:if\s+(?:not\s+)?exists\s+)?{_O}'
+    r'|\bnulls\s+(?:first|last)\b|\bunion\s+all\b'
+    r'|\b(?:information_schema|tablesample)\b|\busing\s+sample\b'
+    rf'|\b(?:inner|left|right|full|cross)\s+(?:outer\s+)?join\s+{_O}'
+    rf'|\bjoin\s+{_O}\s+(?:\w+\s+)?(?:on|using)\s*[\w.("{{]'
+    rf'|\bwhere\s+{_O}\s*(?:=|<>|!=|<=|>=|<|>|\bin\s*\(|\blike\b|'
+    r'\bis\s+(?:not\s+)?null\b)'
+    rf'|\b(?:order|group|partition)\s+by\s+{_O}\s*(?:,|\basc\b|\bdesc\b|'
+    r'\bnulls\b|\))'
+    rf'|{_O}\s+is\s+(?:not\s+)?null\s+(?:and|or)\b'
+    rf'|\b(?:and|or)\s+{_O}\s+is\s+(?:not\s+)?null\b'
+    r'|\bwith\s+\w+\s+as\s*\(\s*select\b'
+)
+_SQL_KEYWORDS = re.compile(
     r'\b(SELECT|FROM|WHERE|JOIN|UNION|GROUP\s+BY|ORDER\s+BY|PARTITION\s+BY|'
     r'LIMIT|OFFSET|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|WITH|CAST|COALESCE|'
     r'ROW_NUMBER|OVER|QUALIFY|TABLESAMPLE|USING\s+SAMPLE|DESCRIBE|PRAGMA|'
     r'INFORMATION_SCHEMA|NULLS\s+(?:FIRST|LAST)|IS\s+(?:NOT\s+)?NULL|DISTINCT|'
     r'COUNT\s*\(|MIN\s*\(|MAX\s*\()(?![A-Za-z0-9_])'
 )
-# SQL in any case, recognized by a keyword with the context that makes it a
-# clause, so English such as "missing from the schema" passes.
-_SQL_CONTEXT = re.compile(
-    r'(?i)\bselect\b[\s\S]*?\bfrom\b'
-    r'|\binsert\s+into\b|\bdelete\s+from\b|\bupdate\s+\S+\s+set\b'
-    r'|\b(create|drop|alter)\s+(or\s+replace\s+)?(temp(orary)?\s+)?'
-    r'(table|view|schema|index)\b'
-    r'|\b(order|group|partition)\s+by\b|\bnulls\s+(first|last)\b'
-    r'|\bis\s+(not\s+)?null\b|\bcast\s*\([^)]*\bas\b'
-    r'|\bcount\s*\(\s*(\*|distinct\b)'
-    r'|\b(row_number|dense_rank|rank|coalesce|nullif|ifnull)\s*\('
-    r'|\bover\s*\(|\bunion\s+(all|select)\b'
-    r'|\b(inner|left|right|full|cross)\s+(outer\s+)?join\b'
-    r'|\bjoin\s+\S+\s+(on|using)\b'
-    r'|\bwhere\s+\S+\s*(=|<>|!=|<=|>=|<|>|\bin\b|\blike\b|\bis\b)'
-    r'|\blimit\s+(\d|\{|\$|\?)'
-    r'|\bwith\s+\w+\s+as\s*\('
-    r'|\b(information_schema|tablesample|qualify|pragma)\b|\busing\s+sample\b'
+# A provider's name as a whole literal is a provider match; in a sentence
+# ("came from a Spark job") it is prose.
+_PROVIDER_LITERAL = re.compile(
+    r'(?i)^\s*(duckdb|postgres(ql)?|snowflake|databricks|sqlite|spark|'
+    r'bigquery|redshift|lakebase)\s*$'
 )
-_PROVIDER_TEXT = re.compile(
-    r'(?i)\b(duckdb|postgres(ql)?|snowflake|databricks|sqlite|spark|bigquery|'
-    r'redshift|lakebase)\b'
+_DIAGNOSTIC_CALL = re.compile(
+    r'\bCoreError\s*::\s*\w+\s*\('
+    r'|\b(?:panic|assert|assert_eq|assert_ne|debug_assert|debug_assert_eq|'
+    r'debug_assert_ne|unreachable|todo|unimplemented)\s*!\s*\('
+    r'|\.\s*(?:expect|context|with_context)\s*\('
+    r'|#\s*\[\s*error\s*\('
 )
 _INCLUDE = re.compile(r'\binclude_(str|bytes)\s*!')
 _LITERAL = re.compile(r'^b?r?(#*)"(?s:(.*))"\1$')
 
 
-def statements(source: Source) -> Iterable[tuple[int, str]]:
-    """The string literals of each statement, joined by spaces.
+def diagnostic_spans(source: Source) -> list[tuple[int, int]]:
+    """The argument spans of the error and diagnostic constructors."""
+    spans = []
+    skeleton = source.skeleton
+    for match in _DIAGNOSTIC_CALL.finditer(skeleton):
+        depth, j = 1, match.end()
+        while j < len(skeleton) and depth:
+            if skeleton[j] == '(':
+                depth += 1
+            elif skeleton[j] == ')':
+                depth -= 1
+            j += 1
+        spans.append((match.end(), j))
+    return spans
+
+
+@dataclass(frozen=True)
+class Statement:
+    offset: int
+    text: str  # every literal, joined by spaces
+    prose: str  # the literals outside diagnostic text, joined
+    literals: tuple[str, ...]
+
+
+def statements(source: Source) -> Iterable[Statement]:
+    """The string literals of each statement.
 
     A statement runs to the next `;`, `{` or `}` outside a literal, so the
     pieces of one `format!`, `concat!`, `join` or `+` are read together.
@@ -404,20 +478,41 @@ def statements(source: Source) -> Iterable[tuple[int, str]]:
         + [m.end() for m in re.finditer(r'[;{}]', source.skeleton)]
         + [len(source.skeleton)]
     )
+    diagnostic = diagnostic_spans(source)
     literals = sorted(source.strings)
     index = 0
     for start, end in zip(bounds, bounds[1:], strict=False):
-        parts = []
+        parts: list[str] = []
+        prose: list[str] = []
         first = None
         while index < len(literals) and literals[index][0] < end:
             s, e = literals[index]
             if s >= start:
                 literal = _LITERAL.match(source.code[s:e])
-                parts.append(literal.group(2) if literal else source.code[s:e])
+                text = literal.group(2) if literal else source.code[s:e]
+                parts.append(text)
+                if not any(a <= s < b for a, b in diagnostic):
+                    prose.append(text)
                 first = s if first is None else first
             index += 1
         if parts and first is not None:
-            yield first, ' '.join(parts)
+            yield Statement(
+                first, ' '.join(parts), ' '.join(prose), tuple(parts)
+            )
+
+
+def sql_evidence(statement: Statement) -> str | None:
+    """The SQL a statement's literals hold, or None."""
+    match = _SQL_SYNTAX.search(statement.text) or _SQL_KEYWORDS.search(
+        statement.prose
+    )
+    if match:
+        return match.group(0)
+    for literal in statement.literals:
+        provider = _PROVIDER_LITERAL.match(literal)
+        if provider:
+            return provider.group(1)
+    return None
 
 
 PROVIDER_WORDS = frozenset(
@@ -448,16 +543,12 @@ def check_sql(root: Path) -> list[str]:
         for path in rust_files(src):
             source = read_rust(path.read_text())
             rel = path.relative_to(root)
-            for offset, text in statements(source):
-                match = (
-                    _SQL_CLAUSE.search(text)
-                    or _SQL_CONTEXT.search(text)
-                    or _PROVIDER_TEXT.search(text)
-                )
-                if match:
+            for statement in statements(source):
+                evidence = sql_evidence(statement)
+                if evidence:
                     problems.append(
-                        f'{rel}:{source.line(offset)}: the strings of a '
-                        f'statement hold `{match.group(0)}`, SQL or a '
+                        f'{rel}:{source.line(statement.offset)}: the strings '
+                        f'of a statement hold `{evidence}`, SQL or a '
                         "provider's name; SQL and providers are sdm-data's "
                         'alone'
                     )
@@ -809,12 +900,30 @@ def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
                 'on its one statement (E24)'
             )
     if shipped:
+        # An allow outside an attribute reaches one through a macro
+        # (`wa!(allow(clippy::disallowed_methods), fn f() {…})`); in shipped
+        # code it is a switch wherever it stands.
+        bare = source.skeleton
+        for attribute in attributes(source):
+            bare = (
+                bare[: attribute.start]
+                + _blank(bare[attribute.start : attribute.end])
+                + bare[attribute.end :]
+            )
+        compact = re.sub(r'\s+', '', bare)
+        for match in _LEVEL.finditer(compact):
+            items = _group(compact, match.end()).split(',')
+            for lint in sorted(set(items) & BAN_SWITCHES):
+                problems.append(
+                    f'{rel}: `{match.group(1)}({lint})` outside an attribute, '
+                    'as a macro would pass it, turns a ban off in shipped code'
+                )
         text = tokens(source.skeleton)
         for pattern in _ZONED_PARSE:
-            match = pattern.search(text)
-            if match:
+            parse = pattern.search(text)
+            if parse:
                 problems.append(
-                    f'{rel}: `{match.group(0)}` parses a Zoned through '
+                    f'{rel}: `{parse.group(0)}` parses a Zoned through '
                     "jiff's global zone database; resolve the zone through "
                     "the host's lookup roots"
                 )

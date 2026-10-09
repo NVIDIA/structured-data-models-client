@@ -18,8 +18,9 @@ allow-invalid rand entries aside, inert while rand is no dependency), and
 must fail clippy on each; the reasoned ``#[allow]`` that ``sdm-host``
 carries must silence its one call and pass the bans check (decision E24);
 and each suppression a review found (``cfg_attr``, ``warnings``, a spaced
-path, an ``expect``, the allow widened to a function or its statement
-widened) must silence clippy there and fail the bans check. That run needs the pinned toolchain and the
+path, an ``expect``, an allow passed through a macro, the allow widened
+to a function or its statement widened) must silence clippy there and
+fail the bans check. That run needs the pinned toolchain and the
 workspace's dependencies already fetched; ``--no-clippy`` leaves it out.
 
 Phase 1 design, task T1.10c (formerly T1.16); the rest of ``selftest.py``,
@@ -651,7 +652,7 @@ def scan_cases(results: list[Result]) -> None:
             r / crates / 'sdm-engine/src/lib.rs',
             '\nconst Q: &str = "SELECT a FROM t";\n',
         ),
-        'hold `SELECT`',
+        'hold `SELECT a FROM t`',
     )
     sql(
         'lowercase SQL in sdm-schema',
@@ -659,7 +660,7 @@ def scan_cases(results: list[Result]) -> None:
             r / crates / 'sdm-schema/src/lib.rs',
             '\nconst Q: &str = "select a from t";\n',
         ),
-        'hold `select a from`',
+        'hold `select a from t`',
     )
     sql(
         'an ORDER BY clause in sdm-request',
@@ -667,7 +668,7 @@ def scan_cases(results: list[Result]) -> None:
             r / crates / 'sdm-request/src/lib.rs',
             '\nconst Q: &str = "x ORDER BY y NULLS LAST";\n',
         ),
-        'hold `ORDER BY`',
+        'hold `ORDER BY y NULLS`',
     )
     sql(
         'a provider match in sdm-request',
@@ -690,7 +691,7 @@ def scan_cases(results: list[Result]) -> None:
         (
             'a condition assembled by format!',
             'pub fn f(c: &str) -> String { format!("{c} > 0 and {c} is not null") }',
-            'is not null',
+            '{c} > 0 and',
         ),
         (
             'a lowercase cast',
@@ -742,6 +743,71 @@ def scan_cases(results: list[Result]) -> None:
         ),
         None,
     )
+    # Diagnostics in English pass, bare and as an error's message; the
+    # same SQL in an error still fails (fix round 2).
+    for phrase in (
+        'required field is null',
+        'the seed time in column {c} is null',
+        'the key set is past the row limit {n}',
+        'could not select a column from {c}',
+        'a window where {c} is unset',
+        'order by time is required',
+        'came from a Spark job',
+    ):
+        bare = f'pub fn m(c: &str, n: u64) -> String {{ format!("{phrase}") }}'
+        if '{' not in phrase:
+            bare = f'pub const M: &str = "{phrase}";'
+        in_error = (
+            'pub fn e(c: &str, n: u64) -> sdm_contract::CoreError {\n'
+            '    sdm_contract::CoreError::new(\n'
+            '        sdm_contract::ErrorCode::InvalidRequest,\n'
+            f'        format!("{phrase}"),\n'
+            '    )\n}'
+        )
+        for where, code in (('bare', bare), ('in CoreError::new', in_error)):
+
+            def seed_prose(root: Path, code: str = code) -> None:
+                append(root / crates / engine, f'\n{code}\n')
+
+            sql(f'control: "{phrase}", {where}', seed_prose, None)
+    for name, code, fragment in (
+        (
+            'a condition in an error message',
+            'pub fn e(c: &str) -> sdm_contract::CoreError {\n'
+            '    sdm_contract::CoreError::new(\n'
+            '        sdm_contract::ErrorCode::InvalidRequest,\n'
+            '        format!("{c} > 0 and {c} is not null"),\n'
+            '    )\n}',
+            '{c} > 0 and',
+        ),
+        (
+            'a query in a panic',
+            'pub fn p(t: &str) { panic!("select * from {t} where x = 1") }',
+            'select * from {t} where',
+        ),
+        (
+            'a SQL keyword in capitals outside a message',
+            'pub const K: &str = "ORDER BY";',
+            'hold `ORDER BY`',
+        ),
+    ):
+
+        def seed_sql_error(root: Path, code: str = code) -> None:
+            append(root / crates / engine, f'\n{code}\n')
+
+        sql(name, seed_sql_error, fragment)
+
+    def keyword_in_message(root: Path) -> None:
+        append(
+            root / crates / engine,
+            '\npub fn e() -> sdm_contract::CoreError {\n'
+            '    sdm_contract::CoreError::new(\n'
+            '        sdm_contract::ErrorCode::InvalidRequest,\n'
+            '        "expected an ORDER BY clause",\n'
+            '    )\n}\n',
+        )
+
+    sql('control: a keyword named in a message', keyword_in_message, None)
 
     skips_tree = (
         'rust/crates/sdm-contract',
@@ -1039,6 +1105,15 @@ def scan_cases(results: list[Result]) -> None:
             append(root / run, f'\n{code}\n')
 
         bans(f'shipped code: {name}', seed_ban, f'{run}:')
+    bans(
+        'an allow passed through a macro',
+        lambda r: append(
+            r / run,
+            '\nmacro_rules! wa { ($a:meta, $i:item) => { #[$a] $i } }\n'
+            'wa!(allow(clippy::disallowed_methods), fn e() { let _ = std::env::var("X"); });\n',
+        ),
+        'outside an attribute',
+    )
     zones = 'rust/crates/sdm-host/src/zones.rs'
     statement = 'let db = TimeZoneDatabase::from_dir(&root.path).ok();'
     bans(
@@ -1270,6 +1345,11 @@ BYPASSES = {
         '    let db = TimeZoneDatabase::from_dir(std::env::var("TZDIR").unwrap_or_default()).ok();\n'
         '    let _ = (db, &root.path);\n'
         '}\n'
+    ),
+    'an allow passed through a macro': (
+        'macro_rules! wa { ($a:meta, $i:item) => { #[$a] $i } }\n'
+        'wa!(allow(clippy::disallowed_methods), pub fn bypass_macro() '
+        '{ let _ = std::env::var("X"); });\n'
     ),
     "a block in sdm-host's allowed initializer": (
         'pub fn bypass_block(root: &Root) {\n'
