@@ -39,6 +39,20 @@ python3.12 -m venv .venv
   packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q
 ```
 
+On the Rust core's epic branch the client carries the core, the native module
+`sdm_client._native`, and builds with maturin: installing it, editable
+included, compiles `rust/bindings/sdm-py` and needs the Rust toolchain
+`rust/rust-toolchain.toml` pins. The binding's own tests run against an
+installed build and say which one it is; those of the test-only operations
+need a build with them:
+
+```bash
+uv run --no-project --with maturin==1.15.0 \
+  python scripts/rust_core/native_wheel.py --out dist-native --test-ops
+.venv/bin/pip install --force-reinstall --no-deps dist-native/*.whl
+.venv/bin/python -m pytest rust/bindings/sdm-py/tests -q --native-build test-ops
+```
+
 `tests/` at the root is the cross-package suite: that the five distributions
 agree on a version and a licence, that the recorded public surface and wire
 payloads still match, and that the claims the configuration files make about

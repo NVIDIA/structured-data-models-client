@@ -18,12 +18,13 @@ else:
 
 setup(
     install_requires=[
-        'numpy',
-        'pandas',
-        # The warehouse backends read results as `pd.ArrowDtype`, which pandas
-        # refuses below pyarrow 10.0.1. Databricks Runtime 14.3 LTS and
-        # serverless environment 1 ship pyarrow 8, and failed there on import.
-        'pyarrow>=10.0.1',
+        # The floors every distribution that names these shares on the Rust
+        # core's epic branch (decision E16). Databricks Runtime 14.3 LTS and
+        # serverless environment 1 ship older ones, which the install
+        # upgrades; pyarrow 8 failed there on import before any floor.
+        'numpy>=1.26',
+        'pandas>=2.2',
+        'pyarrow>=14.0.1',
         'python-dateutil',
         'requests>=2.28.2',
         'urllib3',

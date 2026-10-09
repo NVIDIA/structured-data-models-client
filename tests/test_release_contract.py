@@ -1149,6 +1149,75 @@ class TestDistributionCoherence:
             'than the one being released:\n' + '\n'.join(wrong)
         )
 
+    def test_the_native_module_is_versioned_with_the_five(self):
+        """maturin stamps the client wheel with sdm-py's Cargo version.
+
+        That version is the Rust workspace's, which `_version.py` does not
+        see, so a release that moved only the five would ship a client wheel
+        at the old version, and "five wheels, one version" would fail only
+        when CI built it (design, "Packaging").
+        """
+        crate = tomllib.loads(
+            (REPO / 'rust/bindings/sdm-py/Cargo.toml').read_text()
+        )['package']['version']
+        if crate == {'workspace': True}:
+            crate = tomllib.loads((REPO / 'rust/Cargo.toml').read_text())[
+                'workspace'
+            ]['package']['version']
+        assert crate == self._declared_version(), (
+            f'sdm-py is at {crate}, the five at {self._declared_version()}'
+        )
+        client = _pyproject('structured-data-models-client')
+        assert client['build-system']['build-backend'] == 'maturin'
+        assert client['project']['dynamic'] == ['version']
+
+    def test_every_floor_on_frames_and_arrow_is_the_supported_one(self):
+        """pandas, NumPy and pyarrow carry one floor wherever they are named.
+
+        The core takes Arrow through the PyCapsule interface, which pyarrow
+        has from 14.0.1, and the supported versions are decision E16's; a
+        distribution that named a lower floor would let an install resolve
+        to a set nothing tests.
+        """
+        from packaging.requirements import Requirement
+        from packaging.version import Version
+
+        floors = {
+            'pandas': Version('2.2'),
+            'numpy': Version('1.26'),
+            'pyarrow': Version('14.0.1'),
+        }
+        named = []
+        wrong = []
+        for name in _distributions():
+            project = _pyproject(name)['project']
+            requirements = list(project.get('dependencies', []))
+            for extra in project.get('optional-dependencies', {}).values():
+                requirements.extend(extra)
+            setup = PACKAGES / name / 'setup.py'
+            if setup.is_file():
+                requirements.extend(
+                    re.findall(
+                        r"""['"]((?:pandas|numpy|pyarrow)\b[^'"]*)['"]""",
+                        setup.read_text(),
+                    )
+                )
+            for text in requirements:
+                requirement = Requirement(text)
+                floor = floors.get(requirement.name.lower())
+                if floor is None:
+                    continue
+                named.append(f'{name}: {text}')
+                lower = [
+                    Version(s.version)
+                    for s in requirement.specifier
+                    if s.operator == '>='
+                ]
+                if not lower or max(lower) < floor:
+                    wrong.append(f'{name}: {text} (floor {floor})')
+        assert len(named) >= 9, named
+        assert not wrong, 'below the supported floor:\n' + '\n'.join(wrong)
+
     def test_every_distribution_declares_the_same_licence(self):
         licences = {
             name: _pyproject(name)['project'].get('license')
