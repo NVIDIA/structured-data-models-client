@@ -201,12 +201,19 @@ fn start_error(error: &CoreError) -> Outgoing {
     write_error(error, || Ok(AttachmentId(1)))
 }
 
+/// Whether `text` is a POSIX `TZ` string a run takes as its local zone:
+/// the one parser [`HostRun::start`] checks with, so a binding can name a
+/// local zone only when a run would read it, and pass none otherwise.
+pub fn is_posix_zone(text: &str) -> bool {
+    jiff::tz::TimeZone::posix(text).is_ok()
+}
+
 /// Refuses a local zone the host's facts name that cannot be read: a POSIX
 /// `TZ` string must parse. An IANA name is resolved when a run first needs
 /// it.
 fn check_local_zone(zone: Option<&LocalZone>) -> Result<(), CoreError> {
     if let Some(LocalZone::Posix(text)) = zone
-        && jiff::tz::TimeZone::posix(text).is_err()
+        && !is_posix_zone(text)
     {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,

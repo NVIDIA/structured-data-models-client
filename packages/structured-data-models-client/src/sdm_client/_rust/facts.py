@@ -8,8 +8,8 @@ What the core would otherwise read from the machine, read here and passed
 in (contract ``HostFacts``):
 
 - ``now``: the clock, a ``ts`` in microseconds, in UTC;
-- ``local_zone``: the local zone, an IANA name, or a POSIX ``TZ`` string, or
-  none when this host cannot name it;
+- ``local_zone``: the local zone, an IANA name, or a POSIX ``TZ`` string the
+  host's parser takes, or none when this host cannot name one;
 - ``zone_roots``: the zone lookup roots, in the order Python's own zone
   library, :mod:`zoneinfo`, searches them (``zoneinfo.TZPATH``, then the
   ``tzdata`` package), each with the database version read there;
@@ -26,21 +26,12 @@ import re
 import sys
 import time
 import zoneinfo
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from sdm_client._rust import codec
 
-#: A POSIX ``TZ`` string with a rule: a name, an offset and, optionally, a
-#: daylight name, offset and rule. A string that looks like neither this nor
-#: an IANA name is passed as no zone, so a run never refuses the
-#: environment's ``TZ``.
-_POSIX_TZ = re.compile(
-    r'(?:[A-Za-z]{3,}|<[+-]?[A-Za-z0-9]{3,}>)[+-]?\d{1,2}(?::\d{2}){0,2}'
-    r'(?:(?:[A-Za-z]{3,}|<[+-]?[A-Za-z0-9]{3,}>)'
-    r'(?:[+-]?\d{1,2}(?::\d{2}){0,2})?'
-    r'(?:,[^,\s]+,[^,\s]+)?)?\Z'
-)
 _VERSION = re.compile(r'#\s*version\s+(\S+)')
 
 
@@ -101,20 +92,24 @@ def _iana(name: str, roots: list[dict[str, Any]]) -> bool:
     return any((Path(root['path']) / name).is_file() for root in roots)
 
 
-def local_zone(roots: list[dict[str, Any]]) -> dict[str, str] | None:
+def local_zone(
+    roots: list[dict[str, Any]], is_posix: Callable[[str], bool]
+) -> dict[str, str] | None:
     r"""The local zone, as the platform names it.
 
-    ``TZ`` when set: an IANA name a root holds, else a POSIX ``TZ`` string,
-    else none. Without ``TZ``, the zone ``/etc/localtime`` links to, named
-    from its path under a ``zoneinfo`` directory. None when neither names
-    one.
+    ``TZ`` when set: an IANA name a root holds, else a POSIX ``TZ`` string
+    that ``is_posix`` takes, else none. ``is_posix`` is the host's own check
+    (``_native.is_posix_zone``), the one a run's start applies, so a ``TZ``
+    the run could not read is passed as no zone and never refuses the run.
+    Without ``TZ``, the zone ``/etc/localtime`` links to, named from its
+    path under a ``zoneinfo`` directory. None when neither names one.
     """
     setting = os.environ.get('TZ')
     if setting is not None:
         name = setting[1:] if setting.startswith(':') else setting
         if _iana(name, roots):
             return {'iana': name}
-        if _POSIX_TZ.match(setting):
+        if is_posix(setting):
             return {'posix': setting}
         return None
     try:
@@ -138,12 +133,16 @@ def platform() -> dict[str, Any]:
     return {'os': name, 'strftime_pads_year': pads}
 
 
-def host_facts() -> dict[str, Any]:
-    r"""The facts of a run starting now, as the contract's ``HostFacts``."""
+def host_facts(is_posix: Callable[[str], bool]) -> dict[str, Any]:
+    r"""The facts of a run starting now, as the contract's ``HostFacts``.
+
+    ``is_posix`` is the host's check of a POSIX ``TZ`` string
+    (:func:`local_zone`).
+    """
     roots = zone_roots()
     return {
         'now': codec.timestamp(time.time_ns() // 1000, 'us', 'UTC'),
-        'local_zone': local_zone(roots),
+        'local_zone': local_zone(roots, is_posix),
         'zone_roots': roots,
         'platform': platform(),
     }

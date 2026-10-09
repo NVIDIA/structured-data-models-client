@@ -111,7 +111,7 @@ def run(
         {
             'message': 'start',
             'contract': core.CONTRACT_VERSION,
-            'facts': facts.host_facts(),
+            'facts': facts.host_facts(core.is_posix_zone),
             'operation': operation,
         }
     )

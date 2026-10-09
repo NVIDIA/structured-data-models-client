@@ -96,6 +96,14 @@ fn reset_log_cache(py: Python<'_>) {
     }
 }
 
+/// Whether `text` is a POSIX `TZ` string a run takes as its local zone, as
+/// `HostRun::start` checks it; the Python host names a local zone only when
+/// it is, so no `TZ` setting refuses a run.
+#[pyfunction]
+fn is_posix_zone(text: &str) -> bool {
+    sdm_host::is_posix_zone(text)
+}
+
 /// The batches of an Arrow attachment, ready to export again; each export
 /// shares their buffers.
 #[pyclass(frozen, module = "sdm_client._native")]
@@ -354,5 +362,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<ArrowStream>()?;
     module.add_class::<Run>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
+    module.add_function(wrap_pyfunction!(is_posix_zone, module)?)?;
     Ok(())
 }

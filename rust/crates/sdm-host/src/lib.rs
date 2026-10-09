@@ -17,7 +17,7 @@ pub mod zones;
 
 pub use admission::{OFFSET_CAPACITY, admit, admit_with_capacity, admitted_type};
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
-pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain};
+pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone};
 /// The types a binding hands across, so a binding depends on `sdm-host`
 /// and on `sdm-contract` for types, never on `sdm-core` (decision E21).
 pub use sdm_core::{ArrowData, Attachment, Attachments};

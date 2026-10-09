@@ -109,3 +109,6 @@ class Run:
 
 def reset_log_cache() -> None:
     """Forget the logger levels the logging bridge cached."""
+
+def is_posix_zone(text: str) -> bool:
+    """Whether a run takes ``text`` as a POSIX ``TZ`` local zone."""
