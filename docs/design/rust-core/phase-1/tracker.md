@@ -73,6 +73,7 @@ A fix round is one batch of fixes after a review verdict requiring changes; a re
 | T1.7d code review (fixes after f92f987 and d414c83) | T1.7d | 2 | 0 | Yes: reported to the owner 2026-10-08 with checkpoint 1 |
 | T1.8 code review, two reviewers (fixes after 11b4b81 and 03962a9) | T1.8 | 2 | 0 | Yes: reported to the owner 2026-10-08 with checkpoint 1 |
 | T1.9 code review, two reviewers (fixes after 7849e22 and 89ddecb) | T1.9 | 2 | 0 | Yes: reported to the owner in the overnight report |
+| T1.10 code review, two reviewers (fixes after 5151381) | T1.10 | 1 | 0 | No |
 
 ## Owner check-ins
 
