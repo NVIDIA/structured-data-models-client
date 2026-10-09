@@ -19,21 +19,33 @@ graph; these check the text:
   is emulation vocabulary. The public names the allowlisted modules define
   may be used anywhere in their crate.
 - ``sql``: no SQL fragment and no provider match in ``sdm-schema``,
-  ``sdm-engine`` or ``sdm-request`` (migration plan, "Ownership"): a string
-  literal holding a SQL clause, or an identifier naming a dialect, a
-  backend or a SQL statement type.
+  ``sdm-engine`` or ``sdm-request`` (migration plan, "Ownership"). It is a
+  lexical scan: the string literals of each statement are read together, so
+  a clause split across one ``format!``, ``concat!``, ``join`` or ``+`` is
+  seen, in any case, as is a provider's name in a string, an identifier
+  naming a dialect, a backend or SQL, and ``include_str!``. It cannot see
+  SQL assembled across statements (pieces bound to names first), from data
+  that is not a literal in these crates (another crate's constants, values
+  built at run time), or from bytes; review covers those.
 - ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
   and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
   ``contract/``, the client tests that touch ``_rust`` or ``_native`` (and
-  the ``conftest.py`` files over them), or the Rust and contract CI jobs
-  (design, "Workspace rules"). The tokens are ``SKIP_TOKENS``, matched
+  the ``conftest.py`` files over them), or the CI jobs that run the core or
+  its tests, chosen by what they run (``CI_SCOPE_MARKS``: cargo, the
+  contract, these scripts, the native wheel, the client), whole jobs and
+  single steps alike (design, "Workspace rules"). The tokens are ``SKIP_TOKENS``, matched
   exactly (decision E24), so ``skip_while`` and ``#[schemars(skip)]`` pass;
   they are written in pieces here, since the ban covers this file.
 - ``bans``: the clippy bans are configured for every domain and shipped
   crate (``rust/clippy.toml``, repeated in full by any crate's own file but
-  ``sdm-testkit``'s), no lint table turns them off, and the only ``#[allow]``
-  of them in shipped code is ``sdm-host``'s reading of the zone lookup
-  roots (decision E24); a test file may allow them, with a reason.
+  ``sdm-testkit``'s), no lint table turns them off, and no attribute in
+  shipped code allows or expects them, nor ``warnings``, ``clippy::style``
+  or ``clippy::all``, however spaced and inside ``cfg_attr`` too, but
+  ``sdm-host``'s one allow on its one statement reading the zone lookup
+  roots (decision E24); a test file may allow them, with a reason. It also
+  refuses, lexically, a ``Zoned`` parsed from text in shipped code, which
+  looks its zone up in jiff's global database through a trait clippy
+  cannot ban.
 - ``steps``: ``Step`` has exactly the three variants ``fetch``,
   ``call_model`` and ``done``, in the Rust source and in the locked schema:
   no step asks the host for language behavior (migration plan, L0).
@@ -137,7 +149,12 @@ def read_rust(text: str) -> Source:
             j = text.find(close, raw.end())
             j = n if j < 0 else j + len(close)
             code.append(text[i:j])
-            skeleton.append(text[i : raw.end()] + _blank(text[raw.end() : j]))
+            tail = len(close) if text[raw.end() : j].endswith(close) else 0
+            skeleton.append(
+                text[i : raw.end()]
+                + _blank(text[raw.end() : j - tail])
+                + text[j - tail : j]
+            )
             strings.append((i, j))
             i = j
             continue
@@ -152,8 +169,12 @@ def read_rust(text: str) -> Source:
             j = min(j + 1, n)
             code.append(text[start:j])
             head = 2 if text[start] == 'b' else 1
+            closed = j - 1 > start + head - 1 and text[j - 1] == '"'
+            inner_end = j - 1 if closed else j
             skeleton.append(
-                text[start : start + head] + _blank(text[start + head : j])
+                text[start : start + head]
+                + _blank(text[start + head : inner_end])
+                + text[inner_end:j]
             )
             strings.append((start, j))
             i = j
@@ -345,11 +366,60 @@ _SQL_CLAUSE = re.compile(
     r'INFORMATION_SCHEMA|NULLS\s+(?:FIRST|LAST)|IS\s+(?:NOT\s+)?NULL|DISTINCT|'
     r'COUNT\s*\(|MIN\s*\(|MAX\s*\()(?![A-Za-z0-9_])'
 )
-_SQL_LOWER = re.compile(
-    r'(?i)\bselect\b[^"]*\bfrom\b|\b(insert\s+into|create\s+(?:temp|temporary|table|view)|'
-    r'drop\s+(?:table|view)|order\s+by|group\s+by|partition\s+by|nulls\s+(?:first|last)|'
-    r'row_number\s*\(|information_schema|tablesample|using\s+sample)\b'
+# SQL in any case, recognized by a keyword with the context that makes it a
+# clause, so English such as "missing from the schema" passes.
+_SQL_CONTEXT = re.compile(
+    r'(?i)\bselect\b[\s\S]*?\bfrom\b'
+    r'|\binsert\s+into\b|\bdelete\s+from\b|\bupdate\s+\S+\s+set\b'
+    r'|\b(create|drop|alter)\s+(or\s+replace\s+)?(temp(orary)?\s+)?'
+    r'(table|view|schema|index)\b'
+    r'|\b(order|group|partition)\s+by\b|\bnulls\s+(first|last)\b'
+    r'|\bis\s+(not\s+)?null\b|\bcast\s*\([^)]*\bas\b'
+    r'|\bcount\s*\(\s*(\*|distinct\b)'
+    r'|\b(row_number|dense_rank|rank|coalesce|nullif|ifnull)\s*\('
+    r'|\bover\s*\(|\bunion\s+(all|select)\b'
+    r'|\b(inner|left|right|full|cross)\s+(outer\s+)?join\b'
+    r'|\bjoin\s+\S+\s+(on|using)\b'
+    r'|\bwhere\s+\S+\s*(=|<>|!=|<=|>=|<|>|\bin\b|\blike\b|\bis\b)'
+    r'|\blimit\s+(\d|\{|\$|\?)'
+    r'|\bwith\s+\w+\s+as\s*\('
+    r'|\b(information_schema|tablesample|qualify|pragma)\b|\busing\s+sample\b'
 )
+_PROVIDER_TEXT = re.compile(
+    r'(?i)\b(duckdb|postgres(ql)?|snowflake|databricks|sqlite|spark|bigquery|'
+    r'redshift|lakebase)\b'
+)
+_INCLUDE = re.compile(r'\binclude_(str|bytes)\s*!')
+_LITERAL = re.compile(r'^b?r?(#*)"(?s:(.*))"\1$')
+
+
+def statements(source: Source) -> Iterable[tuple[int, str]]:
+    """The string literals of each statement, joined by spaces.
+
+    A statement runs to the next `;`, `{` or `}` outside a literal, so the
+    pieces of one `format!`, `concat!`, `join` or `+` are read together.
+    """
+    bounds = (
+        [0]
+        + [m.end() for m in re.finditer(r'[;{}]', source.skeleton)]
+        + [len(source.skeleton)]
+    )
+    literals = sorted(source.strings)
+    index = 0
+    for start, end in zip(bounds, bounds[1:], strict=False):
+        parts = []
+        first = None
+        while index < len(literals) and literals[index][0] < end:
+            s, e = literals[index]
+            if s >= start:
+                literal = _LITERAL.match(source.code[s:e])
+                parts.append(literal.group(2) if literal else source.code[s:e])
+                first = s if first is None else first
+            index += 1
+        if parts and first is not None:
+            yield first, ' '.join(parts)
+
+
 PROVIDER_WORDS = frozenset(
     {
         'sql',
@@ -378,13 +448,24 @@ def check_sql(root: Path) -> list[str]:
         for path in rust_files(src):
             source = read_rust(path.read_text())
             rel = path.relative_to(root)
-            for offset, text in string_literals(source):
-                match = _SQL_CLAUSE.search(text) or _SQL_LOWER.search(text)
+            for offset, text in statements(source):
+                match = (
+                    _SQL_CLAUSE.search(text)
+                    or _SQL_CONTEXT.search(text)
+                    or _PROVIDER_TEXT.search(text)
+                )
                 if match:
                     problems.append(
-                        f'{rel}:{source.line(offset)}: a string holds the SQL '
-                        f"`{match.group(0)}`; SQL is sdm-data's alone"
+                        f'{rel}:{source.line(offset)}: the strings of a '
+                        f'statement hold `{match.group(0)}`, SQL or a '
+                        "provider's name; SQL and providers are sdm-data's "
+                        'alone'
                     )
+            for match in _INCLUDE.finditer(source.skeleton):
+                problems.append(
+                    f'{rel}:{source.line(match.start())}: `{match.group(0)}` '
+                    'brings in text this scan cannot read'
+                )
             for offset, name in identifiers(source):
                 hit = PROVIDER_WORDS.intersection(words(name))
                 if hit:
@@ -406,28 +487,47 @@ SKIP_TOKENS: tuple[tuple[str, re.Pattern[str]], ...] = (
         'cfg_attr(…, ' + _I + ')',
         re.compile(r'cfg_attr\s*\([^\]]*\b' + _I + r'\b'),
     ),
-    ('pytest.mark.' + _S, re.compile(r'pytest\.mark\.' + _S + r'\b')),
+    # The skip marker under any alias of pytest, or imported bare.
+    ('mark.' + _S, re.compile(r'\bmark\.' + _S + r'\b')),
     ('pytest.' + _S, re.compile(r'pytest\.' + _S + r'\b')),
     (_S + 'if', re.compile(r'\b' + _S + r'if\b')),
     ('x' + _X, re.compile(r'\bx' + _X + r'\b')),
     ('importor' + _S, re.compile(r'\bimportor' + _S + r'\b')),
     ('unittest.' + _S, re.compile(r'unittest\.' + _S)),
     (_S.capitalize() + 'Test', re.compile(r'\b' + _S.capitalize() + r'Test\b')),
+    ('expected' + 'Failure', re.compile(r'\bexpected' + r'Failure\b')),
     (_S + 'Test', re.compile(r'\.' + _S + r'Test\b')),
     ('continue-on-' + 'error', re.compile(r'\bcontinue-on-' + r'error\b')),
+)
+# In Python only: a bare call of the skip function, however pytest or the
+# function was imported or aliased. Rust's iterator method of that name is
+# not a skip, so Rust files are not held to it.
+PYTHON_SKIP_TOKENS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (_S + '(', re.compile(r'\b' + _S + r'\(')),
 )
 CLIENT_TESTS = Path('packages/structured-data-models-client')
 CI_FILE = Path('.github/workflows/ci.yml')
 _CI_JOB = re.compile(r'^  ([A-Za-z0-9_-]+):\s*$')
 
 
+# What puts a CI job in scope, by what it runs: the contract's checks, the
+# Rust core's scripts, cargo, the native client wheel, or the client's tests.
+CI_SCOPE_MARKS = (
+    'contract/',
+    'scripts/rust_core/',
+    'cargo ',
+    'native-wheel',
+    'native/*.whl',
+    'structured-data-models-client',
+)
+
+
 def ci_job_in_scope(name: str, body: str) -> bool:
-    """A Rust job, a contract job, or one that runs the contract's checks."""
+    """A Rust or contract job, or one that runs the core or its tests."""
     return (
         name.startswith(('rust-', 'contract-'))
         or name in ('native-wheel', 'wheel-smoke')
-        or 'contract/' in body
-        or 'scripts/rust_core/' in body
+        or any(mark in body for mark in CI_SCOPE_MARKS)
     )
 
 
@@ -480,8 +580,9 @@ def skip_scope(root: Path) -> list[Path]:
     return sorted({*files, *touching, *conftests})
 
 
-def find_skips(text: str) -> Iterable[tuple[int, str]]:
-    for token, pattern in SKIP_TOKENS:
+def find_skips(text: str, python: bool = False) -> Iterable[tuple[int, str]]:
+    tokens = SKIP_TOKENS + (PYTHON_SKIP_TOKENS if python else ())
+    for token, pattern in tokens:
         for match in pattern.finditer(text):
             yield text.count('\n', 0, match.start()) + 1, token
 
@@ -522,7 +623,7 @@ def check_skips(root: Path) -> list[str]:
         text = _text(path)
         if text is None:
             continue
-        for line, token in find_skips(text):
+        for line, token in find_skips(text, python=path.suffix == '.py'):
             problems.append(
                 f'{path.relative_to(root)}:{line}: `{token}`; nothing in the Rust '
                 'core\'s scope is skipped or ignored (design, "Workspace rules")'
@@ -535,8 +636,8 @@ def check_skips(root: Path) -> list[str]:
             continue
         for line, token in find_skips(body):
             problems.append(
-                f'{CI_FILE}:{start + line}: `{token}` in job {job}; the Rust and '
-                'contract jobs fail on every failure'
+                f'{CI_FILE}:{start + line}: `{token}` in job {job}; the jobs '
+                'that run the core or its tests fail on every failure'
             )
     return problems
 
@@ -583,20 +684,141 @@ REQUIRED_METHODS = frozenset(
     }
 )
 # The one place shipped code may allow a ban: sdm-host reads the zone lookup
-# roots the host names (decision E24).
-BAN_EXEMPTIONS = {
-    (
-        Path('rust/crates/sdm-host/src/zones.rs'),
-        'clippy::disallowed_methods',
-    ): 1,
-}
-BAN_LINTS = ('clippy::disallowed_methods', 'clippy::disallowed_types')
-# Allowing these groups or names turns the bans off as well.
-_BAN_SWITCHES = re.compile(
-    r'\bclippy::(disallowed_methods|disallowed_types|disallowed_method|'
-    r'disallowed_type|style|all)\b'
+# roots the host names (decision E24). The allow must be exactly this one,
+# on exactly this statement: a binding of `TimeZoneDatabase::from_dir` over
+# the root's path, with at most a trailing `.ok()` or `?`.
+BAN_EXEMPTION = Path('rust/crates/sdm-host/src/zones.rs')
+_EXEMPT_ATTRIBUTE = re.compile(
+    r'^#\[allow\(clippy::disallowed_methods,reason=""\)\]$'
 )
-_ALLOW = re.compile(r'#(!?)\[\s*(?:allow|expect)\s*\(([^\]]*)\)\s*\]', re.S)
+_EXEMPT_STATEMENT = re.compile(
+    r'^let (mut )?\w+ (: [^=]+ )?= TimeZoneDatabase :: from_dir '
+    r'\( & root \. path \)( \. ok \( \)| \?)? ;$'
+)
+# What, inside an allow or expect, turns a ban off: the lints, their old
+# names, the groups that hold them, and every warning at once.
+BAN_SWITCHES = frozenset(
+    {
+        'clippy::disallowed_methods',
+        'clippy::disallowed_types',
+        'clippy::disallowed_method',
+        'clippy::disallowed_type',
+        'clippy::style',
+        'clippy::all',
+        'warnings',
+    }
+)
+_ATTRIBUTE = re.compile(r'#\s*(!?)\s*\[')
+_LEVEL = re.compile(r'(?<![\w:])(allow|expect)\(')
+# A Zoned parsed from text looks its zone up in jiff's global database,
+# which clippy cannot see through `str::parse` or `FromStr`.
+_ZONED_PARSE = (
+    re.compile(r'parse :: < (jiff :: )?Zoned >'),
+    re.compile(r': (jiff :: )?Zoned = [^;]*\. parse \('),
+    re.compile(r'\bZoned :: from_str\b'),
+    re.compile(r'< (jiff :: )?Zoned as (std :: |core :: )?(str :: )?FromStr >'),
+)
+
+
+def tokens(text: str) -> str:
+    """Rust text as its tokens, one space apart, so spacing cannot hide."""
+    return ' '.join(re.findall(r'\w+|::|[^\w\s]', text))
+
+
+@dataclass(frozen=True)
+class Attribute:
+    start: int
+    end: int
+    inner: bool
+    text: str  # without whitespace, string contents blanked
+
+
+def attributes(source: Source) -> list[Attribute]:
+    """Every `#[...]` and `#![...]`, bracket-matched."""
+    found = []
+    skeleton = source.skeleton
+    for match in _ATTRIBUTE.finditer(skeleton):
+        depth, j = 1, match.end()
+        while j < len(skeleton) and depth:
+            if skeleton[j] == '[':
+                depth += 1
+            elif skeleton[j] == ']':
+                depth -= 1
+            j += 1
+        text = re.sub(r'\s+', '', skeleton[match.start() : j])
+        text = re.sub(r'"[^"]*"', '""', text)
+        found.append(Attribute(match.start(), j, bool(match.group(1)), text))
+    return found
+
+
+def _group(text: str, start: int) -> str:
+    depth, j = 1, start
+    while j < len(text) and depth:
+        if text[j] == '(':
+            depth += 1
+        elif text[j] == ')':
+            depth -= 1
+        j += 1
+    return text[start : j - 1]
+
+
+def ban_switches(attribute: Attribute) -> set[str]:
+    """The bans an attribute turns off, inside `cfg_attr` too."""
+    switches: set[str] = set()
+    for match in _LEVEL.finditer(attribute.text):
+        for item in _group(attribute.text, match.end()).split(','):
+            if item in BAN_SWITCHES:
+                switches.add(item)
+    return switches
+
+
+def exempt(source: Source, attribute: Attribute) -> bool:
+    """Whether this is sdm-host's approved allow on its approved statement."""
+    if attribute.inner or not _EXEMPT_ATTRIBUTE.match(attribute.text):
+        return False
+    end = source.skeleton.find(';', attribute.end)
+    if end < 0:
+        return False
+    statement = tokens(source.skeleton[attribute.end : end + 1])
+    return bool(_EXEMPT_STATEMENT.match(statement))
+
+
+def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
+    """The suppressions of the bans in one file."""
+    problems = []
+    exemptions = 0
+    for attribute in attributes(source):
+        switches = ban_switches(attribute)
+        if not switches:
+            continue
+        line = source.line(attribute.start)
+        if not shipped:
+            if 'reason=' not in attribute.text:
+                problems.append(
+                    f'{rel}:{line}: allows a clippy ban without a reason'
+                )
+            continue
+        if rel == BAN_EXEMPTION and exempt(source, attribute):
+            exemptions += 1
+            if exemptions == 1:
+                continue
+        for lint in sorted(switches):
+            problems.append(
+                f'{rel}:{line}: shipped code allows {lint}; the one '
+                "exemption is sdm-host's reading of the zone lookup roots, "
+                'on its one statement (E24)'
+            )
+    if shipped:
+        text = tokens(source.skeleton)
+        for pattern in _ZONED_PARSE:
+            match = pattern.search(text)
+            if match:
+                problems.append(
+                    f'{rel}: `{match.group(0)}` parses a Zoned through '
+                    "jiff's global zone database; resolve the zone through "
+                    "the host's lookup roots"
+                )
+    return problems
 
 
 def clippy_files(root: Path, crate: str) -> list[Path]:
@@ -685,6 +907,16 @@ def check_bans(root: Path) -> list[str]:
         if not manifest.is_file() or 'target' in manifest.parts:
             continue
         data = tomllib.loads(manifest.read_text())
+        for rust_table in (
+            data.get('workspace', {}).get('lints', {}).get('rust', {}),
+            data.get('lints', {}).get('rust', {}),
+        ):
+            level = rust_table.get('warnings')
+            setting = level.get('level') if isinstance(level, dict) else level
+            if setting == 'allow':
+                problems.append(
+                    f'{manifest.relative_to(root)}: warnings set to allow'
+                )
         tables = [
             data.get('workspace', {}).get('lints', {}).get('clippy', {}),
             data.get('lints', {}).get('clippy', {}),
@@ -710,46 +942,14 @@ def check_bans(root: Path) -> list[str]:
                         f'{manifest.relative_to(root)}: clippy::all set to allow'
                     )
     # Shipped code allows a ban only at its exemption; tests give a reason.
-    seen: dict[tuple[Path, str], int] = {}
     for crate in workspace_crates(root):
         if crate in DEV_CRATES:
             continue
         directory = crate_dir(root, crate)
         for path in rust_files(directory):
-            source = read_rust(path.read_text())
-            rel = path.relative_to(root)
-            in_src = (directory / 'src') in path.parents
-            for match in _ALLOW.finditer(source.code):
-                inner, body = match.group(1), match.group(2)
-                switches = sorted(set(_BAN_SWITCHES.findall(body)))
-                if not switches:
-                    continue
-                line = source.line(match.start())
-                if not in_src:
-                    if 'reason' not in body:
-                        problems.append(
-                            f'{rel}:{line}: allows a clippy ban without a reason'
-                        )
-                    continue
-                for switch in switches:
-                    lint = f'clippy::{switch}'
-                    key = (rel, lint)
-                    if (
-                        inner
-                        or key not in BAN_EXEMPTIONS
-                        or 'reason' not in body
-                    ):
-                        problems.append(
-                            f'{rel}:{line}: shipped code allows {lint}; the one '
-                            "exemption is sdm-host's zone lookup roots (E24)"
-                        )
-                        continue
-                    seen[key] = seen.get(key, 0) + 1
-    for key, count in seen.items():
-        if count > BAN_EXEMPTIONS[key]:
-            problems.append(
-                f'{key[0]}: allows {key[1]} {count} times; the exemption is '
-                f'{BAN_EXEMPTIONS[key]} site'
+            shipped = (directory / 'src') in path.parents
+            problems += ban_problems(
+                path.relative_to(root), read_rust(path.read_text()), shipped
             )
     return problems
 

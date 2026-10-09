@@ -18,12 +18,14 @@ features, every target platform) and checks:
   (E21); ``sdm-testkit`` over ``sdm-host``;
 - the parser rule: only ``sdm-core`` depends on the parser crate, and only
   its adapter (``src/pql.rs``, and ``src/test_ops.rs``, compiled only with
-  the ``test-ops`` feature) names it;
+  the ``test-ops`` feature) names it, by its own name or any name a
+  ``package =`` rename gives it, read from ``cargo metadata``;
 - nothing shipped (domain, host or binding) reaches ``sdm-testkit`` over
   normal or build edges;
 - no domain crate, and not ``sdm-host``, reaches ``pyo3``, ``jni``,
-  ``arrow-pyarrow``, ``numpy`` or ``duckdb`` over normal or build edges; the
-  binding reaches no ``jni`` or ``duckdb``;
+  ``arrow-pyarrow``, ``numpy`` or ``duckdb`` over normal or build edges; a
+  binding reaches no database driver and no other language's runtime
+  (``sdm-py`` no ``jni``; the planned ``sdm-jni`` no ``pyo3``);
 - unsafe code: each domain crate and ``sdm-host`` takes the workspace lints,
   which forbid it, and forbids it at its root; the binding and the test
   host deny it;
@@ -121,7 +123,14 @@ LANGUAGE_CRATES = frozenset(
         'libduckdb-sys',
     }
 )
-BINDING_FORBIDDEN = frozenset({'jni', 'jni-sys', 'duckdb', 'libduckdb-sys'})
+# What each binding may not reach: a binding links its own language's
+# runtime and no other, and no database driver. A binding not named here
+# (none yet) may link no database driver.
+DRIVERS = frozenset({'duckdb', 'libduckdb-sys'})
+BINDING_FORBIDDEN: dict[str, frozenset[str]] = {
+    'sdm-py': DRIVERS | {'jni', 'jni-sys'},
+    'sdm-jni': DRIVERS | {'pyo3', 'pyo3-ffi', 'arrow-pyarrow', 'numpy'},
+}
 # Where sdm-core may name the parser: its adapter, and the test-only fault
 # behind the test-ops feature.
 PARSER_USERS = (Path('src/pql.rs'), Path('src/test_ops.rs'))
@@ -172,11 +181,16 @@ class Graph:
         )
         self.workspace_root = Path(metadata['workspace_root'])
         self.edges: dict[str, list[tuple[str, set[str | None]]]] = {}
+        # The name each crate's code knows a dependency by, which a
+        # `package =` rename in Cargo.toml changes.
+        self.externs: dict[tuple[str, str], set[str]] = {}
         for node in metadata['resolve']['nodes']:
             deps = []
             for dep in node['deps']:
                 kinds = {k['kind'] for k in dep['dep_kinds']}
                 deps.append((self.names[dep['pkg']], kinds))
+                key = (self.names[node['id']], self.names[dep['pkg']])
+                self.externs.setdefault(key, set()).add(dep['name'])
             self.edges.setdefault(self.names[node['id']], []).extend(deps)
 
     def direct(self, crate: str) -> list[tuple[str, set[str | None]]]:
@@ -250,7 +264,9 @@ def check_reach(graph: Graph) -> list[str]:
                 'nothing shipped depends on the dev-only test host'
             )
         forbidden = (
-            LANGUAGE_CRATES if kind in (DOMAIN, HOST) else BINDING_FORBIDDEN
+            LANGUAGE_CRATES
+            if kind in (DOMAIN, HOST)
+            else BINDING_FORBIDDEN.get(crate, DRIVERS)
         )
         for target in sorted(forbidden & reached.keys()):
             problems.append(
@@ -269,19 +285,21 @@ def check_parser_users(graph: Graph) -> list[str]:
         return ['sdm-core: missing']
     root = crate_root(graph, 'sdm-core')
     problems = []
-    module = PARSER.replace('-', '_')
+    names = {PARSER.replace('-', '_')} | graph.externs.get(
+        ('sdm-core', PARSER), set()
+    )
+    pattern = re.compile(
+        r'\b(' + '|'.join(re.escape(n) for n in sorted(names)) + r')\b'
+    )
     for path in sorted(root.rglob('*.rs')):
         if 'target' in path.parts:
             continue
         rel = path.relative_to(root)
-        source = read_rust(path.read_text())
-        if (
-            re.search(rf'\b{module}\b', source.skeleton)
-            and rel not in PARSER_USERS
-        ):
+        match = pattern.search(read_rust(path.read_text()).skeleton)
+        if match and rel not in PARSER_USERS:
             problems.append(
-                f'sdm-core/{rel}: names {module}; only the adapter '
-                f'({", ".join(str(p) for p in PARSER_USERS)}) uses the parser'
+                f'sdm-core/{rel}: names {match.group(0)}, the parser; only the '
+                f'adapter ({", ".join(str(p) for p in PARSER_USERS)}) uses it'
             )
     lib = root / 'src/lib.rs'
     if lib.is_file() and (root / 'src/test_ops.rs').is_file():
