@@ -17,7 +17,7 @@ A row changes with the dependency, in the same commit.
 | `half` | 2 | `sdm-host` tests only | Use a library | Builds the `float16` values the widening tests admit; Arrow's own `f16` type |
 | `chrono` | 0.4 (transitive) | none directly | Not used | Only Arrow's own dependency; first-party code uses `jiff` (A7) |
 | `chrono-tz` | none | none | Banned | Expands rules only to 2099 and embeds its database at build time, so it fails DT-1 and DT-2 (T0.6); `cargo-deny` refuses it |
-| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | 1 | contract, host, later all | Use a library | Control messages are versioned JSON (plan section 3) |
+| `serde`, `serde_json` (`float_roundtrip`, `preserve_order`) | 1 | contract, host, `sdm-testkit` (cases and observations), later all | Use a library | Control messages are versioned JSON (plan section 3) |
 | `schemars` | 1 | contract | Use a library | Generates the committed JSON Schema from the serde types, so the schema cannot drift from the code |
 | `thiserror` | 2 | first-party crates | Use a library | Typed errors; `anyhow` stays out of first-party crates other than `sdm-testkit` |
 | `indexmap` | 2 | where output order matters | Use a library | Insertion order for anything that reaches an output; `HashMap` iteration is banned there |
@@ -25,7 +25,7 @@ A row changes with the dependency, in the same commit.
 | `anyhow` | 1 | `sdm-testkit` only | Use a library | Test-host plumbing only; `cargo-deny` refuses it elsewhere |
 | `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
-| `sha2` | 0.10 | contract tests | Use a library | Hashes the committed schema for the lock check |
+| `sha2` | 0.10 | contract tests; `sdm-testkit` | Use a library | Hashes the committed schema for the lock check, and each case file for an observation's identity |
 | `tracing` (features `std`, `log`) | 0.1.44 | first-party crates (`sdm-core` from T1.8) | Use a library | Logging in Rust (decision H8); the `log` feature emits each event to the `log` facade when no subscriber is set, which is what `pyo3-log` reads |
 | `serde_stacker` | 0.1.14 | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27), through `read_validated_query`, which refuses text nested past `MAX_JSON_DEPTH` (2,008) before reading; `sdm-contract` turns on `serde_json`'s `unbounded_depth` for it, which only adds the switch that reader uses: every other read keeps the 128-level limit |
 | `pyo3-log` | 0.13 | `sdm-py` only | Use a library | Bridges Rust `log` records to Python `logging`, initialized at the first core call; its level cache is reset at each run start (H8) |

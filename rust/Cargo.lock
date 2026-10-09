@@ -1465,6 +1465,9 @@ dependencies = [
  "duckdb",
  "sdm-contract",
  "sdm-host",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -17,6 +17,9 @@ sdm-contract = { path = "../sdm-contract" }
 sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
 duckdb.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the
 # Arrow FFI sites can allow it locally.
