@@ -36,7 +36,7 @@ The owner made these before any code:
 2. **Scope:** Python supports every backend it supports today (Databricks, Snowflake, Lakebase, Postgres, SQLite, DuckDB and in-memory frames, including files read from Amazon S3).
    Java starts with DuckDB, SQLite, Postgres and Databricks.
    Platforms: the client becomes one CPython `abi3` wheel per platform (3.10 and later, no sdist) for Linux x86_64 and aarch64 (`manylinux2014`, and `musllinux_1_2` if feasible; no PQL C++ is linked since Phase 1 decision E18, approved by owner 2026-10-08), macOS (10.12 x86_64, 11.0 arm64) and Windows x86_64, with `pyarrow>=10.0.1` and `pandas>=1.5` on `main` until the epic merges, and on the epic branch Python 3.10 to 3.14, `pandas>=2.2`, `numpy>=1.26` and `pyarrow>=14.0.1`, with Arrow through the PyCapsule interface only (Phase 1 decision E16, approved by owner 2026-10-08).
-   Dropped by the owner: 32-bit, Windows on Arm, other architectures, PyPy, GraalPy and free-threaded CPython; Java natives are Linux x86_64 and aarch64 plus macOS, and only tested environments are claimed (`phase-0/support-matrix.md`, decisions G1 to G14).
+   Dropped by the owner: 32-bit, Windows on Arm, other architectures, PyPy, GraalPy and free-threaded CPython; Java natives are Linux x86_64 and aarch64 plus macOS, with Windows x86_64 requested by the first Java consumer as a proposed G13 amendment pending owner review. Only tested environments are claimed (`phase-0/support-matrix.md`, decisions G1 to G14).
 3. **Regressions:** refusing an input the old Python client accepted is a regression, and so is dropping a platform or version Python supports today, unless the owner decides it explicitly.
    Java on Snowflake is not prioritized, so it is not held to this yet.
 4. **Python quirks:** the register (section 5) follows common sense, with a small bias towards today's Python behavior but without catering to its accidents.
@@ -182,7 +182,7 @@ Each language uses its standard binding tool, over one shared Rust layer:
   Memory has one owner and an explicit release, and the threading model is written down.
 - **Java runtime flags:** users run with `--enable-native-access` (Java warns without it from JDK 24 and will later refuse) and the flag Arrow Java needs; the Java consumer's environment must allow both.
 - **PQL's C++ is linked into both native libraries** with its symbols kept private, so a Python process that also loads the PQL team's own package gets no clashes (superseded by Phase 1 decision E18, approved by owner 2026-10-08: no PQL C++ is linked).
-- **Platforms and versions:** the owner decided the native coverage in Phase 0 (decision 2 and `phase-0/support-matrix.md`): Python wheels as above, and Java natives for Linux x86_64 and aarch64 plus macOS, to confirm with the Java consumer.
+- **Platforms and versions:** the owner decided the native coverage in Phase 0 (decision 2 and `phase-0/support-matrix.md`): Python wheels as above, and Java natives for Linux x86_64 and aarch64 plus macOS. The first Java consumer has requested Windows x86_64 as well as Linux x86_64; adding Windows to the Java JAR's native targets and L8 packaging checks is a proposed G13 amendment pending owner review.
   pyarrow 8, as Databricks Runtime 14.3 ships, is upgraded by the `pyarrow>=10.0.1` floor (raised to 14.0.1 on the epic branch by Phase 1 decision E16).
   Dropping any further platform or version, or moving to `manylinux_2_28`, is an explicit owner decision, never a side effect.
 

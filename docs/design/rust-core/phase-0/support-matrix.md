@@ -115,7 +115,7 @@ The Rust core ships inside the `structured-data-models-client` wheel (plan secti
 | NumPy | Unchanged; the core does not use it (superseded by Phase 1 decision E16 (owner, 2026-10-08): `numpy>=1.26` on the epic branch) |
 | OpenSSL | None linked into the core; HTTP stays in the host, so the Databricks aarch64 FIPS abort cannot recur through the core |
 | Build and test | Native Arm runners instead of QEMU for aarch64; each wheel installed and loaded in a clean container per platform (L8) |
-| Java JAR | Native libraries for linux-x86_64 and linux-aarch64 (same glibc floor as the Python wheel) and macOS x86_64 and arm64, on JDK 17 and 21; Windows only if the Java consumer needs it (G13) |
+| Java JAR | Native libraries for linux-x86_64 and linux-aarch64 (same glibc floor as the Python wheel), macOS x86_64 and arm64, and Windows x86_64, on JDK 17 and 21; the Windows target is requested by the first Java consumer (G13 amendment pending owner review) |
 
 Each platform added here must also be in the PQL asks ([pql-asks.md](pql-asks.md)); superseded by Phase 1 decision E18 (owner, 2026-10-08): the asks are retired, and no PQL C++ conditions a platform.
 
@@ -179,7 +179,8 @@ Recommendation: publish no sdist for the client once it carries the core, so pip
 
 **G13. Java native platforms.**
 Java has no support today, so this is not a regression, but the Java consumer's environment decides it (plan section 10).
-Recommendation: Linux x86_64 and aarch64 first, since Databricks is where Java must be proven, plus macOS for development; confirm with the Java consumer before Java packaging.
+Original recommendation: Linux x86_64 and aarch64 first, since Databricks is where Java must be proven, plus macOS for development; confirm with the Java consumer before Java packaging.
+The first Java consumer has now stated a requirement for Windows x86_64 as well as Linux x86_64. Add Windows x86_64 to the Java packaging and L8 load-test matrix before claiming support; this amendment awaits owner review. The Maven artifact layout remains a Java-phase decision.
 
 **G14. Unrecorded environments.**
 Snowflake notebook runtimes and Databricks runtimes outside the matrix (13.3 LTS and older, ML and GPU runtimes, DBR 18 and later) are unknown, not supported or unsupported.

@@ -39,5 +39,6 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 
 ## Open decisions
 
+- G13 amendment proposed for owner review: the first Java consumer requires Windows x86_64 and Linux x86_64. Add Windows x86_64 to the Java native and packaging test matrix; retain Linux aarch64 and macOS. Decide the single-JAR versus platform-specific Maven layout in the Java phase.
 - T0.9: the owner sends the PQL asks in [pql-asks.md](pql-asks.md) (decision 31); this does not block Phase 1. Closed: superseded by Phase 1 decision E18 (owner, 2026-10-08), the asks are retired and not sent.
 - P1B-1: any Phase 1b case whose new outcome refuses an input Python accepts comes to the owner case by case.
