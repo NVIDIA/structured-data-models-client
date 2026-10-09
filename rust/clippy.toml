@@ -16,10 +16,24 @@
 # from no random generator but the registered streams.
 #
 # A use the core needs is allowed at its site with one reasoned #[allow],
-# and l0_scan.py lists each such site; today the only one is sdm-host's
-# reading of the host's zone lookup roots (decision E24). Tests are not the
-# core: a test file that reads its vectors allows the ban once, at its top,
-# with its reason.
+# and l0_scan.py pins each such site to its statement; today the only one
+# is sdm-host's reading of the host's zone lookup roots (decision E24).
+# Tests are not the core: a test file that reads its vectors allows the ban
+# once, at its top, with its reason.
+#
+# What clippy cannot see, and what covers it:
+# - Arrow's field and schema metadata are std HashMaps, built and returned
+#   by Arrow's own API, so a value of that type never names HashMap in our
+#   code. Today's code only compares or clones those maps; iterating one
+#   into an output would need an ordered copy first, and review holds that.
+# - A Zoned parsed from text (`str::parse::<Zoned>`, `Zoned::from_str`)
+#   looks its zone up in the global database through a trait clippy cannot
+#   ban; l0_scan.py's bans check refuses those spellings in shipped code.
+#   It is a lexical scan: a parse whose target type is only inferred is
+#   not seen.
+# - The rand entries are marked allow-invalid: rand is not a workspace
+#   dependency, so they are inert until something adds it, and then they
+#   apply. selftest.py's clippy fixture uses every other entry.
 msrv = "1.97"
 
 disallowed-types = [
@@ -39,6 +53,7 @@ disallowed-methods = [
     # Clocks: the host's clock arrives as HostFacts.now.
     { path = "std::time::SystemTime::now", reason = "the clock is a host fact (HostFacts.now)" },
     { path = "std::time::Instant::now", reason = "the core reads no clock" },
+    { path = "std::time::SystemTime::elapsed", reason = "reads the clock; the clock is a host fact (HostFacts.now)" },
     { path = "jiff::Timestamp::now", reason = "the clock is a host fact (HostFacts.now)" },
     { path = "jiff::Zoned::now", reason = "the clock and the local zone are host facts" },
     # The environment: what the core needs from it is a host fact.
@@ -98,6 +113,9 @@ disallowed-methods = [
     { path = "jiff::Zoned::in_tz", reason = "looks the name up in the global database; use with_time_zone with a resolved zone" },
     { path = "jiff::civil::DateTime::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
     { path = "jiff::civil::Date::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
+    { path = "jiff::fmt::temporal::DateTimeParser::parse_zoned", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::Zoned::strptime", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::fmt::strtime::BrokenDownTime::to_zoned", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
     # Random generators other than the registered streams.
     { path = "rand::thread_rng", reason = "random draws come only from the registered streams", allow-invalid = true },
     { path = "rand::rng", reason = "random draws come only from the registered streams", allow-invalid = true },

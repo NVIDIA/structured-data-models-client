@@ -25,6 +25,7 @@ disallowed-methods = [
     # Clocks: the host's clock arrives as HostFacts.now.
     { path = "std::time::SystemTime::now", reason = "the clock is a host fact (HostFacts.now)" },
     { path = "std::time::Instant::now", reason = "the core reads no clock" },
+    { path = "std::time::SystemTime::elapsed", reason = "reads the clock; the clock is a host fact (HostFacts.now)" },
     { path = "jiff::Timestamp::now", reason = "the clock is a host fact (HostFacts.now)" },
     { path = "jiff::Zoned::now", reason = "the clock and the local zone are host facts" },
     # The environment: what the core needs from it is a host fact.
@@ -84,6 +85,9 @@ disallowed-methods = [
     { path = "jiff::Zoned::in_tz", reason = "looks the name up in the global database; use with_time_zone with a resolved zone" },
     { path = "jiff::civil::DateTime::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
     { path = "jiff::civil::Date::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
+    { path = "jiff::fmt::temporal::DateTimeParser::parse_zoned", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::Zoned::strptime", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::fmt::strtime::BrokenDownTime::to_zoned", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
     # Random generators other than the registered streams.
     { path = "rand::thread_rng", reason = "random draws come only from the registered streams", allow-invalid = true },
     { path = "rand::rng", reason = "random draws come only from the registered streams", allow-invalid = true },
