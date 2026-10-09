@@ -244,10 +244,14 @@ jobs:
       # hand to avoid it would put less-reviewed code in the same place, which
       # is the worse trade.
       #
-      # It is not the only mutable thing the release runs: `ubuntu-latest` is
-      # reimaged on its own schedule, and the build installs `build`, `twine`
-      # and `cyclonedx-bom` from PyPI at release time. Pinning every `uses:`
-      # does not make a release hermetic and is not claimed to.
+      # It is not the only mutable thing the release runs. `ubuntu-latest` is
+      # reimaged on its own schedule, and everything this workflow installs
+      # from PyPI resolves at release time: `pip` itself, the build and
+      # packaging tools, the PEP 517 build requirements behind them, the whole
+      # dependency graph the SBOM step installs to inventory it, and the
+      # verifier's own dependencies, which the pin below does not reach.
+      # Pinning every `uses:` does not make a release hermetic and is not
+      # claimed to.
       #
       # What this one does not leave unguarded is the bytes of the files it is
       # given: `verify` below checks what PyPI attested against the artifacts
@@ -302,14 +306,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Every published file verifies against this repository
+      - name: Every distribution this build produced verifies against this repository
         run: |
           set -euo pipefail
           # Pinned, unlike the build-time tools above, because this one is the
           # check rather than the thing being checked: a verifier resolved at
           # release time could pass without verifying, or drop the subcommand
           # and block a release that is fine. Upstream says the CLI is not a
-          # stable interface, so raise this deliberately.
+          # stable interface, so raise this deliberately. The pin is on this
+          # package only; what it resolves underneath is not pinned.
           python -m pip install pypi-attestations==0.0.30
           # The same two files the publish job drops, for the same reason:
           # they are release assets and were never uploaded to the index.

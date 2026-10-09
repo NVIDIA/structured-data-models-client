@@ -88,8 +88,8 @@ configuration instead.
 
 ## After
 
-The `verify` job has already checked every published file against this
-repository's identity, so there is nothing to confirm by hand. It runs beside
+The `verify` job has already checked every distribution this workflow built
+against this repository's identity, so there is nothing to confirm by hand. It runs beside
 the job that creates the GitHub Release rather than before it: an upload
 cannot be undone, and a release whose SBOM never got attached because a cache
 was cold is worse than one whose verification has to be re-run. A red `verify`
