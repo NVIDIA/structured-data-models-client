@@ -37,11 +37,13 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Mutex, MutexGuard, Once, TryLockError};
 
 use sdm_contract::data::AttachmentId;
+use sdm_contract::data::ProviderError;
 use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::AttachmentKind;
 use sdm_contract::run::{FetchOutcome, ModelOutcome};
 use sdm_contract::{ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_core::attached::check_attachments;
+use sdm_core::run::schema_mismatch;
 use sdm_core::{
     Attachment, AttachmentIds, Attachments, CompositionRoot, FetchResult, ModelResult, Run,
     RunState,
@@ -136,6 +138,42 @@ pub fn contain<T>(call: impl FnOnce() -> Result<T, CoreError>) -> Result<T, Fail
     }
 }
 
+/// Why a binding could not read an Arrow attachment it was handed into
+/// Arrow data, before the core saw any of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unreadable {
+    /// The producer failed while handing the data over: the provider
+    /// failed.
+    Producer,
+    /// A batch broke the schema its own stream declares, such as nulls in
+    /// a column declared without them: check (a) refuses it.
+    Declared,
+}
+
+/// The provider error a producer's failure is, with nothing of its text,
+/// which may quote values (decision H17).
+fn producer_failed() -> ProviderError {
+    ProviderError {
+        kind: ErrorKind::DataSource,
+        retryable: false,
+        sqlstate: None,
+        vendor_code: None,
+    }
+}
+
+/// The error an unreadable attachment is, naming the attachment.
+fn unreadable(id: AttachmentId, failure: Unreadable) -> CoreError {
+    let error = match failure {
+        Unreadable::Producer => CoreError::provider(&producer_failed()),
+        Unreadable::Declared => schema_mismatch(
+            "declared",
+            None,
+            "a batch does not hold to the schema its stream declares",
+        ),
+    };
+    error.with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0)))
+}
+
 fn invalid(message: impl Into<String>) -> CoreError {
     CoreError::protocol(ErrorCode::InvalidMessage, message)
 }
@@ -187,6 +225,12 @@ impl HostRun {
             Ok(HostRun::with(run, zones))
         })
         .map_err(|failure| start_error(&failure.error))
+    }
+
+    /// The error of a `start` whose attachment `id` the binding could not
+    /// read: as a provider error or a check (a) refusal; there is no run.
+    pub fn start_unreadable(id: AttachmentId, failure: Unreadable) -> Outgoing {
+        start_error(&unreadable(id, failure))
     }
 
     /// The host run of a core run built directly, as tests and the
@@ -301,6 +345,37 @@ impl HostRun {
                     "a run takes replies here: a fetch_reply or a model_reply",
                 )),
             }
+        })
+    }
+
+    /// Hands the run a `fetch_reply` whose data, attachment `id`, the
+    /// binding could not read. A reply the run does not await gets the
+    /// run's own refusal, as [`HostRun::reply`] gives it. Otherwise a
+    /// producer's failure reaches the run as the provider's error, as a
+    /// failed fetch the host reports does, and a batch that broke its own
+    /// stream's schema ends the run with check (a)'s refusal, as admission
+    /// does.
+    pub fn reply_unreadable(
+        &self,
+        message: &[u8],
+        id: AttachmentId,
+        failure: Unreadable,
+    ) -> Result<(), Outgoing> {
+        self.enter(|run| {
+            let ControlMessage::FetchReply(reply) = decode(message)? else {
+                return Err(invalid("Arrow data arrives in a fetch_reply"));
+            };
+            if reply.outcome != (FetchOutcome::Data { data: id }) {
+                return Err(invalid("the fetch_reply does not name the attachment"));
+            }
+            // A reply the run does not await is refused by the run before
+            // it reads the outcome; an awaited one carries the producer's
+            // failure as the fetch's.
+            if !awaits(run, reply.id) || failure == Unreadable::Producer {
+                return run.submit_fetch(reply.id, FetchResult::Error(producer_failed()));
+            }
+            run.end()?;
+            Err(unreadable(id, failure))
         })
     }
 

@@ -145,6 +145,33 @@ def test_an_attachment_is_bytes_or_arrow() -> None:
             _native.Run.start(start, {1: wrong, 2: b'{}'})
 
 
+def test_an_object_with_only_pyarrow_s_private_export_is_refused() -> None:
+    class Legacy:
+        def _export_to_c(self, *pointers: int) -> None:
+            raise AssertionError('the private export was reached')
+
+    start, attachments = messages.validate(
+        'PREDICT users.age FOR EACH users.id'
+    )
+    with pytest.raises(TypeError, match='__arrow_c_stream__'):
+        _native.Run.start(start, {**attachments, 3: Legacy()})
+
+
+def test_a_start_whose_arrow_producer_fails_is_the_provider_s_error() -> None:
+    class Failing:
+        def __arrow_c_stream__(self, requested_schema: object = None) -> object:
+            raise RuntimeError(CANARY)
+
+    start, attachments = messages.validate(
+        'PREDICT users.age FOR EACH users.id'
+    )
+    with pytest.raises(_native.CoreError) as raised:
+        _native.Run.start(start, {**attachments, 3: Failing()})
+    error = raised.value
+    assert (error.kind, error.code) == ('data_source', 'PROVIDER_ERROR')
+    assert CANARY not in f'{error} {error!r} {error.control!r}'
+
+
 def test_only_the_test_ops_build_takes_a_test_operation(
     native_build: str,
 ) -> None:

@@ -17,17 +17,25 @@
 #endif
 
 static int recording;
+static int overflowed;
 static char names[16384];
 static size_t used;
 
 void shim_start(void) {
     used = 0;
     names[0] = 0;
+    overflowed = 0;
     recording = 1;
 }
 
+// A record too long for the buffer ends with a name no test excuses, so
+// the test fails rather than miss what was dropped.
 const char *shim_stop(void) {
     recording = 0;
+    if (overflowed) {
+        // note() keeps 32 bytes free for this.
+        strcpy(names + used, "SHIM_RECORD_OVERFLOWED\n");
+    }
     return names;
 }
 
@@ -36,7 +44,8 @@ static void note(const char *name) {
         return;
     }
     size_t n = strlen(name);
-    if (used + n + 2 >= sizeof names) {
+    if (used + n + 2 >= sizeof names - 32) {
+        overflowed = 1;
         return;
     }
     memcpy(names + used, name, n);

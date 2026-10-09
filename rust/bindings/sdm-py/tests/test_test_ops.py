@@ -274,26 +274,51 @@ def test_data_that_does_not_match_its_request_is_refused_by_check_b() -> None:
     )
 
 
-def test_a_stream_that_breaks_its_own_schema_is_refused_before_admission() -> (
-    None
-):
+def test_a_stream_that_breaks_its_own_schema_fails_check_a() -> None:
     # Through the binding an Arrow attachment is one stream, whose batches
-    # carry its schema, so check (a) can fail only on nulls in a column the
-    # stream declares without them; Arrow's import refuses those first, so
-    # nothing is admitted and the run still awaits its fetch.
+    # carry its schema; Arrow cannot build a batch with nulls in a column
+    # the stream declares without them, and sdm-host refuses that as check
+    # (a) does, ending the run.
     declared = pa.schema([pa.field('a', pa.int64(), nullable=False)])
-    run = _fetching({'expect': 'discover'})
-    with pytest.raises(
-        ValueError, match='attachment 1: the Arrow stream failed'
-    ):
-        run.reply(
-            messages.fetch_reply(),
-            {1: pa.table({'a': [1, None]}, schema=declared)},
-        )
-    run.reply(
-        messages.fetch_reply(), {1: pa.table({'a': [1, 2]}, schema=declared)}
+    _refused(
+        'declared',
+        {'expect': 'discover'},
+        pa.table({'a': [1, None]}, schema=declared),
+        'nulls in a column the stream declares without them',
     )
-    assert messages.read(run.next()[0])['result'] == {'op': 'test', 'rows': 2}
+
+
+def _failing_stream(at_start: bool) -> object:
+    """A producer that fails, quoting a canary: before its stream starts,
+    or after its first batch."""
+    schema = pa.schema([('a', pa.int64())])
+
+    def batches():  # type: ignore[no-untyped-def]
+        yield pa.record_batch([pa.array([1])], schema=schema)
+        raise RuntimeError(CANARY)
+
+    class Producer:
+        def __arrow_c_stream__(self, requested_schema: object = None) -> object:
+            if at_start:
+                raise RuntimeError(CANARY)
+            reader = pa.RecordBatchReader.from_batches(schema, batches())
+            return reader.__arrow_c_stream__()
+
+    return Producer()
+
+
+def test_a_producer_that_fails_is_the_provider_s_error() -> None:
+    for at_start in (True, False):
+        run = _fetching({'expect': 'discover'})
+        run.reply(messages.fetch_reply(), {1: _failing_stream(at_start)})
+        with pytest.raises(_native.CoreError) as raised:
+            run.next()
+        error = raised.value
+        assert (error.kind, error.code) == ('data_source', 'PROVIDER_ERROR')
+        assert CANARY not in f'{error} {error!r} {error.control!r}'
+        with pytest.raises(_native.CoreError) as finished:
+            run.next()
+        assert finished.value.code == 'RUN_FINISHED'
 
 
 def test_the_data_asked_for_is_taken_and_comes_back_out() -> None:

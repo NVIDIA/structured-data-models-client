@@ -30,7 +30,7 @@ use sdm_contract::{
     Field as ContractField, HostFacts, Scalar, Unit,
 };
 use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot, RunState};
-use sdm_host::{HostRun, Outgoing, encode, read};
+use sdm_host::{HostRun, Outgoing, Unreadable, encode, read};
 
 fn start_message(operation: Operation) -> Vec<u8> {
     encode(&ControlMessage::Start(Box::new(StartRun {
@@ -322,6 +322,72 @@ fn data_that_does_not_match_its_request_is_refused_by_check_b() {
     let run = fetching(expected(&["a", "b"]));
     reply(&run, consistent(&["a", "b"])).unwrap();
     assert!(run.next().is_ok());
+}
+
+fn fetch_reply(id: u32, data: u32) -> Vec<u8> {
+    encode(&ControlMessage::FetchReply(FetchReply {
+        id: ReplyId(id),
+        outcome: FetchOutcome::Data {
+            data: AttachmentId(data),
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn an_attachment_a_binding_could_not_read_ends_the_fetch_as_its_cause_says() {
+    // A producer's failure reaches the run as the provider's error.
+    let run = fetching(ExpectedSchema::Discover {});
+    run.reply_unreadable(&fetch_reply(1, 1), AttachmentId(1), Unreadable::Producer)
+        .map_err(error)
+        .unwrap();
+    let err = error(run.next().unwrap_err());
+    assert_eq!(
+        (err.kind, err.code, err.retryable),
+        (ErrorKind::DataSource, ErrorCode::ProviderError, false)
+    );
+    assert_eq!(run.state().unwrap(), RunState::Finished);
+    // A batch that broke its own stream's schema is check (a)'s refusal,
+    // and ends the run.
+    let run = fetching(ExpectedSchema::Discover {});
+    let err = run
+        .reply_unreadable(&fetch_reply(1, 1), AttachmentId(1), Unreadable::Declared)
+        .map_err(error)
+        .unwrap_err();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::DataSource, ErrorCode::ProviderSchemaMismatch)
+    );
+    assert_eq!(text(&err, "check"), "declared");
+    assert_eq!(
+        err.fields.get("attachment"),
+        Some(&Detail::Scalar(Scalar::UInt32(1)))
+    );
+    assert_eq!(run.state().unwrap(), RunState::Finished);
+    // A reply the run does not await gets the run's own refusal, and the
+    // run still awaits its fetch.
+    let run = fetching(ExpectedSchema::Discover {});
+    for failure in [Unreadable::Producer, Unreadable::Declared] {
+        let err = run
+            .reply_unreadable(&fetch_reply(7, 1), AttachmentId(1), failure)
+            .map_err(error)
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnknownReply, "{failure:?}");
+        assert!(matches!(run.state().unwrap(), RunState::AwaitingFetch(_)));
+    }
+    // The message must name the attachment, as data of a fetch_reply.
+    let err = run
+        .reply_unreadable(&fetch_reply(1, 2), AttachmentId(1), Unreadable::Declared)
+        .map_err(error)
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidMessage);
+    assert!(matches!(run.state().unwrap(), RunState::AwaitingFetch(_)));
+    // Without a run, a start's unreadable attachment is the start's error.
+    let err = error(HostRun::start_unreadable(
+        AttachmentId(3),
+        Unreadable::Producer,
+    ));
+    assert_eq!(err.code, ErrorCode::ProviderError);
 }
 
 fn panicking(at: PanicAt, payload: &str) -> Result<HostRun, CoreError> {

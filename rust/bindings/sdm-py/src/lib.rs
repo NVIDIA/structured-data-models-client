@@ -36,7 +36,7 @@ use pyo3::types::{PyBytes, PyCapsule, PyDict, PyMapping};
 use sdm_contract::data::AttachmentId;
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, ErrorCode, ErrorKind};
 use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot};
-use sdm_host::{HostRun, Outgoing, read};
+use sdm_host::{HostRun, Outgoing, Unreadable, read};
 
 create_exception!(
     sdm_client._native,
@@ -173,9 +173,54 @@ fn core_error(py: Python<'_>, out: Outgoing) -> PyErr {
     }
 }
 
+/// Why the attachments a Python caller sent could not be read.
+enum Unread {
+    /// A Python error that is not the data's: a wrong type, an interrupt.
+    Python(PyErr),
+    /// An Arrow attachment the binding could not read into Arrow data,
+    /// which `sdm-host` turns into the run's error.
+    Arrow(AttachmentId, Unreadable),
+}
+
+impl From<PyErr> for Unread {
+    fn from(error: PyErr) -> Self {
+        Unread::Python(error)
+    }
+}
+
+/// Reads one Arrow attachment through `__arrow_c_stream__`. A failure of
+/// the producer, an exception from its `__arrow_c_stream__` or an error
+/// its stream reports, is the provider's; a batch Arrow cannot build in
+/// the stream's own schema, such as one with nulls in a column declared
+/// without them, fails check (a). Nothing of either error's text is kept,
+/// since it may quote values (decision H17).
+fn read_arrow(py: Python<'_>, id: u32, value: &Bound<'_, PyAny>) -> Result<ArrowData, Unread> {
+    let producer = |error: PyErr| {
+        if error.is_instance_of::<PyException>(py) {
+            Unread::Arrow(AttachmentId(id), Unreadable::Producer)
+        } else {
+            Unread::Python(error)
+        }
+    };
+    let reader = ArrowArrayStreamReader::from_pyarrow_bound(value).map_err(producer)?;
+    let schema = reader.schema();
+    let mut batches = Vec::new();
+    for batch in reader {
+        batches.push(batch.map_err(|error| {
+            let failure = match error {
+                ArrowError::CDataInterface(_) => Unreadable::Producer,
+                _ => Unreadable::Declared,
+            };
+            Unread::Arrow(AttachmentId(id), failure)
+        })?);
+    }
+    Ok(ArrowData::new(schema, batches))
+}
+
 /// The attachments a Python caller sends, read with the GIL held: `bytes`,
 /// or an object with `__arrow_c_stream__`, by id.
-fn attachments_from_python(attachments: &Bound<'_, PyMapping>) -> PyResult<Attachments> {
+fn attachments_from_python(attachments: &Bound<'_, PyMapping>) -> Result<Attachments, Unread> {
+    let py = attachments.py();
     let mut read: Attachments = BTreeMap::new();
     for item in attachments.items()?.try_iter()? {
         let (id, value): (u32, Bound<'_, PyAny>) = item?.extract()?;
@@ -184,17 +229,12 @@ fn attachments_from_python(attachments: &Bound<'_, PyMapping>) -> PyResult<Attac
         } else if value.hasattr("__arrow_c_stream__")? {
             // Checked first, so arrow-pyarrow takes the capsule path and
             // never pyarrow's private export.
-            let reader = ArrowArrayStreamReader::from_pyarrow_bound(&value)?;
-            let schema = reader.schema();
-            let batches = reader.collect::<Result<Vec<_>, _>>().map_err(|_| {
-                PyValueError::new_err(format!("attachment {id}: the Arrow stream failed"))
-            })?;
-            Attachment::Arrow(ArrowData::new(schema, batches))
+            Attachment::Arrow(read_arrow(py, id, &value)?)
         } else {
-            return Err(PyTypeError::new_err(format!(
+            return Err(Unread::Python(PyTypeError::new_err(format!(
                 "attachment {id} is a {}: an attachment is bytes or an object with __arrow_c_stream__",
                 value.get_type().name()?
-            )));
+            ))));
         };
         read.insert(AttachmentId(id), attachment);
     }
@@ -215,7 +255,13 @@ impl Run {
     #[staticmethod]
     fn start(py: Python<'_>, message: &[u8], attachments: &Bound<'_, PyMapping>) -> PyResult<Run> {
         logging(py);
-        let attachments = attachments_from_python(attachments)?;
+        let attachments = match attachments_from_python(attachments) {
+            Ok(attachments) => attachments,
+            Err(Unread::Python(error)) => return Err(error),
+            Err(Unread::Arrow(id, failure)) => {
+                return Err(core_error(py, HostRun::start_unreadable(id, failure)));
+            }
+        };
         let message = message.to_vec();
         py.detach(|| HostRun::start(&CompositionRoot::default(), &message, attachments))
             .map(|run| Run { run })
@@ -240,10 +286,17 @@ impl Run {
         attachments: &Bound<'_, PyMapping>,
     ) -> PyResult<()> {
         logging(py);
-        let attachments = attachments_from_python(attachments)?;
         let message = message.to_vec();
-        py.detach(|| self.run.reply(&message, attachments))
-            .map_err(|out| core_error(py, out))
+        let result = match attachments_from_python(attachments) {
+            Ok(attachments) => py.detach(|| self.run.reply(&message, attachments)),
+            Err(Unread::Python(error)) => return Err(error),
+            // An Arrow attachment that could not be read still ends the
+            // fetch it answers, as sdm-host decides (decision H16).
+            Err(Unread::Arrow(id, failure)) => {
+                py.detach(|| self.run.reply_unreadable(&message, id, failure))
+            }
+        };
+        result.map_err(|out| core_error(py, out))
     }
 
     /// Cancels the run; its attachments are released.
