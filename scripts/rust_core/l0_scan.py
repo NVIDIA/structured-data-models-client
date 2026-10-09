@@ -27,9 +27,9 @@ graph; these check the text:
   seen, as is a provider's name as a whole literal, an identifier naming a
   dialect, a backend or SQL, and ``include_str!``. Only SQL's unambiguous
   shapes count (``_SQL_STRONG``), such as a ``select … from`` with a clause
-  or ``cast(… as type)``, and only outside diagnostic text, the arguments
-  of an error or diagnostic constructor or helper (``_DIAGNOSTIC_CALL``),
-  which is exempt entirely; ``#[cfg(test)]`` modules, in the file or their
+  or ``cast(… as type)``, and only outside diagnostic text, the message
+  arguments of a verified error helper or a diagnostic macro
+  (``diagnostic_calls``), which is exempt entirely; ``#[cfg(test)]`` modules, in the file or their
   own, are not read (decision E28, approved by owner 2026-10-09). It
   cannot see SQL assembled across statements (pieces bound to names
   first), from data that is not a literal in these crates (another crate's
@@ -397,6 +397,7 @@ def check_vocabulary(root: Path) -> list[str]:
 # - `insert into <operand>` then `(`, `values` or `select`; `delete from
 #   <operand> where`; `truncate table`; `update … set … =`; `create`,
 #   `drop` or `alter` of a table or view then `(`, `as select` or the end;
+#   `alter table <operand>` then `add`, `drop`, `rename`, `alter` or `set`;
 #   `with x as (select`;
 # - `cast(… as <type>)`, `count(*) from`, `row_number() over`,
 #   `over (partition by`, `union all`, `information_schema`,
@@ -404,17 +405,21 @@ def check_vocabulary(root: Path) -> list[str]:
 # Predicates, orderings, null tests and keywords in capitals are left to
 # review: a message writes them too (`{c} > 0 and {c} is not null`).
 #
-# Diagnostic text is exempt entirely: the arguments of an error or
-# diagnostic constructor or helper, every argument of `CoreError`'s
-# constructors, the helpers that build one (`DIAGNOSTIC_HELPERS`),
-# `.with_field`, `.caused_by`, `Detail::text`, `panic!`, `unreachable!`,
-# `todo!`, `unimplemented!`, `.expect`, `.context`, `.with_context` and
-# `#[error]`; for `assert!` the arguments after the condition, and for
-# `assert_eq!`/`assert_ne!` (and the `debug_` forms) those after the two
-# operands, which are code. A turbofish's type arguments nest when the
-# arguments are split; where a bare `<` after a name leaves the end of the
-# code unclear, no argument is diagnostic text. A message bound to a name
-# first and passed on later is read as code.
+# Diagnostic text is exempt entirely: the message arguments of a verified
+# error helper (decision E28): one of the error types' own functions that
+# build one (`CoreError::new`, `Detail::text`), a free function of the
+# scanned crate every definition of which returns `CoreError` or `Detail`,
+# and `.with_field` or `.caused_by` on a chain that starts at one of those;
+# a name alone, a path elsewhere (`text::invalid`) or another receiver
+# verifies nothing. Also `panic!`, `unreachable!`, `todo!`, `unimplemented!`,
+# `.expect`, `.context`, `.with_context` and `#[error]`; for `assert!` the
+# arguments after the condition, and for `assert_eq!`/`assert_ne!` (and the
+# `debug_` forms) those after the two operands, which are code. The
+# arguments of a call nested in a message that is not itself diagnostic
+# (`internal(&run("…"))`) are code. A turbofish's type arguments nest when
+# the arguments are split; where a bare `<` after a name leaves the end of
+# the code unclear, no argument is diagnostic text. A message bound to a
+# name first and passed on later is read as code.
 _O = (
     r'(?:\{[^}]*\}|\*|\?|\$\d+|\'[^\']*\'|\d+(?:\.\d+)?'
     r'|\w+\s*\([^()]*\)|[\w."]+)'
@@ -447,6 +452,8 @@ _SQL_STRONG = re.compile(
     r'|(?i:\b(?:create|drop|alter)\s+(?:or\s+replace\s+)?'
     r'(?:temp(?:orary)?\s+)?(?:table|view|index|schema)\s+'
     rf'(?:if\s+(?:not\s+)?exists\s+)?{_O}\s*(?:\(|as\s+select\b|$))'
+    rf'|(?i:\balter\s+table\s+(?:if\s+exists\s+)?{_O}\s+'
+    r'(?:add|drop|rename|alter|set)\b)'
     r'|(?i:\bwith\s+\w+\s+as\s*\(\s*select\b|\bexists\s*\(\s*select\b)'
     rf'|(?i:\b(?:coalesce|nullif|ifnull|greatest|least)\s*\(\s*{_O}\s*,)'
     r'|(?i:\bvalues\s*\(\s*(?:\?|\$\d+|\{[^}]*\})\s*,)'
@@ -462,27 +469,6 @@ _SQL_STRONG = re.compile(
 _PROVIDER_LITERAL = re.compile(
     r'(?i)^\s*(duckdb|postgres(ql)?|snowflake|databricks|sqlite|spark|'
     r'bigquery|redshift|lakebase)\s*$'
-)
-# The diagnostic constructors, and how many leading arguments are code.
-# The helpers in the core that build a CoreError from a message.
-DIAGNOSTIC_HELPERS = (
-    'invalid',
-    'internal',
-    'unsupported',
-    'protocol',
-    'out_of_range',
-    'refused',
-    'refused_by',
-)
-_DIAGNOSTIC_CALL = re.compile(
-    r'\bCoreError\s*::\s*\w+\s*\('
-    rf'|\b(?:{"|".join(DIAGNOSTIC_HELPERS)})\s*\('
-    r'|\.\s*(?:with_field|caused_by)\s*\(|\bDetail\s*::\s*text\s*\('
-    r'|\b(?P<assert>assert|debug_assert)\s*!\s*\('
-    r'|\b(?P<pair>assert_eq|assert_ne|debug_assert_eq|debug_assert_ne)\s*!\s*\('
-    r'|\b(?:panic|unreachable|todo|unimplemented)\s*!\s*\('
-    r'|\.\s*(?:expect|context|with_context)\s*\('
-    r'|#\s*\[\s*error\s*\('
 )
 _INCLUDE = re.compile(r'\binclude_(str|bytes)\s*!')
 _LITERAL = re.compile(r'^(b?r?)(#*)"(?s:(.*))"\2$')
@@ -522,20 +508,231 @@ def literal_text(literal: str) -> str:
     return _ESCAPE.sub(_unescape, match.group(3))
 
 
-def diagnostic_spans(source: Source) -> list[tuple[int, int]]:
-    """The message arguments of the error and diagnostic constructors."""
-    spans = []
-    skeleton = source.skeleton
-    for match in _DIAGNOSTIC_CALL.finditer(skeleton):
+# The diagnostic forms whose message arguments are exempt, and how many
+# leading arguments are code. Error helpers are verified, not named: see
+# `Verified` and `diagnostic_calls`.
+_DIAGNOSTIC_MACRO = re.compile(
+    r'\b(?P<assert>assert|debug_assert)\s*!\s*\('
+    r'|\b(?P<pair>assert_eq|assert_ne|debug_assert_eq|debug_assert_ne)\s*!\s*\('
+    r'|\b(?:panic|unreachable|todo|unimplemented)\s*!\s*\('
+    r'|\.\s*(?:expect|context|with_context)\s*\('
+    r'|#\s*\[\s*error\s*\('
+)
+# The contract's error type and its detail type; a helper building one is a
+# diagnostic.
+ERROR_TYPES = ('CoreError', 'Detail')
+_ERROR_RETURN = re.compile(r'^(?:CoreError|Detail)$')
+_FN_NAME = re.compile(r'\bfn\s+([A-Za-z_]\w*)')
+_IMPL = re.compile(r'\bimpl\s*(?:<[^{};]*?>\s*)?([A-Za-z_]\w*)\s*\{')
+_ASSOC_CALL = re.compile(
+    rf'\b({"|".join(ERROR_TYPES)})\s*::\s*([A-Za-z_]\w*)\s*\('
+)
+_PLAIN_CALL = re.compile(r'\b([A-Za-z_]\w*)\s*\(')
+_CHAIN_METHOD = re.compile(r'\.\s*(with_field|caused_by)\s*\(')
+_OPEN = {'(': ')', '[': ']', '{': '}'}
+_CLOSE = {v: k for k, v in _OPEN.items()}
+
+
+def _matching(text: str, index: int) -> int:
+    """The index just past the bracket closing the one at ``index``."""
+    depth, j = 0, index
+    while j < len(text):
+        if text[j] in _OPEN:
+            depth += 1
+        elif text[j] in _CLOSE:
+            depth -= 1
+            if not depth:
+                return j + 1
+        j += 1
+    return len(text)
+
+
+def _opening(text: str, index: int) -> int:
+    """The index of the bracket opening the one closing at ``index``."""
+    depth, j = 0, index
+    while j >= 0:
+        if text[j] in _CLOSE:
+            depth += 1
+        elif text[j] in _OPEN:
+            depth -= 1
+            if not depth:
+                return j
+        j -= 1
+    return 0
+
+
+def _return_type(text: str) -> str:
+    """A return type, paths and spaces removed: `Result<u8,CoreError>`."""
+    text = re.sub(r'\bwhere\b.*', '', text, flags=re.S)
+    text = re.sub(r'\b(?:[A-Za-z_]\w*\s*::\s*)+(?=[A-Za-z_])', '', text)
+    return re.sub(r'\s+', '', text)
+
+
+def fn_signatures(skeleton: str) -> Iterable[tuple[int, str, str, str]]:
+    """Each `fn`: its offset, name, parameters and return type."""
+    for match in _FN_NAME.finditer(skeleton):
+        j = match.end()
+        while j < len(skeleton) and skeleton[j].isspace():
+            j += 1
+        if j < len(skeleton) and skeleton[j] == '<':  # generic parameters
+            depth = 0
+            while j < len(skeleton):
+                depth += {'<': 1, '>': -1}.get(skeleton[j], 0)
+                j += 1
+                if not depth:
+                    break
+        open_paren = skeleton.find('(', j)
+        if open_paren < 0:
+            continue
+        close = _matching(skeleton, open_paren)
+        params = skeleton[open_paren + 1 : close - 1]
+        tail = re.match(r'\s*(?:->\s*([^{;]*))?', skeleton[close:])
+        ret = _return_type(tail.group(1) or '') if tail else ''
+        yield match.start(), match.group(1), params, ret
+
+
+@dataclass(frozen=True)
+class Verified:
+    """The error helpers a crate's code may call with a message.
+
+    ``assoc`` are the error types' own functions that build one
+    (`CoreError::new`, `Detail::text`), ``methods`` the error's methods that
+    return it (`with_field`, `caused_by`), ``helpers`` the crate's own free
+    functions every definition of which returns `CoreError` or `Detail`.
+    A function returning `Result<_, CoreError>` is an operation that may
+    fail, not a message's builder, so its arguments stay code.
+    """
+
+    assoc: frozenset[tuple[str, str]] = frozenset()
+    methods: frozenset[str] = frozenset()
+    helpers: frozenset[str] = frozenset()
+
+
+NOTHING_VERIFIED = Verified()
+
+
+def workspace_sources(root: Path) -> list[Path]:
+    return [
+        path
+        for parent in ('rust/crates', 'rust/bindings')
+        for path in rust_files(root / parent)
+        if 'src' in path.relative_to(root / parent).parts[1:2]
+    ]
+
+
+def verified_helpers(root: Path, crate: str) -> Verified:
+    assoc: set[tuple[str, str]] = set()
+    methods: set[str] = set()
+    for path in workspace_sources(root):
+        skeleton = read_rust(path.read_text()).skeleton
+        for impl in _IMPL.finditer(skeleton):
+            if impl.group(1) not in ERROR_TYPES:
+                continue
+            body = skeleton[
+                impl.end() - 1 : _matching(skeleton, impl.end() - 1)
+            ]
+            for _, name, params, ret in fn_signatures(body):
+                if ret not in ('Self', impl.group(1)):
+                    continue
+                assoc.add((impl.group(1), name))
+                takes_self = re.match(r'\s*(?:mut\s+)?self\b', params)
+                if impl.group(1) == 'CoreError' and takes_self:
+                    methods.add(name)
+    returns: dict[str, set[bool]] = {}
+    for path in rust_files(crate_dir(root, crate) / 'src'):
+        skeleton = read_rust(path.read_text()).skeleton
+        for _, name, _, ret in fn_signatures(skeleton):
+            returns.setdefault(name, set()).add(bool(_ERROR_RETURN.match(ret)))
+    helpers = {name for name, oks in returns.items() if oks == {True}}
+    return Verified(frozenset(assoc), frozenset(methods), frozenset(helpers))
+
+
+def _callee_before(skeleton: str, end: int) -> tuple[int, str]:
+    """The path called by the `(` at ``end``: its start and text."""
+    j = end - 1
+    while j >= 0 and skeleton[j].isspace():
+        j -= 1
+    k = j
+    while k >= 0 and (
+        skeleton[k].isalnum() or skeleton[k] in '_:' or skeleton[k].isspace()
+    ):
+        k -= 1
+    return k + 1, re.sub(r'\s+', '', skeleton[k + 1 : j + 1])
+
+
+def _chain_verified(skeleton: str, dot: int, verified: Verified) -> bool:
+    """Whether the method chain ending at ``dot`` starts at a verified call."""
+    j = dot - 1
+    while True:
+        while j >= 0 and skeleton[j].isspace():
+            j -= 1
+        if j < 0 or skeleton[j] != ')':
+            return False  # a name, a field or a literal: not verified
+        start, callee = _callee_before(skeleton, _opening(skeleton, j))
+        k = start - 1
+        while k >= 0 and skeleton[k].isspace():
+            k -= 1
+        if k >= 0 and skeleton[k] == '.':
+            if callee not in verified.methods:
+                return False
+            j = k - 1
+            continue
+        path = callee.split('::')
+        if len(path) >= 2 and path[-2] in ERROR_TYPES:
+            return (path[-2], path[-1]) in verified.assoc
+        return len(path) == 1 and callee in verified.helpers
+
+
+def diagnostic_calls(
+    skeleton: str, verified: Verified
+) -> list[tuple[int, int]]:
+    """Each diagnostic call: the index past its `(`, and its code arguments."""
+    calls = []
+    for match in _DIAGNOSTIC_MACRO.finditer(skeleton):
         code_args = (
             1 if match.group('assert') else 2 if match.group('pair') else 0
         )
+        calls.append((match.end(), code_args))
+    for match in _ASSOC_CALL.finditer(skeleton):
+        if (match.group(1), match.group(2)) in verified.assoc:
+            calls.append((match.end(), 0))
+    for match in _PLAIN_CALL.finditer(skeleton):
+        if match.group(1) not in verified.helpers:
+            continue
+        before = skeleton[: match.start()].rstrip()
+        if before.endswith(('.', ':')) or re.search(r'\bfn$', before):
+            continue  # a method, a path or a definition, not the helper
+        calls.append((match.end(), 0))
+    for match in _CHAIN_METHOD.finditer(skeleton):
+        if match.group(1) in verified.methods and _chain_verified(
+            skeleton, match.start(), verified
+        ):
+            calls.append((match.end(), 0))
+    return sorted(calls)
+
+
+Span = tuple[int, int, tuple[tuple[int, int], ...]]
+
+
+def diagnostic_spans(
+    source: Source, verified: Verified = NOTHING_VERIFIED
+) -> list[Span]:
+    """The message arguments of the diagnostic calls.
+
+    Each span carries the argument lists of the calls nested in it that are
+    not diagnostic themselves (`internal(&run("…"))`): those are code.
+    """
+    spans: list[Span] = []
+    skeleton = source.skeleton
+    calls = diagnostic_calls(skeleton, verified)
+    opens = {open_end for open_end, _ in calls}
+    for open_end, code_args in calls:
         # A turbofish's type arguments (`same::<A, B>(…)`, `::<Vec<(A, B)>,
         # C>`) nest like brackets, so their commas separate nothing. A bare
         # `<` right after a name (`HashMap<K, V>` in a closure's types)
         # could open type arguments too; then where the code ends cannot be
         # told, and the arguments are all read as code.
-        depth, generic, j, start = 1, 0, match.end(), match.end()
+        depth, generic, j, start = 1, 0, open_end, open_end
         unsure = False
         while j < len(skeleton) and depth:
             char = skeleton[j]
@@ -568,8 +765,20 @@ def diagnostic_spans(source: Source) -> list[tuple[int, int]]:
             j += 1
         if code_args or generic or unsure:
             continue  # no message argument, or none that can be found
-        spans.append((start, j))
+        nested = tuple(
+            (call.end() - 1, _matching(skeleton, call.end() - 1))
+            for call in _PLAIN_CALL.finditer(skeleton, start, j)
+            if call.end() not in opens
+        )
+        spans.append((start, j, nested))
     return spans
+
+
+def in_diagnostic(offset: int, spans: list[Span]) -> bool:
+    return any(
+        a <= offset < b and not any(c <= offset < d for c, d in nested)
+        for a, b, nested in spans
+    )
 
 
 @dataclass(frozen=True)
@@ -580,7 +789,9 @@ class Statement:
     literals: tuple[str, ...]
 
 
-def statements(source: Source) -> Iterable[Statement]:
+def statements(
+    source: Source, verified: Verified = NOTHING_VERIFIED
+) -> Iterable[Statement]:
     """The string literals of each statement.
 
     A statement runs to the next `;`, `{` or `}` outside a literal, so the
@@ -591,7 +802,7 @@ def statements(source: Source) -> Iterable[Statement]:
         + [m.end() for m in re.finditer(r'[;{}]', source.skeleton)]
         + [len(source.skeleton)]
     )
-    diagnostic = diagnostic_spans(source)
+    diagnostic = diagnostic_spans(source, verified)
     literals = sorted(source.strings)
     index = 0
     for start, end in zip(bounds, bounds[1:], strict=False):
@@ -603,7 +814,7 @@ def statements(source: Source) -> Iterable[Statement]:
             if s >= start:
                 text = literal_text(source.code[s:e])
                 parts.append(text)
-                if not any(a <= s < b for a, b in diagnostic):
+                if not in_diagnostic(s, diagnostic):
                     prose.append(text)
                 first = s if first is None else first
             index += 1
@@ -676,6 +887,7 @@ def check_sql(root: Path) -> list[str]:
             problems.append(f'{src.relative_to(root)}: missing')
             continue
         tests = test_module_files(src)
+        verified = verified_helpers(root, crate)
         for path in rust_files(src):
             source = read_rust(path.read_text())
             rel = path.relative_to(root)
@@ -686,7 +898,9 @@ def check_sql(root: Path) -> list[str]:
             if path not in tests:  # SQL's shapes, outside test modules
                 found += [
                     (statement.offset, sql_evidence(statement))
-                    for statement in statements(without_test_modules(source))
+                    for statement in statements(
+                        without_test_modules(source), verified
+                    )
                 ]
             for offset, evidence in sorted(found, key=lambda f: f[0]):
                 if evidence:

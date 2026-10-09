@@ -9,12 +9,21 @@
 //! `sdm-data` for a SQL provider, decides how to fetch it. So no field of
 //! the vocabulary, at any depth, may hold a free-text expression or a SQL
 //! string. The test reads the generated JSON Schema of `DataRequest` and
-//! every definition it reaches, and holds:
+//! classifies every property's schema recursively: through local `$ref`s
+//! (each definition once per path, so a cycle ends), `anyOf`, `oneOf` and
+//! `allOf`, list items at any depth, nested objects and map values. It
+//! holds:
 //!
-//! - no property is named as SQL or an expression (`DENIED`), anywhere;
-//! - every text property (a string, or a list or map of strings) outside
-//!   the typed values (`TYPED_VALUES`: a scalar, an Arrow field and its
-//!   type) is named as an identifier the request refers to (`IDENTIFIERS`).
+//! - no property is named as SQL or an expression (`DENIED`), anywhere,
+//!   the typed values included;
+//! - text (a string, at any depth of lists, maps, options or newtypes) is
+//!   held only by a property named as an identifier the request refers to
+//!   (`IDENTIFIERS`), the nearest property naming it;
+//! - an any-typed schema (`true` or `{}`, as `serde_json::Value` gives, or a
+//!   map of anything) is refused, since it can hold text of any shape;
+//! - the typed values (`TYPED_VALUES`: a scalar, an Arrow field and its
+//!   type) are reviewed: a reference to one of them is accepted at that
+//!   reference, and only the name check goes inside.
 //!
 //! A new text field fails until it is added to `IDENTIFIERS` in review, so
 //! it is a name the request refers to, never text a provider interprets.
@@ -23,7 +32,7 @@ use std::collections::BTreeSet;
 
 use schemars::JsonSchema;
 use sdm_contract::data::DataRequest;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// Property names that hold SQL or an expression; never allowed.
 const DENIED: &[&str] = &[
@@ -46,80 +55,196 @@ const DENIED: &[&str] = &[
 /// Text properties that name what a request refers to.
 const IDENTIFIERS: &[&str] = &["table", "tables", "column", "columns", "key"];
 
-/// Definitions that are typed values, not request structure: their text is
-/// a scalar's encoded value, a field's name, type or Arrow metadata.
+/// Definitions that are reviewed typed values, not request structure: their
+/// text is a scalar's encoded value, a field's name, type or Arrow metadata.
 const TYPED_VALUES: &[&str] = &["Scalar", "Field", "ColumnType"];
+
+/// Keywords that annotate a schema without constraining it.
+const ANNOTATIONS: &[&str] = &[
+    "description",
+    "title",
+    "examples",
+    "default",
+    "$schema",
+    "$id",
+];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Finding {
+    /// Text under a property named as an identifier: allowed.
+    Identifier(String),
+    /// Text under any other property, or with no property naming it.
+    Text(String),
+    /// A schema that accepts anything.
+    Any(String),
+    /// A property named as SQL or an expression.
+    Denied(String),
+}
+
+struct Walk<'a> {
+    defs: &'a Map<String, Value>,
+    found: Vec<Finding>,
+}
+
+/// The definition a local `$ref` names.
+fn ref_name(reference: &str) -> Option<&str> {
+    reference
+        .strip_prefix("#/$defs/")
+        .or_else(|| reference.strip_prefix("#/definitions/"))
+}
+
+fn types(schema: &Map<String, Value>) -> Vec<&str> {
+    match schema.get("type") {
+        Some(Value::String(t)) => vec![t.as_str()],
+        Some(Value::Array(ts)) => ts.iter().filter_map(Value::as_str).collect(),
+        _ => Vec::new(),
+    }
+}
+
+impl Walk<'_> {
+    /// Classify `schema`, reached at `path`, under the nearest property
+    /// `name` (None at the root); `seen` holds the definitions entered on
+    /// this path.
+    fn classify(&mut self, schema: &Value, path: &str, name: Option<&str>, seen: &[String]) {
+        let map = match schema {
+            Value::Bool(true) => return self.found.push(Finding::Any(path.into())),
+            Value::Bool(false) => return,
+            Value::Object(map) => map,
+            _ => return self.found.push(Finding::Any(path.into())),
+        };
+        if map.keys().all(|k| ANNOTATIONS.contains(&k.as_str())) {
+            return self.found.push(Finding::Any(path.into()));
+        }
+        if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
+            let Some(def) = ref_name(reference) else {
+                return self
+                    .found
+                    .push(Finding::Any(format!("{path} ({reference})")));
+            };
+            let at = format!("{path} -> {def}");
+            if seen.iter().any(|s| s == def) {
+                return; // a cycle: this definition is classified on this path
+            }
+            let mut inner = seen.to_vec();
+            inner.push(def.to_owned());
+            match self.defs.get(def) {
+                None => self.found.push(Finding::Any(format!("{at} (missing)"))),
+                Some(target) if TYPED_VALUES.contains(&def) => self.names_only(target, &at, &inner),
+                Some(target) => self.classify(target, &at, name, &inner),
+            }
+        }
+        for key in ["anyOf", "oneOf", "allOf"] {
+            for (i, branch) in map
+                .get(key)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                self.classify(branch, &format!("{path}/{key}/{i}"), name, seen);
+            }
+        }
+        let closed = map.contains_key("const") || map.contains_key("enum");
+        let kinds = types(map);
+        if kinds.contains(&"string") && !closed {
+            let at = path.to_owned();
+            self.found.push(match name {
+                Some(n) if IDENTIFIERS.contains(&n) => Finding::Identifier(at),
+                _ => Finding::Text(at),
+            });
+        }
+        if kinds.contains(&"array") || map.contains_key("items") {
+            match map.get("items") {
+                None => self.found.push(Finding::Any(format!("{path}/items"))),
+                Some(Value::Array(items)) => {
+                    for (i, item) in items.iter().enumerate() {
+                        self.classify(item, &format!("{path}/items/{i}"), name, seen);
+                    }
+                }
+                Some(items) => self.classify(items, &format!("{path}/items"), name, seen),
+            }
+            if let Some(more) = map.get("prefixItems").and_then(Value::as_array) {
+                for (i, item) in more.iter().enumerate() {
+                    self.classify(item, &format!("{path}/prefixItems/{i}"), name, seen);
+                }
+            }
+        }
+        if let Some(properties) = map.get("properties").and_then(Value::as_object) {
+            for (property, child) in properties {
+                let at = format!("{path}/{property}");
+                if DENIED.contains(&property.to_ascii_lowercase().as_str()) {
+                    self.found.push(Finding::Denied(at.clone()));
+                }
+                self.classify(child, &at, Some(property), seen);
+            }
+        }
+        match map.get("additionalProperties") {
+            None | Some(Value::Bool(false)) => {}
+            Some(values) => self.classify(values, &format!("{path}/*"), name, seen),
+        }
+    }
+
+    /// Inside a reviewed typed value: only the name check.
+    fn names_only(&mut self, schema: &Value, path: &str, seen: &[String]) {
+        match schema {
+            Value::Object(map) => {
+                for (key, child) in map {
+                    if key == "properties" {
+                        for (property, _) in child.as_object().into_iter().flatten() {
+                            if DENIED.contains(&property.to_ascii_lowercase().as_str()) {
+                                self.found
+                                    .push(Finding::Denied(format!("{path}/{property}")));
+                            }
+                        }
+                    }
+                    if key == "$ref" {
+                        if let Some(def) = child.as_str().and_then(ref_name)
+                            && !seen.iter().any(|s| s == def)
+                            && let Some(target) = self.defs.get(def)
+                        {
+                            let mut inner = seen.to_vec();
+                            inner.push(def.to_owned());
+                            self.names_only(target, &format!("{path} -> {def}"), &inner);
+                        }
+                        continue;
+                    }
+                    self.names_only(child, &format!("{path}/{key}"), seen);
+                }
+            }
+            Value::Array(items) => {
+                for (i, item) in items.iter().enumerate() {
+                    self.names_only(item, &format!("{path}/{i}"), seen);
+                }
+            }
+            _ => {}
+        }
+    }
+}
 
 fn schema<T: JsonSchema>() -> Value {
     serde_json::to_value(schemars::schema_for!(T)).expect("a schema serializes")
 }
 
-/// Whether a property's schema is text: a string, or a list or map of them,
-/// not held to closed values (a serde tag is a `const`, an enum an `enum`).
-fn is_text(property: &Value) -> bool {
-    let string = |v: &Value| match v.get("type") {
-        _ if v.get("const").is_some() || v.get("enum").is_some() => false,
-        Some(Value::String(t)) => t == "string",
-        Some(Value::Array(ts)) => ts.iter().any(|t| t == "string"),
-        _ => false,
+fn findings(schema: &Value) -> Vec<Finding> {
+    let empty = Map::new();
+    let defs = schema
+        .get("$defs")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let mut walk = Walk {
+        defs,
+        found: Vec::new(),
     };
-    string(property)
-        || property.get("items").is_some_and(string)
-        || property.get("additionalProperties").is_some_and(string)
-}
-
-/// Every property of `value` at any depth, outside the typed values, with
-/// the path that reaches it; `denied` gathers denied names everywhere.
-fn walk(value: &Value, path: &str, text: &mut Vec<(String, String)>, denied: &mut Vec<String>) {
-    match value {
-        Value::Object(map) => {
-            for (key, child) in map {
-                if key == "$defs" {
-                    for (name, def) in child.as_object().into_iter().flatten() {
-                        let mut inner = Vec::new();
-                        walk(def, &format!("{path}/$defs/{name}"), &mut inner, denied);
-                        if !TYPED_VALUES.contains(&name.as_str()) {
-                            text.extend(inner);
-                        }
-                    }
-                    continue;
-                }
-                if key == "properties" {
-                    for (name, property) in child.as_object().into_iter().flatten() {
-                        if DENIED.contains(&name.to_ascii_lowercase().as_str()) {
-                            denied.push(format!("{path}/{name}"));
-                        }
-                        if is_text(property) {
-                            text.push((format!("{path}/{name}"), name.clone()));
-                        }
-                    }
-                }
-                walk(child, &format!("{path}/{key}"), text, denied);
-            }
-        }
-        Value::Array(items) => {
-            for (i, item) in items.iter().enumerate() {
-                walk(item, &format!("{path}/{i}"), text, denied);
-            }
-        }
-        _ => {}
-    }
+    walk.classify(schema, "#", None, &[]);
+    walk.found
 }
 
 /// What in a vocabulary's schema could carry SQL or an expression.
-fn problems(schema: &Value) -> Vec<String> {
-    let (mut text, mut denied) = (Vec::new(), Vec::new());
-    walk(schema, "#", &mut text, &mut denied);
-    let mut found: Vec<String> = denied
+fn problems(schema: &Value) -> Vec<Finding> {
+    findings(schema)
         .into_iter()
-        .map(|p| format!("{p}: named as SQL or an expression"))
-        .collect();
-    found.extend(
-        text.into_iter()
-            .filter(|(_, name)| !IDENTIFIERS.contains(&name.as_str()))
-            .map(|(p, _)| format!("{p}: a text field that names no identifier")),
-    );
-    found
+        .filter(|f| !matches!(f, Finding::Identifier(_)))
+        .collect()
 }
 
 #[test]
@@ -138,16 +263,44 @@ fn the_lists_do_not_overlap() {
 fn the_vocabulary_has_identifier_text() {
     // The walk sees the request's own text fields; were it blind, the first
     // test would pass on anything.
-    let (mut text, mut denied) = (Vec::new(), Vec::new());
-    walk(&schema::<DataRequest>(), "#", &mut text, &mut denied);
-    let names: BTreeSet<_> = text.iter().map(|(_, name)| name.as_str()).collect();
-    assert!(
-        names.contains("table") && names.contains("columns"),
-        "{names:?}"
-    );
+    let found = findings(&schema::<DataRequest>());
+    let at = |field: &str| {
+        found
+            .iter()
+            .any(|f| matches!(f, Finding::Identifier(p) if p.contains(field)))
+    };
+    assert!(at("/table") && at("/columns/items"), "{found:#?}");
 }
 
-// Seeded faults: shapes the guard must refuse.
+// Controls: identifiers and the reviewed typed values pass.
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct Allowed {
+    table: String,
+    columns: Vec<String>,
+    key: Option<Vec<String>>,
+    seed: sdm_contract::Scalar,
+    fields: Vec<sdm_contract::Field>,
+    limit: Option<u64>,
+    flag: bool,
+}
+
+#[test]
+fn identifiers_and_typed_values_pass() {
+    let found = problems(&schema::<Allowed>());
+    assert!(found.is_empty(), "{found:#?}");
+}
+
+// Seeded faults: shapes the guard must refuse, each alone.
+
+fn refused<T: JsonSchema>(expected: &str) {
+    let found = problems(&schema::<T>());
+    assert!(
+        found.iter().any(|f| format!("{f:?}").contains(expected)),
+        "{expected} in {found:#?}"
+    );
+}
 
 #[derive(JsonSchema)]
 #[serde(tag = "request")]
@@ -158,45 +311,147 @@ enum WithSql {
 
 #[derive(JsonSchema)]
 #[allow(dead_code, reason = "only its schema is read")]
-struct Inner {
-    order: Vec<String>,
+struct FilterText(String);
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct Newtype {
+    table: String,
+    filter: FilterText,
 }
 
 #[derive(JsonSchema)]
-#[serde(tag = "request")]
 #[allow(dead_code, reason = "only its schema is read")]
-enum WithExpression {
-    Scan {
-        table: String,
-        filter: Option<String>,
-    },
-    Sorted {
-        table: String,
-        by: Inner,
-    },
-    Where {
-        expression: String,
-    },
+struct NestedLists {
+    table: String,
+    fragments: Vec<Vec<String>>,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct AnyValue {
+    table: String,
+    opts: serde_json::Value,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct OptionalNewtype {
+    table: String,
+    maybe: Option<FilterText>,
+}
+
+#[derive(JsonSchema)]
+#[serde(tag = "choice")]
+#[allow(dead_code, reason = "only its schema is read")]
+enum Choice {
+    Plain { column: String },
+    Ordered { column: String, note: String },
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct OptionalVariant {
+    table: String,
+    inner: Option<Choice>,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct MapOfText {
+    table: String,
+    options: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct Recursive {
+    column: String,
+    label: String,
+    next: Option<Box<Recursive>>,
 }
 
 #[test]
 fn a_sql_field_is_refused() {
-    let found = problems(&schema::<WithSql>());
-    assert!(
-        found
-            .iter()
-            .any(|p| p.ends_with("/sql: named as SQL or an expression")),
-        "{found:#?}"
-    );
+    refused::<WithSql>("Denied(\"#/oneOf/0/sql\")");
 }
 
 #[test]
-fn free_text_fields_are_refused() {
-    let found = problems(&schema::<WithExpression>());
-    for field in ["/filter:", "/order:", "/expression: named"] {
-        assert!(
-            found.iter().any(|p| p.contains(field)),
-            "{field} in {found:#?}"
-        );
-    }
+fn a_newtype_of_text_is_refused() {
+    refused::<Newtype>("Text(\"#/filter -> FilterText\")");
+}
+
+#[test]
+fn nested_lists_of_text_are_refused() {
+    refused::<NestedLists>("Text(\"#/fragments/items/items\")");
+}
+
+#[test]
+fn an_any_typed_value_is_refused() {
+    refused::<AnyValue>("Any(\"#/opts\")");
+}
+
+#[test]
+fn an_optional_newtype_of_text_is_refused() {
+    refused::<OptionalNewtype>("FilterText\")");
+}
+
+#[test]
+fn text_in_a_referenced_optional_variant_is_refused() {
+    refused::<OptionalVariant>("Choice/oneOf/1/note");
+}
+
+#[test]
+fn a_map_of_text_is_refused() {
+    refused::<MapOfText>("Text(\"#/options/*\")");
+}
+
+#[test]
+fn a_cycle_ends_and_its_text_is_refused() {
+    refused::<Recursive>("/label");
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct Tuple {
+    table: String,
+    pair: (u8, String),
+}
+
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code, reason = "only its schema is read")]
+enum Untagged {
+    Count(u64),
+    Words(String),
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct UntaggedField {
+    table: String,
+    bound: Untagged,
+}
+
+#[derive(JsonSchema)]
+#[allow(dead_code, reason = "only its schema is read")]
+struct Flattened {
+    table: String,
+    #[serde(flatten)]
+    rest: Newtype,
+}
+
+#[test]
+fn text_in_a_tuple_is_refused() {
+    refused::<Tuple>("Text(\"#/pair/prefixItems/1\")");
+}
+
+#[test]
+fn text_in_an_untagged_variant_is_refused() {
+    refused::<UntaggedField>("Untagged/anyOf/1");
+}
+
+#[test]
+fn text_in_a_flattened_struct_is_refused() {
+    refused::<Flattened>("FilterText");
 }

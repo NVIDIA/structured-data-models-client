@@ -715,6 +715,12 @@ def scan_cases(results: list[Result]) -> None:
 
     engine = 'sdm-engine/src/lib.rs'
     held = 'the strings of a statement hold'
+    # Verified helpers: free functions of the crate that build a CoreError.
+    helpers = (
+        'fn invalid(m: impl Into<String>) -> sdm_contract::CoreError { todo!() }\n'
+        'fn internal(m: &str) -> CoreError { todo!() }\n'
+        'fn protocol(c: u8, m: String) -> CoreError { todo!() }\n'
+    )
     failing = [
         ('const Q: &str = "cast(t as timestamp)";', 'cast(t as'),
         ('const Q: &str = "count(*) from";', 'count(*'),
@@ -778,6 +784,55 @@ def scan_cases(results: list[Result]) -> None:
             bare('select a, b from {t} t join u on x'),
             'select a, b from {t} t join',
         ),
+        # Every shape decision E28 lists.
+        (bare('truncate table {t}'), 'truncate table {t}'),
+        (bare('update {t} set a = 1'), 'update {t} set a ='),
+        (bare('{a} union all {b}'), 'union all'),
+        (bare('from information_schema.columns'), 'information_schema'),
+        (bare('from {t} tablesample (10 percent)'), 'tablesample'),
+        (bare('from {t} using sample 10 rows'), 'using sample'),
+        (bare('row_number() over (order by a)'), 'row_number() over'),
+        (bare('rank over (partition by {c})'), 'over (partition by'),
+        (bare('insert into {t} select * from u'), 'insert into {t} select'),
+        (bare('alter table {t} add column a int'), 'alter table {t} add'),
+        (bare('alter table {t} rename to u'), 'alter table {t} rename'),
+        # Unverified helpers exempt nothing (fix round 1 of T1.10d): a local
+        # function of a helper's name returning text, a path elsewhere, a
+        # builder's with_field, an operation returning Result, and a call
+        # nested in a verified helper's message.
+        *(
+            (
+                f'fn {name}(m: &str) -> String {{ m.into() }}\n'
+                f'pub fn q() -> String {{ {name}("select a from t where x = 1") }}',
+                held,
+            )
+            for name in ('internal', 'protocol', 'refused')
+        ),
+        (
+            f'{helpers}pub fn q() -> CoreError {{ text::invalid("select a from t where x = 1") }}',
+            held,
+        ),
+        (
+            'pub fn q(b: Builder) -> Builder { b.with_field("k", "select a from t where x = 1") }',
+            held,
+        ),
+        (
+            'pub fn q() -> Builder { Builder::new().with_field("k", "select a from t where x = 1") }',
+            held,
+        ),
+        (
+            'fn read(q: &str) -> Result<u8, CoreError> { todo!() }\n'
+            'pub fn q() -> Result<u8, CoreError> { read("select a from t where x = 1") }',
+            held,
+        ),
+        (
+            f'{helpers}pub fn q() -> CoreError {{ internal(&run("select a from t where x = 1")) }}',
+            held,
+        ),
+        (
+            'pub fn q() -> CoreError { CoreError::new(K, C, "m").with_field("k", run("select a from t where x = 1")) }',
+            held,
+        ),
         # Escapes decoded and continuations joined (fix round 4).
         (bare('select {c}\\nfrom {t}\\nwhere {c} is not null'), held),
         (bare('select {c}\\tfrom {t}'), held),
@@ -830,18 +885,21 @@ def scan_cases(results: list[Result]) -> None:
     )
     passing = [
         *(code for text in english for code in (bare(text), error(text))),
-        # Diagnostic text is exempt entirely, through the helpers that build
-        # a CoreError too (decision E28).
+        # Diagnostic text is exempt entirely, through verified helpers too
+        # (decision E28): the crate's own functions returning CoreError or
+        # Detail, the error types' own, and chains starting at them.
         error('select * from {t} where x = 1'),
         'pub fn p(t: &str) { panic!("select * from {t} where x = 1") }',
         'pub fn f(v: Option<u8>) { v.expect("SELECT 1"); }',
         'pub fn f(a: u8) { assert!(a > 0, "select a from t where a = {a}"); }',
-        'pub fn f() -> CoreError { invalid("expected a window where start <= end") }',
-        'pub fn f(lo: u8, hi: u8) -> CoreError { let m = format!("window start {lo} > end {hi}"); invalid(m) }',
+        f'{helpers}pub fn f() -> CoreError {{ invalid("expected a window where start <= end") }}',
+        f'{helpers}pub fn f() -> CoreError {{ invalid("select a from t where x = 1") }}',
+        f'{helpers}pub fn f(lo: u8, hi: u8) -> CoreError {{ let m = format!("window start {{lo}} > end {{hi}}"); invalid(m) }}',
         'pub fn f(e: CoreError) -> CoreError { e.with_field("rule", Detail::text("by time desc, then key, nulls last")) }',
-        'pub fn f(e: CoreError) -> CoreError { e.with_field("rule", "order by {c} desc nulls last") }',
+        'pub fn f() -> CoreError { CoreError::new(K, C, "m").with_field("rule", Detail::text("select a from t where x = 1")) }',
+        f'{helpers}pub fn f() -> CoreError {{ internal("m").caused_by(invalid("x")).with_field("q", Detail::text("select a from t where x = 1")) }}',
         'pub fn f(c: &str) -> CoreError { CoreError::new(K, C, format!("{c} > 0 and {c} is not null in the window")) }',
-        'pub fn f(c: &str) -> CoreError { protocol(C, format!("select {c} from {t} where it is set")) }',
+        f'{helpers}pub fn f(c: &str) -> CoreError {{ protocol(C, format!("select {{c}} from {{t}} where it is set")) }}',
         '#[cfg(test)]\nmod more_tests {\n    const Q: &str = "SELECT a FROM t WHERE b = 1";\n}',
     ]
     for number, code in enumerate(passing):
