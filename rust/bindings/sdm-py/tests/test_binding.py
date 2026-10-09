@@ -190,13 +190,19 @@ _CLEAN_IMPORT = textwrap.dedent(
         return found
 
     def signals():
-        # Each signal's disposition as the C library holds it, compared as
-        # bytes, so no struct layout is assumed.
+        # Each signal's handler and flags as the C library holds them, read
+        # where struct sigaction keeps them: the handler first, the flags
+        # after the mask, which is 4 bytes on macOS and 128 in glibc. The
+        # mask itself is left out: glibc copies all 128 bytes of it from
+        # the kernel's 8, so the rest is whatever was on its stack.
+        width = ctypes.sizeof(ctypes.c_void_p)
+        flags = width + (4 if sys.platform == 'darwin' else 128)
         found = {}
         for number in range(1, signal.NSIG):
             buffer = ctypes.create_string_buffer(512)
             if libc.sigaction(number, None, buffer) == 0:
-                found[number] = buffer.raw.hex()
+                raw = buffer.raw
+                found[number] = (raw[:width] + raw[flags:flags + 4]).hex()
         return found, {
             s.name: repr(signal.getsignal(s)) for s in signal.valid_signals()
             if isinstance(s, signal.Signals)
@@ -242,7 +248,24 @@ _CLEAN_IMPORT = textwrap.dedent(
         'threads': [before[0], after[0]],
         'native_threads': [before[1], after[1]],
         'handlers_equal': before[2] == after[2],
-        'signals_equal': before[3] == after[3],
+        'signals_changed': sorted(
+            {
+                str(n) for n in before[3][0]
+                if before[3][0][n] != after[3][0].get(n)
+            }
+            | {
+                name for name in before[3][1]
+                if before[3][1][name] != after[3][1].get(name)
+            }
+        ),
+        'signals_before': {
+            str(n): before[3][0][n] for n in before[3][0]
+            if before[3][0][n] != after[3][0].get(n)
+        },
+        'signals_after': {
+            str(n): after[3][0].get(n) for n in before[3][0]
+            if before[3][0][n] != after[3][0].get(n)
+        },
         'read_in_python': read_in_python,
         'read_natively': read_natively,
     }))
@@ -292,7 +315,10 @@ def test_importing_the_module_changes_nothing_in_the_process(
     assert threads[0] == threads[1], 'a Python thread started'
     assert native[0] == native[1], 'a native thread started'
     assert found['handlers_equal'], 'a logging handler was added'
-    assert found['signals_equal'], 'a signal handler changed'
+    assert found['signals_changed'] == [], (
+        found['signals_before'],
+        found['signals_after'],
+    )
     assert found['read_in_python'] == []
     # The dynamic loader reads its own variables as it loads any library;
     # the module itself reads none.
