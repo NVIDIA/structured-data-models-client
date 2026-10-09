@@ -1419,6 +1419,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdm-data"
+version = "1.0.0"
+
+[[package]]
+name = "sdm-engine"
+version = "1.0.0"
+
+[[package]]
 name = "sdm-host"
 version = "1.0.0"
 dependencies = [
@@ -1458,6 +1466,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdm-request"
+version = "1.0.0"
+
+[[package]]
+name = "sdm-schema"
+version = "1.0.0"
+
+[[package]]
 name = "sdm-testkit"
 version = "1.0.0"
 dependencies = [
@@ -1469,6 +1485,10 @@ dependencies = [
  "serde_json",
  "sha2",
 ]
+
+[[package]]
+name = "sdm-wire"
+version = "1.0.0"
 
 [[package]]
 name = "serde"
