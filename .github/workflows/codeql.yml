@@ -4,19 +4,18 @@
 
 # Static analysis, in its own workflow rather than in `ci.yml`.
 #
-# `ci.yml` is the set of gates a change has to pass, and the release workflow
-# refuses to build a tag whose CI run did not succeed. Static analysis does not
-# belong in that contract: a new query released upstream can turn a commit that
-# passed yesterday into a failure today, with nothing in this repository having
-# changed. Keeping it separate means a finding is triaged rather than
-# immediately blocking a release.
+# `ci.yml` is the set of gates a change has to pass, and `publish.yml` refuses
+# to build a tag whose CI run did not succeed. What would land in that contract
+# is not the findings, which GitHub reports as a separate `Code scanning
+# results` check, but this job's own failures: an extraction, build, query or
+# upload error. Those have little to do with the commit and would block a
+# release, so they are kept out of the gate.
 #
-# It also needs a weekly run, which `ci.yml` has no reason to have. Most of
-# what this catches arrives from the query packs rather than from the code.
+# It also needs a weekly run, which `ci.yml` has no reason to have. Queries
+# arrive on upstream's schedule rather than with a change here.
 #
 # Results need GitHub code scanning, which needs Advanced Security while this
-# repository is internal and is included for public repositories. Until one of
-# those is true the analysis runs and the upload is refused.
+# repository is internal and is included once it is public.
 name: CodeQL
 
 on:
@@ -25,8 +24,9 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Monday 07:00 UTC, away from the hour boundary where everyone else queues.
-    - cron: '0 7 * * 1'
+    # Monday, off the hour: scheduled runs queue behind everyone else's at the
+    # boundary, and GitHub drops them under load.
+    - cron: '17 7 * * 1'
   workflow_dispatch:
 
 permissions: {}
@@ -64,16 +64,17 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-          # security-extended over the default pack. This is a library other
-          # people install, so the extra precision costs us triage and saves
-          # them an incident.
+          # security-extended over the default pack: it adds queries of lower
+          # precision and lower severity, so it finds more and is wrong more
+          # often. This is a library other people install, and that trade buys
+          # coverage with our triage rather than with their incident.
           queries: security-extended
 
       # CodeQL observes a real compilation rather than guessing at one, so the
       # engine is actually built here. Only this matrix leg compiles anything;
       # the Python leg reads the tree.
       #
-      # `--no-deps` because the engine pins its four siblings by exact version
+      # `--no-deps` because the engine pins three siblings by exact version
       # and those versions are not on PyPI until the release publishes, so
       # resolving them fails outright. `ci.yml` works around that by installing
       # the siblings from the tree first, which this job has no use for: the
