@@ -40,8 +40,12 @@ _MEASURE_SUFFIX = ' measure'
 
 _IDENT = rf'`(?:[^`]|``)+`|{BARE_NAME}'
 
+# A table name part as Unity Catalog allows it, which is more than SQL reads
+# bare: a catalog named `my-catalog` is written so in SQL, but `my-catalog`
+# by a caller. Every part is quoted again before it reaches SQL.
+_NAME_PART = r'`(?:[^`]|``)+`|[^\s.`]+'
 _TABLE_REFERENCE_RE = re.compile(
-    rf'\s*({_IDENT})(?:\.({_IDENT}))?(?:\.({_IDENT}))?\s*$'
+    rf'\s*({_NAME_PART})(?:\.({_NAME_PART}))?(?:\.({_NAME_PART}))?\s*$'
 )
 _CHAIN = rf'(?:{_IDENT})(?:\s*\.\s*(?:{_IDENT}))*'
 _JOIN_CONDITION_RE = re.compile(rf'\s*({_CHAIN})\s*=\s*({_CHAIN})\s*$')

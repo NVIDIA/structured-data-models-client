@@ -64,6 +64,14 @@ def test_parse_table_reference() -> None:
         'my tab',
     )
     assert parse_table_reference('  cat.sch.tab  ') == ('cat', 'sch', 'tab')
+    # Unity Catalog allows a hyphen in a name that SQL reads only quoted.
+    assert parse_table_reference('my-cat.sch.tab') == ('my-cat', 'sch', 'tab')
+    assert parse_table_reference('`my-cat`.sch.`a.b`') == (
+        'my-cat',
+        'sch',
+        'a.b',
+    )
+    assert parse_table_reference('`a``b`') == ('a`b',)
 
     assert parse_table_reference(None) is None
     assert parse_table_reference(42) is None
@@ -1497,6 +1505,30 @@ def test_a_metric_view_that_is_not_there_is_a_missing_table() -> None:
 
     with pytest.raises(TableNotFoundError):
         _convert(connection)
+
+
+@pytest.mark.parametrize(
+    ('name', 'namespace', 'quoted'),
+    [
+        ('my-cat.sch.sales_mv', {}, '`my-cat`.`sch`.`sales_mv`'),
+        ('`my-cat`.`sch`.sales_mv', {}, '`my-cat`.`sch`.`sales_mv`'),
+        (
+            'sales_mv',
+            {'catalog': 'my-cat', 'schema': 'sch'},
+            '`my-cat`.`sch`.`sales_mv`',
+        ),
+        ('sch.`sales.mv`', {'catalog': 'my-cat'}, '`my-cat`.`sch`.`sales.mv`'),
+        ('`a``b`', {}, '`a``b`'),
+    ],
+)
+def test_from_databricks_metric_view_quotes_its_name(
+    name: str, namespace: dict[str, str], quoted: str
+) -> None:
+    connection = _FakeConnection()
+    Graph.from_databricks_metric_view(
+        name, connection=connection, verbose=False, warn=False, **namespace
+    )
+    assert connection.sql_log[0] == f'DESCRIBE TABLE EXTENDED {quoted}'
 
 
 def test_from_databricks_metric_view_invalid_name() -> None:
