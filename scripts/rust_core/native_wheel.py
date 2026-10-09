@@ -40,7 +40,9 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import zipfile
+from typing import Any
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 CLIENT = REPO / 'packages/structured-data-models-client'
@@ -178,27 +180,16 @@ def _manylinux(wheel: pathlib.Path) -> str:
     return shown
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--out', required=True, type=pathlib.Path)
-    parser.add_argument('--test-ops', action='store_true')
-    parser.add_argument('--manylinux', action='store_true')
-    arguments = parser.parse_args()
-
-    version = _run('maturin', '--version').split()[-1]
-    if version != MATURIN:
-        sys.exit(f'maturin {version} is on PATH; the build pins {MATURIN}')
-
-    environment = {
-        name: os.environ[name] for name in FLAG_VARIABLES if name in os.environ
-    }
-    configs = _cargo_configs()
-
-    out = arguments.out.resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    before = set(out.glob('*.whl'))
+def _build(
+    arguments: argparse.Namespace,
+    staged: pathlib.Path,
+    environment: dict[str, str],
+    configs: dict[str, str],
+    version: str,
+) -> dict[str, Any]:
+    """Builds one wheel into `staged` and writes its identity beside it."""
     command = ['maturin', 'build', '--release', '--locked', '--verbose']
-    command += ['--out', str(out)]
+    command += ['--out', str(staged)]
     if arguments.test_ops:
         command += ['--features', 'test-ops']
     if arguments.manylinux:
@@ -217,10 +208,10 @@ def main() -> int:
     log = build.stdout + build.stderr
     if build.returncode != 0:
         sys.stderr.write(log)
-        return build.returncode
-    built = sorted(set(out.glob('*.whl')) - before)
+        sys.exit(build.returncode)
+    built = sorted(staged.glob('*.whl'))
     if len(built) != 1:
-        sys.exit(f'expected one new wheel in {out}, found {built}')
+        sys.exit(f'expected one wheel from the build, found {built}')
     wheel = built[0]
 
     flags = _rustc_flags(log)
@@ -248,8 +239,39 @@ def main() -> int:
     }
     if arguments.manylinux:
         identity['auditwheel'] = _manylinux(wheel)
-    record = out / f'{wheel.name}.json'
+    record = staged / f'{wheel.name}.json'
     record.write_text(json.dumps(identity, indent=2) + '\n')
+    return identity
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument('--out', required=True, type=pathlib.Path)
+    parser.add_argument('--test-ops', action='store_true')
+    parser.add_argument('--manylinux', action='store_true')
+    arguments = parser.parse_args()
+
+    version = _run('maturin', '--version').split()[-1]
+    if version != MATURIN:
+        sys.exit(f'maturin {version} is on PATH; the build pins {MATURIN}')
+
+    environment = {
+        name: os.environ[name] for name in FLAG_VARIABLES if name in os.environ
+    }
+    configs = _cargo_configs()
+
+    out = arguments.out.resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    # maturin writes over a wheel of the same name, so it builds into a
+    # fresh directory beside the destination, and the wheel and its
+    # identity move in together once both are known good.
+    with tempfile.TemporaryDirectory(dir=out, prefix='.staging-') as staged:
+        identity = _build(
+            arguments, pathlib.Path(staged), environment, configs, version
+        )
+        name = identity['wheel']
+        os.replace(pathlib.Path(staged) / name, out / name)
+        os.replace(pathlib.Path(staged) / f'{name}.json', out / f'{name}.json')
     print(json.dumps(identity, indent=2))
     return 0
 
