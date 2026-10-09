@@ -36,6 +36,7 @@ try:
         parse_join_condition,
         parse_metric_view,
         parse_table_reference,
+        parse_view_name,
         read_metric_view_definition,
         references_alias,
         resolve_join_keys,
@@ -64,8 +65,6 @@ def test_parse_table_reference() -> None:
         'my tab',
     )
     assert parse_table_reference('  cat.sch.tab  ') == ('cat', 'sch', 'tab')
-    # Unity Catalog allows a hyphen in a name that SQL reads only quoted.
-    assert parse_table_reference('my-cat.sch.tab') == ('my-cat', 'sch', 'tab')
     assert parse_table_reference('`my-cat`.sch.`a.b`') == (
         'my-cat',
         'sch',
@@ -78,6 +77,24 @@ def test_parse_table_reference() -> None:
     assert parse_table_reference('SELECT * FROM cat.sch.tab') is None
     assert parse_table_reference('cat.sch.tab AS t') is None
     assert parse_table_reference('cat.sch.tab.col') is None
+    # A source in a view's YAML is held to what SQL reads as a table name.
+    assert parse_table_reference('(SELECT*FROM(cat.sch.tab))') is None
+    assert parse_table_reference('range(10)') is None
+    assert parse_table_reference('cat.sch.tab@v3') is None
+    assert parse_table_reference('my-cat.sch.tab') is None
+
+
+def test_parse_view_name() -> None:
+    # A caller may write a part unquoted that SQL reads only quoted.
+    assert parse_view_name('my-cat.sch.tab') == ('my-cat', 'sch', 'tab')
+    assert parse_view_name('`my-cat`.sch.`a.b`') == ('my-cat', 'sch', 'a.b')
+    assert parse_view_name('`a``b`') == ('a`b',)
+    assert parse_view_name('  sch.tab  ') == ('sch', 'tab')
+
+    assert parse_view_name(None) is None
+    assert parse_view_name('') is None
+    assert parse_view_name('cat.sch.tab.col') is None
+    assert parse_view_name('cat.sch.tab AS t') is None
 
 
 def test_parse_join_condition() -> None:
@@ -907,6 +924,9 @@ def test_parse_metric_view_errors() -> None:
         parse_metric_view('version: "0.1"')
     with pytest.raises(ValueError, match='Only plain table names'):
         parse_metric_view('source: SELECT * FROM cat.sch.tab')
+    # A query with no white space in it is a query all the same.
+    with pytest.raises(ValueError, match='Unsupported metric view source'):
+        parse_metric_view('source: "(SELECT*FROM(cat.sch.tab))"')
 
 
 def _join(
