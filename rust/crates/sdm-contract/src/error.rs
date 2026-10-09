@@ -7,9 +7,17 @@
 //! An error is `{kind, code, message, fields, cause, retryable}` with a
 //! closed list of kinds and a closed list of codes; a warning travels on its
 //! own channel, in order. No string here names a Python or Java class: each
-//! host maps every `(kind, code)` to its own classes through one reviewed
-//! table, never reading message text. Codes are promised, message text is
-//! not.
+//! host maps every code to its own classes through one reviewed table,
+//! never reading message text. Codes are promised, message text is not.
+//!
+//! Each code may carry only the kinds [`ErrorCode::kinds`] lists, so a
+//! host's mapping keys on the code alone (decision E22). Every construction
+//! is held to that table: [`CoreError::new`] debug-asserts the pair;
+//! [`CoreError::provider`] and [`CoreError::transport`], whose kind comes
+//! from the host, give `INTERNAL_ERROR` for a kind outside the code's set;
+//! and since the fields are public and the type deserializes, `sdm-host`
+//! checks every pair where an error crosses the boundary
+//! ([`CoreError::holds_to_table`]).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -47,6 +55,18 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
+    /// Every kind, in the order the contract lists them.
+    pub const ALL: [ErrorKind; 8] = [
+        ErrorKind::InvalidRequest,
+        ErrorKind::Unsupported,
+        ErrorKind::NotFound,
+        ErrorKind::DataSource,
+        ErrorKind::ModelEndpoint,
+        ErrorKind::Cancelled,
+        ErrorKind::Protocol,
+        ErrorKind::Internal,
+    ];
+
     /// The kind's name, as the contract spells it.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -145,6 +165,46 @@ impl ErrorCode {
         ErrorCode::InvalidMessage,
     ];
 
+    /// The kinds an error of this code may carry (decision E22): one for
+    /// every code but `PROVIDER_ERROR`, whose kind the host's provider
+    /// chooses from a closed set.
+    ///
+    /// `VALUE_OUT_OF_RANGE` stays `unsupported` (E13): the value is the
+    /// source's own, valid there; what fails is that the type the core
+    /// admits it as cannot hold it, which is the core's limit, not the
+    /// source's failure.
+    pub fn kinds(self) -> &'static [ErrorKind] {
+        use ErrorKind as K;
+        match self {
+            ErrorCode::InvalidRequest
+            | ErrorCode::InvalidConfiguration
+            | ErrorCode::InvalidSchema => &[K::InvalidRequest],
+            ErrorCode::UnsupportedRequest
+            | ErrorCode::MissingExtra
+            | ErrorCode::SessionsUnsupported
+            | ErrorCode::UnsupportedType
+            | ErrorCode::ValueOutOfRange => &[K::Unsupported],
+            ErrorCode::UnknownModel => &[K::NotFound],
+            ErrorCode::InvalidResponse | ErrorCode::TransportError => &[K::ModelEndpoint],
+            ErrorCode::InternalError => &[K::Internal],
+            ErrorCode::ProviderSchemaMismatch => &[K::DataSource],
+            ErrorCode::ProviderError => &[K::DataSource, K::NotFound],
+            ErrorCode::RunCancelled => &[K::Cancelled],
+            ErrorCode::UnknownReply
+            | ErrorCode::ReplyMissing
+            | ErrorCode::WrongReply
+            | ErrorCode::RunFinished
+            | ErrorCode::RunPoisoned
+            | ErrorCode::RunBusy
+            | ErrorCode::InvalidMessage => &[K::Protocol],
+        }
+    }
+
+    /// Whether an error of this code may carry `kind`.
+    pub fn allows(self, kind: ErrorKind) -> bool {
+        self.kinds().contains(&kind)
+    }
+
     /// The code's name, as the contract spells it.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -216,7 +276,14 @@ pub struct CoreError {
 }
 
 impl CoreError {
+    /// An error of `code` and `kind`, which must be one of the code's
+    /// [`ErrorCode::kinds`]; a debug build asserts it (decision E22).
     pub fn new(kind: ErrorKind, code: ErrorCode, message: impl Into<String>) -> Self {
+        debug_assert!(
+            code.allows(kind),
+            "{code} does not carry kind {}",
+            kind.as_str()
+        );
         Self {
             kind,
             code,
@@ -236,7 +303,13 @@ impl CoreError {
     /// with the driver's SQLSTATE and vendor code as fields. The driver's
     /// message is not part of the contract, since drivers quote values in
     /// it.
+    ///
+    /// A kind `PROVIDER_ERROR` does not carry gives `INTERNAL_ERROR`
+    /// instead (decision E22).
     pub fn provider(error: &ProviderError) -> Self {
+        if !ErrorCode::ProviderError.allows(error.kind) {
+            return Self::outside_table(error.kind, ErrorCode::ProviderError);
+        }
         let mut out = Self::new(
             error.kind,
             ErrorCode::ProviderError,
@@ -253,8 +326,12 @@ impl CoreError {
     }
 
     /// The error a model transport's failure becomes: its kind and
-    /// retryability.
+    /// retryability. A kind `TRANSPORT_ERROR` does not carry gives
+    /// `INTERNAL_ERROR` instead (decision E22).
     pub fn transport(kind: ErrorKind, retryable: bool) -> Self {
+        if !ErrorCode::TransportError.allows(kind) {
+            return Self::outside_table(kind, ErrorCode::TransportError);
+        }
         let mut out = Self::new(
             kind,
             ErrorCode::TransportError,
@@ -262,6 +339,24 @@ impl CoreError {
         );
         out.retryable = retryable;
         out
+    }
+
+    /// The `INTERNAL_ERROR` that replaces an error whose kind its code does
+    /// not carry, naming the pair as `pair_kind` and `pair_code`.
+    pub fn outside_table(kind: ErrorKind, code: ErrorCode) -> Self {
+        Self::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "an error carried a kind its code does not allow",
+        )
+        .with_field("pair_kind", Detail::text(kind.as_str()))
+        .with_field("pair_code", Detail::text(code.as_str()))
+    }
+
+    /// Whether this error, and every error in its cause chain, carries a
+    /// kind its code allows (decision E22).
+    pub fn holds_to_table(&self) -> bool {
+        self.code.allows(self.kind) && self.cause.as_deref().is_none_or(CoreError::holds_to_table)
     }
 
     #[must_use]

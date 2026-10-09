@@ -123,17 +123,20 @@ pub fn write(
 /// `error` as an `error` control message, whole: within the cap, or as an
 /// attachment ([`write`]). Only an error the core's encoder refuses, or a
 /// run out of attachment ids, is replaced, by the `INTERNAL_ERROR` that
-/// says so.
+/// says so; and an error, or a cause in its chain, whose kind its code does
+/// not carry is replaced by the `INTERNAL_ERROR` that names the pair
+/// (decision E22).
 pub fn write_error(
     error: &CoreError,
     reserve: impl FnOnce() -> Result<AttachmentId, CoreError>,
 ) -> Outgoing {
-    let replacement = match write(
-        &ControlMessage::Error {
-            error: error.clone(),
-        },
-        reserve,
-    ) {
+    let error = if error.holds_to_table() {
+        error.clone()
+    } else {
+        let outside = outside_pair(error);
+        CoreError::outside_table(outside.kind, outside.code)
+    };
+    let replacement = match write(&ControlMessage::Error { error }, reserve) {
         Ok(out) => return out,
         Err(replacement) => replacement,
     };
@@ -152,6 +155,19 @@ pub fn write_error(
         control,
         attachments: Attachments::new(),
     }
+}
+
+/// The first error in `error`'s cause chain whose kind its code does not
+/// carry; `error` itself when none is.
+fn outside_pair(error: &CoreError) -> &CoreError {
+    let mut at = error;
+    while at.code.allows(at.kind) {
+        match at.cause.as_deref() {
+            Some(cause) => at = cause,
+            None => return error,
+        }
+    }
+    at
 }
 
 /// Reads a control message the core wrote, as a host does: an `attached`

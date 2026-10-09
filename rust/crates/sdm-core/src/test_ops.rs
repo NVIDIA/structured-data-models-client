@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
-use sdm_contract::{CoreError, CoreWarning, HostFacts};
+use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, HostFacts, Scalar};
 
 use crate::attached::take_json;
 use crate::profiles::Profile;
@@ -44,8 +44,18 @@ pub(crate) fn run(
             let result: OperationResult = take_json(attachments, result)?;
             Run::new(move |_| async move { Ok(result) })
         }
-        TestOperation::Fail { error } => {
-            let error: CoreError = take_json(attachments, error)?;
+        TestOperation::Fail { error: id } => {
+            let error: CoreError = take_json(attachments, id)?;
+            // The one host-to-core message that carries a `CoreError`: one
+            // whose kind its code does not carry is refused as the start's
+            // own message (decision E22).
+            if !error.holds_to_table() {
+                return Err(CoreError::protocol(
+                    ErrorCode::InvalidMessage,
+                    "the error carries a kind its code does not allow",
+                )
+                .with_field("attachment", Detail::Scalar(Scalar::UInt32(id.0))));
+            }
             Run::new(move |_| async move { Err(error) })
         }
         TestOperation::Warn { warnings } => {
