@@ -434,9 +434,12 @@ def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
 ) -> None:
     # Python's reader takes nesting the core refuses: the host writes it
     # without recursion, and the core refuses it as too deep. 126 arrays in
-    # the metadata nest 128 deep in all, the deepest the core reads.
+    # the metadata nest 128 deep in all, the deepest the core reads. Past
+    # what Python's own reader takes (about a thousand levels on 3.10 and
+    # 3.11), the transport refuses the answer itself, TRANSPORT_ERROR, as
+    # on the old route; either way nothing raises a bare RecursionError.
     request = _materialized(monkeypatch)
-    for depth in (126, 960, 5000):
+    for depth in (126, 300, 960, 5000):
         answer = (
             '{"id": "r1", "model": "kumo-relational", "metadata": {"x": '
             + '[' * depth
@@ -446,16 +449,22 @@ def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
             '"prediction": 1.0}, {"id": "113", "row_index": 1, '
             '"prediction": 1.0}]}'
         )
-        monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
         with _answering(200, answer.encode()) as (url, _):
-            if depth == 126:
-                assert len(_predict(url, request)) == 2
-                continue
-            with pytest.raises(StructuredDataError) as refused:
-                _predict(url, request)
-        assert refused.value.code == 'INVALID_RESPONSE'
-        assert refused.value.details['reason'] == 'too_deep'
-    monkeypatch.delenv(_routing.ENVIRONMENT)
+            core, old = _both(monkeypatch, request, url)
+        if depth == 126:
+            assert len(core) == 2
+            continue
+        assert isinstance(core, StructuredDataError), depth
+        if isinstance(old, StructuredDataError):
+            # The transport could not read it, on either route.
+            assert (core.code, old.code) == (
+                'TRANSPORT_ERROR',
+                'TRANSPORT_ERROR',
+            )
+        else:
+            assert core.code == 'INVALID_RESPONSE', depth
+            assert core.details['reason'] == 'too_deep', depth
+        assert depth != 300 or core.code == 'INVALID_RESPONSE'
 
 
 def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
