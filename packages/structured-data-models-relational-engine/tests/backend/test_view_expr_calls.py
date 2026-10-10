@@ -20,6 +20,7 @@ from sdm_relational_engine.rfm.view_expr import (
     _SNOWFLAKE_RESERVED,
     _unsafe_expr_reason,
     _untrusted_call_reason,
+    strip_comments,
 )
 
 _DIALECTS = ['databricks', 'snowflake']
@@ -331,6 +332,45 @@ def test_snowflake_refuses_a_line_comment_written_with_slashes() -> None:
         _unsafe_expr_reason("CONCAT('https://x.com/', ID)", 'snowflake') is None
     )
     assert _unsafe_expr_reason("CONCAT('a//b', x)", 'databricks') is None
+
+
+@pytest.mark.parametrize(
+    'expr',
+    [
+        "concat('a--b', `c--d`)",
+        "'/* x */' || `a/*b`",
+        "'/*' || x || '*/'",
+        "`a*/b` || 'c*/'",
+        "concat('http://x', x)",
+    ],
+)
+def test_a_comment_opener_in_a_string_or_quoted_name_opens_none(
+    expr: str,
+) -> None:
+    r"""Databricks reads each of these as strings and names, so removing
+    comments leaves them whole, and a comment after them ends with its
+    line: the call on the next line runs, and is checked.
+    """
+    assert strip_comments(expr) == expr
+    hiding = strip_comments(f'{expr} -- note\n|| secret(x)')
+    assert hiding == f'{expr}  \n|| secret(x)'
+    assert _call(hiding, 'databricks') == (
+        "it calls 'secret', which is not a pure built-in SQL function"
+    )
+
+
+@pytest.mark.parametrize(
+    'dialect, expr',
+    [
+        ('databricks', '`café` || upper(`列`)'),
+        ('snowflake', '"café" || UPPER("列")'),
+    ],
+)
+def test_a_quoted_name_may_hold_any_letter(dialect: str, expr: str) -> None:
+    r"""Only a name outside quotes is held to ASCII, where which letters
+    may join a name is undocumented.
+    """
+    assert _refused(expr, dialect) is None
 
 
 def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:

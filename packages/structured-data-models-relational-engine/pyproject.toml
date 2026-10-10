@@ -114,8 +114,9 @@ cmake.build-type = "Release"
 editable.verbose=false
 
 # https://cibuildwheel.pypa.io/en/stable/options/
-# The GitLab `wheels` job and the release workflow both drive cibuildwheel from
-# here, so the wheel set CI proves is the one a tag uploads.
+# The GitLab `wheels` job, the GitHub `engine-wheels` job and the release
+# workflow all drive cibuildwheel from here, so the wheel set CI proves is the
+# one a tag uploads.
 [tool.cibuildwheel]
 # The default `build` frontend, not `build[uv]`: the smoke test below installs
 # this wheel against sibling wheels that exist only on disk, found through
@@ -139,7 +140,7 @@ manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 # The engine pins its siblings by exact version, and before a release they exist
 # only as wheels on disk. cibuildwheel copies the directory it is run from into
-# the container as /project, and both CI definitions run it from the repository
+# the container as /project, and every workflow runs it from the repository
 # root, so this is `_sibling_wheels/` at that root.
 environment = { PIP_FIND_LINKS = "/project/_sibling_wheels" }
 
@@ -278,9 +279,6 @@ ignore = [
 "tests/client/test_client_security.py" = ["N815"]
 # ANTLR's `ErrorListener` calls `syntaxError(...)` by that exact name.
 "tests/test_pql_quoted_identifiers.py" = ["N802"]
-# Databricks injects `dbutils`/`spark`/`display` into notebooks (F821), and
-# each cell repeats its own imports so it stays runnable on its own (E402).
-"**/examples/**/notebooks/*.ipynb" = ["F821", "E402"]
 
 [tool.ruff.lint.pydocstyle]
 convention="google"

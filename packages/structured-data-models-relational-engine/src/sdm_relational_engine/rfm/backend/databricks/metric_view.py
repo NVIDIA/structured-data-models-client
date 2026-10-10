@@ -43,6 +43,17 @@ _IDENT = rf'`(?:[^`]|``)+`|{BARE_NAME}'
 _TABLE_REFERENCE_RE = re.compile(
     rf'\s*({_IDENT})(?:\.({_IDENT}))?(?:\.({_IDENT}))?\s*$'
 )
+# A part of a metric view name as a caller passes it. Unity Catalog names can
+# hold characters SQL accepts only in backticks, such as the hyphen in
+# `my-catalog`, and a caller often writes them unquoted. So an unquoted part is
+# any run of characters other than a dot, a backtick or white space. This is
+# looser than Unity Catalog, which is safe because every part is quoted again
+# before it reaches SQL. A view's own sources use `_TABLE_REFERENCE_RE`, so a
+# query given as a source is still refused.
+_NAME_PART = r'`(?:[^`]|``)+`|[^\s.`]+'
+_VIEW_NAME_RE = re.compile(
+    rf'\s*({_NAME_PART})(?:\.({_NAME_PART}))?(?:\.({_NAME_PART}))?\s*$'
+)
 _CHAIN = rf'(?:{_IDENT})(?:\s*\.\s*(?:{_IDENT}))*'
 _JOIN_CONDITION_RE = re.compile(rf'\s*({_CHAIN})\s*=\s*({_CHAIN})\s*$')
 _IDENT_RE = re.compile(_IDENT)
@@ -352,9 +363,24 @@ def parse_table_reference(name: Any) -> tuple[str, ...] | None:
     Returns ``None`` if the reference is not a plain (optionally qualified)
     table name, *e.g.*, a SQL query.
     """
+    return _name_parts(_TABLE_REFERENCE_RE, name)
+
+
+def parse_view_name(name: Any) -> tuple[str, ...] | None:
+    r"""Parses a metric view name, as a caller passes it, into its unquoted
+    name parts.
+
+    Unlike :func:`parse_table_reference`, a part may hold characters SQL
+    reads only quoted, such as the hyphen in ``my-catalog.sales.metrics``.
+    Returns ``None`` if the name has more than three parts or is empty.
+    """
+    return _name_parts(_VIEW_NAME_RE, name)
+
+
+def _name_parts(pattern: re.Pattern[str], name: Any) -> tuple[str, ...] | None:
     if not isinstance(name, str):
         return None
-    match = _TABLE_REFERENCE_RE.match(name)
+    match = pattern.match(name)
     if match is None:
         return None
     return tuple(

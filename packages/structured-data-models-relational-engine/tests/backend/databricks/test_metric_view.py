@@ -36,6 +36,7 @@ try:
         parse_join_condition,
         parse_metric_view,
         parse_table_reference,
+        parse_view_name,
         read_metric_view_definition,
         references_alias,
         resolve_join_keys,
@@ -64,12 +65,36 @@ def test_parse_table_reference() -> None:
         'my tab',
     )
     assert parse_table_reference('  cat.sch.tab  ') == ('cat', 'sch', 'tab')
+    assert parse_table_reference('`my-cat`.sch.`a.b`') == (
+        'my-cat',
+        'sch',
+        'a.b',
+    )
+    assert parse_table_reference('`a``b`') == ('a`b',)
 
     assert parse_table_reference(None) is None
     assert parse_table_reference(42) is None
     assert parse_table_reference('SELECT * FROM cat.sch.tab') is None
     assert parse_table_reference('cat.sch.tab AS t') is None
     assert parse_table_reference('cat.sch.tab.col') is None
+    # A source in a view's YAML is held to what SQL reads as a table name.
+    assert parse_table_reference('(SELECT*FROM(cat.sch.tab))') is None
+    assert parse_table_reference('range(10)') is None
+    assert parse_table_reference('cat.sch.tab@v3') is None
+    assert parse_table_reference('my-cat.sch.tab') is None
+
+
+def test_parse_view_name() -> None:
+    # A caller may write a part unquoted that SQL reads only quoted.
+    assert parse_view_name('my-cat.sch.tab') == ('my-cat', 'sch', 'tab')
+    assert parse_view_name('`my-cat`.sch.`a.b`') == ('my-cat', 'sch', 'a.b')
+    assert parse_view_name('`a``b`') == ('a`b',)
+    assert parse_view_name('  sch.tab  ') == ('sch', 'tab')
+
+    assert parse_view_name(None) is None
+    assert parse_view_name('') is None
+    assert parse_view_name('cat.sch.tab.col') is None
+    assert parse_view_name('cat.sch.tab AS t') is None
 
 
 def test_parse_join_condition() -> None:
@@ -804,6 +829,31 @@ dimensions:
         spec.filter.checked(_FACT_COLUMNS)
 
 
+def test_a_comment_opener_in_a_string_opens_no_comment() -> None:
+    r"""A URL's `//` opens no comment on Databricks, so a filter or
+    dimension holding one is kept whole, and a comment after it ends with
+    its line: the call on the next line is still checked.
+    """
+    spec = parse_metric_view(f"""
+source: cat.sch.facts
+filter: {json.dumps("note <> 'http://x' -- not a link")}
+dimensions:
+  - name: link
+    expr: {json.dumps("concat('http://x/', source.token) -- the page")}
+""")
+
+    assert spec.filter is not None
+    assert spec.filter.checked(_FACT_COLUMNS) == "note <> 'http://x'"
+    (column,) = spec.columns
+    assert column.expr == "concat('http://x/', token)"
+
+    hiding = "note <> 'http://x' -- it's\nAND secret('s', 'k') IS NULL"
+    spec = parse_metric_view(_FILTERED_YAML.format(filter=json.dumps(hiding)))
+    assert spec.filter is not None
+    with pytest.raises(UnsupportedFilterError, match="calls 'secret'"):
+        spec.filter.checked(_FACT_COLUMNS)
+
+
 def test_parse_metric_view_refuses_a_filter_that_is_not_sql() -> None:
     with pytest.raises(UnsupportedFilterError, match='not a SQL condition'):
         parse_metric_view(_FILTERED_YAML.format(filter='true'))
@@ -899,6 +949,9 @@ def test_parse_metric_view_errors() -> None:
         parse_metric_view('version: "0.1"')
     with pytest.raises(ValueError, match='Only plain table names'):
         parse_metric_view('source: SELECT * FROM cat.sch.tab')
+    # A query with no white space in it is a query all the same.
+    with pytest.raises(ValueError, match='Unsupported metric view source'):
+        parse_metric_view('source: "(SELECT*FROM(cat.sch.tab))"')
 
 
 def _join(
@@ -1499,6 +1552,30 @@ def test_a_metric_view_that_is_not_there_is_a_missing_table() -> None:
         _convert(connection)
 
 
+@pytest.mark.parametrize(
+    ('name', 'namespace', 'quoted'),
+    [
+        ('my-cat.sch.sales_mv', {}, '`my-cat`.`sch`.`sales_mv`'),
+        ('`my-cat`.`sch`.sales_mv', {}, '`my-cat`.`sch`.`sales_mv`'),
+        (
+            'sales_mv',
+            {'catalog': 'my-cat', 'schema': 'sch'},
+            '`my-cat`.`sch`.`sales_mv`',
+        ),
+        ('sch.`sales.mv`', {'catalog': 'my-cat'}, '`my-cat`.`sch`.`sales.mv`'),
+        ('`a``b`', {}, '`a``b`'),
+    ],
+)
+def test_from_databricks_metric_view_quotes_its_name(
+    name: str, namespace: dict[str, str], quoted: str
+) -> None:
+    connection = _FakeConnection()
+    Graph.from_databricks_metric_view(
+        name, connection=connection, verbose=False, warn=False, **namespace
+    )
+    assert connection.sql_log[0] == f'DESCRIBE TABLE EXTENDED {quoted}'
+
+
 def test_from_databricks_metric_view_invalid_name() -> None:
     with pytest.raises(ValueError, match='Invalid metric view name'):
         Graph.from_databricks_metric_view(
@@ -1728,6 +1805,50 @@ def test_from_databricks_metric_view_drops_a_hostile_expression() -> None:
         'product_line',
         'amount',
     }
+
+
+_NON_ASCII_YAML = """
+version: "1.1"
+source: cat.sch.order_lines
+dimensions:
+  - name: city
+    expr: source.`café`
+  - name: label
+    expr: UPPER(source.`列`)
+measures:
+  - name: total_amount
+    expr: SUM(source.amount)
+"""
+
+
+def test_from_databricks_metric_view_reads_a_quoted_non_ascii_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""A quoted name may hold any letter, and is read and quoted as
+    written, where one outside quotes is refused.
+    """
+    monkeypatch.setitem(
+        _EXPR_DATA,
+        'order_lines',
+        pd.DataFrame({'city': ['Zürich'] * 100, 'label': ['列'] * 100}),
+    )
+    connection = _FakeConnection(
+        _metric_view(_NON_ASCII_YAML, {'city': 'string', 'label': 'string'})
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        graph = Graph.from_databricks_metric_view(
+            'audit_mv', connection=connection, verbose=False
+        )
+
+    fact = graph['order_lines']
+    assert str(fact['city'].expr) == '`café`'
+    assert str(fact['label'].expr) == 'UPPER(`列`)'
+    assert any(
+        'SELECT `café` AS `city`, UPPER(`列`) AS `label` FROM' in sql
+        for sql in connection.sql_log
+    )
 
 
 _UDF_EXPR_YAML = """
@@ -3432,11 +3553,28 @@ measures:
         # A signed exponent ends where a name would go on.
         ('SUM(CASE WHEN ok THEN 1e+5ELSE amount END)', ['ok', 'amount']),
         ('SUM(amount) /* gross */ -- switch to net_amount later', ['amount']),
+        # Nor does one in a string or a quoted name.
+        (
+            "COUNT(`a--b`) + MAX('x -- y') + SUM(amount) -- net_amount",
+            ['a--b', 'amount'],
+        ),
         # A name may lead with a digit, where a number is no name.
         (
             'SUM(2024_total) * 1e5 / 2d + 10L - SUM(source.1_000)',
             ['2024_total', '1_000'],
         ),
+        # Truncated dates, a column named like EXTRACT's field, and quoted
+        # names of any letter, each read as Databricks reads them.
+        (
+            "AVG(DATEDIFF(DATE_TRUNC('MONTH', shipped), "
+            "DATE_TRUNC('MONTH', order_ts)))",
+            ['shipped', 'order_ts'],
+        ),
+        (
+            'SUM(dow) + COUNT(extract(DOW FROM order_ts)) + MAX(dayofweek)',
+            ['dow', 'order_ts', 'dayofweek'],
+        ),
+        ('SUM(`café`) + COUNT(DISTINCT source.`列`)', ['café', '列']),
     ],
     ids=[
         'cast-joined',
@@ -3461,7 +3599,11 @@ measures:
         'try-cast-operator',
         'signed-exponent',
         'comments',
+        'quoted-comment-openers',
         'digit-led',
+        'truncated-dates',
+        'extract-field-named',
+        'non-ascii-quoted',
     ],
 )
 def test_a_measure_reads_the_columns_it_names(
@@ -3520,6 +3662,39 @@ dimensions:
 
     (column,) = spec.columns
     assert column.expr == read
+
+
+def test_a_parameter_named_like_an_extract_field_is_read_as_a_value() -> None:
+    r"""EXTRACT's field is any word, so a parameter of a field's name is
+    left out of the field and substituted where it reads a value, and a
+    column of such a name, qualified, stays a column.
+    """
+    spec = parse_metric_view("""
+source: cat.sch.orders
+parameters:
+  - name: dow
+    data_type: INT
+    default: 2
+  - name: dayofweek
+    data_type: INT
+    default: 3
+dimensions:
+  - name: shifted
+    expr: extract(DOW FROM source.ts) + dow
+  - name: weighted
+    expr: extract(DAYOFWEEK FROM source.ts) * dayofweek + dayofweek(source.ts)
+  - name: own
+    expr: source.dayofweek + extract(YEAROFWEEK FROM source.ts) + yearofweek
+""")
+
+    assert [(c.name, c.expr) for c in spec.columns] == [
+        ('shifted', "extract(DOW FROM ts) + CAST('2' AS INT)"),
+        (
+            'weighted',
+            "extract(DAYOFWEEK FROM ts) * CAST('3' AS INT) + dayofweek(ts)",
+        ),
+        ('own', 'dayofweek + extract(YEAROFWEEK FROM ts) + yearofweek'),
+    ]
 
 
 # Nested past what the name scanner settles, so it reads no name of it.

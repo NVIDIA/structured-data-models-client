@@ -13,7 +13,10 @@ from __future__ import annotations
 
 import pytest
 from sdm_relational_engine.rfm.view_expr import (
+    _TRIAL_STEPS,
     UnreadableExpressionError,
+    _lex,
+    _NameScan,
     name_references,
 )
 
@@ -193,6 +196,50 @@ _PROBE = '(CASE WHEN x THEN not END)'
         ('struct(all AS f)', {'all'}),
         ('struct(DISTINCT x)', {'DISTINCT'}),
         ('TRIM(BOTH FROM from)', {'from'}),
+        # A column named like a field is a column wherever a value stands,
+        # beside the field, in its FROM, or beside a function of its name.
+        ('extract(DAYOFWEEK FROM ts) + dayofweek', {'ts', 'dayofweek'}),
+        ('extract(YEAROFWEEK FROM ts) + yearofweek', {'ts', 'yearofweek'}),
+        ('extract(dow FROM a) * dow + doy', {'a', 'dow', 'doy'}),
+        (
+            'extract(DAYOFWEEK_ISO FROM ts) - dayofweek_iso',
+            {'ts', 'dayofweek_iso'},
+        ),
+        ('dayofweek(ts) + dayofweek', {'ts', 'dayofweek'}),
+        ("date_part('DOW', ts) + dow", {'ts', 'dow'}),
+        (
+            'SUM(x) OVER (PARTITION BY dow ORDER BY ts ROWS BETWEEN '
+            'UNBOUNDED PRECEDING AND CURRENT ROW)',
+            {'x', 'dow', 'ts'},
+        ),
+        # Two truncated dates, with the unit first or not.
+        (
+            "DATEDIFF(DATE_TRUNC('MONTH', a), DATE_TRUNC('MONTH', b))",
+            {'a', 'b'},
+        ),
+        (
+            "DATEDIFF(MONTH, DATE_TRUNC('MONTH', a), DATE_TRUNC('MONTH', b))",
+            {'a', 'b'},
+        ),
+        (
+            'SUM(x) OVER (PARTITION BY y ORDER BY a RANGE BETWEEN '
+            'INTERVAL 7 DAYS PRECEDING AND CURRENT ROW)',
+            {'x', 'y', 'a'},
+        ),
+        (
+            'CAST(CASE WHEN y > 1 THEN CASE WHEN z > 1 THEN x ELSE doy END '
+            'ELSE dow END AS DECIMAL(10, 2))',
+            {'x', 'y', 'z', 'doy', 'dow'},
+        ),
+        # A comment's opener in a string or a quoted name opens none, and a
+        # comment after one ends with its line.
+        ("concat('a--b', x) || `a--b`", {'x', 'a--b'}),
+        ("concat('http://x', x)", {'x'}),
+        ("'/* y */' || `a/*b`", {'a/*b'}),
+        ('`a--b` -- upper(y)\n || y', {'a--b', 'y'}),
+        # A quoted name may hold any letter.
+        ('`café` || `列`', {'café', '列'}),
+        ('source.`café` || upper(source.`列`)', {'source.café', 'source.列'}),
     ],
 )
 def test_a_name_is_a_column_where_databricks_reads_one(
@@ -234,3 +281,58 @@ def test_an_expression_that_does_not_parse_is_refused(expr: str) -> None:
     """
     with pytest.raises(UnreadableExpressionError, match='not understood'):
         name_references(expr)
+
+
+_KEYWORD_NAMED = (
+    'range', 'partition', 'rows', 'filter', 'from', 'order', 'window',
+    'first', 'last', 'over',
+)  # fmt: skip
+
+
+def _large(shape: str, n: int) -> tuple[str, set[str]]:
+    r"""An expression of ``n`` parts in ``shape``, and the columns it reads."""
+    terms = [f'c{i}' for i in range(n)]
+    if shape == 'nested-brackets':
+        return '(' * n + 'x' + ')' * n, {'x'}
+    if shape == 'nested-calls':
+        return 'upper(' * n + 'x' + ')' * n, {'x'}
+    if shape == 'case-arms':
+        arms = ' '.join(f'WHEN NOT c{i} THEN {i}' for i in range(n))
+        return f'CASE {arms} ELSE 0 END', set(terms)
+    if shape == 'flat':
+        return ' + '.join(terms), set(terms)
+    assert shape == 'keyword-named'
+    names = [_KEYWORD_NAMED[i % len(_KEYWORD_NAMED)] for i in range(n)]
+    return ' + '.join(names), set(names)
+
+
+def _steps(expr: str) -> int:
+    r"""How many steps reading ``expr`` takes, its trials' included."""
+    scan = _NameScan([token for token in _lex(expr) if token.kind != 'comment'])
+    scan.references()
+    assert not scan.cut
+    return scan.end + _TRIAL_STEPS * (scan.end + 1) - scan.budget
+
+
+@pytest.mark.parametrize(
+    'shape, n',
+    [
+        ('nested-brackets', 200),
+        ('nested-calls', 100),
+        ('case-arms', 120),
+        ('flat', 900),
+        ('keyword-named', 200),
+    ],
+)
+def test_a_large_expression_is_read_in_steps_linear_in_its_length(
+    shape: str, n: int
+) -> None:
+    r"""Trying a form's reading and coming back could make the scan's work
+    grow faster than the expression. A reviewer timed these shapes at these
+    sizes, and none blew up. Steps are counted rather than time, so a slow
+    machine cannot fail this, and doubling an expression about doubles
+    them.
+    """
+    expr, columns = _large(shape, n)
+    assert {'.'.join(name.parts) for name in name_references(expr)} == columns
+    assert _steps(_large(shape, 2 * n)[0]) <= 2.1 * _steps(expr)

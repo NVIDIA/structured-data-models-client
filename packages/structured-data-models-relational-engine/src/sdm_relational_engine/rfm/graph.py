@@ -1489,7 +1489,7 @@ class Graph:
             SkippedJoin,
             UnsupportedJoinError,
             parse_metric_view,
-            parse_table_reference,
+            parse_view_name,
             read_metric_view_definition,
             resolve_join_keys,
             unquote_ident,
@@ -1504,7 +1504,7 @@ class Graph:
         assert isinstance(connection, CONNECTION_TYPES)
 
         try:
-            name_parts = parse_table_reference(metric_view_name)
+            name_parts = parse_view_name(metric_view_name)
             if name_parts is None:
                 raise ViewConversionError(
                     f"Invalid metric view name '{metric_view_name}'"
