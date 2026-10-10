@@ -316,7 +316,10 @@ def test_the_dry_run_reads_no_profile(
     capsys.readouterr()
 
 
-def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
+def test_a_warning_is_the_client_s_by_its_category_alone() -> None:
+    # The client's categories are shown, redacted; anyone else's text is
+    # withheld, a "[CODE]" prefix or a path under sdm_client
+    # notwithstanding (T1.11d review round 4).
     script = (
         'import importlib.util, sys, warnings\n'
         f'spec = importlib.util.spec_from_file_location("s", {str(SCRIPT)!r})\n'
@@ -324,16 +327,20 @@ def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
         'sys.modules["s"] = smoke\n'
         'spec.loader.exec_module(smoke)\n'
         'smoke._quiet_the_world()\n'
-        'warnings.warn_explicit("token for SYNTH_UNKNOWN_USER at '
-        'other-host.vanity-corp.test", UserWarning, '
-        '"/x/site-packages/databricks/sdk/oauth.py", 1)\n'
-        'warnings.warn_explicit("the context is small", UserWarning, '
-        '"/x/site-packages/sdm_client/client.py", 1)\n'
         'from sdm_client.core.warnings import SDMWarning\n'
+        'from sdm_client._rust.errors import UserWarning as CoreWarning\n'
         'warnings.warn_explicit("every context row agrees", SDMWarning, '
         '"/x/caller.py", 2)\n'
         'warnings.warn_explicit("[MISSING_INDICES] Missing 3 indices", '
-        'UserWarning, "/x/caller.py", 3)\n'
+        'CoreWarning, "/x/caller.py", 3)\n'
+        'warnings.warn_explicit("[AUTH] refresh failed for '
+        'SYNTH_UNKNOWN_CREDENTIAL", UserWarning, '
+        '"/x/site-packages/external_sdk/oauth.py", 1)\n'
+        'warnings.warn_explicit("token for SYNTH_UNKNOWN_USER at '
+        'other-host.vanity-corp.test", UserWarning, '
+        '"/x/site-packages/databricks/sdk/oauth.py", 1)\n'
+        'warnings.warn_explicit("[NOTICE] SYNTH_IN_CLIENT_PATH", UserWarning, '
+        '"/x/site-packages/sdm_client/client.py", 1)\n'
     )
     run = subprocess.run(
         [sys.executable, '-c', script],
@@ -343,12 +350,16 @@ def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
         check=False,
     )
     assert run.returncode == 0, run.stderr
-    assert 'warning UserWarning from oauth (text withheld)' in run.stderr
-    assert 'warning UserWarning: the context is small' in run.stderr
-    # The client's own, attributed to the caller's line, are shown too.
     assert 'warning SDMWarning: every context row agrees' in run.stderr
     assert (
         'warning UserWarning: [MISSING_INDICES] Missing 3 indices' in run.stderr
     )
-    assert 'SYNTH_UNKNOWN_USER' not in run.stderr
-    assert 'vanity-corp' not in run.stderr
+    assert 'warning UserWarning from oauth (text withheld)' in run.stderr
+    assert 'warning UserWarning from client (text withheld)' in run.stderr
+    for secret in (
+        'SYNTH_UNKNOWN_CREDENTIAL',
+        'SYNTH_UNKNOWN_USER',
+        'vanity-corp',
+        'SYNTH_IN_CLIENT_PATH',
+    ):
+        assert secret not in run.stderr, secret

@@ -170,10 +170,7 @@ def _quiet_the_world() -> None:
         # HTTP libraries') by category and module alone, since their text
         # may name what this script was never told of.
         module = Path(str(filename)).stem or '?'
-        if (
-            _the_client_s(category, message)
-            or 'sdm_client' in Path(str(filename)).parts
-        ):
+        if _the_client_s(category):
             say(f'warning {category.__name__}: {message}', file=sys.stderr)
         else:
             say(
@@ -184,18 +181,14 @@ def _quiet_the_world() -> None:
     warnings.showwarning = show  # type: ignore[assignment]
 
 
-def _the_client_s(category: type[Warning], message: object) -> bool:
-    r"""Whether a warning is the client's own: one of its categories
-    (``SDMWarning``), or the core's, which the client shows as
-    ``[CODE] text``. The client attributes its warnings to the caller's
-    line, so where one was raised does not say whose it is."""
-    try:
-        from sdm_client.core.warnings import SDMWarning
-    except ImportError:
-        return False
-    if issubclass(category, SDMWarning):
-        return True
-    return re.match(r'\[[A-Z][A-Z0-9_]*\] ', str(message)) is not None
+def _the_client_s(category: type[Warning]) -> bool:
+    r"""Whether a warning is the client's own, by its category alone: one of
+    the client's categories (``SDMWarning`` and its subclasses, and the
+    class the core's warnings are shown as, which the client defines). Its
+    text and where it was raised say nothing: the client attributes its
+    warnings to the caller's line, and anyone may write ``[CODE]``."""
+    module = getattr(category, '__module__', '') or ''
+    return module == 'sdm_client' or module.startswith('sdm_client.')
 
 
 def _no_network() -> None:
