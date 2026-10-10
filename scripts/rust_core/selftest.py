@@ -29,7 +29,8 @@ base's: every evasion the T1.10e reviews found (decorators, dispatch
 tables, bound methods, getattr, aliases, a zero-count helper, swallowing,
 early returns, module code, ledgered bodies, a class attribute moved to
 module scope, new dunders, the bridges' package rebinding a method, a
-file leaving the freeze) fails as an undeclared change; a moved rule's
+file leaving the freeze) fails as an undeclared change; a source-encoding
+cookie hiding code and a package shadowing a frozen module are refused; a moved rule's
 drop cannot pay for a refactor's rise, while two moved entries net;
 a declared refactor, a rename declared, a rule moved out declared, a
 widened coverage declared, a frozen file added or removed, and an approved
@@ -629,7 +630,7 @@ def freeze_cases(results: list[Result]) -> None:
 
     def source(rel: Path) -> str | None:
         path = REPO_ROOT / rel
-        return path.read_text() if path.is_file() else None
+        return path.read_bytes() if path.is_file() else None
 
     def based(
         rows: str = '',
@@ -690,14 +691,18 @@ def freeze_cases(results: list[Result]) -> None:
     ) -> None:
         with tree(*FREEZE_TREE) as root:
             change(root)
+            refused: list[str] = []
             if rewrite:
-                bridge_freeze.write(root)
+                try:
+                    bridge_freeze.write(root)
+                except bridge_freeze.Unreadable as error:
+                    refused.append(f'--write refused: {error}')
             if declare is not None:
                 path = root / bridge_freeze.CHANGES
                 data = json.loads(path.read_text())
                 data['changes'] = declare
                 path.write_text(json.dumps(data))
-            problems = bridge_freeze.check(
+            problems = refused + bridge_freeze.check(
                 root, on, allowances={} if allowances is None else allowances
             )
             expect(
@@ -1102,6 +1107,51 @@ def freeze_cases(results: list[Result]) -> None:
         f'{rust_init}::<module>',
     )
 
+    # Round 4: what the interpreter runs, not what a UTF-8 reader sees.
+    licence = '# All rights reserved.\n'
+    for name, cookie, hidden in (
+        (
+            'a raw_unicode_escape cookie hiding a raise in a comment',
+            'raw_unicode_escape',
+            "    # tidy\\u000a    if len(indices) > 5: raise _not_taken('big')\n",
+        ),
+        (
+            'a utf-7 cookie hiding a rebinding in a comment',
+            'utf-7',
+            '    # tidy +AAo-    materializer._check_entity_count +AD0- len\n',
+        ),
+    ):
+
+        def seed(r: Path, c: str = cookie, h: str = hidden) -> None:
+            edit(
+                r / materialize,
+                licence,
+                f'# All rights reserved. -*- coding: {c} -*-\n',
+            )
+            at_gather(h)(r)
+
+        case(name, seed, f'declares the source encoding {cookie}')
+        case(
+            f'{name}, written into the baseline',
+            seed,
+            '--write refused',
+            rewrite=True,
+        )
+    case(
+        'control: a utf-8 cookie',
+        lambda r: edit(
+            r / materialize,
+            licence,
+            '# All rights reserved. -*- coding: utf-8 -*-\n',
+        ),
+        None,
+    )
+    case(
+        'a package beside a frozen module, shadowing it',
+        lambda r: append(r / client / '_rust/materialize/__init__.py', ''),
+        '_rust/materialize.py: the directory',
+    )
+
     # Codex round 2: a zero-count helper that caps the entities.
     cap = '\n\ndef _cap_indices(indices):\n    return indices[:10]\n'
     case(
@@ -1283,20 +1333,65 @@ def freeze_cases(results: list[Result]) -> None:
             )
         }
     ):
+        # Round 4 (P3-1): the rule let out of the freeze is still defined in
+        # schema.py, so it moved nothing, and the glue's warning is new.
         case(
-            'control: a rule moved from schema.py into the glue, both declared moved',
+            "a rule let out of the freeze but still defined pays for the glue's",
             t121d,
-            None,
+            'the entries declared moved raise warn by 1 and drop it by 0',
             rewrite=True,
             declare=moved_both,
         )
-        case(
-            'the same move with its glue declared a refactor',
-            t121d,
-            'build: the baseline raises warn from',
-            rewrite=True,
-            declare={**moved_both, f'{schema}::build': {'refactor': 'glue'}},
-        )
+    # The review's mv4: a still-called rule let out, its body still there.
+    entity_count = 'RelationalMaterializer._check_entity_count'
+    with covering(
+        {
+            relational: tuple(
+                n
+                for n in bridge_freeze.COVERED[relational]
+                if n != entity_count
+            )
+        }
+    ):
+        for kind in ('moved', 'gone'):
+            case(
+                f'a rule let out of the freeze, declared {kind}, paying for a new one',
+                at_gather(big),
+                'raise',
+                rewrite=True,
+                declare={
+                    gather: {'moved': 'the entity cap (T1.28)'},
+                    f'{relational}::{entity_count}': {
+                        kind: 'the entity cap (T1.28)'
+                    },
+                },
+            )
+    entity_rule = (
+        '        if len(indices) > ceiling:\n'
+        '            raise StructuredDataError(\n'
+        "                f'{len(indices):,} entities were asked for, and {described} '\n"
+        "                f'{ceiling:,} at a time; split them across calls',\n"
+        "                code='UNSUPPORTED_REQUEST',\n"
+        '            )\n'
+    )
+    moved_cap = {
+        f'{relational}::{entity_count}': {'moved': 'the entity cap (T1.28)'},
+        gather: {'moved': 'the entity cap (T1.28)'},
+    }
+    case(
+        'control: a rule moved from relational.py into the glue, both declared moved',
+        lambda r: (edit(r / relational, entity_rule, ''), at_gather(big)(r)),
+        None,
+        rewrite=True,
+        declare=moved_cap,
+    )
+    case(
+        'the same move with its glue declared a refactor',
+        lambda r: (edit(r / relational, entity_rule, ''), at_gather(big)(r)),
+        'gather: the baseline raises raise from',
+        rewrite=True,
+        declare={**moved_cap, gather: {'refactor': 'glue'}},
+    )
 
     statistic = (
         '        if statistic is not None:\n'
@@ -1346,7 +1441,7 @@ def freeze_cases(results: list[Result]) -> None:
 
     rename = {
         f'{materialize}::<module>': {'refactor': 'renamed _anchor_of'},
-        f'{materialize}::_anchor': {'refactor': 'renamed _anchor_of'},
+        f'{materialize}::_anchor': {'gone': 'renamed _anchor_of'},
         f'{materialize}::_anchor_of': {'refactor': 'renamed from _anchor'},
         gather: {'refactor': 'calls _anchor_of'},
     }
@@ -1461,6 +1556,13 @@ def freeze_cases(results: list[Result]) -> None:
             preflight_rule,
             f'{adapter}::RelationalAdapter._preflight: gone against the base',
             rewrite=True,
+        )
+        case(
+            'a file taken out of the freeze, its entries declared refactor',
+            preflight_rule,
+            'declared refactor: an entry that left is declared gone',
+            rewrite=True,
+            declare={k: {'refactor': 'x'} for k in adapter_gone},
         )
         case(
             'control: a file taken out of the freeze, declared gone',
@@ -1864,7 +1966,7 @@ def freeze_cases(results: list[Result]) -> None:
                 found.decisions,
                 found.script,
                 found.changes,
-                found.source(schema),
+                (found.source(schema) or b'').decode(),
             )
             == tuple(at_base.values())
             else [f'read {found!r}'],

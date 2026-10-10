@@ -43,16 +43,22 @@ must be declared in ``bridge_changes.json`` under
 - ``{"allowance": "E##"}``, growth the owner approved: an ``ALLOWANCES``
   entry for that function under that row, as below;
 - ``{"refactor": "<one line>"}``, an edit that keeps behaviour; a rename
-  is a change, declared a refactor (the old name, the new one and the
-  skeleton);
-- ``{"gone": "<one line>"}``, an entry that left the freeze, valid only for
-  an entry gone against the base.
+  is a change, its new name and the skeleton declared a refactor and its
+  old name gone;
+- ``{"gone": "<one line>"}``, an entry that left the freeze: an entry gone
+  against the base is declared gone, or moved when its rule moved into
+  Rust, and nothing else.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale); on a change declared only by an entry the merge base's
 declarations already hold (spent: a later change states its own reason); on
-``gone`` for an entry that is not gone; and on a ``moved`` that names no
-task. So no change to frozen code is silent, and review judges each
+``gone`` for an entry that is not gone, or a gone entry declared anything
+but gone or moved; and on a ``moved`` that names no task. It reads each
+frozen file's bytes, as the interpreter does, and refuses one declaring a
+source encoding other than UTF-8 (a ``raw_unicode_escape`` or ``utf-7``
+cookie runs what a UTF-8 reader takes for a comment); and it refuses a
+directory beside a frozen module with the module's name, whose package
+would be imported in the module's place. So no change to frozen code is silent, and review judges each
 reason's direction. A file joining ``FROZEN`` has every entry new.
 
 The counts, the secondary check: per entry the baseline also records its
@@ -79,7 +85,8 @@ the entries declared ``moved`` in one change net their counts, and their
 dropped calls, against each other across the frozen files, so a rule
 moved from ``schema.py`` into ``_rust/`` glue needs no allowance, as long
 as the moved entries together add no rule; a ``refactor`` or ``gone``
-entry is never paid for by another's drop. A covered function let out of
+entry is never paid for by another's drop, and an entry let out of the
+freeze whose body the file still defines moved nothing, so adds nothing. A covered function let out of
 the freeze, declared, is no new helper to covered code still calling it.
 The baseline must match the code exactly (``--write`` rewrites it).
 
@@ -93,9 +100,10 @@ each declared reason:
 
 - a rule added inside the body of an existing function that ``COVERED``
   does not name (a first-party helper covered code already called);
-- data defined outside the frozen files that covered code reads (for
-  example ``models.py``'s ``RELATIONAL_LIMITS``);
-- module code outside the frozen files that rebinds a covered name.
+- any code outside the frozen files: data covered code reads (for
+  example ``models.py``'s ``RELATIONAL_LIMITS``), module code rebinding a
+  covered name, a dunder set on a frozen class from elsewhere, a method on
+  a superclass that is not frozen.
 
 When a ledger row moves into Rust, the package deletes the row and the
 bridge's rule, takes a function the core route no longer reaches out of
@@ -115,10 +123,12 @@ import argparse
 import ast
 import copy
 import hashlib
+import io
 import json
 import re
 import subprocess
 import sys
+import tokenize
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -481,10 +491,33 @@ class _Skeleton(ast.NodeTransformer):
     visit_AsyncFunctionDef = _hollow
 
 
-def measure_text(text: str, rel: Path) -> Measured:
+class Unreadable(ValueError):
+    """A frozen file the freeze will not read as the interpreter would."""
+
+
+#: The source encodings a frozen file may declare (PEP 263).
+_ENCODINGS = frozenset({'utf-8', 'utf-8-sig'})
+
+
+def _source_bytes(source: str | bytes, rel: Path) -> bytes:
+    """A file's bytes, refused if it declares an encoding other than UTF-8:
+    a cookie such as ``raw_unicode_escape`` or ``utf-7`` makes the
+    interpreter run what a UTF-8 reader sees as a comment."""
+    data = source.encode('utf-8') if isinstance(source, str) else source
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    if encoding not in _ENCODINGS:
+        raise Unreadable(
+            f'{rel}: declares the source encoding {encoding}; a frozen file '
+            'is UTF-8, so the freeze reads what the interpreter runs'
+        )
+    return data
+
+
+def measure_text(text: str | bytes, rel: Path) -> Measured:
     """Every function and method of one file's source, and its skeleton as
-    ``<module>``."""
-    tree = ast.parse(text, filename=str(rel))
+    ``<module>``, parsed from its bytes as the interpreter parses them."""
+    data = _source_bytes(text, rel)
+    tree = ast.parse(data, filename=str(rel))
     module = module_name(rel)
     top_level = frozenset(
         n.name
@@ -538,7 +571,7 @@ def measure_text(text: str, rel: Path) -> Measured:
                     visit(case.body, prefix, owner)
 
     visit(tree.body, '', None)
-    skeleton = _Skeleton().visit(ast.parse(text, filename=str(rel)))
+    skeleton = _Skeleton().visit(ast.parse(data, filename=str(rel)))
     statements = skeleton.body
     if statements and _is_docstring(statements[0]):
         statements = statements[1:]
@@ -549,7 +582,7 @@ def measure_text(text: str, rel: Path) -> Measured:
 def measure_tree(root: Path) -> dict[Path, Measured | None]:
     """Each frozen file measured, or None where it does not exist."""
     return {
-        rel: measure_text((root / rel).read_text(encoding='utf-8'), rel)
+        rel: measure_text((root / rel).read_bytes(), rel)
         if (root / rel).is_file()
         else None
         for rel in FROZEN
@@ -782,6 +815,17 @@ def exactness(
     return problems
 
 
+def shadowing(root: Path) -> list[str]:
+    """A directory beside a frozen module with the module's name: a package
+    there would be imported in its place, leaving the frozen file dead."""
+    return [
+        f'{rel}: the directory {rel.with_suffix("")} beside it would shadow '
+        'the frozen module; a frozen module keeps its name to itself'
+        for rel in FROZEN
+        if rel.name != '__init__.py' and (root / rel.with_suffix('')).exists()
+    ]
+
+
 def decision_rows(text: str) -> dict[str, tuple[str, str]]:
     """decisions.md's rows by ID: each row's text and its status cell."""
     rows = {}
@@ -809,7 +853,7 @@ class Base:
     decisions: str
     script: str | None
     changes: str | None = None
-    source: Callable[[Path], str | None] = lambda rel: None
+    source: Callable[[Path], str | bytes | None] = lambda rel: None
 
 
 def held_allowances(
@@ -946,6 +990,12 @@ def ratchet(
                 f'{key}: {how}, declared only by an entry the base ({label}) '
                 'already holds, which is spent: declare this change anew'
             )
+        elif how == 'gone' and reason[0] not in ('gone', 'moved'):
+            problems.append(
+                f'{key}: gone against the base ({label}), declared '
+                f'{reason[0]}: an entry that left is declared gone (or moved, '
+                'when its rule moved into Rust)'
+            )
         elif reason[0] == 'gone' and how != 'gone':
             problems.append(
                 f'{key}: declared gone, but it is {how} against the base '
@@ -998,11 +1048,14 @@ def ratchet(
     moved_dropped: set[str] = set()
     for rel, name, then, now in pairs:
         if declared.get(f'{rel}::{name}', ('',))[0] == 'moved':
+            # An entry let out of the freeze whose body the file still
+            # defines moved nothing: its rules are still there.
+            still = now is _NOTHING and _measured(code, rel, name) is not None
             for kind in KINDS:
                 delta = now[kind] - then[kind]
                 if delta > 0:
                     moved_need[kind] += delta
-                else:
+                elif not still:
                     moved_pool[kind] -= delta
             moved_dropped |= set(then['calls']) - set(now['calls'])
     # A covered function let out of the freeze, declared, is no new helper
@@ -1086,7 +1139,10 @@ def check(
         code = measure_tree(root)
     except SyntaxError as error:
         return [*problems, f'{error.filename}: does not parse: {error.msg}']
+    except Unreadable as error:
+        return [*problems, str(error)]
     problems += exactness(code, baseline)
+    problems += shadowing(root)
     if isinstance(base, str):
         problems.append(f'no base to ratchet against: {base}')
         return problems
@@ -1118,8 +1174,18 @@ def check(
             measured_at_base[rel] = (
                 None if source is None else measure_text(source, rel)
             )
-        except SyntaxError:
+        except (SyntaxError, Unreadable):
             measured_at_base[rel] = None
+    # The files the base froze that are frozen no longer, as they stand,
+    # so an entry let out whose body is still there moves nothing.
+    code = dict(code)
+    for name in then:
+        rel = Path(name)
+        if rel not in code and (root / rel).is_file():
+            try:
+                code[rel] = measure_text((root / rel).read_bytes(), rel)
+            except (SyntaxError, Unreadable):
+                code[rel] = None
     problems += ratchet(
         baseline,
         then,
@@ -1145,6 +1211,12 @@ def _git(root: Path, *args: str) -> str:
     ).stdout
 
 
+def _git_bytes(root: Path, *args: str) -> bytes:
+    return subprocess.run(
+        ['git', '-C', str(root), *args], check=True, capture_output=True
+    ).stdout
+
+
 def base_baseline(root: Path, ref: str) -> Base | str:
     """What the merge base of HEAD and ``ref`` holds, or why it cannot be
     read."""
@@ -1161,13 +1233,18 @@ def base_baseline(root: Path, ref: str) -> Base | str:
             return None
         return _git(root, 'show', f'{merge_base}:{path}')
 
+    def source(path: Path) -> bytes | None:
+        if read(path) is None:
+            return None
+        return _git_bytes(root, 'show', f'{merge_base}:{path}')
+
     return Base(
         label=f'{ref} at {merge_base[:12]}',
         baseline=read(BASELINE),
         decisions=read(DECISIONS) or '',
         script=read(SCRIPT),
         changes=read(CHANGES),
-        source=read,
+        source=source,
     )
 
 
@@ -1215,7 +1292,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.write:
-        for change in write(args.root):
+        try:
+            changes = write(args.root)
+        except Unreadable as error:
+            print(f'freeze: {error}\nfreeze: FAIL')
+            return 1
+        for change in changes:
             print(f'wrote {change}')
     found = problems(args.root, args.base)
     for problem in found:
