@@ -171,7 +171,9 @@ def test_both_loaders_refuse_an_unknown_key_inside_the_call_arguments(
         run_python.load_cases([path])
 
 
-def _changed(case: dict[str, Any], path: list[Any], value: Any) -> dict[str, Any]:
+def _changed(
+    case: dict[str, Any], path: list[Any], value: Any
+) -> dict[str, Any]:
     changed = copy.deepcopy(case)
     at = changed
     for key in path[:-1]:
