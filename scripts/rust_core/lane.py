@@ -553,6 +553,14 @@ def describe_plan(plan: Plan, remote: str) -> list[str]:
         f'record {plan.package} in that worktree: git config --worktree '
         f'{PACKAGE_KEY} {plan.package}'
     )
+    steps.append(
+        f"refresh refs/remotes/{remote}/{PHASE_BRANCH} and the lane's "
+        'tracking ref (no local phase branch)'
+    )
+    steps.append(
+        "install prepush.sh's pre-push hook for that worktree "
+        '(prepush.sh --install-hook)'
+    )
     return steps
 
 
