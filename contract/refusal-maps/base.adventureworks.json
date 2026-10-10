@@ -102,10 +102,10 @@
       "id": "describe_source/time_name",
       "operation": "describe_source",
       "rule": "time_name",
-      "owner": "T1.23",
+      "owner": "T1.21d",
       "register": "P1B-2",
       "where": "rust/crates/sdm-schema/src/infer.rs:548",
-      "why": "A timestamp named as an edit stamp (ModifiedDate, in every table), which the time-column choice and the edit stamps the ledger gives T1.23 decide",
+      "why": "A timestamp named as an edit stamp (ModifiedDate, in every table), which the time-column choice and the edit stamps the ledger gives T1.21d decide (E50, moved from T1.23 at T1.10e)",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_name"},
         "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_name"}

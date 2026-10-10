@@ -13,8 +13,9 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
   1,000 rows in all, at most 2,000, as its README's table says, and the
   case asks for the product the notebook asks for, the most units sold.
 - The map (``contract/refusal-maps/base.adventureworks.json``): every entry
-  names its rule and operation, an owning task among T1.22 to T1.28 and a
-  register entry that is proposed, and the line it cites holds the rule;
+  names its rule and operation, an owning task among T1.21c, T1.21d and
+  T1.22 to T1.28 (E50) and a register entry that is proposed, and the line
+  it cites holds the rule;
   each probe's input is a case input, its own edits aside; the line it
   cites holds the rule (a core refusal) or the text it names (a bridge's or
   the seam's); and every probe is the case with the removals it names
@@ -385,3 +386,12 @@ def test_the_reader_refuses_deep_and_wide_maps_by_name(tmp_path: Path) -> None:
         path.write_text(broken)
         with pytest.raises(refusal_map.MapFailure):
             refusal_map.load(path)
+
+
+def test_the_owners_a_map_may_name() -> None:
+    # E50 (T1.10e): T1.21c and T1.21d join T1.22 to T1.28; their
+    # neighbours, a landed package and a later one stay refused.
+    for task in ('T1.21c', 'T1.21d', 'T1.22', 'T1.28'):
+        assert refusal_map.OWNER.match(task), task
+    for task in ('T1.21', 'T1.21b', 'T1.21e', 'T1.21cd', 'T1.29', 'T1.2', ''):
+        assert not refusal_map.OWNER.match(task), task

@@ -56,8 +56,9 @@ FIELDS = {
     'rust-host': ('code', 'operation', 'rule'),
 }
 STAGES = ('from_source', 'materialize', 'predict')
-#: The tasks a refusal of T1.21b's map may name as its owner.
-OWNER = re.compile(r'^T1\.2[2-8]$')
+#: The tasks a refusal of T1.21b's map may name as its owner: T1.21c and
+#: T1.21d (E50, added at T1.10e) and T1.22 to T1.28.
+OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-8])$')
 
 
 class MapFailure(Exception):
