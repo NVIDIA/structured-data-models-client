@@ -33,8 +33,8 @@ file leaving the freeze) fails as an undeclared change; a source-encoding
 cookie hiding code (one behind a lone CR included) and a package shadowing
 a frozen module are refused; a moved rule's drop cannot pay for a
 refactor's rise, while two moved entries net; an entry let out but still
-defined, or in a let-out file that cannot be read, pays for no rise and no
-call;
+defined, or in a let-out file that cannot be opened, read or parsed,
+pays for no rise and no call;
 a declared refactor, a rename declared, a rule moved out declared, a
 widened coverage declared, a frozen file added or removed, and an approved
 allowance pass; a declared refactor raising a count, a stale or spent
@@ -1452,6 +1452,37 @@ def freeze_cases(results: list[Result]) -> None:
             case(
                 f'a file let out of the freeze, with {name}, paying for a new rule',
                 lambda r, s=spoil: (s(r), at_gather(big)(r)),
+                'the entries declared moved raise raise by 1 and drop it by 0',
+                rewrite=True,
+                declare=adapter_moved,
+            )
+
+        # And one the freeze cannot open (OSError): the fixture's copy of
+        # the file raises PermissionError when read, which a chmod alone
+        # would not make it do for root; the repository's own copy, the
+        # base's source, still reads.
+        @contextmanager
+        def unopenable(rel: Path) -> Iterator[None]:
+            real = Path.read_bytes
+
+            def read_bytes(self: Path) -> bytes:
+                if self.as_posix().endswith(rel.as_posix()) and (
+                    REPO_ROOT not in self.resolve().parents
+                ):
+                    raise PermissionError(13, 'Permission denied', str(self))
+                return real(self)
+
+            Path.read_bytes = read_bytes  # type: ignore[method-assign]
+            try:
+                yield
+            finally:
+                Path.read_bytes = real  # type: ignore[method-assign]
+
+        with unopenable(adapter):
+            case(
+                'a file let out of the freeze that cannot be opened, '
+                'paying for a new rule',
+                at_gather(big),
                 'the entries declared moved raise raise by 1 and drop it by 0',
                 rewrite=True,
                 declare=adapter_moved,
