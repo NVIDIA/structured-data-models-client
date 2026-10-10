@@ -23,8 +23,13 @@ and never from this repository; the workspace and its credentials only from
 the local Databricks CLI profile (``--profile``, ``SDM_SMOKE_PROFILE``, or
 the SDK's own ``DATABRICKS_CONFIG_PROFILE`` and environment). Nothing this
 script writes names the endpoint, the workspace, a token or a user: every
-line it prints, every warning and log record it shows and every error it
-reports passes through :func:`redact`, which also drops tracebacks.
+line it prints and every warning it shows passes through :func:`redact`,
+which knows, before any client exists, every value of the arguments, the
+``DATABRICKS_`` and ``SDM_SMOKE_`` variables and the CLI profile, bare host
+names included; an error is reported by its class, its code and its HTTP
+status alone, never by its text, and with no traceback; a log record of any
+logger but the client's is shown by its name and level alone; and argument
+errors name no value.
 
 ``--dry-run`` builds the same request on the core and shows what would be
 sent, answered in process by the scripted endpoint's rule, with no network
@@ -49,8 +54,11 @@ import socket
 import sys
 import warnings
 from collections.abc import Callable, Iterable, Sequence
+from configparser import ConfigParser
+from configparser import Error as ConfigError
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 CASE = ROOT / 'contract/cases/s1/base.regression.json'
@@ -86,6 +94,20 @@ class Redactor:
             if isinstance(value, str) and len(value.strip()) >= 3:
                 self._secrets.add(value.strip())
 
+    def know_host(self, value: object) -> None:
+        r"""Adds a URL or host, and its bare host name, to the secrets."""
+        if not isinstance(value, str) or not value.strip():
+            return
+        self.know(value)
+        for candidate in (value, f'https://{value}'):
+            try:
+                host = urlparse(candidate.strip()).hostname
+            except ValueError:
+                host = None
+            if host:
+                self.know(host)
+                break
+
     def __call__(self, text: object) -> str:
         said = str(text)
         # Longest first, so a secret holding another is removed whole.
@@ -105,11 +127,22 @@ def say(*parts: object, file: Any = None) -> None:
 
 
 class _RedactingHandler(logging.Handler):
+    r"""Shows a log record: the client's own text, redacted; any other
+    logger's (the SDK's, the HTTP libraries') by its name and level only,
+    since their text may hold a host, a user or an account this script was
+    never told of."""
+
     def emit(self, record: logging.LogRecord) -> None:
+        if not record.name.startswith('sdm_'):
+            say(
+                f'log {record.levelname} {record.name} (text withheld)',
+                file=sys.stderr,
+            )
+            return
         try:
             message = record.getMessage()
         except Exception:  # noqa: BLE001 - a record that cannot format
-            message = record.msg if isinstance(record.msg, str) else ''
+            message = '(a record that does not format)'
         say(f'log {record.levelname} {record.name}: {message}', file=sys.stderr)
 
 
@@ -146,8 +179,22 @@ def _no_network() -> None:
     socket.create_connection = refuse  # type: ignore[assignment]
 
 
+class _Parser(argparse.ArgumentParser):
+    r"""An argument parser whose errors name no value: argparse quotes the
+    arguments it refuses, and an argument may be an endpoint's name."""
+
+    def error(self, message: str) -> NoReturn:  # noqa: ARG002 - never shown
+        self.exit(2, 'bad usage: see --help\n')
+
+
+def _usage(reason: str) -> NoReturn:
+    r"""Exits for bad usage, with a fixed ``reason`` that names no value."""
+    sys.stderr.write(f'bad usage: {reason}\n')
+    raise SystemExit(2)
+
+
 def parse(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         description='A live-model smoke of the Rust core request (E27).'
     )
     parser.add_argument(
@@ -179,9 +226,9 @@ def parse(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     arguments = parser.parse_args(argv)
     if arguments.show_body and not arguments.dry_run:
-        parser.error('--show-body goes with --dry-run')
+        _usage('--show-body goes with --dry-run')
     if arguments.timeout <= 0:
-        parser.error('--timeout must be positive')
+        _usage('--timeout must be positive')
     return arguments
 
 
@@ -193,7 +240,37 @@ def resolve(
     endpoint = arguments.endpoint or environ.get(ENDPOINT_VARIABLE) or None
     profile = arguments.profile or environ.get(PROFILE_VARIABLE) or None
     redact.know(endpoint, profile)
+    know_configuration(environ, profile)
     return endpoint, profile
+
+
+def know_configuration(environ: dict[str, str], profile: str | None) -> None:
+    r"""Adds to the secrets, before any client exists, every value the
+    Databricks configuration may hold: each ``DATABRICKS_`` and
+    ``SDM_SMOKE_`` variable's value, and each value of the profile's
+    section of the CLI's configuration file (``DATABRICKS_CONFIG_FILE``, or
+    ``~/.databrickscfg``), a host's bare name included."""
+    for name, value in environ.items():
+        if name.startswith(('DATABRICKS_', 'SDM_SMOKE_')):
+            redact.know_host(value)
+    path = Path(
+        environ.get('DATABRICKS_CONFIG_FILE')
+        or Path(environ.get('HOME', '~')).expanduser() / '.databrickscfg'
+    )
+    parser = ConfigParser(interpolation=None)
+    try:
+        parser.read(path, encoding='utf-8')
+    except (OSError, ConfigError, UnicodeDecodeError):
+        return
+    section = (
+        profile
+        or environ.get('DATABRICKS_CONFIG_PROFILE')
+        or parser.default_section
+    )
+    if section != parser.default_section and not parser.has_section(section):
+        return
+    for value in parser[section].values():
+        redact.know_host(value)
 
 
 def _shop() -> list[str]:
@@ -300,25 +377,60 @@ def check(frame: Any, indices: Iterable[Any]) -> list[str]:
     return problems
 
 
+class SmokeError(Exception):
+    r"""A failure this script describes in its own fixed words."""
+
+
 def _client(endpoint: str, profile: str | None, timeout: float) -> Any:
+    r"""A client of the serving endpoint, through the local Databricks
+    configuration. The SDK's own text on a failure is never shown: it may
+    name a user, a client id or a host this script was never told of."""
     from databricks.sdk import WorkspaceClient
     from sdm_client import SDMClient
 
-    workspace = (
-        WorkspaceClient(profile=profile) if profile else WorkspaceClient()
-    )
+    try:
+        workspace = (
+            WorkspaceClient(profile=profile) if profile else WorkspaceClient()
+        )
+    except Exception:  # noqa: BLE001 - its text is not shown
+        raise SmokeError(
+            'the Databricks client could not be configured from the local '
+            'profile or environment'
+        ) from None
     config = workspace.config
-    redact.know(
-        getattr(config, 'host', None),
-        getattr(config, 'token', None),
-        getattr(config, 'username', None),
-        getattr(config, 'client_id', None),
-        getattr(config, 'client_secret', None),
-        getattr(config, 'profile', None),
-    )
+    for name in (
+        'host',
+        'token',
+        'username',
+        'password',
+        'client_id',
+        'client_secret',
+        'account_id',
+        'profile',
+        'azure_client_id',
+        'azure_tenant_id',
+    ):
+        redact.know_host(getattr(config, name, None))
     return SDMClient.for_databricks_serving(
         endpoint, workspace_client=workspace, timeout=timeout
     )
+
+
+def _diagnosis(failed: BaseException) -> str:
+    r"""What a failure is, from an allowlist: the exception's class, the
+    client's code and HTTP status when it carries them, and this script's
+    own words; never the exception's text, which an SDK or an endpoint
+    wrote."""
+    said = type(failed).__name__
+    code = getattr(failed, 'code', None)
+    if isinstance(code, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', code):
+        said += f' [{code}]'
+    status = getattr(failed, 'status_code', None)
+    if isinstance(status, int) and not isinstance(status, bool):
+        said += f' (HTTP {status})'
+    if isinstance(failed, SmokeError):
+        said += f': {failed}'
+    return said
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -365,13 +477,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if isinstance(failed, KeyboardInterrupt):
             say('interrupted', file=sys.stderr)
             return 1
-        code = getattr(failed, 'code', None)
-        say(
-            f'smoke failed: {type(failed).__name__}'
-            + (f' [{code}]' if isinstance(code, str) else '')
-            + f': {failed}',
-            file=sys.stderr,
-        )
+        say(f'smoke failed: {_diagnosis(failed)}', file=sys.stderr)
         return 1
     for problem in problems:
         say(f'smoke failed: {problem}', file=sys.stderr)

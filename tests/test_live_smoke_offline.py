@@ -148,3 +148,130 @@ def test_the_dry_run_builds_the_core_s_request_with_no_connection() -> None:
     assert 'dry run, core route' in run.stdout
     assert 'context rows: 112, rows to predict: 2' in run.stdout
     assert 'smoke passed' in run.stdout
+
+
+def test_an_argument_error_names_no_value() -> None:
+    # argparse quotes what it refuses; the script's parser does not.
+    for argv in (
+        [
+            '--dry-run',
+            '--endpoint=SYNTHETIC_ENDPOINT',
+            '--bad=SYNTHETIC_ENDPOINT',
+        ],
+        ['--route', 'SYNTHETIC_ENDPOINT'],
+        ['--timeout', 'SYNTHETIC_ENDPOINT'],
+        ['SYNTHETIC_ENDPOINT'],
+    ):
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), *argv],
+            capture_output=True,
+            text=True,
+            env=_clean_env(),
+            check=False,
+        )
+        assert run.returncode == 2, argv
+        assert 'SYNTHETIC' not in run.stdout + run.stderr, argv
+        assert 'bad usage' in run.stderr
+
+
+class _FakeSdk:
+    r"""A stand-in ``databricks.sdk``, its client failing or configured as
+    a test says; nothing is called."""
+
+    def __init__(self, failure: Exception | None, host: str = '') -> None:
+        failing = failure
+
+        class WorkspaceClient:
+            def __init__(self, profile: str | None = None) -> None:
+                if failing is not None:
+                    raise failing
+                self.config = type(
+                    'Config',
+                    (),
+                    {'host': host, 'username': 'SYNTH_USER', 'token': None},
+                )()
+
+        self.WorkspaceClient = WorkspaceClient
+
+
+def _live_main(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    sdk: _FakeSdk,
+    environ: dict[str, str],
+) -> tuple[int, str]:
+    smoke = _smoke()
+    monkeypatch.setattr(smoke, '_quiet_the_world', lambda: None)
+    monkeypatch.setattr(smoke, 'build_request', lambda route: object())
+    module = type(sys)('databricks.sdk')
+    module.WorkspaceClient = sdk.WorkspaceClient  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, 'databricks.sdk', module)
+    for name in [
+        n for n in os.environ if n.startswith(('DATABRICKS_', 'SDM_SMOKE_'))
+    ]:
+        monkeypatch.delenv(name)
+    monkeypatch.setenv('HOME', '/nonexistent-home')
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+    status = smoke.main(['--endpoint', 'SYNTHETIC_ENDPOINT'])
+    captured = capsys.readouterr()
+    return status, captured.out + captured.err
+
+
+@pytest.mark.parametrize(
+    'environ',
+    [
+        {},
+        {
+            'DATABRICKS_USERNAME': 'SYNTH_USER',
+            'DATABRICKS_CLIENT_ID': 'SYNTH_CID',
+        },
+    ],
+)
+def test_an_sdk_that_fails_to_configure_is_reported_without_its_text(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    environ: dict[str, str],
+) -> None:
+    failure = ValueError(
+        'default auth: cannot configure: username=SYNTH_USER '
+        'client_id=SYNTH_CID host=models.vanity-corp.test account SYNTH_ACCOUNT'
+    )
+    status, said = _live_main(monkeypatch, capsys, _FakeSdk(failure), environ)
+    assert status == 1
+    assert 'smoke failed: SmokeError' in said
+    for secret in (
+        'SYNTH_USER',
+        'SYNTH_CID',
+        'SYNTH_ACCOUNT',
+        'vanity-corp',
+        'SYNTHETIC_ENDPOINT',
+    ):
+        assert secret not in said, secret
+
+
+def test_a_vanity_host_is_known_by_its_bare_name(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    smoke = _smoke()
+    redact = smoke.Redactor()
+    redact.know_host('https://models.vanity-corp.test:8443/path')
+    redact.know_host('bare-host.vanity-corp.test')
+    said = redact(
+        'connecting to models.vanity-corp.test:443 and bare-host.vanity-corp.test'
+    )
+    assert 'vanity-corp' not in said
+    # The SDK configured on a vanity host, then the call failing with text
+    # naming the host and the user: only the class and code are shown.
+    sdk = _FakeSdk(None, host='https://models.vanity-corp.test')
+    status, said = _live_main(
+        monkeypatch,
+        capsys,
+        sdk,
+        {'DATABRICKS_HOST': 'https://models.vanity-corp.test'},
+    )
+    assert status == 1
+    for secret in ('vanity-corp', 'SYNTH_USER', 'SYNTHETIC_ENDPOINT'):
+        assert secret not in said, secret
+    assert 'smoke failed:' in said
