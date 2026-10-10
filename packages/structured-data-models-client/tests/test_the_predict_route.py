@@ -480,3 +480,113 @@ def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
     assert core.code == 'INVALID_REQUEST'
     assert core.__cause__ is None and core.__context__ is None
     assert received.requests == []
+
+
+def _same(left: Any, right: Any) -> bool:
+    r"""Whether two decoded JSON values are equal, compared without
+    recursion, at any depth."""
+    stack = [(left, right)]
+    while stack:
+        a, b = stack.pop()
+        if isinstance(a, dict) and isinstance(b, dict):
+            if list(a) != list(b):
+                return False
+            stack += [(a[k], b[k]) for k in a]
+        elif isinstance(a, list) and isinstance(b, list):
+            if len(a) != len(b):
+                return False
+            stack += list(zip(a, b, strict=True))
+        elif type(a) is not type(b) or a != b:
+            return False
+    return True
+
+
+def test_a_refusal_with_deeply_nested_details_is_shown_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Details the transport read at a depth a recursive copy cannot take
+    # (T1.11d review round 3): the old route's class, status, code and
+    # details, and nothing chained.
+    request = _materialized(monkeypatch)
+    for depth in (600, 900):
+        body = (
+            '{"code": "BAD_REQUEST", "detail": "not served", "extra": '
+            + '[' * depth
+            + '0'
+            + ']' * depth
+            + '}'
+        )
+        with _answering(422, body.encode()) as (url, _):
+            core, old = _both(monkeypatch, request, url)
+        assert isinstance(core, NimRequestError), depth
+        assert (type(core), core.status_code, core.code, str(core)) == (
+            type(old),
+            old.status_code,
+            old.code,
+            str(old),
+        ), depth
+        assert _same(core.details, old.details), depth
+        assert core.__cause__ is None and core.__context__ is None
+
+
+@contextmanager
+def _echoing_our_credentials() -> Iterator[tuple[str, str]]:
+    r"""An endpoint refusing with 401 whose detail and other fields echo
+    the Authorization header it was sent and the URL's userinfo, and a
+    sentinel of its own; its URL carries a credential."""
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def log_message(self, *args: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802 - http.server's name
+            self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            sent = self.headers.get('Authorization', '')
+            body = json.dumps(
+                {
+                    'code': 'UNAUTHORIZED',
+                    'detail': f'credential {sent} refused (ENDPOINT-ONLY-7c2)',
+                    'seen': {'user': 'sdm:SECRETPW-77', 'header': sent},
+                }
+            ).encode()
+            self.send_response(401)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+        yield (
+            f'http://sdm:SECRETPW-77@127.0.0.1:{port}',
+            'Basic c2RtOlNFQ1JFVFBXLTc3',
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_a_credential_of_ours_the_endpoint_echoes_is_redacted_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # E47, orchestrator reading: the endpoint's text is shown, with each
+    # exact credential of ours replaced; the old route, the reference's in
+    # this phase, shows the echo unchanged.
+    request = _materialized(monkeypatch)
+    with _echoing_our_credentials() as (url, basic):
+        core, old = _both(monkeypatch, request, url)
+    shown = str(core) + repr(core.details)
+    assert isinstance(core, NimRequestError) and core.status_code == 401
+    for credential in ('SECRETPW-77', basic.split()[1], 'sdm:SECRETPW-77'):
+        assert credential not in shown, credential
+    assert '<redacted>' in shown
+    assert 'ENDPOINT-ONLY-7c2' in str(core)
+    assert core.code == old.code == 'UNAUTHORIZED'
+    assert 'SECRETPW-77' in str(old) + repr(old.details)
+    assert core.__cause__ is None and core.__context__ is None

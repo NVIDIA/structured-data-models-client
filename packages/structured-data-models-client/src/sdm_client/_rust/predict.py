@@ -32,9 +32,17 @@ client's transport raises it and its adapter explains it, a
 (``endpoint_code``, ``diagnosis`` and its other fields, as the transport
 reads them), the same class, message and details as the old route's. That
 text is the endpoint's, so a request value it echoes back is shown, which
-the owner accepted. Nothing of this side's is added to it: the
-transport's exception, and with it the endpoint's URL and any credential
-the URL holds, is not chained, nor any other context. A failed transport
+the owner accepted; to it the client adds only its own explanations, as on
+the old route: the adapter's naming of the tables and columns of our schema
+a refusal is about, and the Databricks transport's naming of the serving
+endpoint (both the user's own configuration), never a value, a credential
+or a URL. The transport's exception, and with it the endpoint's URL and any
+credential the URL holds, is not chained, nor any other context; and an
+exact credential of ours the endpoint echoes (the URL's userinfo, its user
+and password, the ``Basic`` token made of them, a query value, the API key,
+a Databricks token or secret) is replaced by ``<redacted>`` before its text
+is shown (E47, orchestrator reading, owner to confirm). The old route, the
+reference's in this phase, shows such an echo unchanged. A failed transport
 (the endpoint could not be reached, or its answer could not be read) is
 told to the core, which ends the run with ``TRANSPORT_ERROR``; any other
 error of the transport keeps its code and gets a fixed sentence.
@@ -47,10 +55,11 @@ Nothing here imports the relational engine.
 
 from __future__ import annotations
 
-import copy
+import base64
 import json
 import math
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
@@ -144,17 +153,100 @@ def _encoded(value: Any) -> bytes:
     return ''.join(out).encode()
 
 
-def _refusal(refused: NimRequestError) -> NimRequestError:
+#: What stands in, in an endpoint's text, for a credential of ours it echoes.
+REDACTED = '<redacted>'
+
+
+def our_credentials(transport: Any) -> list[str]:
+    r"""The exact credentials of ours the transport sends (E47, orchestrator
+    reading): the URL's userinfo, its user and password, raw and decoded,
+    the ``Basic`` token ``requests`` builds of them, each query value, the
+    API key, and a Databricks workspace's token, password and client
+    secret; longest first, so one that holds another is replaced whole."""
+    found: list[str] = []
+    url = getattr(transport, 'url', None)
+    if isinstance(url, str):
+        parsed = urlparse(url)
+        user, password = parsed.username, parsed.password
+        if parsed.netloc and '@' in parsed.netloc:
+            found.append(parsed.netloc.rsplit('@', 1)[0])
+        for value in (user, password):
+            if value:
+                found += [value, unquote(value)]
+        if user is not None or password is not None:
+            pair = f'{unquote(user or "")}:{unquote(password or "")}'
+            found += [
+                pair,
+                base64.b64encode(pair.encode('latin-1', 'replace')).decode(),
+            ]
+        for _, value in parse_qsl(parsed.query, keep_blank_values=False):
+            found.append(value)
+    found.append(getattr(transport, 'api_key', None))
+    config = getattr(getattr(transport, '_workspace', None), 'config', None)
+    for name in ('token', 'password', 'client_secret'):
+        found.append(getattr(config, name, None))
+    return sorted(
+        {
+            value
+            for value in found
+            if isinstance(value, str) and len(value) >= 3
+        },
+        key=len,
+        reverse=True,
+    )
+
+
+def _scrubbed(text: str, secrets: list[str]) -> str:
+    for secret in secrets:
+        text = text.replace(secret, REDACTED)
+    return text
+
+
+def _scrubbed_copy(value: Any, secrets: list[str]) -> Any:
+    r"""``value``, the JSON the transport decoded, copied without recursion
+    at any depth, each text in it, keys included, with our credentials
+    replaced by :data:`REDACTED`."""
+
+    def leaf(item: Any) -> Any:
+        return _scrubbed(item, secrets) if isinstance(item, str) else item
+
+    if not isinstance(value, (dict, list, tuple)):
+        return leaf(value)
+    root: Any = {} if isinstance(value, dict) else []
+    stack: list[tuple[Any, Any]] = [(value, root)]
+    while stack:
+        source, target = stack.pop()
+        pairs = (
+            source.items() if isinstance(source, dict) else enumerate(source)
+        )
+        for key, item in pairs:
+            if isinstance(item, (dict, list, tuple)):
+                copied: Any = {} if isinstance(item, dict) else []
+                stack.append((item, copied))
+            else:
+                copied = leaf(item)
+            if isinstance(target, dict):
+                target[leaf(key)] = copied
+            else:
+                target.append(copied)
+    return root
+
+
+def _refusal(refused: NimRequestError, secrets: list[str]) -> NimRequestError:
     r"""The endpoint's refusal as this route raises it: the old route's
     class, status, code, message and details, the endpoint's own text and
-    the adapter's explanation of it (decision E47), but a new exception, so
-    nothing of the transport's (its URL, a credential) is chained to it."""
+    the client's explanation of it (decision E47), but a new exception, so
+    nothing of the transport's (its URL, a credential) is chained to it,
+    with each credential of ours it echoes replaced by :data:`REDACTED`.
+    Its details are copied without recursion, at any depth the transport
+    read."""
     details = refused.details if isinstance(refused.details, dict) else {}
+    code = refused.code
     return type(refused)(
         refused.status_code,
-        code=refused.code,
-        message=refused.message,
-        details=copy.deepcopy(details),
+        code=_scrubbed(code, secrets) if isinstance(code, str) else code,
+        message=_scrubbed(str(refused.message), secrets),
+        details=_scrubbed_copy(details, secrets),
     )
 
 
@@ -197,10 +289,11 @@ def predict(
         # even the context of what is raised.
         failure: StructuredDataError | None = None
         transport_failed = False
+        refused: NimRequestError | None = None
         try:
             answer = client._send(adapter, json.loads(body))
-        except NimRequestError as refused:
-            failure = _refusal(refused)
+        except NimRequestError as refusal:
+            refused = refusal
         except StructuredDataError as failed:
             if failed.code == 'TRANSPORT_ERROR':
                 transport_failed = True
@@ -211,6 +304,10 @@ def predict(
                 )
         if transport_failed:
             raise TransportFailed
+        if refused is not None:
+            # Built outside the handler, so nothing failing in the copy is
+            # chained to the transport's exception.
+            raise _refusal(refused, our_credentials(client._transport))
         if failure is not None:
             raise failure
         return _encoded(answer)

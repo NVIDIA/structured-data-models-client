@@ -48,6 +48,7 @@ URL is never chained or added.
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import logging
@@ -241,11 +242,16 @@ def _answering(body: bytes, status: int = 200) -> Iterator[str]:
 
         def do_POST(self) -> None:  # noqa: N802 - http.server's name
             self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            # An endpoint that echoes the credential it was sent: the
+            # Authorization header the transport built of the URL's
+            # userinfo, wherever the body says {AUTH}.
+            sent = self.headers.get('Authorization', '').encode()
+            answer = body.replace(b'{AUTH}', sent)
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Content-Length', str(len(answer)))
             self.end_headers()
-            self.wfile.write(body)
+            self.wfile.write(answer)
 
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -293,6 +299,11 @@ _ENDPOINT_S_OWN = {
     'diagnosis': f'{ENDPOINT}-diagnosis',
     'hint': f'{ENDPOINT}-hint',
 }
+
+
+#: The ``Authorization`` header the transport builds of the URL's userinfo.
+_BASIC_TOKEN = base64.b64encode(f'sdm:{DSN}'.encode()).decode()
+_BASIC = f'Basic {_BASIC_TOKEN}'
 
 
 def _shows_the_endpoint_s_own_words(error: NimRequestError) -> None:
@@ -412,6 +423,16 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
         'refusal: a 422 in the endpoint s own words behind a credential': (
             answered(endpoint_s_refusal, 422)
         ),
+        'refusal: a 401 echoing our credential, behind it': answered(
+            json.dumps(
+                {
+                    'code': 'UNAUTHORIZED',
+                    'detail': f'{{AUTH}} for sdm:{DSN} refused ({ENDPOINT})',
+                    'seen': {'header': '{AUTH}', 'password': DSN},
+                }
+            ).encode(),
+            401,
+        ),
         'refusal: a 500 behind a credential': answered(
             b'{"code": "INTERNAL_ERROR", "detail": "internal failure"}', 500
         ),
@@ -444,6 +465,13 @@ def test_no_sentinel_reaches_anything_written(
         assert error.__cause__ is None and error.__context__ is None, name
         if 'own words' in name:
             _shows_the_endpoint_s_own_words(error)
+        if 'echoing our credential' in name:
+            # E47, orchestrator reading: each exact credential of ours the
+            # endpoint echoes is replaced; its own words still reach the
+            # exception.
+            shown = str(error) + repr(error.details)
+            assert _BASIC not in shown and _BASIC_TOKEN not in shown
+            assert '<redacted>' in shown and ENDPOINT in str(error)
     else:
         # The error is the core's, raised with no cause chained.
         assert error.__cause__ is None and error.__suppress_context__, name
@@ -452,7 +480,7 @@ def test_no_sentinel_reaches_anything_written(
         'codec': {'INVALID_MESSAGE', 'INVALID_RESPONSE'},
         'provider': {'PROVIDER_ERROR'},
         'transport': {'TRANSPORT_ERROR'},
-        'refusal': {_ENDPOINT_CODE, 'INTERNAL_ERROR'},
+        'refusal': {_ENDPOINT_CODE, 'INTERNAL_ERROR', 'UNAUTHORIZED'},
         'panic': {'INTERNAL_ERROR'},
     }[path]
     assert error.code in expected, (name, error.code)
@@ -609,3 +637,34 @@ def test_an_endpoint_echoing_our_data_is_shown_verbatim_as_on_the_old_route(
     assert core.__cause__ is None and core.__context__ is None
     formatted = ''.join(traceback.format_exception(core))
     assert DSN not in formatted + repr(core.details)
+
+
+def test_the_client_s_own_explanation_names_schema_columns_never_values(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    r"""The boundary of what the client adds to the endpoint's words (E47,
+    orchestrator reading): the adapter names the tables and columns of our
+    schema a refusal is about, as on the old route, and never a value, a
+    credential or a URL. Here the endpoint refuses a semantic type without
+    naming a column, and the column it means holds the planted values."""
+    request = _request()
+    schema = request.payloads[0]['schema']
+    schema['related_tables']['users']['columns']['country']['stype'] = 'text'
+    refusal = json.dumps(
+        {
+            'code': 'UNSUPPORTED_FEATURE',
+            'detail': "semantic type 'text' is unsupported",
+        }
+    ).encode()
+    with _answering(refusal, 422) as url, _watching(monkeypatch, capfd) as seen:
+
+        def call() -> Any:
+            with SDMClient(url, max_retries=0) as client:
+                return client.predict(request, model=KumoRelational())
+
+        error = _raised(seen, call)
+    assert isinstance(error, NimRequestError)
+    assert 'users.country' in str(error)
+    assert seen.leaks() == []
+    assert error.__cause__ is None and error.__context__ is None
