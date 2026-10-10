@@ -25,6 +25,14 @@ pub enum TestOperation {
     /// finishes with the number of rows fetched, or fails with the
     /// provider's error.
     Fetch { fetch: AttachmentId },
+    /// [`TestOperation::Fetch`] of a request with seeds (`neighbors`,
+    /// `lookup`), whose rows are the Arrow attachment `keys`: the core
+    /// attaches them to the fetch step as its own key set, as an operation
+    /// does, so a test can drive a provider's binding of a key set.
+    Keyed {
+        fetch: AttachmentId,
+        keys: AttachmentId,
+    },
     /// Finishes with the `OperationResult` a bytes attachment of JSON holds.
     Finish { result: AttachmentId },
     /// Fails with the `CoreError` a bytes attachment of JSON holds.
@@ -66,6 +74,10 @@ impl TestOperation {
             | TestOperation::Finish { result: id }
             | TestOperation::Fail { error: id }
             | TestOperation::Warn { warnings: id } => vec![(*id, AttachmentKind::Bytes)],
+            TestOperation::Keyed { fetch, keys } => vec![
+                (*fetch, AttachmentKind::Bytes),
+                (*keys, AttachmentKind::Arrow),
+            ],
             TestOperation::Panic { .. }
             | TestOperation::Log { .. }
             | TestOperation::Abort

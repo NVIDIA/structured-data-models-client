@@ -20,12 +20,16 @@
 //! stay off, so nothing else loads, and the loaded ICU's version is
 //! checked.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use anyhow::{Context, Result, anyhow, bail};
+use duckdb::arrow::compute::concat_batches;
 use duckdb::arrow::datatypes::SchemaRef;
 use duckdb::arrow::record_batch::RecordBatch;
+use duckdb::vtab::arrow::{ArrowVTab, arrow_recordbatch_to_query_params};
 use duckdb::{Config, Connection};
 use sdm_contract::ErrorKind;
-use sdm_contract::data::{FetchPlan, ProviderError};
+use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError, SqlParam};
 use sdm_contract::run::FetchStep;
 
 /// The DuckDB version the reference runs, which this host must link.
@@ -115,9 +119,23 @@ pub struct Fetched {
     pub batches: Vec<RecordBatch>,
 }
 
-/// The answer to one fetch step, or the provider's error as the contract
-/// carries it: its kind, never the driver's text.
+/// The answer to one fetch step whose plan binds no key set, or the
+/// provider's error as the contract carries it: its kind, never the
+/// driver's text.
 pub fn answer(connection: &Connection, step: &FetchStep) -> Result<Fetched, ProviderError> {
+    answer_with(connection, step, &BTreeMap::new())
+}
+
+/// The answer to one fetch step, its key sets bound from `keys`, the
+/// attachments the step named, by id: each as the relation its plan names
+/// it by, on the step's own cursor, as the Python provider registers one;
+/// a key set's rows travel as Arrow, never as text (decision Q1). A plan
+/// with a scalar parameter, which no request carries yet, is not run.
+pub fn answer_with(
+    connection: &Connection,
+    step: &FetchStep,
+    keys: &BTreeMap<AttachmentId, Fetched>,
+) -> Result<Fetched, ProviderError> {
     let failed = || ProviderError {
         kind: ErrorKind::DataSource,
         retryable: false,
@@ -131,21 +149,53 @@ pub fn answer(connection: &Connection, step: &FetchStep) -> Result<Fetched, Prov
     let Some((last, before)) = statements.split_last() else {
         return Err(failed());
     };
-    // Parameters, and key sets bound as relations, arrive with the requests
-    // that carry them (T1.11c); a statement with any is not run.
-    if statements.iter().any(|s| !s.params.is_empty()) {
-        return Err(failed());
-    }
     // A cursor of its own, as the Python provider and the reference read:
     // a connection to the same database, which takes the database's
     // settings and none of the session's.
     let cursor = connection.try_clone().map_err(|_| failed())?;
+    let mut bound = BTreeSet::new();
+    for statement in statements {
+        for param in &statement.params {
+            let SqlParam::KeySet {
+                keys: set,
+                relation,
+            } = param
+            else {
+                return Err(failed());
+            };
+            if !bound.insert(relation.clone()) {
+                continue;
+            }
+            let fetched = keys.get(&set.attachment).ok_or_else(failed)?;
+            bind(&cursor, relation, fetched).map_err(|_| failed())?;
+        }
+    }
     for statement in before {
         cursor
             .execute_batch(&statement.text)
             .map_err(|_| failed())?;
     }
     run(&cursor, &last.text).map_err(|_| failed())
+}
+
+/// Binds `keys` as the relation `name` on `cursor`: a temporary table of
+/// the key set's rows, read from Arrow by `duckdb-rs`'s Arrow table
+/// function, so every value keeps its type (an unsigned 64-bit integer, a
+/// decimal of any scale) and nothing passes through text or a float.
+fn bind(cursor: &Connection, name: &str, keys: &Fetched) -> Result<()> {
+    cursor
+        .register_table_function::<ArrowVTab>("arrow")
+        .map_err(|e| anyhow!("{e}"))?;
+    let batch = concat_batches(&keys.schema, &keys.batches).map_err(|e| anyhow!("{e}"))?;
+    let params = arrow_recordbatch_to_query_params(batch);
+    let quoted = format!("\"{}\"", name.replace('"', "\"\""));
+    cursor
+        .execute(
+            &format!("CREATE TEMPORARY TABLE {quoted} AS SELECT * FROM arrow(?, ?)"),
+            params,
+        )
+        .map_err(|e| anyhow!("{e}"))?;
+    Ok(())
 }
 
 /// Every batch of `sql`'s result, with its schema, empty or not.

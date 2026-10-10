@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/6",
+  "$id": "sdm-contract/7",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",

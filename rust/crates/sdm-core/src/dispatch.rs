@@ -14,7 +14,7 @@ use sdm_engine::time::Zones;
 use crate::attached::{check_attachments, take_json};
 use crate::compose::CompositionRoot;
 use crate::profiles::Profile;
-use crate::run::{Attachments, Run};
+use crate::run::{Attachment, Attachments, Run, internal};
 
 /// Refuses a start from a host speaking another contract version, before
 /// anything else of the message is read (decision H25): host and core ship
@@ -81,11 +81,19 @@ pub fn start(
             })
         }
         Operation::Materialize(request) => {
-            let _schema: SourceDescription = take_json(&mut attachments, request.schema)?;
-            let _query: String = take_json(&mut attachments, request.query)?;
+            let description: SourceDescription = take_json(&mut attachments, request.schema)?;
+            let query: String = take_json(&mut attachments, request.query)?;
+            let indices = match request.indices {
+                Some(id) => match attachments.remove(&id) {
+                    Some(Attachment::Arrow(data)) => Some(data),
+                    _ => return Err(internal("the indices are not the Arrow data named")),
+                },
+                None => None,
+            };
             // The decoder takes a seed of any size and sign; which seeds a
-            // run takes is the core's rule (decision H7). Per-backend
-            // ranges (RS-7) come with the random streams (T1.22).
+            // run takes is the core's rule (decision H7): not a negative
+            // one, and a provider's own range (RS-7) is its data layer's,
+            // which plans the sample.
             if request.seed.as_ref().is_some_and(|seed| seed.is_negative()) {
                 return Err(CoreError::new(
                     ErrorKind::InvalidRequest,
@@ -95,7 +103,15 @@ pub fn start(
                 .with_field("field", Detail::text("seed")));
             }
             let access = root.data_access(&request.provider)?;
-            Run::with_data(access, |_| async { Err(not_yet("materialize")) })
+            let inputs = crate::materialize::Inputs {
+                description,
+                query,
+                indices,
+                anchor_time: request.anchor_time,
+                seed: request.seed,
+                facts,
+            };
+            Run::with_data(access, move |asker| crate::materialize::run(asker, inputs))
         }
         Operation::Predict(request) => {
             let _query: String = take_json(&mut attachments, request.state.query)?;

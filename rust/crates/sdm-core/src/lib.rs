@@ -11,6 +11,7 @@ pub mod attached;
 pub mod compose;
 mod describe;
 pub mod dispatch;
+pub mod materialize;
 pub mod pql;
 pub mod profiles;
 pub mod run;

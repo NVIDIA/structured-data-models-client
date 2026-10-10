@@ -359,6 +359,12 @@ pub struct DescribedColumn {
     pub received: ColumnType,
     pub dtype: Dtype,
     pub stype: Stype,
+    /// Whether the column may hold no value, as the catalog declares it:
+    /// neither declared `NOT NULL` nor part of the declared primary key.
+    pub nullable: bool,
+    /// Whether the catalog declares a primary or unique key of this one
+    /// column, which the source refuses to repeat.
+    pub unique: bool,
 }
 
 // --- materialize and predict --------------------------------------------------

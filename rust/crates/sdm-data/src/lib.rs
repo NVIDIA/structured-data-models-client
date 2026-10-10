@@ -13,8 +13,9 @@
 //! with statements this crate renders for its dialect, and its
 //! capabilities are the requests this crate renders for that dialect. As
 //! built at T1.11b DuckDB renders the catalog (`describe` in each part,
-//! `preview`, `key_counts`, `time_bounds`); the rest come with the tasks
-//! that reach them. Either way a plan expects the schema the contract fixes
+//! `preview`, `key_counts`, `time_bounds`), and from T1.11c the sampler's
+//! `sample_entities`, `neighbors` and `lookup`; the rest come with the
+//! tasks that reach them. Either way a plan expects the schema the contract fixes
 //! for the request's answer, or discovers it where the answer's columns
 //! are the source's own (`DataRequest::expected`, decision E36), so a host
 //! provider is held to the same shape as a rendering.

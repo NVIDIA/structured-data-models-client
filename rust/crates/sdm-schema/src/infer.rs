@@ -35,6 +35,9 @@ pub struct InferredColumn {
     pub received: ColumnType,
     /// Whether the catalog lets the column hold no value.
     pub nullable: bool,
+    /// Whether the catalog declares a primary or unique key of this one
+    /// column.
+    pub unique: bool,
 }
 
 /// One table, inferred.
@@ -118,6 +121,7 @@ pub fn table(
             stype,
             received: ColumnType::from_arrow(&declared.name, field.data_type())?,
             nullable: !is_primary && !declared.not_null,
+            unique: declared_unique.contains(&declared.name),
         });
         samples.push(sample);
     }

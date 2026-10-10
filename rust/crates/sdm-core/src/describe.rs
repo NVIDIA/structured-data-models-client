@@ -178,6 +178,8 @@ pub(crate) async fn run(
                         received: c.received,
                         dtype: c.dtype,
                         stype: c.stype,
+                        nullable: c.nullable,
+                        unique: c.unique,
                     })
                     .collect(),
                 primary_key: table.primary_key.into_iter().collect(),
@@ -295,7 +297,7 @@ async fn count_keys(asker: &Asker, tables: &[InferredTable]) -> Result<(), CoreE
 }
 
 /// The data a request's answer holds, or the provider's error.
-async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData, CoreError> {
+pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData, CoreError> {
     data(asker.fetch(request)?.await)
 }
 

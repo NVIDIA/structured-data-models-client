@@ -42,6 +42,9 @@ pub struct Validation {
     pub diagnostics: Vec<PqlDiagnostic>,
     /// The query, when it has no errors.
     pub query: Option<ValidatedQuery>,
+    /// The query, when it has no errors, written back as the reference's
+    /// `ValidatedPredictiveQuery.to_string()` writes it.
+    pub text: Option<String>,
 }
 
 impl Validation {
@@ -49,6 +52,7 @@ impl Validation {
         Validation {
             diagnostics,
             query: None,
+            text: None,
         }
     }
 
@@ -142,6 +146,7 @@ fn resolve_here(
         return Ok(Validation {
             diagnostics: found,
             query: Some(query),
+            text: Some(validated.query.to_string_with(false, false)),
         });
     }
     let warnings = found.split_off(found.iter().take_while(|d| is_error(d)).count());

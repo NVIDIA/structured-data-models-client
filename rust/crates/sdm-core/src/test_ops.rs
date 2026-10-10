@@ -8,6 +8,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use sdm_contract::data::DataRequest;
 use sdm_contract::ops::{OperationResult, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation, TestResult};
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
@@ -26,9 +27,16 @@ pub(crate) fn run(
     facts: HostFacts,
     zones: Arc<dyn Zones>,
 ) -> Result<Run, CoreError> {
+    let keyed = match &operation {
+        TestOperation::Keyed { keys, .. } => match attachments.remove(keys) {
+            Some(Attachment::Arrow(data)) => Some(data),
+            _ => return Err(internal("a keyed fetch's keys are not Arrow")),
+        },
+        _ => None,
+    };
     Ok(match operation {
-        TestOperation::Fetch { fetch } => {
-            let fetch: TestFetch = take_json(attachments, fetch)?;
+        TestOperation::Fetch { fetch } | TestOperation::Keyed { fetch, .. } => {
+            let mut fetch: TestFetch = take_json(attachments, fetch)?;
             // The test's own plan, or the one the root's data layer makes
             // for the provider named, through the run's data access, as an
             // operation's body asks.
@@ -44,6 +52,18 @@ pub(crate) fn run(
                 }
             };
             let make = move |asker: Asker| async move {
+                // The keys, attached as the run's own, become the request's
+                // seeds, as an operation's are.
+                if let Some(keys) = keyed {
+                    let id = asker.attach(Attachment::Arrow(keys))?;
+                    match &mut fetch.request {
+                        DataRequest::Neighbors { seeds, .. }
+                        | DataRequest::Lookup { seeds, .. } => {
+                            seeds.attachment = id;
+                        }
+                        _ => return Err(internal("a keyed fetch's request takes no seeds")),
+                    }
+                }
                 let asked = match plan {
                     Some(plan) => asker.fetch_planned(fetch.request, plan),
                     None => asker.fetch(fetch.request)?,

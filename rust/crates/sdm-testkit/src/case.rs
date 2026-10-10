@@ -155,6 +155,24 @@ pub struct CoreInputs {
     pub validate_query: Option<ValidateQueryInput>,
     #[serde(default)]
     pub describe_source: Option<DescribeSourceInput>,
+    #[serde(default)]
+    pub materialize: Option<MaterializeInput>,
+}
+
+/// `materialize`'s inputs beside the query text, which is `input.pql`,
+/// kept as written: the provider, the schema it samples (the contract's
+/// `SourceDescription`, as the schema the call holds describes it), the
+/// entities to predict for (each a contract scalar, one Arrow column), the
+/// anchor time (a contract `ts` scalar or null) and the seed (the
+/// contract's signed hexadecimal text, or null for the default).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MaterializeInput {
+    pub provider: Value,
+    pub schema: Value,
+    pub indices: Vec<Value>,
+    pub anchor_time: Value,
+    pub seed: Option<String>,
 }
 
 /// `describe_source`'s inputs, kept as written: the provider, the source's

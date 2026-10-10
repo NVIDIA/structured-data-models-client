@@ -20,10 +20,15 @@ use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
-use sdm_contract::data::{AttachmentId, ProviderChoice};
+use std::sync::Arc;
+
+use duckdb::arrow::array::{ArrayRef, RecordBatch};
+use duckdb::arrow::datatypes::{Field, Schema};
+use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Operation, OperationResult, ProfileSpec, QuerySchema, SourceSpec, ValidateQuery,
+    DescribeSource, Materialize, Operation, OperationResult, ProfileSpec, QuerySchema, Seed,
+    SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, StartRun};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, CoreError, HostFacts, Scalar, Step, Unit};
@@ -31,17 +36,19 @@ use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, r
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
-use crate::case::{Case, DescribeSourceInput};
+use crate::case::{Case, DescribeSourceInput, MaterializeInput};
 use crate::duck;
 
 /// What the host saw of one case: the operations it started with their
 /// inputs, each fetch the core asked for (its request and plan, in order),
-/// and the core's answer.
+/// `describe_source`'s description when it gave one, and the core's last
+/// answer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Observed {
     pub operations: Vec<String>,
     pub inputs: Vec<Value>,
     pub fetches: Vec<Value>,
+    pub described: Option<Value>,
     pub answer: Answer,
 }
 
@@ -52,6 +59,9 @@ pub enum Answer {
     Validated(bool),
     /// `describe_source`'s description, as the JSON it attached.
     Described(Value),
+    /// `materialize`'s request state: its version, the query and the
+    /// payload as the JSON it attached, each number as its text.
+    Materialized(Value),
     /// A core error's kind and code, as the contract spells them.
     Error { kind: String, code: String },
 }
@@ -61,7 +71,9 @@ impl Answer {
     /// `refusal`, with the code a refusal carries.
     pub fn outcome(&self) -> (&'static str, Option<String>) {
         match self {
-            Answer::Validated(true) | Answer::Described(_) => ("success", None),
+            Answer::Validated(true) | Answer::Described(_) | Answer::Materialized(_) => {
+                ("success", None)
+            }
             Answer::Validated(false) => ("refusal", Some("INVALID_REQUEST".into())),
             Answer::Error { code, .. } => ("refusal", Some(code.clone())),
         }
@@ -184,12 +196,98 @@ pub fn run(case: &Case, bases: &Bases) -> Result<Observed> {
         operations: vec!["validate_query".into()],
         inputs: vec![input],
         fetches: vec![],
+        described: None,
         answer,
     })
 }
 
+/// The case's DuckDB base, built on a fresh connection.
+fn database(case: &Case, bases: &Bases) -> Result<duckdb::Connection> {
+    let Some(base) = bases.get(&case.input.base) else {
+        bail!("{}: unknown base", case.id);
+    };
+    let connection = duck::open()?;
+    for statement in base.iter().chain(case.input.setup.iter().flatten()) {
+        connection
+            .execute_batch(statement)
+            .map_err(|_| anyhow!("{}: its data could not be built", case.id))?;
+    }
+    Ok(connection)
+}
+
+/// Runs a started operation to its result, answering each fetch with the
+/// DuckDB provider and the key sets the step names, and recording each
+/// fetch in `fetches`: the result and the run, or the core's error.
+fn drive(
+    case: &Case,
+    handle: HostRun,
+    connection: &duckdb::Connection,
+    fetches: &mut Vec<Value>,
+) -> Result<std::result::Result<(OperationResult, HostRun), Answer>> {
+    loop {
+        let out = match handle.next() {
+            Ok(out) => out,
+            Err(failed) => return Ok(Err(error_of(&failed)?)),
+        };
+        match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
+            ControlMessage::Step(Step::Done { result }) => return Ok(Ok((result, handle))),
+            ControlMessage::Step(Step::Fetch { requests }) => {
+                for step in &requests {
+                    fetches.push(json!({"request": step.request, "plan": step.plan}));
+                    let mut keys = BTreeMap::new();
+                    if let FetchPlan::Sql { statements, .. } = &step.plan {
+                        for param in statements.iter().flat_map(|s| &s.params) {
+                            if let SqlParam::KeySet { keys: set, .. } = param
+                                && !keys.contains_key(&set.attachment)
+                            {
+                                let Ok(Some(Attachment::Arrow(data))) =
+                                    handle.take_attachment(set.attachment)
+                                else {
+                                    bail!("{}: a key set is not attached", case.id);
+                                };
+                                keys.insert(
+                                    set.attachment,
+                                    duck::Fetched {
+                                        schema: data.schema,
+                                        batches: data.batches,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    let (outcome, attachments) = match duck::answer_with(connection, step, &keys) {
+                        Ok(fetched) => (
+                            FetchOutcome::Data {
+                                data: AttachmentId(1),
+                            },
+                            BTreeMap::from([(
+                                AttachmentId(1),
+                                Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
+                            )]),
+                        ),
+                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
+                    };
+                    let reply = encode(&ControlMessage::FetchReply(FetchReply {
+                        id: step.id,
+                        outcome,
+                    }))
+                    .map_err(|_| anyhow!("a reply does not encode"))?;
+                    if let Err(failed) = handle.reply(&reply, attachments) {
+                        return Ok(Err(error_of(&failed)?));
+                    }
+                }
+            }
+            _ => bail!(
+                "{}: the core asked for a step this host never takes",
+                case.id
+            ),
+        }
+    }
+}
+
 /// `describe_source` over the case's DuckDB base, each fetch answered by
-/// the DuckDB provider.
+/// the DuckDB provider; then, when the case names it, `materialize` over
+/// the same base.
 fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Observed> {
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
@@ -203,15 +301,7 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
             case.id
         )
     })?;
-    let Some(base) = bases.get(&case.input.base) else {
-        bail!("{}: unknown base", case.id);
-    };
-    let connection = duck::open()?;
-    for statement in base.iter().chain(case.input.setup.iter().flatten()) {
-        connection
-            .execute_batch(statement)
-            .map_err(|_| anyhow!("{}: its data could not be built", case.id))?;
-    }
+    let connection = database(case, bases)?;
     // What this host sends, as it encodes it, is what it records.
     let source_bytes = serde_json::to_vec(&source)?;
     let input = json!({
@@ -231,74 +321,202 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let attachments = BTreeMap::from([(AttachmentId(1), Attachment::Bytes(source_bytes))]);
-    let mut fetches = Vec::new();
+    let mut observed = Observed {
+        operations: vec!["describe_source".into()],
+        inputs: vec![input],
+        fetches: Vec::new(),
+        described: None,
+        answer: Answer::Validated(false),
+    };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
-            return Ok(Observed {
-                operations: vec!["describe_source".into()],
-                inputs: vec![input],
-                fetches,
-                answer: error_of(&refused)?,
-            });
+            observed.answer = error_of(&refused)?;
+            return Ok(observed);
         }
     };
-    let answer = loop {
-        let out = match handle.next() {
-            Ok(out) => out,
-            Err(failed) => break error_of(&failed)?,
+    let described = match drive(case, handle, &connection, &mut observed.fetches)? {
+        Err(answer) => {
+            observed.answer = answer;
+            return Ok(observed);
+        }
+        Ok((OperationResult::DescribeSource(described), handle)) => {
+            let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(described.description)
+            else {
+                bail!("{}: the description is not attached", case.id);
+            };
+            serde_json::from_slice::<Value>(&bytes)?
+        }
+        Ok(_) => bail!("{}: describe_source answered another operation", case.id),
+    };
+    observed.described = Some(described.clone());
+    observed.answer = Answer::Described(described);
+    if let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) {
+        materialize(case, spec, &connection, &mut observed)?;
+    }
+    Ok(observed)
+}
+
+/// One Arrow column of contract scalars, all of one integer or text type.
+fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
+    macro_rules! ints {
+        ($array:ty, $variant:ident) => {
+            Arc::new(<$array>::from_iter_values(
+                values
+                    .iter()
+                    .map(|v| match v {
+                        Scalar::$variant(v) => Ok(*v),
+                        _ => Err(anyhow!("the indices are not of one type")),
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            )) as ArrayRef
         };
-        match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
-            ControlMessage::Step(Step::Done {
-                result: OperationResult::DescribeSource(described),
-            }) => {
-                let Ok(Some(Attachment::Bytes(bytes))) =
-                    handle.take_attachment(described.description)
-                else {
-                    bail!("{}: the description is not attached", case.id);
-                };
-                break Answer::Described(serde_json::from_slice(&bytes)?);
-            }
-            ControlMessage::Step(Step::Fetch { requests }) => {
-                let mut refused = None;
-                for step in &requests {
-                    fetches.push(json!({"request": step.request, "plan": step.plan}));
-                    let (outcome, attachments) = match duck::answer(&connection, step) {
-                        Ok(fetched) => (
-                            FetchOutcome::Data {
-                                data: AttachmentId(1),
-                            },
-                            BTreeMap::from([(
-                                AttachmentId(1),
-                                Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
-                            )]),
-                        ),
-                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
-                    };
-                    let reply = encode(&ControlMessage::FetchReply(FetchReply {
-                        id: step.id,
-                        outcome,
-                    }))
-                    .map_err(|_| anyhow!("a reply does not encode"))?;
-                    if let Err(failed) = handle.reply(&reply, attachments) {
-                        refused = Some(error_of(&failed)?);
-                        break;
-                    }
-                }
-                if let Some(answer) = refused {
-                    break answer;
-                }
-            }
-            _ => bail!(
-                "{}: the core asked for a step describe_source never takes",
-                case.id
-            ),
+    }
+    use duckdb::arrow::array::{
+        Int8Array, Int16Array, Int32Array, Int64Array, StringArray, UInt8Array, UInt16Array,
+        UInt32Array, UInt64Array,
+    };
+    Ok(match values.first() {
+        Some(Scalar::Int8(_)) => ints!(Int8Array, Int8),
+        Some(Scalar::Int16(_)) => ints!(Int16Array, Int16),
+        Some(Scalar::Int32(_)) => ints!(Int32Array, Int32),
+        Some(Scalar::Int64(_)) => ints!(Int64Array, Int64),
+        Some(Scalar::UInt8(_)) => ints!(UInt8Array, UInt8),
+        Some(Scalar::UInt16(_)) => ints!(UInt16Array, UInt16),
+        Some(Scalar::UInt32(_)) => ints!(UInt32Array, UInt32),
+        Some(Scalar::UInt64(_)) => ints!(UInt64Array, UInt64),
+        Some(Scalar::Utf8(_)) => Arc::new(StringArray::from(
+            values
+                .iter()
+                .map(|v| match v {
+                    Scalar::Utf8(v) => Ok(v.clone()),
+                    _ => Err(anyhow!("the indices are not of one type")),
+                })
+                .collect::<Result<Vec<_>>>()?,
+        )),
+        _ => bail!("the indices are integers or text, of one type"),
+    })
+}
+
+/// A JSON value with each number as the text it was written with, as the
+/// Python runner reads a payload (`{"number": text}`), so no value passes
+/// through a float: the core writes a float as the shortest text that
+/// reads back as its double, which reading and writing it again gives.
+pub fn numbers_as_text(value: Value) -> Value {
+    match value {
+        Value::Number(number) => {
+            let text = match (number.as_i64(), number.as_u64(), number.as_f64()) {
+                (Some(i), _, _) => i.to_string(),
+                (_, Some(u), _) => u.to_string(),
+                (_, _, Some(f)) => serde_json::to_string(&f).unwrap_or_default(),
+                _ => number.to_string(),
+            };
+            json!({"number": text})
+        }
+        Value::Array(items) => Value::Array(items.into_iter().map(numbers_as_text).collect()),
+        Value::Object(members) => Value::Object(
+            members
+                .into_iter()
+                .map(|(k, v)| (k, numbers_as_text(v)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
+/// `materialize` over the case's DuckDB base, after its `describe_source`.
+fn materialize(
+    case: &Case,
+    spec: &MaterializeInput,
+    connection: &duckdb::Connection,
+    observed: &mut Observed,
+) -> Result<()> {
+    let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
+        anyhow!(
+            "{}: core.materialize.provider is not a ProviderChoice",
+            case.id
+        )
+    })?;
+    let schema: SourceDescription = serde_json::from_value(spec.schema.clone()).map_err(|_| {
+        anyhow!(
+            "{}: core.materialize.schema is not a SourceDescription",
+            case.id
+        )
+    })?;
+    let indices: Vec<Scalar> = serde_json::from_value(Value::from(spec.indices.clone()))
+        .map_err(|_| anyhow!("{}: core.materialize.indices are not scalars", case.id))?;
+    let anchor_time: Option<Scalar> = serde_json::from_value(spec.anchor_time.clone())
+        .map_err(|_| anyhow!("{}: core.materialize.anchor_time is not a scalar", case.id))?;
+    let seed: Option<Seed> = match &spec.seed {
+        None => None,
+        Some(text) => Some(
+            Seed::try_from(text.clone())
+                .map_err(|_| anyhow!("{}: core.materialize.seed is not a seed", case.id))?,
+        ),
+    };
+    let column = column_of(&indices)?;
+    let field = Field::new("indices", column.data_type().clone(), false);
+    let batch = RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![column])?;
+    // What this host sends, as it encodes it, is what it records.
+    let schema_bytes = serde_json::to_vec(&schema)?;
+    let query_bytes = serde_json::to_vec(&case.input.pql)?;
+    observed.operations.push("materialize".into());
+    observed.inputs.push(json!({
+        "op": "materialize",
+        "provider": serde_json::to_value(&provider)?,
+        "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
+        "query": serde_json::from_slice::<Value>(&query_bytes)?,
+        "indices": serde_json::to_value(&indices)?,
+        "anchor_time": serde_json::to_value(&anchor_time)?,
+        "seed": serde_json::to_value(&seed)?,
+    }));
+    let start = ControlMessage::Start(Box::new(StartRun {
+        contract: CONTRACT_VERSION,
+        facts: facts()?,
+        operation: Operation::Materialize(Materialize {
+            provider,
+            schema: AttachmentId(1),
+            query: AttachmentId(2),
+            indices: Some(AttachmentId(3)),
+            anchor_time,
+            seed,
+        }),
+    }));
+    let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
+    let attachments = BTreeMap::from([
+        (AttachmentId(1), Attachment::Bytes(schema_bytes)),
+        (AttachmentId(2), Attachment::Bytes(query_bytes)),
+        (
+            AttachmentId(3),
+            Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
+        ),
+    ]);
+    let handle = match HostRun::start(&default_root(), &message, attachments) {
+        Ok(handle) => handle,
+        Err(refused) => {
+            observed.answer = error_of(&refused)?;
+            return Ok(());
         }
     };
-    Ok(Observed {
-        operations: vec!["describe_source".into()],
-        inputs: vec![input],
-        fetches,
-        answer,
-    })
+    observed.answer = match drive(case, handle, connection, &mut observed.fetches)? {
+        Err(answer) => answer,
+        Ok((OperationResult::Materialize(materialized), handle)) => {
+            let state = materialized.state;
+            let bytes = |id| -> Result<Vec<u8>> {
+                match handle.take_attachment(id) {
+                    Ok(Some(Attachment::Bytes(bytes))) => Ok(bytes),
+                    _ => bail!("{}: the request state is not attached", case.id),
+                }
+            };
+            let payload: Value = serde_json::from_slice(&bytes(state.payload)?)?;
+            let query: Value = serde_json::from_slice(&bytes(state.query)?)?;
+            Answer::Materialized(json!({
+                "version": state.version,
+                "query": query,
+                "payload": numbers_as_text(payload),
+            }))
+        }
+        Ok(_) => bail!("{}: materialize answered another operation", case.id),
+    };
+    Ok(())
 }

@@ -16,7 +16,10 @@ publish.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
-duckdb.workspace = true
+# vtab-arrow: the Arrow table function a key set is bound through, as the
+# provider binds a key set (a relation of the attachment's rows); it adds
+# the num crates to the test host only.
+duckdb = { workspace = true, features = ["vtab-arrow"] }
 serde.workspace = true
 # raw_value, to read an entity key's integer literal of any size as its
 # digits; it only adds `RawValue`, changing no other reading.

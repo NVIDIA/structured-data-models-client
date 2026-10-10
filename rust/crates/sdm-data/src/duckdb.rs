@@ -17,21 +17,44 @@
 //! quoted as the reference quotes them: an identifier in double quotes and
 //! a table name compared as text in single quotes, each with its quote
 //! doubled, which DuckDB's standard-conforming strings make sufficient.
+//!
+//! From T1.11c it renders the sampler's requests too: `sample_entities` as
+//! the reference's reservoir sample, text for text, and `neighbors` and
+//! `lookup` as the reference's joins against a key set, which the provider
+//! binds as the relation the plan names ([`SEEDS`]). Their texts are not
+//! the reference's: its key table's name is drawn from an object's address,
+//! and its columns are its own `__kumo_` names; the seeds' role-named
+//! columns (`key`, `batch`) could meet a source column's name, so the
+//! table's columns are read from its alias. What each returns is the
+//! reference statement's result, its helper columns under the reference's
+//! names (decision H9 gates on the results, not the text).
 
 use std::collections::BTreeSet;
 
 use sdm_contract::data::{
-    DataRequest, DescribePart, Determinism, Dialect, FetchPlan, OptionalRequest,
-    ProviderCapabilities, SqlStatement, TableColumn, TableKey,
+    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, FetchPlan, Filter,
+    MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, SEED_BATCH, SEED_KEY, SqlParam,
+    SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 /// The optional requests this dialect renders.
 const RENDERED: &[OptionalRequest] = &[
     OptionalRequest::Preview,
     OptionalRequest::KeyCounts,
     OptionalRequest::TimeBounds,
+    OptionalRequest::SampleEntities,
+    OptionalRequest::Neighbors,
+    OptionalRequest::Lookup,
 ];
+
+/// The name a statement reads its seeds by: the key set the provider binds
+/// for it (registered as a relation, on the statement's own cursor).
+pub(crate) const SEEDS: &str = "__sdm_seeds__";
+
+/// The largest seed DuckDB's `REPEATABLE` takes: its parser refuses one
+/// from 2**31 (register entry RS-7).
+const MAX_SEED: i128 = (1 << 31) - 1;
 
 /// The catalog's own tables of the database and schema an unquoted name
 /// resolves in, which is where each table is read from.
@@ -51,6 +74,7 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
 /// The statements answering `request` on DuckDB, with the schema the
 /// contract fixes for its answer (`DataRequest::expected`).
 pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
+    let mut params = vec![];
     let text = match request {
         DataRequest::Describe { tables, part } => describe(request, tables, *part)?,
         DataRequest::Preview {
@@ -73,11 +97,50 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
         }
         DataRequest::KeyCounts { keys } => key_counts(keys),
         DataRequest::TimeBounds { columns } => time_bounds(columns),
-        DataRequest::Scan { .. }
-        | DataRequest::CountRows { .. }
-        | DataRequest::SampleEntities { .. }
-        | DataRequest::Neighbors { .. }
-        | DataRequest::Lookup { .. } => {
+        DataRequest::SampleEntities {
+            table,
+            key,
+            n,
+            seed,
+            columns,
+            filters,
+        } => sample_entities(request, table, key, *n, seed, columns, filters)?,
+        DataRequest::Neighbors {
+            table,
+            key,
+            columns,
+            seeds,
+            window,
+            per_seed,
+            order,
+        } => {
+            params.push(SqlParam::KeySet {
+                keys: seeds.clone(),
+                relation: SEEDS.to_owned(),
+            });
+            neighbors(
+                request,
+                table,
+                key,
+                columns,
+                window.as_ref(),
+                *per_seed,
+                order.as_ref(),
+            )?
+        }
+        DataRequest::Lookup {
+            table,
+            key,
+            columns,
+            seeds,
+        } => {
+            params.push(SqlParam::KeySet {
+                keys: seeds.clone(),
+                relation: SEEDS.to_owned(),
+            });
+            lookup(request, table, key, columns)?
+        }
+        DataRequest::Scan { .. } | DataRequest::CountRows { .. } => {
             return Err(crate::not_rendered(request, Dialect::Duckdb));
         }
     };
@@ -85,10 +148,227 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
         statements: vec![SqlStatement {
             dialect: Dialect::Duckdb,
             text,
-            params: vec![],
+            params,
         }],
         expect: request.expected(),
     })
+}
+
+/// A request field this rendering does not take, refused by name.
+fn not_taken(request: &DataRequest, field: &str, message: &str) -> CoreError {
+    CoreError::new(
+        ErrorKind::Unsupported,
+        ErrorCode::UnsupportedRequest,
+        message,
+    )
+    .with_field("request", Detail::text(request.name()))
+    .with_field("field", Detail::text(field))
+}
+
+/// A seed's integer value, if the scalar is an integer.
+fn integer(seed: &Scalar) -> Option<i128> {
+    Some(match seed {
+        Scalar::Int32(v) => i128::from(*v),
+        Scalar::Int64(v) => i128::from(*v),
+        Scalar::UInt32(v) => i128::from(*v),
+        Scalar::UInt64(v) => i128::from(*v),
+        Scalar::Decimal128 {
+            scale: 0, value, ..
+        } => *value,
+        _ => return None,
+    })
+}
+
+/// The reference's reservoir sample of an entity table (`_random_sample_sql`
+/// on DuckDB): the columns asked for, from the rows that meet each not-null
+/// filter, `n` rows under the seed. The key names the columns the entities
+/// are told apart by, which the sample projects, and which the core keeps
+/// one row of each of, as the reference does. A seed DuckDB's parser
+/// refuses, from 2**31, is refused here by name (register entry RS-7).
+fn sample_entities(
+    request: &DataRequest,
+    table: &str,
+    key: &[String],
+    n: u64,
+    seed: &Scalar,
+    columns: &[String],
+    filters: &[Filter],
+) -> Result<String, CoreError> {
+    if columns.is_empty() {
+        return Err(sdm_contract::data::refused(
+            request,
+            "columns",
+            "a sample names no columns",
+        ));
+    }
+    if key.is_empty() || key.iter().any(|k| !columns.contains(k)) {
+        return Err(sdm_contract::data::refused(
+            request,
+            "key",
+            "a sample's key is not among the columns it projects",
+        ));
+    }
+    let seed = match integer(seed) {
+        Some(seed) if (0..=MAX_SEED).contains(&seed) => seed,
+        Some(seed) if seed >= 0 => {
+            return Err(CoreError::new(
+                ErrorKind::InvalidRequest,
+                ErrorCode::InvalidRequest,
+                "DuckDB samples repeatably with a seed below 2**31 only",
+            )
+            .with_field("request", Detail::text(request.name()))
+            .with_field("field", Detail::text("seed")));
+        }
+        _ => {
+            return Err(sdm_contract::data::refused(
+                request,
+                "seed",
+                "a sample's seed is a non-negative integer",
+            ));
+        }
+    };
+    let mut conditions = Vec::with_capacity(filters.len());
+    for filter in filters {
+        let Filter::NotNull { column } = filter else {
+            return Err(not_taken(
+                request,
+                "filters",
+                "this rendering takes not-null filters only",
+            ));
+        };
+        conditions.push(format!(" {} IS NOT NULL", identifier(column)));
+    }
+    let mut text = format!(
+        "SELECT {}\nFROM (SELECT * FROM {}",
+        identifiers(columns),
+        identifier(table)
+    );
+    if !conditions.is_empty() {
+        text.push_str(&format!("\nWHERE{}", conditions.join(" AND")));
+    }
+    text.push_str(&format!(
+        ")\nUSING SAMPLE reservoir({n} ROWS) REPEATABLE ({seed})"
+    ));
+    Ok(text)
+}
+
+/// The table's columns asked for, read from its alias, after the seed's
+/// batch position under the reference's name.
+fn joined_columns(
+    request: &DataRequest,
+    table: &str,
+    columns: &[String],
+) -> Result<String, CoreError> {
+    if columns.is_empty() {
+        return Err(sdm_contract::data::refused(
+            request,
+            "columns",
+            "the request names no columns",
+        ));
+    }
+    if table == SEEDS {
+        return Err(not_taken(
+            request,
+            "table",
+            "a table may not have the name its seeds are read by",
+        ));
+    }
+    Ok(columns
+        .iter()
+        .map(|c| format!("t.{}", identifier(c)))
+        .collect::<Vec<_>>()
+        .join(", "))
+}
+
+/// One term of a neighbor order, as DuckDB orders it.
+fn order_term(term: &TieTerm) -> String {
+    let column = format!("t.{}", identifier(&term.column));
+    let value = if term.as_timestamp {
+        format!("CAST({column} AS TIMESTAMP)")
+    } else {
+        column
+    };
+    format!(
+        "{value} {} {}",
+        if term.descending { "DESC" } else { "ASC" },
+        if term.nulls_last {
+            "NULLS LAST"
+        } else {
+            "NULLS FIRST"
+        }
+    )
+}
+
+/// The reference's neighbor reads (`_by_time` and `_by_fkey` on DuckDB):
+/// the rows of `table` whose `key` is a seed's key, within the seed's
+/// window in the source's own `CAST(column AS TIMESTAMP)` wall clock, and,
+/// with a limit per seed, the first rows of each seed in `order`, the
+/// result in `(batch, order)`.
+fn neighbors(
+    request: &DataRequest,
+    table: &str,
+    key: &str,
+    columns: &[String],
+    window: Option<&Window>,
+    per_seed: Option<u64>,
+    order: Option<&TieBreak>,
+) -> Result<String, CoreError> {
+    let projected = joined_columns(request, table, columns)?;
+    let mut text = format!(
+        "SELECT s.{batch} AS {helper}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = s.{seed_key}",
+        batch = identifier(SEED_BATCH),
+        helper = identifier(BATCH_COLUMN),
+        seeds = identifier(SEEDS),
+        table = identifier(table),
+        key = identifier(key),
+        seed_key = identifier(SEED_KEY),
+    );
+    if let Some(window) = window {
+        let time = format!("CAST(t.{} AS TIMESTAMP)", identifier(&window.column));
+        if let Some(upper) = &window.upper {
+            let op = if upper.inclusive { "<=" } else { "<" };
+            text.push_str(&format!(
+                "\n AND {time} {op} s.{}",
+                identifier(&upper.seed_column)
+            ));
+        }
+        if let Some(lower) = &window.lower {
+            let op = if lower.inclusive { ">=" } else { ">" };
+            text.push_str(&format!(
+                "\n AND {time} {op} s.{}",
+                identifier(&lower.seed_column)
+            ));
+        }
+    }
+    if let (Some(limit), Some(TieBreak(terms))) = (per_seed, order) {
+        let order = terms.iter().map(order_term).collect::<Vec<_>>().join(", ");
+        let batch = identifier(SEED_BATCH);
+        text.push_str(&format!(
+            "\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n  ORDER BY {order}\n) <= {limit}\nORDER BY s.{batch}, {order}"
+        ));
+    }
+    Ok(text)
+}
+
+/// The reference's key lookup (`_by_pkey` on DuckDB): one row of `table`
+/// per seed whose key it holds, with the count of rows holding that key.
+fn lookup(
+    request: &DataRequest,
+    table: &str,
+    key: &str,
+    columns: &[String],
+) -> Result<String, CoreError> {
+    let projected = joined_columns(request, table, columns)?;
+    let batch = identifier(SEED_BATCH);
+    Ok(format!(
+        "SELECT s.{batch} AS {helper}, COUNT(*) OVER (PARTITION BY s.{batch}) AS {matches}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = s.{seed_key}\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n) = 1",
+        helper = identifier(BATCH_COLUMN),
+        matches = identifier(MATCHES_COLUMN),
+        seeds = identifier(SEEDS),
+        table = identifier(table),
+        key = identifier(key),
+        seed_key = identifier(SEED_KEY),
+    ))
 }
 
 /// One part of the catalog. The table list and the indexes are read whole,

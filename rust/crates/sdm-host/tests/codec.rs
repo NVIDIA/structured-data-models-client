@@ -177,6 +177,8 @@ fn description_of(size: usize) -> Vec<u8> {
                 received: ColumnType::Int64,
                 dtype: Dtype::Int,
                 stype: Stype::Numerical,
+                nullable: true,
+                unique: false,
             }],
             primary_key: vec![],
             time_column: None,

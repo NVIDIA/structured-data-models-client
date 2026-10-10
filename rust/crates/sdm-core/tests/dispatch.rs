@@ -295,7 +295,10 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
         BTreeSet::from([
             OptionalRequest::Preview,
             OptionalRequest::KeyCounts,
-            OptionalRequest::TimeBounds
+            OptionalRequest::TimeBounds,
+            OptionalRequest::SampleEntities,
+            OptionalRequest::Neighbors,
+            OptionalRequest::Lookup,
         ])
     );
     let tables = DataRequest::Describe {
@@ -576,7 +579,9 @@ fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
         (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest)
     );
     assert_eq!(err.fields["field"], sdm_contract::Detail::text("seed"));
-    // 2**70 passes the core's entry; materialize itself comes with T1.11c.
+    // 2**70 passes the core's entry, which takes a seed of any size; this
+    // start names no entities, which the run refuses (tests/materialize.rs
+    // follows 2**70 to the sample it seeds).
     for seed in [
         Some(Seed::from(1_u128 << 70)),
         Some(Seed::from(0_u128)),
@@ -584,6 +589,8 @@ fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
     ] {
         let operation = materialize(seed);
         let mut run = start_with(operation.clone(), attachments_of(&operation)).unwrap();
-        assert_eq!(run.next().unwrap_err().code, ErrorCode::UnsupportedRequest);
+        let err = run.next().unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidRequest);
+        assert_eq!(err.fields["field"], sdm_contract::Detail::text("indices"));
     }
 }
