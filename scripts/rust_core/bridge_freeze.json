@@ -11,14 +11,12 @@
         "calls": []
       },
       "build": {
-        "fingerprint": "b87d99b0b42d0622b283737cd7b681f7242255f4c6fd4f6898a3edb55e2fec6a",
+        "fingerprint": "3db54a442da34b053d08222a6e6026fb142c71aba630aff647136c802382a246",
         "raise": 1,
         "warn": 0,
-        "branch": 12,
+        "branch": 7,
         "calls": [
           ".__setattr__",
-          "._mark_key_columns",
-          "predictive_query.time_columns.TimeColumnChoice",
           "sdm_client._rust.codec.decode_scalar",
           "sdm_client.errors.StructuredDataError",
           "sdm_client.materializers.sources.EngineTables",
@@ -85,7 +83,7 @@
         ]
       },
       "description": {
-        "fingerprint": "4bb96bac5f2ba7c8d695745e504f7db9eccec12b59dd6008a800415ec00f38db",
+        "fingerprint": "cfdf1e6aab8d58ce48ddbcc5711963358ecd09ed712727b831db58ad53203a08",
         "raise": 3,
         "warn": 0,
         "branch": 8,
@@ -99,7 +97,7 @@
         ]
       },
       "gather": {
-        "fingerprint": "a390bd162f7e3122601957ed017f323720d21c9a92ead145366248b15ef56d4d",
+        "fingerprint": "99443f2d8cff7353014b8ae0c8f031b5d45f9940cdcc1141c22fc5d4cd74202f",
         "raise": 3,
         "warn": 0,
         "branch": 8,
@@ -108,7 +106,6 @@
           "._check_limits",
           "._check_shape",
           "._run_mode_for",
-          ".check_consistent",
           ".get",
           ".take",
           ".to_string",
@@ -770,69 +767,14 @@
           "sdm_client.schema._checked_links",
           "sdm_client.schema._declared_links",
           "sdm_client.schema._describe_source_table",
+          "sdm_client.schema._infer_relationships",
+          "sdm_client.schema._joinable_inferred_links",
+          "sdm_client.schema._key_by_the_referenced_column",
           "sdm_client.schema._model_links",
           "sdm_client.schema._require_a_source",
-          "sdm_client.schema._require_table_names"
-        ]
-      },
-      "_infer_relationships": {
-        "fingerprint": "c95158942c676807980a031c4408e5c745d027210bd975f6caa6b39c3dcd2cfa",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".add",
-          ".append",
-          ".get",
-          ".items",
-          "sdm_client.schema.Relationship"
-        ]
-      },
-      "_joinable_inferred_links": {
-        "fingerprint": "9fa622a0f18f3acb9cdbb3dd0d5fb53b5c14392395be3130a2270750804967d0",
-        "raise": 0,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          "sdm_client.schema._is_joinable",
-          "sdm_client.schema._warn_of_a_link_that_cannot_join"
-        ]
-      },
-      "_key_by_the_referenced_column": {
-        "fingerprint": "bbefd36a97a6ee328750175e4bd1a93fde2b17562a803dc7e36f9bb0939697d6",
-        "raise": 0,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".add",
-          ".items",
-          ".setdefault"
-        ]
-      },
-      "_settle_edit_stamps": {
-        "fingerprint": "1b632f880af2845e3d883c8c5099636a95625fd22180cc48e42b234d25b77b54",
-        "raise": 0,
-        "warn": 0,
-        "branch": 5,
-        "calls": [
-          ".for_links",
-          ".items"
-        ]
-      },
-      "_warn_how_time_columns_were_inferred": {
-        "fingerprint": "8d0ae7d902c5bdd3fa6e9e27eca4f4e3fead8f3f0bd32ca856c0a40789c6bf48",
-        "raise": 0,
-        "warn": 1,
-        "branch": 15,
-        "calls": [
-          ".append",
-          ".extend",
-          ".get",
-          ".items",
-          ".join",
-          "predictive_query.time_columns.taken_unchecked",
-          "sdm_client.core.warnings.caller_stacklevel",
-          "sdm_client.schema._and_list"
+          "sdm_client.schema._require_table_names",
+          "sdm_client.schema._settle_edit_stamps",
+          "sdm_client.schema._warn_how_time_columns_were_inferred"
         ]
       },
       "_warn_two_ways_to_reach_one_table": {

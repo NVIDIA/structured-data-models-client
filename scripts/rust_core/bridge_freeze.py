@@ -221,18 +221,17 @@ COVERED: dict[Path, tuple[str, ...]] = {
         '_warn_of_tables_left_out',
         '_warn_the_filter_chose_only_the_examples',
     ),
-    # The ledgered rules' own bodies (T1.21d's schema rows, T1.28's
-    # _preflight, model check and merge, the decomposition), and
-    # Schema.from_source, the describe route's entry point.
+    # The ledgered rules' own bodies (T1.28's _preflight, model check and
+    # merge, the decomposition), and Schema.from_source, the describe
+    # route's entry point. T1.21d moved the schema rows into sdm-schema and
+    # took out the helpers the core route no longer reaches; what building a
+    # Schema still runs on it stays (its key marking, its two-ways warning,
+    # which the schema bridge suppresses), and check_consistent, the old
+    # route's and the tabular route's, which the self-tests seed.
     _CLIENT / 'schema.py': (
         'Schema._mark_key_columns',
         'Schema.check_consistent',
         'Schema.from_source',
-        '_infer_relationships',
-        '_joinable_inferred_links',
-        '_key_by_the_referenced_column',
-        '_settle_edit_stamps',
-        '_warn_how_time_columns_were_inferred',
         '_warn_two_ways_to_reach_one_table',
     ),
     _CLIENT / 'adapters/relational.py': ('RelationalAdapter._preflight',),

@@ -1,5 +1,30 @@
 {
   "format": "sdm-bridge-changes/1",
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), allowance (an owner-approved ALLOWANCES row), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
-  "changes": {}
+  "changes": {
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: build presents the description; no link inference, edit stamps, key marking or warnings of its own"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the key marking moved into materialize, which reads each column's stype_before_key the host sends"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the consistency check moved into materialize; no check_consistent call"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_infer_relationships": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: links inferred by name, no longer reached on the core route"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_joinable_inferred_links": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: inferred links kept joinable, no longer reached on the core route"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_key_by_the_referenced_column": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: a keyless table keyed by the referenced column, no longer reached on the core route"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_settle_edit_stamps": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: a lone edit stamp settled by the links, no longer reached on the core route"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_warn_how_time_columns_were_inferred": {
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the time-column warning, given by the core, no longer reached on the core route"
+    }
+  }
 }

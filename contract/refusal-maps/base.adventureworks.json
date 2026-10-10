@@ -54,7 +54,7 @@
       "rule": "relationships",
       "owner": "T1.24",
       "register": "P1B-2",
-      "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:71-76",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:72-77",
       "holds": "if relationships is not None:",
       "why": "The ledger's option refusals pass through to the core (T1.24), which takes the links given once T1.23's describe_source checks and keeps them; SourceSpec has no place for them yet",
       "observed": {"python-core": {"stage": "from_source", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": null, "rule": "relationships"}}
