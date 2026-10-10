@@ -270,7 +270,7 @@ wheels:
         done
         docker run --rm --privileged "$binfmt" --install arm64
       fi
-    - pip install -q build 'cibuildwheel==4.2.1'
+    - pip install -q build 'cibuildwheel==4.3.0'
     # The engine's smoke test installs it against these, which exist nowhere
     # but here until a release; `[tool.cibuildwheel.linux]` points pip at them.
     - |
