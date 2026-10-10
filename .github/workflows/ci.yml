@@ -102,6 +102,11 @@ jobs:
       - name: L0 self-tests
         run: python3 scripts/rust_core/selftest.py
         working-directory: .
+      # land.py's checks, each passing a sound landing and refusing a seeded
+      # fault, against a scripted git and gh (decision E-CI1).
+      - name: land.py self-tests
+        run: python3 scripts/rust_core/land_selftest.py
+        working-directory: .
       # The contract schema: regenerated from the types and compared with the
       # committed file, locked to the current version; no entry merged into
       # rust-core rewritten, and at most one working entry, which is why this
