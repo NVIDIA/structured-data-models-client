@@ -764,3 +764,64 @@ def test_an_arrow_read_without_a_description_is_incomplete() -> None:
     proxy = run_python.capture(Undescribed(), log)
     proxy.execute('SELECT 1 AS a').to_arrow_table()
     assert log.incomplete == ['to_arrow_table:no_description']
+
+
+# --- fix round 2 (T1.11e review) ----------------------------------------------
+
+
+def test_a_core_arrow_read_is_held_to_the_reference_s_row_types() -> None:
+    r"""python-core reads the catalog as Arrow and carries DuckDB's names
+    too; its schema is still held to the reference row read's names as the
+    Arrow types DuckDB reads them as: a string read as large_string fails
+    (the subagent's P3-A repro)."""
+    statement = _statement(_reference(), 0)
+    assert statement['results'][0]['method'] == 'fetchall'
+    core = copy.deepcopy(statement)
+    read = _rust_read(statement['results'][0])
+    read.update(
+        method='to_arrow_table',
+        values=dict(
+            read['values'], types=statement['results'][0]['values']['types']
+        ),
+    )
+    core['results'] = [read]
+
+    def failures(ours: dict[str, Any]) -> list[str]:
+        report = compare.Report({'sql.result': 'gate'})
+        compare._results(
+            report, 'at', ours, statement, False, ('python-core', 'python-ref')
+        )
+        return report.texts
+
+    assert read['schema'][0]['type'] == 'string'
+    assert failures(core) == []
+    widened = copy.deepcopy(core)
+    widened['results'][0]['schema'][0]['type'] = 'large_string'
+    assert any('differs from the types' in t for t in failures(widened))
+
+
+def test_an_owner_approved_row_approves_no_other_exclusion(
+    tmp_path: Path,
+) -> None:
+    r"""E2 is owner-approved and names `predict`, but approves no
+    exclusion; the loader's allow-list refuses it (the subagent's P3-B
+    repro)."""
+    extra = (
+        '  - id: predict\n'
+        '    decision: E2\n'
+        '    status: approved by owner 2026-10-08\n'
+        '    in: payload\n'
+        '    path: [predict]\n'
+        '    keeps: [presence, type]\n'
+    )
+    path = _policy_with(
+        tmp_path,
+        lambda t: t.replace(
+            '    keeps: [presence, type]\n',
+            '    keeps: [presence, type]\n' + extra,
+            1,
+        ),
+    )
+    assert 'decision: E2' in path.read_text()
+    with pytest.raises(capture_check.PolicyError, match='approves no'):
+        capture_check.policy(path)

@@ -906,9 +906,9 @@ def _arrow_types(
 ) -> None:
     r"""The two reads' Arrow types: both schemas where both read Arrow;
     where one read rows (the reference's catalog, by ``fetchall``) and the
-    other has no DuckDB type names (the pure-Rust host), the row read's
-    DuckDB types as Arrow names (:func:`arrow_name`) against the Arrow
-    read's schema, a type with no Arrow name failing."""
+    other Arrow (a core runner), the row read's DuckDB types as Arrow names
+    (:func:`arrow_name`) against the Arrow read's schema, a type with no
+    Arrow name failing."""
     sa, sb = a.get('schema'), b.get('schema')
     if sa is not None and sb is not None:
         if sa != sb:
@@ -917,11 +917,10 @@ def _arrow_types(
     if sa is None and sb is None:
         # Two row reads: their DuckDB types are compared.
         return
+    # One read Arrow, the other rows: whether or not the Arrow read carries
+    # DuckDB's names too (which the type check compares), its schema is
+    # held to the row read's names as the Arrow types DuckDB reads them as.
     arrow, rows = (a, b) if sa is not None else (b, a)
-    if arrow['values']['types'] is not None:
-        # The Arrow read carries DuckDB's names too, compared with the row
-        # read's.
-        return
     schema, types = arrow['schema'], rows['values']['types']
     if types is None:
         report.fail(f'{at}: neither read records its types', 'sql.result')

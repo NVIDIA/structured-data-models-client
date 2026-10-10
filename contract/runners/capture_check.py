@@ -57,6 +57,17 @@ RULE_CLASSES = ('gate', 'diagnostic')
 STAGES = ('from_source', 'materialize', 'predict')
 
 
+#: The exclusions the owner has approved, by decision, each with the one
+#: path it leaves the value of out: an allow-list the loader holds every
+#: exclusion to, beside the decision's own row. Adding one needs an
+#: owner-approved decisions row (decisions.md's preamble) and a review of
+#: this protected file.
+APPROVED_EXCLUSIONS: dict[str, tuple[str, ...]] = {
+    # The request id the client draws at random (approved 2026-10-10).
+    'E35': ('metadata', 'request_id'),
+}
+
+
 class PolicyError(Exception):
     r"""``compare-policy.yaml`` is not a policy this checker can apply."""
 
@@ -79,7 +90,8 @@ def _exclusion_problem(
     exclusion: dict[str, Any], rows: dict[str, tuple[str, str]]
 ) -> str | None:
     r"""Why an exclusion is not one the owner approved, if it is not: its
-    decision must be a row of decisions.md whose status reads its own
+    decision and path must be an entry of :data:`APPROVED_EXCLUSIONS`, and
+    its decision a row of decisions.md whose status reads its own
     "approved by owner <date>", and its path the one that row approves,
     written there in backticks as dotted names, never a strict prefix of a
     path the row names (``[metadata]`` for ``metadata.request_id``), which
@@ -88,7 +100,9 @@ def _exclusion_problem(
     if not re.fullmatch(r'approved by owner \d{4}-\d{2}-\d{2}', status):
         return 'not owner-approved'
     decision = exclusion['decision']
-    if not isinstance(decision, str) or decision not in rows:
+    if not isinstance(decision, str) or decision not in APPROVED_EXCLUSIONS:
+        return 'its decision approves no exclusion'
+    if decision not in rows:
         return 'its decision is not a row of decisions.md'
     text, row_status = rows[decision]
     if status not in row_status:
@@ -100,6 +114,8 @@ def _exclusion_problem(
         or not all(isinstance(part, str) and part for part in path)
     ):
         return 'its path'
+    if tuple(path) != APPROVED_EXCLUSIONS[decision]:
+        return f'{decision} approves another path'
     dotted = '.'.join(path)
     named = set(re.findall(r'`([A-Za-z0-9_.]+)`', text))
     if dotted not in named:
