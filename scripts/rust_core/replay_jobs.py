@@ -5,7 +5,7 @@
 
 """Replays CI's Python jobs locally, each in a clean virtual environment.
 
-``prepush.sh --full`` runs this (decision E-CI1). It reads
+``prepush.sh --full`` runs this (decision E43). It reads
 ``.github/workflows/ci.yml`` and, for each job it can replay, makes a fresh
 virtual environment at the job's Python, checks HEAD out into a temporary
 worktree, and runs the job's ``run`` steps there in order, with the job's

@@ -14,7 +14,7 @@ held to having committed and pushed nothing. Run it as
 
     python3 scripts/rust_core/land_selftest.py
 
-Decision E-CI1; the checks themselves are documented in land.py.
+Decision E43; the checks themselves are documented in land.py.
 """
 
 from __future__ import annotations

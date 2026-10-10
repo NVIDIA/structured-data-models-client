@@ -32,7 +32,7 @@ env:
   # those filled the repository's 10 GiB. Only the long-lived branches save,
   # and the lane branches: each parallel lane of packages pushes to one lane
   # branch it reuses, so a package's first run restores the builds the
-  # lane's previous package saved (decision E-CI1). Every run restores what
+  # lane's previous package saved (decision E43). Every run restores what
   # its own branch saved; a run that saves nothing still runs every check.
   SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core", "rust-core-phase-1"]'), github.ref_name) || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
   # The manylinux2014 image both wheel builds run in, pinned by digest.
@@ -103,7 +103,7 @@ jobs:
         run: python3 scripts/rust_core/selftest.py
         working-directory: .
       # land.py's checks, each passing a sound landing and refusing a seeded
-      # fault, against a scripted git and gh (decision E-CI1).
+      # fault, against a scripted git and gh (decision E43).
       - name: land.py self-tests
         run: python3 scripts/rust_core/land_selftest.py
         working-directory: .

@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The checks to run before pushing a Rust core change (decision E-CI1).
+# The checks to run before pushing a Rust core change (decision E43).
 #
 # The cheap tier, about a minute once the Rust build is warm, runs the guards
 # CI runs in lint, hygiene, rust-lint and rust-test that need no CI service,

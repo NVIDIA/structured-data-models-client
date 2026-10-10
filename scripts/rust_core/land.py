@@ -5,7 +5,7 @@
 
 """Lands a reviewed package on the phase branch, so no one lands by hand.
 
-Decision E-CI1 (b) and the design's "One gate run per work package": the
+Decision E43 (b) and the design's "One gate run per work package": the
 only commit after approval is an empty landing commit carrying the
 trailers (E25), and the phase branch fast-forwards to it at once when its
 tree is the candidate's and the candidate's own exact-SHA CI run
@@ -488,7 +488,7 @@ def land(
         )
         out(
             f'ok   pushed {args.topic_branch} and fast-forwarded '
-            f'{args.phase_branch} to {sha} (decision E-CI1 (b))'
+            f'{args.phase_branch} to {sha} (decision E43 (b))'
         )
     out(f'LANDED {sha}')
     runs = wait_for_runs(tools, sha, [args.topic_branch, args.phase_branch])
