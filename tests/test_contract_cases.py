@@ -102,6 +102,32 @@ def test_every_committed_case_validates_with_a_unique_id() -> None:
     assert {case['expect']['outcome'] for case in s0} == {'success', 'refusal'}
 
 
+def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
+    # T1.12's boundary cases, held to the shapes their `why` states.
+    cases = {
+        case['id']: case for case, _ in run_python.load_cases([CASES / 's0'])
+    }
+
+    def pql(name: str) -> str:
+        text: str = cases[f's0.boundary.{name}']['input']['pql']
+        return text
+
+    # Python's 4,300-digit limit, counting leading zeros, on both sides.
+    for name, digits in (('digits-4300', 4300), ('digits-4301', 4301)):
+        literal = pql(name).split('orders.price > ')[1].split(',')[0]
+        assert literal == '0' * (digits - 1) + '1'
+    # Past the 64 KB control cap (decision H5).
+    assert len(pql('start-past-64kb').encode()) > 64 * 1024
+    # Below the depth the reference reaches before RecursionError (about
+    # 455 in the runner) and the core's MAX_DEPTH (999).
+    deepest = pql('deepest')
+    assert deepest.count('(' * 400) == 1 and '(' * 401 not in deepest
+    # The two date cases DT-9 holds back stay diagnostic until T1.6b.
+    dated = [case for case in cases.values() if case.get('register') == 'DT-9']
+    assert len(dated) == 2
+    assert {case['status'] for case in dated} == {'diagnostic'}
+
+
 def test_the_reference_observations_validate_and_meet_each_expectation(
     tmp_path: Path,
 ) -> None:
