@@ -98,6 +98,14 @@ Each sends the five-line report of the design's "Owner check-ins" section (H12).
 | Phase 1a | T1.20 | not reached | |
 | Baseline cases | T1.29 | not reached | |
 
+## Process packages
+
+Owner-requested packages outside the T-sequence: they change how packages are checked, built and landed, not the product or any locked check, and land like a task, with `land.py` from CI1 on.
+
+| Package | Status | Evidence | Notes |
+|---|---|---|---|
+| CI1 CI speedups and process tooling | in progress | `BASE_SHA` and `CHECKPOINT_SHA` 51bd11c; CI runs 38021826869 (cold cache, green) and TIMINGS; candidate complete; lands by its landing commit, whose SHA and CI run the next package records (E25) | Decision E-CI1 (owner, 2026-10-09; the lane branches are the implementer's choice, owner to confirm). `native-wheel` builds only the shipped wheel, beside `native-test-ops` and `binding`; pip cached in `test` and `engine`; the apt install replaced by a check of the image's toolchain; caches saved only by `main`, `rust-core`, the phase branch and `rust-core-phase-1-lane-*`, after pruning 22 stale caches (9.91 to 2.33 GiB: the landed branches T1.10c to T1.11b, and the phase branch's entries for superseded Cargo files); `prepush.sh` (cheap tier and `--full` with `replay_jobs.py`); `land.py` and `land.py verify`, with `land_selftest.py` (47 cases) in `rust-lint`. From the next package on: each lane pushes to its lane branch, runs `prepush.sh` before each push, starts reviews at the push, and lands with `land.py` |
+
 ## Size-trend review at checkpoint 2
 
 A one-off review, as the design's "Harness scope" asks for growth past the agreed capabilities; the routine size trends are the status page's, from T1.18.
