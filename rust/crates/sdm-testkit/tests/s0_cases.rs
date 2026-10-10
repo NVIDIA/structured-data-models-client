@@ -96,6 +96,58 @@ fn an_unknown_key_inside_the_call_arguments_is_refused() {
     assert!(load_error("nested-from-source", &case).is_some());
 }
 
+/// `contract/tests/malformed-cases.json`'s changes to the AdventureWorks
+/// case: the ones `tests/test_contract_cases.py` shows the Python loader
+/// refusing are refused here too, and the ones it takes are taken (T1.21b).
+#[test]
+fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused() {
+    let listed: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(cases_dir().join("../tests/malformed-cases.json")).unwrap(),
+    )
+    .unwrap();
+    let case: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            cases_dir()
+                .join("..")
+                .join("..")
+                .join(listed["case"].as_str().unwrap()),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(load_error("adventureworks", &case), None);
+    let changed = |change: &serde_json::Value| {
+        let mut changed = case.clone();
+        let path = change["path"].as_array().unwrap();
+        let mut at = &mut changed;
+        for key in path {
+            at = match key {
+                serde_json::Value::String(name) => &mut at[name.as_str()],
+                _ => &mut at[key.as_u64().unwrap() as usize],
+            };
+        }
+        *at = change["value"].clone();
+        changed
+    };
+    let refused = listed["refused"].as_array().unwrap();
+    assert!(refused.len() >= 15);
+    for change in refused {
+        assert!(
+            load_error("malformed", &changed(change)).is_some(),
+            "{}",
+            change["why"]
+        );
+    }
+    for change in listed["accepted"].as_array().unwrap() {
+        assert_eq!(
+            load_error("accepted", &changed(change)),
+            None,
+            "{}",
+            change["why"]
+        );
+    }
+}
+
 #[test]
 fn a_failed_run_leaves_no_output_an_earlier_run_wrote() {
     let directory = scratch("stale");

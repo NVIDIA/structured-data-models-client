@@ -171,6 +171,42 @@ def test_both_loaders_refuse_an_unknown_key_inside_the_call_arguments(
         run_python.load_cases([path])
 
 
+def _changed(case: dict[str, Any], path: list[Any], value: Any) -> dict[str, Any]:
+    changed = copy.deepcopy(case)
+    at = changed
+    for key in path[:-1]:
+        at = at[key]
+    at[path[-1]] = copy.deepcopy(value)
+    return changed
+
+
+MALFORMED = ROOT / 'contract/tests/malformed-cases.json'
+
+
+def test_both_loaders_refuse_the_same_malformed_edits_and_relationships(
+    tmp_path: Path,
+) -> None:
+    # sdm-testkit's tests/s0_cases.rs loads the same changes with the Rust
+    # loader, which must refuse and take the same ones (T1.21b).
+    listed = json.loads(MALFORMED.read_text())
+    case = json.loads((ROOT / listed['case']).read_text())
+    assert len(listed['refused']) >= 15
+    path = tmp_path / 'case.json'
+    path.write_text(json.dumps(case))
+    assert run_python.load_cases([path])
+    for change in listed['refused']:
+        path.write_text(
+            json.dumps(_changed(case, change['path'], change['value']))
+        )
+        with pytest.raises(run_python.RunnerFailure, match='not a case'):
+            run_python.load_cases([path])
+    for change in listed['accepted']:
+        path.write_text(
+            json.dumps(_changed(case, change['path'], change['value']))
+        )
+        assert run_python.load_cases([path]), change['why']
+
+
 # --- the comparator against seeded observations ---------------------------------
 
 

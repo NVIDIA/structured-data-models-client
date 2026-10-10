@@ -70,10 +70,10 @@ pub struct Input {
     pub setup: Option<Vec<String>>,
     #[serde(default)]
     pub from_source: Option<FromSource>,
-    /// The user's edits to the schema `Schema.from_source` returned, kept
-    /// as written; the Python runner makes them (T1.21b).
-    #[serde(default)]
-    pub edits: Option<Vec<Value>>,
+    /// The user's edits to the schema `Schema.from_source` returned, in
+    /// order, at least one; the Python runner makes them (T1.21b).
+    #[serde(default, deserialize_with = "some_edits")]
+    pub edits: Option<Vec<Edit>>,
     pub pql: String,
     pub materialize: Materialize,
 }
@@ -88,9 +88,120 @@ pub struct FromSource {
     pub primary_keys: Option<serde_json::Map<String, Value>>,
     #[serde(default)]
     pub time_columns: Option<serde_json::Map<String, Value>>,
-    /// The relationships passed in, kept as written (T1.21b).
+    /// The relationships passed in (T1.21b).
     #[serde(default)]
-    pub relationships: Option<Vec<Value>>,
+    pub relationships: Option<Vec<Relationship>>,
+}
+
+/// Text the case format requires to hold something: a table or column
+/// name of an edit or a relationship.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Name(pub String);
+
+impl<'de> Deserialize<'de> for Name {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Name, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        if text.is_empty() {
+            return Err(D::Error::custom("a name is empty"));
+        }
+        Ok(Name(text))
+    }
+}
+
+/// A relationship passed to `Schema.from_source`: `source_table.source_column`
+/// refers to `target_table.target_column` (T1.21b). Read only from an object
+/// ([`object_only`]), never from a list of its fields.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "Object")]
+pub struct Relationship {
+    pub source_table: Name,
+    pub source_column: Name,
+    pub target_table: Name,
+    pub target_column: Name,
+}
+
+/// One edit to the schema `Schema.from_source` returned (T1.21b). Read only
+/// from an object ([`object_only`]), never from a list of its fields.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "Object")]
+pub enum Edit {
+    /// `schema[table].time_column = None`.
+    ClearTimeColumn { table: Name },
+    /// `del schema[table][column]`.
+    DeleteColumn { table: Name, column: Name },
+}
+
+/// A JSON object, which serde would otherwise let a struct or a tagged enum
+/// read from a list of its fields; the case schema takes objects only.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(transparent)]
+pub struct Object(serde_json::Map<String, Value>);
+
+/// What `T` reads from `object`, as the object it is.
+fn object_only<T: serde::de::DeserializeOwned>(object: Object) -> Result<T, String> {
+    serde_json::from_value(Value::Object(object.0)).map_err(|error| error.to_string())
+}
+
+impl TryFrom<Object> for Relationship {
+    type Error = String;
+    fn try_from(object: Object) -> Result<Relationship, String> {
+        object_only::<RelationshipFields>(object).map(|f| Relationship {
+            source_table: f.source_table,
+            source_column: f.source_column,
+            target_table: f.target_table,
+            target_column: f.target_column,
+        })
+    }
+}
+
+impl TryFrom<Object> for Edit {
+    type Error = String;
+    fn try_from(object: Object) -> Result<Edit, String> {
+        object_only::<EditFields>(object).map(|edit| match edit {
+            EditFields::ClearTimeColumn { table } => Edit::ClearTimeColumn { table },
+            EditFields::DeleteColumn { table, column } => Edit::DeleteColumn { table, column },
+        })
+    }
+}
+
+/// [`Relationship`]'s fields, read from an object.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RelationshipFields {
+    source_table: Name,
+    source_column: Name,
+    target_table: Name,
+    target_column: Name,
+}
+
+/// [`Edit`]'s fields, read from an object.
+#[derive(Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+enum EditFields {
+    ClearTimeColumn { table: Name },
+    DeleteColumn { table: Name, column: Name },
+}
+
+/// `input.edits`, when given, holds at least one edit, as the case schema's
+/// `minItems` says.
+fn some_edits<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Vec<Edit>>, D::Error> {
+    let edits = Vec::<Edit>::deserialize(deserializer)?;
+    if edits.is_empty() {
+        return Err(D::Error::custom("input.edits is empty"));
+    }
+    Ok(Some(edits))
+}
+
+/// `materialize.inference_config`, when given, is an object of at least one
+/// key, as the case schema's `minProperties` says; what it holds is free.
+fn some_options<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<serde_json::Map<String, Value>>, D::Error> {
+    let options = serde_json::Map::<String, Value>::deserialize(deserializer)?;
+    if options.is_empty() {
+        return Err(D::Error::custom("inference_config is empty"));
+    }
+    Ok(Some(options))
 }
 
 /// `from_source`'s tables: a list of names, or names by alias.
@@ -110,8 +221,8 @@ pub struct Materialize {
     pub indices_as: Option<IndicesAs>,
     #[serde(default)]
     pub anchor_time: Option<String>,
-    /// The inference options passed, kept as written (T1.21b).
-    #[serde(default)]
+    /// The inference options passed, kept as written, free-form (T1.21b).
+    #[serde(default, deserialize_with = "some_options")]
     pub inference_config: Option<serde_json::Map<String, Value>>,
 }
 
