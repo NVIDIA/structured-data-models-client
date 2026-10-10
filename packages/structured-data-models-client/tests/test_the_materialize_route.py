@@ -16,6 +16,7 @@ reference comparison of the payload is ``contract/tests``'s.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -38,6 +39,7 @@ from sdm_client import (
 )
 from sdm_client._rust import codec
 from sdm_client._rust.run import run
+from sdm_client.errors import MissingExtraError
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
@@ -97,9 +99,23 @@ def test_the_route_takes_a_duckdb_source_s_materialize_paths_together(
         _materialize()
 
 
+def _old_route_needs_the_engine() -> bool:
+    r"""Whether the relational engine, which the old route gathers with, is
+    missing. CI's ``test`` job installs none; its ``engine`` job, which runs
+    this suite again, does. Without it the old route refuses, which is held
+    instead."""
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        return False
+    with pytest.raises(MissingExtraError):
+        _materialize()
+    return True
+
+
 def test_the_core_builds_the_request_the_old_route_builds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if _old_route_needs_the_engine():
+        return
     old = _materialize()
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize()
@@ -122,6 +138,8 @@ def test_the_core_builds_the_request_the_old_route_builds(
 def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if _old_route_needs_the_engine():
+        return
     old = _materialize(prediction_statistic='mean')
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     core = _materialize(prediction_statistic='mean')
@@ -154,12 +172,12 @@ def test_what_the_core_does_not_take_yet_is_refused_by_name(
 def test_a_schema_not_described_on_the_core_has_no_core_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(_connection()))
-    monkeypatch.setenv(
-        _routing.ENVIRONMENT, ','.join(_routing.MATERIALIZE_DUCKDB)
-    )
+    # As a schema the old route described: no description of the core's.
+    schema._core_description = None
     with pytest.raises(_routing.RouteError):
         PredictiveQuery(QUERY, schema).materialize(
             indices=[0, 1], anchor_time=ANCHOR
