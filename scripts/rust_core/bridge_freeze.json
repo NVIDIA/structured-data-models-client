@@ -4,7 +4,7 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "b0ecf2f46a255043ddbd1fd20499e67469e191125e6d5ea7e0cde05db03c99a8",
+        "fingerprint": "f302968db49daa6dd782950f470d5e19f59124cc3ef0cf77fca0dc1978342de5",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -46,7 +46,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "9345e9b0409fe5f23c8751e2777fb0d5762ca3a4a7d8cbb71a341a01e1f97c26",
+        "fingerprint": "bb80218c4b619e061a382cad6b5e4f7be7aad14fe24928944869767fd02d3837",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -122,7 +122,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "a5356cd661189d335fe96fb4401e9965ba6f8c2a9ee81339c746fa5f1a33805d",
+        "fingerprint": "34b7db4fc3051f1d20a74670c122df9322bc5bb70bf39d8cf5c2af6cc1a4dea7",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -212,7 +212,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
       "<module>": {
-        "fingerprint": "84b16dab7e427c21ab62c2bdec1fb87d505dca96bd98b8967e0dc759ad62889c",
+        "fingerprint": "54f9b4aa3044bea055a6ed20009f18aac0a32e0796b96d30a6f102d7f86e8052",
         "raise": 0,
         "warn": 0,
         "branch": 0,
@@ -346,7 +346,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
-        "fingerprint": "e87611a5c41d4ce6bd1340983c2e2d92f9c572aa527ccafe55a52dc2063df6db",
+        "fingerprint": "ec0df386cf7c0b508dc03546d539a74c664e07417d9eccb8eeee1dbf8f8e2a60",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -426,7 +426,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": {
       "<module>": {
-        "fingerprint": "d4b61e1ec4c801d1f97025513d98e0e7c8ae75745538c07f7a8bb67b3409d9d7",
+        "fingerprint": "7f646f170162cd94dc7fe5275b6b2f6d2afab35979c909408bd114cc680fc50a",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -714,7 +714,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py": {
       "<module>": {
-        "fingerprint": "69349744ed8209b23def6400ccda999bea3fcf34fee3aa2d4fd3afbbcb13ccc7",
+        "fingerprint": "dd24484314a6db7b998fb0bd9b1a5f5dff68a858dec36e5e688a15ac1c684653",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -852,7 +852,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/adapters/relational.py": {
       "<module>": {
-        "fingerprint": "dc504b4b8a6a91c5bb6f2e8f2fcdcf3374a08888101fec4d6925ede7b9f71237",
+        "fingerprint": "37d32c3983ca361220247526cd3f89876f94bbb3a3926075082705a01f4b9dec",
         "raise": 0,
         "warn": 0,
         "branch": 0,
@@ -875,7 +875,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/base.py": {
       "<module>": {
-        "fingerprint": "c73feacf4cc27d01d68d0776c247be83550ba7c3543011d911d9ac24584686de",
+        "fingerprint": "cb1c414bc8d34ee6244916837c480d127a0b41cd4ccbb6a1e667b637ebdf18f9",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -896,7 +896,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/result.py": {
       "<module>": {
-        "fingerprint": "810247d5a8f70e812eca792e76e0e9add67ece914c8e33f21075351225f1f0ca",
+        "fingerprint": "3b0f42183e7491c7226e8d12405babf926c98aed3828c3d0ab7d76f9fe94e28c",
         "raise": 0,
         "warn": 0,
         "branch": 0,
@@ -914,7 +914,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py": {
       "<module>": {
-        "fingerprint": "defe22995c3136976936683c784fb4c5388881a3bf44d19000a25065ea488a70",
+        "fingerprint": "d3151af4f29e256f66b74696da512268a532c5574f02afdd77109c7d7b1758f0",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -933,6 +933,15 @@
           "sdm_client.errors.StructuredDataError",
           "sdm_client.materializers.relational._candidates_to_rank"
         ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/__init__.py": {
+      "<module>": {
+        "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": []
       }
     }
   }

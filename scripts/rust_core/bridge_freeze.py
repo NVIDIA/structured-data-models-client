@@ -10,42 +10,50 @@ lands in Rust, not in the Python bridge. This guard holds it over the files
 that keep a row of the design's "Host-held semantics" ledger:
 
 - the ``_rust/`` bridges, ``_rust/schema.py``, ``_rust/materialize.py`` and
-  ``_rust/predict.py``, whole: every function and method, and the module's
-  own statements as ``<module>``;
-- the files shared with the old route, for the functions ``COVERED`` names
-  and their module statements: in ``client.py``, ``query.py`` and
-  ``materializers/relational.py`` the ledgered functions and those the core
-  route reaches through them; in ``schema.py``, ``adapters/relational.py``,
-  ``base.py``, ``result.py`` and ``decompose.py`` the ledgered rules' own
-  bodies; and the entry points (``SDMClient.predict``,
-  ``PredictiveQuery.materialize``, ``RelationalMaterializer.materialize``,
-  ``Schema.from_source``) with ``RelationalMaterializer.__init__``, which
-  holds the index once-flag. ``COVERED`` is this file's, so coverage changes
-  only by a reviewed edit here.
+  ``_rust/predict.py``, whole: every function and method;
+- the files shared with the old route, for the functions ``COVERED`` names:
+  in ``client.py``, ``query.py`` and ``materializers/relational.py`` the
+  ledgered functions and those the core route reaches through them; in
+  ``schema.py``, ``adapters/relational.py``, ``base.py``, ``result.py`` and
+  ``decompose.py`` the ledgered rules' own bodies; and the entry points
+  (``SDMClient.predict``, ``PredictiveQuery.materialize``,
+  ``RelationalMaterializer.materialize``, ``Schema.from_source``) with
+  ``RelationalMaterializer.__init__``, which holds the index once-flag;
+- ``_rust/__init__.py``, the bridges' package, for its skeleton only;
+- and every frozen file's skeleton, as ``<module>``: the whole module in
+  order and in scope, each function's body (covered or not) replaced by
+  ``pass``. So a module statement, an import, a class attribute moved in or
+  out of a class, and a method, dunder or property added to, removed from
+  or renamed on any class of a frozen file change it.
+
+``COVERED`` is this file's, so coverage changes only by a reviewed edit.
 
 The tripwire, the primary gate (T1.10e fix round 2, a change of method):
 the committed baseline, ``bridge_freeze.json``, holds a fingerprint of each
-covered function and of each file's module statements: the SHA-256 of its
-syntax tree with no positions and no docstrings, serialized the same way on
-every Python version. Against the merge base of HEAD and
-``origin/rust-core-phase-1``, every entry whose fingerprint differs, and
-every entry that is new or gone (a ``_rust/`` bridge's definitions are its
-entries, so a function added, removed or renamed there is one), must be
-declared in ``bridge_changes.json`` under ``<file>::<qualified name>``, with
-one reason:
+covered function and each skeleton: the SHA-256 of its syntax tree with no
+positions and no docstrings, serialized the same way on every Python
+version. Against the merge base of HEAD and ``origin/rust-core-phase-1``,
+every entry whose fingerprint differs, and every entry that is new or gone
+(a file leaving ``FROZEN`` included: the base's entries for it are gone),
+must be declared in ``bridge_changes.json`` under
+``<file>::<qualified name>``, with one reason:
 
-- ``{"moved": "<ledger row or task>"}``, a rule moved into Rust;
+- ``{"moved": "<the ledger row, naming its task T1.xx>"}``, a rule moved
+  into Rust; the reason must name the task;
 - ``{"allowance": "E##"}``, growth the owner approved: an ``ALLOWANCES``
   entry for that function under that row, as below;
-- ``{"refactor": "<one line>"}``, an edit that keeps behaviour, a rename
-  included.
+- ``{"refactor": "<one line>"}``, an edit that keeps behaviour; a rename
+  is a change, declared a refactor (the old name, the new one and the
+  skeleton);
+- ``{"gone": "<one line>"}``, an entry that left the freeze, valid only for
+  an entry gone against the base.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale); on a change declared only by an entry the merge base's
-declarations already hold (spent: a later change states its own reason);
-and on a ``moved`` or ``refactor`` that raises a count. So no change to
-frozen code is silent, and review judges each reason's direction. A file
-leaving ``FROZEN`` is not compared; one joining it has every entry new.
+declarations already hold (spent: a later change states its own reason); on
+``gone`` for an entry that is not gone; and on a ``moved`` that names no
+task. So no change to frozen code is silent, and review judges each
+reason's direction. A file joining ``FROZEN`` has every entry new.
 
 The counts, the secondary check: per entry the baseline also records its
 rule sites,
@@ -59,28 +67,40 @@ rule sites,
 
 and ``calls``: the first-party functions and classes it calls (dotted, a
 covered one left out) and the methods it calls on objects it cannot resolve
-(``.name``, listed for review, not gated). Against the merge base's entry,
-or for an entry the base's baseline does not hold the function's body
-measured in the base's source, or nothing, a count or a dotted first-party
-call may rise only up to an ``ALLOWANCES`` entry that the base's copy of
-this file does not already hold (spent), under a row of the base's
-decisions.md whose status reads "approved by owner <date>" and which names
-``<file>::<qualified name>`` in backticks. The baseline must match the code
-exactly (``--write`` rewrites it).
+(``.name``, listed for review, not gated). Per entry, against the same
+entry at the merge base (its baseline entry; for one newly covered, its
+body in the base's own source; for a rename, the gone entry of the same
+shape; else nothing), a count or a dotted first-party call may rise only
+under the entry's own ``ALLOWANCES`` entry, declared ``allowance``: one
+the base's copy of this file does not already hold (spent), under a row of
+the base's decisions.md whose status reads "approved by owner <date>" and
+which names ``<file>::<qualified name>`` in backticks. The one exception:
+the entries declared ``moved`` in one change net their counts, and their
+dropped calls, against each other across the frozen files, so a rule
+moved from ``schema.py`` into ``_rust/`` glue needs no allowance, as long
+as the moved entries together add no rule; a ``refactor`` or ``gone``
+entry is never paid for by another's drop. A covered function let out of
+the freeze, declared, is no new helper to covered code still calling it.
+The baseline must match the code exactly (``--write`` rewrites it).
 
 Missing or malformed evidence fails: no baseline or declarations, either in
 another format, a field missing or retyped, an unreadable base, no merge
 base. A base that predates the baseline has nothing to compare, and the
 declarations must then be empty.
 
-What it does not see: a rule added inside a first-party helper that
-``COVERED`` does not name and that a covered function already called at the
-merge base. Review holds that, as it holds the ledger's owners and each
-declared reason.
+What it does not see, review's to hold as it holds the ledger's owners and
+each declared reason:
+
+- a rule added inside the body of an existing function that ``COVERED``
+  does not name (a first-party helper covered code already called);
+- data defined outside the frozen files that covered code reads (for
+  example ``models.py``'s ``RELATIONAL_LIMITS``);
+- module code outside the frozen files that rebinds a covered name.
 
 When a ledger row moves into Rust, the package deletes the row and the
 bridge's rule, takes a function the core route no longer reaches out of
-``COVERED``, declares each changed entry ``moved``, and runs ``--write``.
+``COVERED``, declares each changed entry ``moved`` naming the task, and
+runs ``--write``.
 
 ``l0_deps.py`` runs this check, so it runs where that does: ``prepush.sh``'s
 cheap tier and CI's ``rust-lint``; ``selftest.py`` seeds a fault for each
@@ -93,6 +113,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import hashlib
 import json
 import re
@@ -118,11 +139,14 @@ ABOUT = (
 )
 CHANGES_ABOUT = (
     'Each change to frozen bridge code against the merge base, with one '
-    'reason: moved (a rule moved into Rust), allowance (an owner-approved '
-    'ALLOWANCES row) or refactor (behaviour kept). Entries the merge base '
-    'already holds are spent and may be pruned.'
+    'reason: moved (a rule moved into Rust, naming its task), allowance (an '
+    'owner-approved ALLOWANCES row), refactor (behaviour kept) or gone (an '
+    'entry that left the freeze). Entries the merge base already holds are '
+    'spent and may be pruned.'
 )
-REASONS = ('moved', 'allowance', 'refactor')
+REASONS = ('moved', 'allowance', 'refactor', 'gone')
+#: What a ``moved`` reason names: the task that moves the rule.
+_TASK = re.compile(r'\bT\d+\.\d+[a-z]?\b')
 
 _SRC = Path('packages/structured-data-models-client/src')
 _CLIENT = _SRC / 'sdm_client'
@@ -205,6 +229,8 @@ COVERED: dict[Path, tuple[str, ...]] = {
     _CLIENT / 'base.py': ('check_request_against_model',),
     _CLIENT / 'result.py': ('PredictionResult.merge',),
     _CLIENT / 'decompose.py': ('parts_of',),
+    # The bridges' package: its module statements run on every core route.
+    _CLIENT / '_rust/__init__.py': (),
 }
 LISTED = tuple(COVERED)
 FROZEN = WHOLE + LISTED
@@ -244,6 +270,9 @@ class Entry:
     """A covered function's fingerprint, rule sites and calls."""
 
     fingerprint: str = ''
+    #: The fingerprint with the function's own name left out, which finds a
+    #: rename; not stored.
+    shape: str = ''
     counts: dict[str, int] = field(
         default_factory=lambda: dict.fromkeys(KINDS, 0)
     )
@@ -439,9 +468,22 @@ class _Measure:
         return f'.{rest[-1]}'
 
 
+class _Skeleton(ast.NodeTransformer):
+    """A module with every function's body replaced by ``pass``: its
+    statements, classes, signatures and definitions in order and in scope,
+    without what runs inside a function."""
+
+    def _hollow(self, node: Any) -> Any:
+        node.body = [ast.Pass()]
+        return node
+
+    visit_FunctionDef = _hollow
+    visit_AsyncFunctionDef = _hollow
+
+
 def measure_text(text: str, rel: Path) -> Measured:
-    """Every function and method of one file's source, and its module
-    statements."""
+    """Every function and method of one file's source, and its skeleton as
+    ``<module>``."""
     tree = ast.parse(text, filename=str(rel))
     module = module_name(rel)
     top_level = frozenset(
@@ -468,28 +510,39 @@ def measure_text(text: str, rel: Path) -> Measured:
             module_imports.update(_imports(ast.walk(node), module))
     measuring = _Measure(module, top_level, methods, module_imports)
     out: Measured = {}
-    loose: list[ast.AST] = []
 
     def visit(body: list[ast.stmt], prefix: str, owner: str | None) -> None:
-        for index, node in enumerate(body):
-            if index == 0 and _is_docstring(node):
-                continue
+        for node in body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                entry = measuring.entry([node], owner)
+                nameless = copy.copy(node)
+                nameless.name = ''
+                entry.shape = fingerprint([nameless])
                 name = f'{prefix}{node.name}'
-                out[name] = measuring.entry([node], owner)
+                # A second definition of a name (under if and else) keeps
+                # its own entry.
+                while name in out:
+                    name += "'"
+                out[name] = entry
             elif isinstance(node, ast.ClassDef):
-                # A class's name, decorators, bases and keywords run with
-                # the module.
-                loose.append(ast.Constant(value=f'class {prefix}{node.name}'))
-                loose.extend(
-                    [*node.decorator_list, *node.bases, *node.keywords]
-                )
                 visit(node.body, f'{prefix}{node.name}.', node.name)
             else:
-                loose.append(node)
+                # A definition under if, try, with or a loop at this level.
+                for field_name in ('body', 'orelse', 'finalbody'):
+                    inner = getattr(node, field_name, None)
+                    if isinstance(inner, list):
+                        visit(inner, prefix, owner)
+                for handler in getattr(node, 'handlers', ()):
+                    visit(handler.body, prefix, owner)
+                for case in getattr(node, 'cases', ()):
+                    visit(case.body, prefix, owner)
 
     visit(tree.body, '', None)
-    out[MODULE] = measuring.entry(loose, None)
+    skeleton = _Skeleton().visit(ast.parse(text, filename=str(rel)))
+    statements = skeleton.body
+    if statements and _is_docstring(statements[0]):
+        statements = statements[1:]
+    out[MODULE] = measuring.entry(statements, None)
     return out
 
 
@@ -538,7 +591,7 @@ def _strip(
         if name != MODULE
     }
     calls = {call for call in entry.calls if call not in dotted | whole}
-    return Entry(entry.fingerprint, dict(entry.counts), calls)
+    return Entry(entry.fingerprint, entry.shape, dict(entry.counts), calls)
 
 
 def entries(
@@ -587,8 +640,9 @@ def load(
     text: str | None, where: str, *, base: bool = False
 ) -> tuple[Baseline | None, list[str]]:
     """A baseline read and checked, or the problems that stop it. The
-    base's is read for the files frozen now: one no longer frozen is left
-    out, and one newly frozen holds nothing."""
+    base's is read whole: a file it froze that is no longer frozen keeps
+    its entries, each of which is then gone and declared; a file frozen
+    since holds nothing there."""
     if text is None:
         return None, [f'{where}: the baseline is missing']
     data, problems = _json(text, where)
@@ -610,7 +664,7 @@ def load(
         for name in sorted(set(files) - expected):
             problems.append(f'{where}: {name} is not a frozen bridge file')
     out: Baseline = {}
-    for rel in sorted(expected & set(files)):
+    for rel in sorted(set(files) if base else expected & set(files)):
         functions = files[rel]
         if not isinstance(functions, dict) or not functions:
             problems.append(f'{where}: {rel} lists no function')
@@ -832,26 +886,18 @@ def allowance_problems(
     return problems, valid
 
 
-_NOTHING: dict[str, Any] = {**dict.fromkeys(KINDS, 0), 'calls': []}
+_NOTHING: dict[str, Any] = {
+    'fingerprint': '',
+    **dict.fromkeys(KINDS, 0),
+    'calls': [],
+}
 
 
-def _then(
-    base: Baseline,
-    rel: Path,
-    name: str,
-    measured_at_base: Mapping[Path, Measured | None],
-) -> dict[str, Any] | None:
-    """The entry at the merge base: the base baseline's, else the function's
-    body measured in the base's source, else None."""
-    held = base.get(str(rel), {}).get(name)
-    if held is not None:
-        return held
-    found = measured_at_base.get(rel)
-    if found is not None and name in found:
-        return _strip(
-            found[name], _covered_targets(), measured_at_base
-        ).as_json()
-    return None
+def _measured(
+    measured: Mapping[Path, Measured | None], rel: Path, name: str
+) -> Entry | None:
+    found = measured.get(rel)
+    return None if found is None else found.get(name)
 
 
 def ratchet(
@@ -862,6 +908,7 @@ def ratchet(
     declared: Mapping[str, tuple[str, str]],
     spent: Mapping[str, tuple[str, str]],
     granted: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    code: Mapping[Path, Measured | None],
     measured_at_base: Mapping[Path, Measured | None],
 ) -> list[str]:
     """The tripwire and the counts against the merge base."""
@@ -871,10 +918,12 @@ def ratchet(
         'row of the merge base naming <file>::<function>, declared '
         '{"allowance": "<row>"} (E50)'
     )
+    files = {str(rel): rel for rel in FROZEN}
+    files.update({name: Path(name) for name in base if name not in files})
     changed: dict[str, str] = {}
-    for rel in FROZEN:
-        now = baseline.get(str(rel), {})
-        held = base.get(str(rel), {})
+    for name_of, rel in files.items():
+        now = baseline.get(name_of, {})
+        held = base.get(name_of, {})
         for name in sorted(set(now) | set(held)):
             key = f'{rel}::{name}'
             if name not in held:
@@ -890,12 +939,22 @@ def ratchet(
                 f'{key}: {how} against the base ({label}) and not declared in '
                 f'{CHANGES}; a new product rule on the core route lands in '
                 'Rust (E50); declare a moved rule, an owner-approved '
-                'allowance or a refactor'
+                'allowance, a refactor, or an entry gone from the freeze'
             )
         elif spent.get(key) == reason:
             problems.append(
                 f'{key}: {how}, declared only by an entry the base ({label}) '
                 'already holds, which is spent: declare this change anew'
+            )
+        elif reason[0] == 'gone' and how != 'gone':
+            problems.append(
+                f'{key}: declared gone, but it is {how} against the base '
+                f'({label})'
+            )
+        elif reason[0] == 'moved' and not _TASK.search(reason[1]):
+            problems.append(
+                f'{key}: a moved reason names the task that moves the rule '
+                f'(T1.xx), not {reason[1]!r}'
             )
     for key in sorted(set(declared) - set(changed)):
         if spent.get(key) != declared[key]:
@@ -903,26 +962,71 @@ def ratchet(
                 f'{key}: declared in {CHANGES}, but unchanged against the base '
                 f'({label}): a stale declaration; remove it'
             )
-    # The counts, per file: what the covered code holds now against what
-    # the same functions held at the base (the base's entries, and a newly
-    # covered function's body as the base's source has it), so a rename or
-    # an extraction keeps the totals, and growth needs an allowance.
-    for rel in FROZEN:
-        now = baseline.get(str(rel), {})
-        if not now:
-            continue
-        then_entries = dict(base.get(str(rel), {}))
-        for name in now:
-            if name not in then_entries:
-                found = _then(base, rel, name, measured_at_base)
+
+    # The counts, per entry: what each covered function or module holds now
+    # against the same at the base (the base's entry; for one newly covered,
+    # its body in the base's own source; for a rename, the gone entry of the
+    # same shape; else nothing). A rise passes under the entry's own
+    # allowance; entries declared moved in this change net against each
+    # other across the frozen files, so a rule moved from one file into
+    # another's glue needs no allowance; nothing else nets.
+    pairs: list[tuple[Path, str, dict[str, Any], dict[str, Any]]] = []
+    for name_of, rel in files.items():
+        now_entries = baseline.get(name_of, {})
+        held = base.get(name_of, {})
+        gone = [n for n in held if n not in now_entries]
+        for name in sorted(set(now_entries) | set(held)):
+            then = held.get(name)
+            if then is None:
+                found = _measured(measured_at_base, rel, name)
                 if found is not None:
-                    then_entries[name] = found
-        grants: dict[str, Mapping[str, Any]] = {}
-        for name in now:
-            key = f'{rel}::{name}'
-            kind_said = declared.get(key)
-            if kind_said is None or kind_said[0] != 'allowance':
-                continue
+                    then = _strip(
+                        found, _covered_targets(), measured_at_base
+                    ).as_json()
+            if then is None:
+                shape = getattr(_measured(code, rel, name), 'shape', None)
+                for old in gone:
+                    at_base = _measured(measured_at_base, rel, old)
+                    if shape and at_base is not None and at_base.shape == shape:
+                        then = held[old]
+                        break
+            pairs.append(
+                (rel, name, then or _NOTHING, now_entries.get(name, _NOTHING))
+            )
+    moved_need = dict.fromkeys(KINDS, 0)
+    moved_pool = dict.fromkeys(KINDS, 0)
+    moved_dropped: set[str] = set()
+    for rel, name, then, now in pairs:
+        if declared.get(f'{rel}::{name}', ('',))[0] == 'moved':
+            for kind in KINDS:
+                delta = now[kind] - then[kind]
+                if delta > 0:
+                    moved_need[kind] += delta
+                else:
+                    moved_pool[kind] -= delta
+            moved_dropped |= set(then['calls']) - set(now['calls'])
+    # A covered function let out of the freeze, declared, is no new helper
+    # to the covered code that still calls it.
+    released = {
+        f'{module_name(rel)}.{name}'
+        for rel, name, then, now in pairs
+        if now is _NOTHING
+        and declared.get(f'{rel}::{name}', ('',))[0] in ('moved', 'gone')
+    }
+    for kind in KINDS:
+        if moved_need[kind] > moved_pool[kind]:
+            problems.append(
+                f'the entries declared moved raise {kind} by '
+                f'{moved_need[kind]} and drop it by {moved_pool[kind]} '
+                f'against the base ({label}); a move does not add rules; '
+                f'{remedy}'
+            )
+    for rel, name, then, now in pairs:
+        key = f'{rel}::{name}'
+        kind_said = declared.get(key)
+        moved = kind_said is not None and kind_said[0] == 'moved'
+        grant: Mapping[str, Any] | None = None
+        if kind_said is not None and kind_said[0] == 'allowance':
             grant = granted.get(key, {}).get(kind_said[1])
             if grant is None:
                 problems.append(
@@ -930,31 +1034,25 @@ def ratchet(
                     'grants it nothing (no valid ALLOWANCES entry for it '
                     'under that row)'
                 )
-            else:
-                grants[name] = grant
-        for kind in KINDS:
-            held_total = sum(e[kind] for e in then_entries.values())
-            extra = sum(
-                max(0, g[kind] - then_entries.get(name, _NOTHING)[kind])
-                for name, g in grants.items()
-            )
-            now_total = sum(e[kind] for e in now.values())
-            if now_total > held_total + extra:
-                problems.append(
-                    f'{rel}: the covered code raises {kind} from {held_total} '
-                    f'(the base, {label}) to {now_total}; {remedy}'
-                )
-        held_calls = set().union(
-            *(e['calls'] for e in then_entries.values()),
-            *(g['calls'] for g in grants.values()),
-        )
-        for name, entry in sorted(now.items()):
-            for call in sorted(set(entry['calls']) - held_calls):
-                if not call.startswith('.'):
+        if not moved:
+            for kind in KINDS:
+                ceiling = max(then[kind], grant[kind] if grant else 0)
+                if now[kind] > ceiling:
                     problems.append(
-                        f'{rel}::{name}: the baseline adds a call of {call}, '
-                        f'a helper the base ({label}) does not list; {remedy}'
+                        f'{key}: the baseline raises {kind} from {then[kind]} '
+                        f'(the base, {label}) to {now[kind]}; {remedy}'
                     )
+        allowed = (
+            set(then['calls']) | set(grant['calls'] if grant else ()) | released
+        )
+        if moved:
+            allowed |= moved_dropped
+        for call in sorted(set(now['calls']) - allowed):
+            if not call.startswith('.'):
+                problems.append(
+                    f'{key}: the baseline adds a call of {call}, a helper '
+                    f'the base ({label}) does not list; {remedy}'
+                )
     return problems
 
 
@@ -1014,7 +1112,7 @@ def check(
             return problems + unreadable
         spent = spent_or_none
     measured_at_base: dict[Path, Measured | None] = {}
-    for rel in FROZEN:
+    for rel in {*FROZEN, *(Path(name) for name in then)}:
         source = base.source(rel)
         try:
             measured_at_base[rel] = (
@@ -1029,6 +1127,7 @@ def check(
         declared=declared,
         spent=spent,
         granted=granted,
+        code=code,
         measured_at_base=measured_at_base,
     )
     return problems

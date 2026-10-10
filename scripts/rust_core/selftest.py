@@ -27,7 +27,10 @@ The bridge freeze (``bridge_freeze.py``, decision E50) is held the same
 way, against its committed baseline and declarations taken as the merge
 base's: every evasion the T1.10e reviews found (decorators, dispatch
 tables, bound methods, getattr, aliases, a zero-count helper, swallowing,
-early returns, module code, ledgered bodies) fails as an undeclared change;
+early returns, module code, ledgered bodies, a class attribute moved to
+module scope, new dunders, the bridges' package rebinding a method, a
+file leaving the freeze) fails as an undeclared change; a moved rule's
+drop cannot pay for a refactor's rise, while two moved entries net;
 a declared refactor, a rename declared, a rule moved out declared, a
 widened coverage declared, a frozen file added or removed, and an approved
 allowance pass; a declared refactor raising a count, a stale or spent
@@ -725,6 +728,24 @@ def freeze_cases(results: list[Result]) -> None:
         change(data)
         path.write_text(json.dumps(data))
 
+    @contextmanager
+    def covering(changed: dict[Path, tuple[str, ...] | None]) -> Iterator[None]:
+        saved = dict(bridge_freeze.COVERED)
+        try:
+            for rel, names in changed.items():
+                if names is None:
+                    del bridge_freeze.COVERED[rel]
+                else:
+                    bridge_freeze.COVERED[rel] = names
+            bridge_freeze.LISTED = tuple(bridge_freeze.COVERED)
+            bridge_freeze.FROZEN = bridge_freeze.WHOLE + bridge_freeze.LISTED
+            yield
+        finally:
+            bridge_freeze.COVERED.clear()
+            bridge_freeze.COVERED.update(saved)
+            bridge_freeze.LISTED = tuple(bridge_freeze.COVERED)
+            bridge_freeze.FROZEN = bridge_freeze.WHOLE + bridge_freeze.LISTED
+
     def at_gather(code: str) -> Callable[[Path], None]:
         return lambda r: edit(r / materialize, gather_at, code + gather_at)
 
@@ -776,6 +797,7 @@ def freeze_cases(results: list[Result]) -> None:
             f'{rel}: neither a bridge file nor the home of a ledgered rule'
             for rel in bridge_freeze.FROZEN
             if rel not in l0_deps.BRIDGE_FILES
+            and rel.parent.name != '_rust'
             and not any(
                 f'`{name.split(".")[-1]}`' in ledger or f'`{name}`' in ledger
                 for name in bridge_freeze.COVERED.get(rel, ())
@@ -1024,6 +1046,62 @@ def freeze_cases(results: list[Result]) -> None:
         ),
     ):
         undeclared(name, change, key)
+    # Round 3: the module's structure (Codex: scope; the subagent: dunders).
+    reserved = "    _RESERVED = ('instance_id', '__kumo_anchor_time')\n"
+
+    def relocated(root: Path) -> None:
+        edit(root / relational, reserved, '')
+        edit(
+            root / relational,
+            '\n\ndef _warn_of_a_context_the_default_mode_capped(',
+            "\n\n_RESERVED = ('instance_id', '__kumo_anchor_time')\n\n\n"
+            'def _warn_of_a_context_the_default_mode_capped(',
+        )
+
+    for name, change in (
+        ('a class attribute moved to module scope', relocated),
+        (
+            'a new __setattr__ on a covered class',
+            lambda r: edit(
+                r / relational,
+                reserved,
+                reserved + '\n    def __setattr__(self, name, value):\n'
+                "        if name == 'schema' and len(value.tables) > 12:\n"
+                "            raise StructuredDataError('x', code='INVALID_REQUEST')\n"
+                '        object.__setattr__(self, name, value)\n',
+            ),
+        ),
+        (
+            'a new __getattribute__ disabling a covered check',
+            lambda r: edit(
+                r / relational,
+                reserved,
+                reserved + '\n    def __getattribute__(self, name):\n'
+                "        if name == '_check_entity_count':\n"
+                '            return lambda indices, task_kind=None: None\n'
+                '        return object.__getattribute__(self, name)\n',
+            ),
+        ),
+    ):
+        case(name, change, f'{relational}::<module>: differs from the baseline')
+        case(
+            f'{name}, written into the baseline',
+            change,
+            f'{relational}::<module>: changed against the base',
+            rewrite=True,
+        )
+    rust_init = client / '_rust/__init__.py'
+    undeclared(
+        "the bridges' package rebinding a covered method",
+        lambda r: append(
+            r / rust_init,
+            '\nfrom sdm_client.materializers.relational import '
+            'RelationalMaterializer as _RM\n\n'
+            '_RM._check_entity_count = staticmethod(lambda *a, **k: None)\n',
+        ),
+        f'{rust_init}::<module>',
+    )
+
     # Codex round 2: a zero-count helper that caps the entities.
     cap = '\n\ndef _cap_indices(indices):\n    return indices[:10]\n'
     case(
@@ -1115,7 +1193,7 @@ def freeze_cases(results: list[Result]) -> None:
     case(
         'a declared refactor that raises a count',
         added_raise,
-        '_rust/schema.py: the covered code raises raise from',
+        'from_source: the baseline raises raise from',
         rewrite=True,
         declare={from_source: {'refactor': 'a check added'}},
     )
@@ -1148,6 +1226,78 @@ def freeze_cases(results: list[Result]) -> None:
         rewrite=True,
         declare={from_source: {'refactor': 'the local renamed again'}},
     )
+    # Round 3: counts per entry; only entries declared moved net.
+    anchor_rule = (
+        "    if isinstance(value, str) and value == 'entity':\n"
+        "        raise _not_taken('anchor_entity')\n"
+    )
+    big = "    if len(indices) > 5:\n        raise _not_taken('big')\n"
+    case(
+        "a moved rule's drop paying for a refactor's rise",
+        lambda r: (
+            edit(r / materialize, anchor_rule, ''),
+            at_gather(big)(r),
+        ),
+        'gather: the baseline raises raise from',
+        rewrite=True,
+        declare={
+            f'{materialize}::_anchor': {'moved': 'the anchor refusal (T1.24)'},
+            gather: {'refactor': 'tidy'},
+        },
+    )
+    case(
+        'a moved reason naming no task',
+        lambda r: edit(r / materialize, anchor_rule, ''),
+        'a moved reason names the task',
+        rewrite=True,
+        declare={f'{materialize}::_anchor': {'moved': 'into Rust'}},
+    )
+    case(
+        'gone declared for an entry that changed',
+        lambda r: edit(r / materialize, anchor_rule, ''),
+        'declared gone, but it is changed',
+        rewrite=True,
+        declare={f'{materialize}::_anchor': {'gone': 'out'}},
+    )
+    two_ways = '_warn_two_ways_to_reach_one_table'
+
+    def t121d(root: Path) -> None:
+        # The review's fric3: a rule moved out of schema.py, its warning
+        # presented by the _rust/ glue.
+        edit(
+            root / schema,
+            f'    {two_ways}(built, schema.relationships)\n',
+            "    for said in described.get('warnings', ()):\n"
+            '        warnings.warn(said, stacklevel=2)\n',
+        )
+        edit(root / schema, f'        {two_ways},\n', '')
+
+    moved_both = {
+        f'{schema}::build': {'moved': 'two ways to one table (T1.21d)'},
+        f'{schema_py}::{two_ways}': {'moved': 'two ways to one table (T1.21d)'},
+    }
+    with covering(
+        {
+            schema_py: tuple(
+                n for n in bridge_freeze.COVERED[schema_py] if n != two_ways
+            )
+        }
+    ):
+        case(
+            'control: a rule moved from schema.py into the glue, both declared moved',
+            t121d,
+            None,
+            rewrite=True,
+            declare=moved_both,
+        )
+        case(
+            'the same move with its glue declared a refactor',
+            t121d,
+            'build: the baseline raises warn from',
+            rewrite=True,
+            declare={**moved_both, f'{schema}::build': {'refactor': 'glue'}},
+        )
+
     statistic = (
         '        if statistic is not None:\n'
         '            _record_the_statistic(payloads, statistic)\n'
@@ -1195,6 +1345,7 @@ def freeze_cases(results: list[Result]) -> None:
         )
 
     rename = {
+        f'{materialize}::<module>': {'refactor': 'renamed _anchor_of'},
         f'{materialize}::_anchor': {'refactor': 'renamed _anchor_of'},
         f'{materialize}::_anchor_of': {'refactor': 'renamed from _anchor'},
         gather: {'refactor': 'calls _anchor_of'},
@@ -1231,24 +1382,6 @@ def freeze_cases(results: list[Result]) -> None:
         rewrite=True,
     )
 
-    @contextmanager
-    def covering(changed: dict[Path, tuple[str, ...] | None]) -> Iterator[None]:
-        saved = dict(bridge_freeze.COVERED)
-        try:
-            for rel, names in changed.items():
-                if names is None:
-                    del bridge_freeze.COVERED[rel]
-                else:
-                    bridge_freeze.COVERED[rel] = names
-            bridge_freeze.LISTED = tuple(bridge_freeze.COVERED)
-            bridge_freeze.FROZEN = bridge_freeze.WHOLE + bridge_freeze.LISTED
-            yield
-        finally:
-            bridge_freeze.COVERED.clear()
-            bridge_freeze.COVERED.update(saved)
-            bridge_freeze.LISTED = tuple(bridge_freeze.COVERED)
-            bridge_freeze.FROZEN = bridge_freeze.WHOLE + bridge_freeze.LISTED
-
     widened = {schema_py: (*bridge_freeze.COVERED[schema_py], '_and_list')}
     and_list = f'{schema_py}::_and_list'
     with covering(widened):
@@ -1274,7 +1407,7 @@ def freeze_cases(results: list[Result]) -> None:
                 '    if len(names) > 10**6:\n'
                 "        raise ValueError('big')\n",
             ),
-            'schema.py: the covered code raises raise from',
+            '_and_list: the baseline raises raise from',
             rewrite=True,
             declare={and_list: {'refactor': 'coverage widened'}},
         )
@@ -1301,12 +1434,40 @@ def freeze_cases(results: list[Result]) -> None:
                 f'{dates}::<module>': {'refactor': 'frozen'},
             },
         )
-    with covering({client / 'adapters/relational.py': None}):
+    adapter = client / 'adapters/relational.py'
+    adapter_gone = {
+        f'{adapter}::RelationalAdapter._preflight': {
+            'gone': 'out of the freeze'
+        },
+        f'{adapter}::<module>': {'gone': 'out of the freeze'},
+    }
+
+    def preflight_rule(root: Path) -> None:
+        # The review's extra5: a rule in a body that has left the freeze.
+        path = root / adapter
+        text = path.read_text()
+        at = text.index('    def _preflight(')
+        at = text.index('"""', text.index('"""', at) + 3) + 3
+        at = text.index('\n', at) + 1
+        path.write_text(
+            text[:at]
+            + "        if len(payloads) > 5:\n            raise ValueError('cap')\n"
+            + text[at:]
+        )
+
+    with covering({adapter: None}):
         case(
-            'control: a file taken out of the freeze',
+            'a file taken out of the freeze, its entries not declared gone',
+            preflight_rule,
+            f'{adapter}::RelationalAdapter._preflight: gone against the base',
+            rewrite=True,
+        )
+        case(
+            'control: a file taken out of the freeze, declared gone',
             lambda r: None,
             None,
             rewrite=True,
+            declare=adapter_gone,
         )
     with covering({client / 'decompose.py': None}):
         case(
@@ -1343,7 +1504,7 @@ def freeze_cases(results: list[Result]) -> None:
     case(
         'growth under an allowance, declared as a refactor',
         added_raise,
-        'the covered code raises raise from',
+        'from_source: the baseline raises raise from',
         on=based(approved),
         allowances={'E99': {key: grown}},
         rewrite=True,
@@ -1386,7 +1547,7 @@ def freeze_cases(results: list[Result]) -> None:
     case(
         'an allowance below the growth',
         added_raise,
-        'the covered code raises raise from',
+        'from_source: the baseline raises raise from',
         on=based(approved),
         allowances={'E99': {key: {**grown, 'raise': held_entry['raise']}}},
         rewrite=True,
@@ -1395,7 +1556,7 @@ def freeze_cases(results: list[Result]) -> None:
     case(
         'an allowance the base already holds, reused after a shrink',
         added_raise,
-        'the covered code raises raise from',
+        'from_source: the baseline raises raise from',
         on=based(approved, held=repr({'E99': {key: grown}})),
         allowances={'E99': {key: grown}},
         rewrite=True,
@@ -1409,7 +1570,10 @@ def freeze_cases(results: list[Result]) -> None:
         '    return indices\n'
     )
     new_row = row('approved by owner 2026-10-10', names=f'`{new_key}`')
-    new_declared = {new_key: {'allowance': 'E99'}}
+    new_declared = {
+        new_key: {'allowance': 'E99'},
+        f'{materialize}::<module>': {'refactor': 'defines _brand_new'},
+    }
     case(
         'control: a new function within its allowance',
         lambda r: append(r / materialize, brand_new),
@@ -1424,7 +1588,7 @@ def freeze_cases(results: list[Result]) -> None:
     case(
         'a new function past its allowance (counts)',
         lambda r: append(r / materialize, brand_new),
-        '_rust/materialize.py: the covered code raises raise from',
+        '_brand_new: the baseline raises raise from 0',
         on=based(new_row),
         allowances={
             'E99': {new_key: {'raise': 0, 'warn': 0, 'branch': 1, 'calls': []}}
