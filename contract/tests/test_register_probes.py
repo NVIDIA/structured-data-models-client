@@ -262,6 +262,9 @@ def test_ord1_no_case_reaches_the_tie_sort(
         'null.target-all-null',
     } <= reached
     assert len(reached) >= 31
+    # The two static cases (base.multiclass, decimal.class-target-38-18)
+    # predict for the shop base's users, which have no time column, so
+    # neither has an entity time column for the sort to read either.
     assert any(kind == 'static' for _, kind, _, _ in calls)
     for case_id, _, train, test in calls:
         assert isinstance(train, pd.Timestamp), case_id

@@ -605,9 +605,14 @@ entries:
     answer changes when the core takes the in-memory route: that route's
     payload loses the wrapped anchor time column. The end-time check is a
     second reader of the same value: with the marker kept, the in-memory
-    route would clear every end time as the SQL route does, another changed
-    public answer, which this entry records and does not decide (proposed to
-    the owner: follow the SQL route). Neither shows in Phase 1, and the
+    route would clear every end time as the SQL route does. That answer is
+    public only through the engine package's own API: sdm_client clears a
+    table's end-time column before it samples (_copy_for_one_gather,
+    materializers/sources.py:82), so no sdm_client payload carries end
+    times. This entry records it and decides nothing about it; whether the
+    in-memory route should follow the SQL route there is a question for the
+    owner, in design.md's Journey check-in, not part of this approval.
+    Neither shows in Phase 1, and the
     public in-memory proof is Phase 4's (H24). Decision 30's condition, that
     a changed public answer is recorded here, is met by this note. Phase 0's
     recommendation: drop the wrap, after Phase 1 checks whether that
@@ -759,18 +764,22 @@ entries:
     time come out in introsort's order. It sorts only when the anchor is
     'entity' (base/sampler.py:777-783): a static query materialized with
     anchor_time='entity', whose entity table has a time column. On the
-    reference host (arm64, numpy 2.5.3, pandas 3.0.6) tied rows keep their
-    shuffled order up to 16 rows and lose it from 17.
+    reference host (arm64, numpy 2.5.3, pandas 3.0.6) a shared train set of
+    up to 16 entities keeps its tied rows in their shuffled order, and one
+    of more than 16 entities may not: the threshold is on the length of the
+    train set sorted, not on the number of rows that tie.
   new_behavior: >-
     Proposed: the core orders the shared train set by entity time, newest
     first, with tied rows in their shuffled order (RS-1's draw), the order
-    sort_values(ascending=False, kind='stable') gives; up to 16 rows that is
-    also the reference's order on its host.
+    sort_values(ascending=False, kind='stable') gives; for a shared train
+    set of up to 16 entities that is also the reference's order on its
+    host.
   affected_inputs: >-
-    Static queries materialized with anchor_time='entity' whose entities tie
-    on time, more than 16 of them: the order of the context rows, and which
-    tied rows fill the context when more qualify than it holds. No case of
-    the Phase 1b inventory or of contract/cases.
+    Static queries materialized with anchor_time='entity' over a shared
+    train set of more than 16 entities in which any two tie on time: the
+    order of the context rows, and which tied rows fill the context when
+    more qualify than it holds. No case of the Phase 1b inventory or of
+    contract/cases.
   cases: [T0.6, T1.21]
   status: proposed
   approved_by: null
@@ -781,9 +790,12 @@ entries:
     default route. The tie order reaches no inventory payload: the case
     schema takes an ISO date as materialize's anchor_time, so no case can
     name 'entity'; running the 40 inventory cases and the three of
-    contract/cases, 31 of them reach sample_target, in 32 calls (30
-    temporal, 2 static), every one anchored at a timestamp, so none takes
-    the sort. The control, a public materialize on DuckDB with
+    contract/cases, 32 cases (31 distinct ids, base.regression appears
+    twice, in the inventory and in contract/cases) reach sample_target with
+    one call each (30 temporal, 2 static), every one anchored at a
+    timestamp, so none takes the sort. From T1.21b contract/cases holds a
+    fourth case, base.adventureworks, which reaches it once more, temporal
+    and at a timestamp: 33 cases, 32 distinct ids. The control, a public materialize on DuckDB with
     anchor_time='entity' over 40 users tying on two times, reaches it; run
     by hand on the reference, its context rows came out in another order
     than with kind='stable', so the tie order does reach a payload when a
@@ -892,7 +904,7 @@ entries:
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
     reference's.
-  cases: [base.regression, T1.11b, T1.23, T1.24, T1.25]
+  cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.23, T1.24, T1.25]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -909,6 +921,9 @@ entries:
     (inference and the catalog requests), T1.24 (the bridge with overrides
     and tables named) and T1.25 (text dates, DT-7) remove each rule's
     refusal, and this entry is set to rejected when the last one goes.
+    T1.21b's refusal map (contract/refusal-maps/base.adventureworks.json)
+    records which of these E27's AdventureWorks journey reaches and which
+    task removes each; it approves nothing.
 
 - id: P1B-3
   title: materialize on the core route refuses what T1.11c's thin route does not port yet
@@ -957,7 +972,7 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source's schema
     under a forced core route, with any of the inputs above; base.regression
     is none of them, and its payload is the reference's.
-  cases: [base.regression, T1.11c, T1.22, T1.26, T1.27, T1.28, T1.29]
+  cases: [base.regression, base.adventureworks, T1.11c, T1.21b, T1.22, T1.26, T1.27, T1.28, T1.29]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -974,7 +989,10 @@ entries:
     it. Recommendation: approve as temporary, as P1B-2; T1.22 (seeds and
     streams), T1.26 (sampling), T1.27 (labels) and T1.28 (the payload)
     remove each rule's refusal, and this entry is set to rejected when the
-    last one goes.
+    last one goes. T1.21b's refusal map
+    (contract/refusal-maps/base.adventureworks.json) records which of these
+    E27's AdventureWorks journey reaches and which task removes each; it
+    approves nothing.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
