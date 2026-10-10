@@ -924,7 +924,8 @@ entries:
     for (probabilities, quantiles, scores, rankings, embeddings,
     explanation), any prediction statistic, an answer whose items carry
     those fields or item metadata, a prediction of any JSON type (an
-    integer, text, null or, through Python's reader, NaN and Infinity),
+    integer, text, null, an overflowing number read as an infinity or,
+    through Python's reader, NaN and Infinity),
     and an entity key of any declared dtype, read back as the client's
     as_declared reads it.
   new_behavior: >-
@@ -943,8 +944,10 @@ entries:
     response_field (an answer carrying a field beyond its id, row_index
     and prediction, named in field) and prediction_type (a prediction not
     written as a JSON float). An answer holding NaN or Infinity, which
-    Python's reader takes and JSON does not hold, is INVALID_RESPONSE on
-    the core, where the reference reads it. A request not materialized on
+    Python's reader takes and JSON does not hold, or a prediction token
+    past a double's range (1e400), which reads as an infinity, is
+    INVALID_RESPONSE on the core (reasons not_json and not_finite), on
+    every host, where the reference passes the value on. A request not materialized on
     the core has no core route (RouteError, the seam's own failure). The
     default route is unchanged.
   affected_inputs: >-

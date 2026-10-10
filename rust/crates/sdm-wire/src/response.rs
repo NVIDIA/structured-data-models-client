@@ -4,19 +4,23 @@
 
 //! The model API's prediction response, read as the client's generated
 //! bindings read it (`PredictionResponse.from_dict` and
-//! `PredictionItem.from_dict` of `sdm_api.generated.tfm_api`): the same
-//! fields required, the same types refused, in the same order, so a
-//! response one refuses the other refuses too. A refusal names the field
-//! and why, never a value the response holds.
+//! `PredictionItem.from_dict` of `sdm_api.generated.tfm_api`), for the
+//! fields it reads: the response's `id`, `model`, `predictions` and
+//! `metadata`, and each item's `id`, `row_index` and `forecast_step`, each
+//! required and typed as the bindings require it, checked in their order.
+//! For those fields a response the bindings refuse is refused here, and
+//! one they read is read (`contract/response-vectors.json` holds the two
+//! together). A refusal names the field and why, never a value.
 //!
-//! As built at T1.11d it reads what a regression's answer carries: each
-//! item's `row_index`, `id`, `forecast_step` and `prediction`, and the
-//! response's `id`, `model` and `metadata`. An item's other fields
-//! (`probabilities`, `scores`, `rankings`, `embeddings`, `quantiles`,
-//! `explanation`, `metadata`) are not read: when one is there and not
-//! null, it is named in [`PredictionItem::carried`], for the caller to
-//! refuse by name; T1.28 reads them. Members the bindings do not read are
-//! ignored, as there.
+//! As built at T1.11d the item's `prediction` is taken as written, as the
+//! bindings take it, and its other fields (`probabilities`, `scores`,
+//! `rankings`, `embeddings`, `quantiles`, `explanation`, `metadata`) are
+//! not read or type-checked: when one is there and not null, it is named in
+//! [`PredictionItem::carried`], for the caller to refuse by name as a field
+//! the result does not carry yet (`UNSUPPORTED_REQUEST`, register P1B-4),
+//! where the bindings would refuse a malformed one as a response not the
+//! contract's (`INVALID_RESPONSE`, decision E45(f)); T1.28 reads them.
+//! Members the bindings do not read are ignored, as there.
 
 use crate::json::{Value, whole};
 
