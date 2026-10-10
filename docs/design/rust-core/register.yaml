@@ -800,6 +800,50 @@ entries:
     can be approved by the reviewer; turning an accepted input into a refusal
     needs the owner.
 
+- id: P1B-2
+  title: Schema.from_source on the core route refuses what T1.11b's thin describe_source does not infer yet
+  kind: change
+  old_behavior: >-
+    The reference describes any DuckDB source Schema.from_source can read:
+    tables named or every table, keys, time columns and relationships given,
+    keys that repeat or miss values (warned, declined or refused by its
+    rules), text that holds dates or several categories, a tie between key
+    candidates, several timestamps, a preview of a whole 1,000 rows, a table
+    keyed by the column declared foreign keys refer to; an empty table is
+    refused with a RuntimeError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    DuckDB source's Schema.from_source with no tables named runs on the
+    core's describe_source (T1.11b), which infers by the reference's rules
+    only on the paths it ports and refuses every other input with
+    UNSUPPORTED_REQUEST naming the rule, never a value (fields operation and
+    rule): tables_named, primary_keys, time_columns, column_type,
+    float_nan, float_signed_zero, text_time, multicategorical, key_type,
+    key_name_order, key_tie, key_by_reference, key_missing, key_repeats,
+    time_whole_table, time_name, time_values, time_several and empty_table;
+    the schema bridge refuses relationships and a time column cleared
+    (None) the same way before the core runs. The default route is
+    unchanged.
+  affected_inputs: >-
+    Schema.from_source over DuckDB under a forced core route, with any of the
+    inputs above; base.regression is none of them, and its schema is the
+    reference's.
+  cases: [base.regression, T1.11b, T1.23, T1.24, T1.25]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by the implementer of T1.11b (Phase 1 decisions row E38), for
+    the owner: each is a refusal of an input the reference accepts, or, for
+    an empty table, a named refusal in place of a RuntimeError, so it waits
+    for the owner (P1B-1 process) and is never self-approved; the route is
+    not a default anywhere, so no caller meets it. The tests that pin the
+    refusals are diagnostic (base.regression is diagnostic until T1.29).
+    Recommendation: approve as temporary, as DT-9 was for T1.6a; T1.23
+    (inference and the catalog requests), T1.24 (the bridge with overrides
+    and tables named) and T1.25 (text dates, DT-7) remove each rule's
+    refusal, and this entry is set to rejected when the last one goes.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
