@@ -79,8 +79,19 @@ def test_the_inventory_loader_maps_every_case_without_loss() -> None:
         run_python.inventory_entry(case, defaults)
 
 
-def test_the_bases_are_the_inventorys() -> None:
-    assert run_python.load_bases() == _inventory()['bases']
+def test_the_bases_are_the_inventorys_and_adventureworks() -> None:
+    # The inventory's bases, and E27's AdventureWorks base beside them, in
+    # addition to the inventory (E31; T1.21b).
+    bases = run_python.load_bases()
+    assert 'adventureworks' not in _inventory()['bases']
+    assert {
+        name: statements
+        for name, statements in bases.items()
+        if name != 'adventureworks'
+    } == _inventory()['bases']
+    assert bases['adventureworks'][0].startswith(
+        'CREATE TABLE adventureworks_customers'
+    )
 
 
 def test_every_committed_case_validates_with_a_unique_id() -> None:

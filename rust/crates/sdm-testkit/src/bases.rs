@@ -105,7 +105,10 @@ mod tests {
         let bases =
             load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../contract/bases.yaml"))
                 .unwrap();
-        assert_eq!(bases.keys().collect::<Vec<_>>(), ["declared", "shop"]);
+        assert_eq!(
+            bases.keys().collect::<Vec<_>>(),
+            ["adventureworks", "declared", "shop"]
+        );
         assert_eq!(bases["shop"].len(), 2);
         assert!(bases["shop"][0].starts_with("CREATE TABLE users AS SELECT"));
     }

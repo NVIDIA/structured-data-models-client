@@ -51,7 +51,9 @@ def _run(mode: str, out: Path) -> dict[str, Any]:
             mode,
             '--out',
             str(out),
-            str(CASES),
+            # base.regression alone: base.adventureworks (T1.21b) has no
+            # core route yet (contract/refusal-maps).
+            str(CASES / 'base.regression.json'),
         ],
         capture_output=True,
         text=True,

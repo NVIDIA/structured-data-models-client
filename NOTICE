@@ -26,6 +26,24 @@ of LICENSE, each with the licence it declares at the version mermaid pins. The
 copyright notices themselves are mermaid's own, carried verbatim in
 rfm/assets/MERMAID_LICENSE.
 
+--------------------------------------------------------------------------------
+Test data
+--------------------------------------------------------------------------------
+
+One data set is copied into this repository as test data. It ships in no
+distribution.
+
+contract/bases.yaml (the adventureworks base)
+---------------------------------------------
+
+A subset of 1,000 rows of Microsoft's AdventureWorks sample database, from
+github.com/microsoft/sql-server-samples at commit
+b47eadc85277f72843647223cde53aa1b85ffcb8, MIT licensed, Copyright (c)
+Microsoft Corporation. contract/fixtures/adventureworks/build.py writes it;
+contract/fixtures/adventureworks/README.md records the source files and
+their SHA-256, and contract/fixtures/adventureworks/LICENSE.txt carries the
+licence text as the source repository does.
+
 Everything else in this repository, including the Predictive Query Language in
 packages/structured-data-models-pql, is first-party NVIDIA source maintained here under the
 licence above.

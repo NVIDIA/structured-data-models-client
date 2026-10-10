@@ -38,6 +38,7 @@
           "$ref": "#/$defs/statements"
         },
         "from_source": {"$ref": "#/$defs/from_source"},
+        "edits": {"$ref": "#/$defs/edits"},
         "pql": {"type": "string", "minLength": 1},
         "materialize": {"$ref": "#/$defs/materialize"}
       }
@@ -132,18 +133,62 @@
       "properties": {
         "tables": {"type": ["array", "object"]},
         "primary_keys": {"type": "object"},
-        "time_columns": {"type": "object"}
+        "time_columns": {"type": "object"},
+        "relationships": {
+          "description": "Each a Relationship(source_table, source_column, target_table, target_column) passed in (T1.21b).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_table", "source_column", "target_table", "target_column"],
+            "properties": {
+              "source_table": {"type": "string", "minLength": 1},
+              "source_column": {"type": "string", "minLength": 1},
+              "target_table": {"type": "string", "minLength": 1},
+              "target_column": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "edits": {
+      "description": "Edits to the schema Schema.from_source returned, made in order before materialize (T1.21b): clear_time_column sets schema[table].time_column = None; delete_column runs del schema[table][column]. They finish describing the schema, so a refusal of one is the from_source stage's.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "table"],
+            "properties": {
+              "op": {"const": "clear_time_column"},
+              "table": {"type": "string", "minLength": 1}
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["op", "table", "column"],
+            "properties": {
+              "op": {"const": "delete_column"},
+              "table": {"type": "string", "minLength": 1},
+              "column": {"type": "string", "minLength": 1}
+            }
+          }
+        ]
       }
     },
     "materialize": {
-      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text). An index is a JSON integer literal of any size, read without loss, or a string; both case loaders refuse a number written with a fraction or an exponent, 1.0 included, which JSON Schema alone would count as an integer.",
+      "description": "Keyword arguments to materialize: anchor_time is an ISO timestamp; indices_as decimal makes each index Decimal(text); inference_config is passed as written (T1.21b). An index is a JSON integer literal of any size, read without loss, or a string; both case loaders refuse a number written with a fraction or an exponent, 1.0 included, which JSON Schema alone would count as an integer.",
       "type": "object",
       "additionalProperties": false,
       "required": ["indices"],
       "properties": {
         "indices": {"type": "array", "items": {"type": ["integer", "string"]}},
         "indices_as": {"const": "decimal"},
-        "anchor_time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}
+        "anchor_time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"},
+        "inference_config": {"type": "object", "minProperties": 1}
       }
     },
     "expect": {

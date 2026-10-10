@@ -70,6 +70,10 @@ pub struct Input {
     pub setup: Option<Vec<String>>,
     #[serde(default)]
     pub from_source: Option<FromSource>,
+    /// The user's edits to the schema `Schema.from_source` returned, kept
+    /// as written; the Python runner makes them (T1.21b).
+    #[serde(default)]
+    pub edits: Option<Vec<Value>>,
     pub pql: String,
     pub materialize: Materialize,
 }
@@ -84,6 +88,9 @@ pub struct FromSource {
     pub primary_keys: Option<serde_json::Map<String, Value>>,
     #[serde(default)]
     pub time_columns: Option<serde_json::Map<String, Value>>,
+    /// The relationships passed in, kept as written (T1.21b).
+    #[serde(default)]
+    pub relationships: Option<Vec<Value>>,
 }
 
 /// `from_source`'s tables: a list of names, or names by alias.
@@ -103,6 +110,9 @@ pub struct Materialize {
     pub indices_as: Option<IndicesAs>,
     #[serde(default)]
     pub anchor_time: Option<String>,
+    /// The inference options passed, kept as written (T1.21b).
+    #[serde(default)]
+    pub inference_config: Option<serde_json::Map<String, Value>>,
 }
 
 /// One entity key: a JSON integer literal of any size, kept as its

@@ -101,12 +101,15 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
         'S1': ['describe_source', 'materialize', 'predict'],
     }
     for observation in _observations(core):
-        slice_ = next(
-            case['slice']
+        case = next(
+            case
             for case, _ in run_python.load_cases([CASES])
             if case['id'] == observation['case']
         )
-        assert observation['identity']['operations'] == operations[slice_]
+        # A case that forces no route (base.adventureworks, whose journey
+        # has no core route yet, T1.21b) runs on the old route throughout.
+        wanted = operations[case['slice']] if case['routes'] else []
+        assert observation['identity']['operations'] == wanted, case['id']
         assert observation['identity']['native'] is not None
     for observation in _observations(old):
         assert observation['identity']['native_loaded'] is False

@@ -1517,7 +1517,31 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
     arguments: dict[str, Any] = {'indices': list(indices)}
     if 'anchor_time' in spec:
         arguments['anchor_time'] = pd.Timestamp(spec['anchor_time'])
+    if 'inference_config' in spec:
+        arguments['inference_config'] = copy.deepcopy(spec['inference_config'])
     return arguments
+
+
+def _from_source_arguments(spec: dict[str, Any]) -> dict[str, Any]:
+    r"""``Schema.from_source``'s keyword arguments, each relationship as a
+    ``Relationship``."""
+    from sdm_client import Relationship
+
+    arguments = copy.deepcopy(spec)
+    if 'relationships' in arguments:
+        arguments['relationships'] = [
+            Relationship(**link) for link in arguments['relationships']
+        ]
+    return arguments
+
+
+def _edit(schema: Any, edits: list[dict[str, str]]) -> None:
+    r"""The case's edits to the schema, in order (T1.21b)."""
+    for edit in edits:
+        if edit['op'] == 'clear_time_column':
+            schema[edit['table']].time_column = None
+        else:
+            del schema[edit['table']][edit['column']]
 
 
 def _route_error(error: BaseException) -> bool:
@@ -1620,6 +1644,7 @@ def _call(
     # build is a runner failure, never the case's outcome.
     try:
         arguments = _materialize_arguments(given['materialize'])
+        from_source = _from_source_arguments(given.get('from_source', {}))
     except Exception:  # noqa: BLE001 - building the input is not the call
         raise RunnerFailure(
             f'{case["id"]}: its materialize arguments could not be built'
@@ -1643,9 +1668,12 @@ def _call(
         warnings.simplefilter('always')
         try:
             schema = Schema.from_source(
-                DuckDBSource(given_to_source), **given.get('from_source', {})
+                DuckDBSource(given_to_source), **from_source
             )
             public['schema'] = _schema_projection(schema)
+            # The user's edits finish describing the schema, so a refusal
+            # of one is the from_source stage's.
+            _edit(schema, given.get('edits', []))
             if case['until'] != 'from_source':
                 stage = 'materialize'
                 if log is not None:

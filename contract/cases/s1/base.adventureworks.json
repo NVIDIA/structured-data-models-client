@@ -1,0 +1,139 @@
+{
+  "format": "sdm-case/1",
+  "id": "base.adventureworks",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "schema.edit/set-time-column/any",
+    "schema.edit/drop-column/any",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [],
+  "seam": "baseline",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "int64/target",
+    "utf8/feature",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "from_source": {
+      "tables": {
+        "customers": "adventureworks_customers",
+        "products": "adventureworks_products",
+        "sales_order_headers": "adventureworks_sales_order_headers",
+        "sales_order_details": "adventureworks_sales_order_details"
+      },
+      "primary_keys": {
+        "customers": "CustomerID",
+        "products": "ProductID",
+        "sales_order_details": "SalesOrderDetailID"
+      },
+      "time_columns": {
+        "sales_order_headers": "OrderDate",
+        "sales_order_details": "OrderDate"
+      },
+      "relationships": [
+        {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "ProductID",
+          "target_table": "products",
+          "target_column": "ProductID"
+        }
+      ]
+    },
+    "edits": [
+      {
+        "op": "clear_time_column",
+        "table": "products"
+      },
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "rowguid"
+      }
+    ],
+    "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+    "materialize": {
+      "indices": [
+        709
+      ],
+      "inference_config": {
+        "num_estimators": 4,
+        "column_shuffle": true
+      }
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          "adventureworks_customers",
+          "adventureworks_products",
+          "adventureworks_sales_order_headers",
+          "adventureworks_sales_order_details"
+        ],
+        "primary_keys": {
+          "adventureworks_customers": [
+            "CustomerID"
+          ],
+          "adventureworks_products": [
+            "ProductID"
+          ],
+          "adventureworks_sales_order_details": [
+            "SalesOrderDetailID"
+          ]
+        },
+        "time_columns": {
+          "adventureworks_sales_order_headers": "OrderDate",
+          "adventureworks_sales_order_details": "OrderDate"
+        }
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "customers keyed by CustomerID, with no time column; products keyed by ProductID, SellStartDate inferred as its time column and cleared by the edit; the order headers keyless; OrderDate the time column of both event tables; the three relationships as given; four SDMWarnings and a UserWarning; result columns row_index int64, id int64, prediction float64, one row"
+  },
+  "why": "E27's AdventureWorks baseline case, in addition to the 40-case inventory (E31): the journey of the notebook's demand_30d question (tables named, keys and time columns given, relationships passed, a time column cleared, columns deleted, inference_config passed, then materialize and predict) on local DuckDB over a 1,000-row subset of Microsoft's sample (contract/fixtures/adventureworks). It forces no route: Schema.from_source with tables named has no core route yet. The refusals the core route hits on it, probe by probe, are contract/refusal-maps/base.adventureworks.json's (T1.21b), and core.describe_source is the operation its call would start, as the contract can say it (source table names, no aliases). Diagnostic until T1.29",
+  "source": "examples/databricks/adventureworks_relational.ipynb, demand_30d, and PR #29's kumo_relational_quickstart.ipynb for the data, loaded as its Step 4 loads them, swapped to local DuckDB (E27); the question is the notebook's unchanged, and indices its top_product query's answer over the fixture"
+}
