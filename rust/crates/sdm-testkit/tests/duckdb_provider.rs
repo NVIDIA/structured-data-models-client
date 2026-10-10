@@ -6,7 +6,8 @@
 //! schema completes through `HostRun`, and, by `contract/provider-vectors.json`,
 //! which the Python host's provider tests read too, a fetch the driver hands
 //! over in several batches and an empty one are admitted as the vectors
-//! say, and a `TIMESTAMPTZ` column reads in the session zone's wall clock.
+//! say, and a `TIMESTAMPTZ` column reads in the database (`GLOBAL`) zone's wall
+//! clock, a session zone of the source's connection being seen by no read.
 //! Each fetch is planned by the root's data layer for DuckDB and echoed back
 //! by the test-only fetch, so what is compared is what the core admitted.
 
@@ -193,6 +194,38 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     assert!(tables.iter().all(|t| t["duplicate_keys"]["v"] == "0"));
     // One fetch per statement the reference runs in Schema.from_source.
     assert_eq!(observed.fetches.len(), 10);
+    // The whole description, the inputs and the step trace are the ones
+    // python-core records (contract/pinned, which contract/tests holds
+    // python-core to), so CI gates the two hosts' equality.
+    let pinned: Value = serde_json::from_slice(
+        &std::fs::read(contract().join("pinned/base.regression.core.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(described, pinned["described"]);
+    assert_eq!(Value::from(observed.fetches), pinned["fetches"]);
+    assert_eq!(Value::from(observed.inputs), pinned["inputs"]);
+}
+
+#[test]
+fn a_time_of_day_is_refused_as_a_time_column_by_name() {
+    let mut loaded = case::load(&[contract().join("cases/s1/base.regression.json")])
+        .unwrap()
+        .remove(0)
+        .case;
+    loaded.input.setup = Some(vec![
+        "CREATE TABLE things (thing_id BIGINT, tod TIME)".into(),
+        "INSERT INTO things SELECT i, TIME '01:00:00' + INTERVAL (i) MINUTE FROM range(30) t(i)"
+            .into(),
+    ]);
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let observed = host::run(&loaded, &bases).unwrap();
+    assert_eq!(
+        observed.answer,
+        Answer::Error {
+            kind: "unsupported".into(),
+            code: "UNSUPPORTED_REQUEST".into()
+        }
+    );
 }
 
 #[test]
@@ -312,4 +345,12 @@ fn the_host_s_duckdb_links_the_reference_version_with_icu() {
         )
         .unwrap();
     assert_eq!(autoload, "false");
+    let autoinstall: String = connection
+        .query_row(
+            "SELECT current_setting('autoinstall_known_extensions')::VARCHAR",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(autoinstall, "false");
 }

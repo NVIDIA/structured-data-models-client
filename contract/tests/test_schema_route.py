@@ -72,6 +72,14 @@ def test_base_regression_s_schema_on_the_core_is_the_reference_s(
     assert core['core']['error'] is None
     assert core['core']['described'] is not None
     assert old['identity']['native_loaded'] is False
+    # The inputs, step trace and description sdm-testkit's
+    # tests/duckdb_provider.rs holds rust-host to: CI gates the two hosts'
+    # equality here until T1.18's comparator does.
+    pinned = json.loads(
+        (ROOT / 'contract/pinned/base.regression.core.json').read_text()
+    )
+    for field in ('inputs', 'fetches', 'described'):
+        assert core['core'][field] == pinned[field], field
     for observed in (core, old):
         assert observed['public']['schema'] == reference['public']['schema']
         assert observed['outcome'] == reference['outcome']

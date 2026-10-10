@@ -13,9 +13,12 @@
 //! `duckdb` 1.10506.0 needs DuckDB's sources beside the crate, which the
 //! published crate does not carry, so it cannot be built (decision E37).
 //! [`open`] loads ICU explicitly instead, the extension DuckDB signs for
-//! this exact version, installed from DuckDB's repository the first time;
-//! autoloading and autoinstalling stay off, so nothing else loads, and the
-//! loaded ICU's version is checked.
+//! this exact version, installed from DuckDB's repository the first time
+//! (a signature-checked network bootstrap, not a hermetic one; CI caches
+//! the extension directory), its bytes checked against the digest recorded
+//! for the platform before it is loaded; autoloading and autoinstalling
+//! stay off, so nothing else loads, and the loaded ICU's version is
+//! checked.
 
 use anyhow::{Context, Result, anyhow, bail};
 use duckdb::arrow::datatypes::SchemaRef;
@@ -27,6 +30,28 @@ use sdm_contract::run::FetchStep;
 
 /// The DuckDB version the reference runs, which this host must link.
 pub const DUCKDB_VERSION: &str = "v1.5.6";
+
+/// The SHA-256 of DuckDB's signed ICU extension for v1.5.6, by platform,
+/// as `extensions.duckdb.org` serves it (decompressed), which is the file
+/// `INSTALL icu` writes.
+const ICU_SHA256: [(&str, &str); 4] = [
+    (
+        "linux_amd64",
+        "f7bdb7b30da48406cc58429b8b5d901a1aea5f8b9c0bd1928642f0ab262d5d85",
+    ),
+    (
+        "linux_arm64",
+        "414bd5f36d5efd15cf92d008a7e9369ada3031d584e8a992bff73f9d3b444749",
+    ),
+    (
+        "osx_amd64",
+        "9cc1f9c2c261de0af335d530749d23e5f472bb85c76f0552ab34adfb5cf1dfd3",
+    ),
+    (
+        "osx_arm64",
+        "3578a29bb3e05024eaf75c849d502089d25ed2b629823ed97508a86e62acbba7",
+    ),
+];
 
 /// A fresh in-memory database, with ICU loaded and extension autoloading
 /// off.
@@ -40,14 +65,39 @@ pub fn open() -> Result<Connection> {
     if version != DUCKDB_VERSION {
         bail!("DuckDB {version} is linked, and the reference runs {DUCKDB_VERSION}");
     }
-    if connection.execute_batch("LOAD icu").is_err() {
-        // Tests in parallel may install it at once; whichever install
-        // lands, the load is what must succeed.
-        let _ = connection.execute_batch("INSTALL icu");
-        connection
-            .execute_batch("LOAD icu")
-            .context("installing and loading DuckDB's ICU extension")?;
+    // Installed once per machine from DuckDB's repository, signature
+    // checked by DuckDB; its bytes are checked here against the digest
+    // recorded for the platform before it is loaded (decision E37).
+    let installed = |connection: &Connection| -> Result<Option<String>> {
+        Ok(connection.query_row(
+            "SELECT install_path FROM duckdb_extensions() WHERE extension_name = 'icu' AND installed",
+            [],
+            |row| row.get(0),
+        ).ok())
+    };
+    let path = match installed(&connection)? {
+        Some(path) => path,
+        None => {
+            // Tests in parallel may install it at once; whichever install
+            // lands, the file must then be there.
+            let _ = connection.execute_batch("INSTALL icu");
+            installed(&connection)?.context("installing DuckDB's ICU extension")?
+        }
+    };
+    let platform: String =
+        connection.query_row("SELECT platform FROM pragma_platform()", [], |row| {
+            row.get(0)
+        })?;
+    let Some((_, digest)) = ICU_SHA256.iter().find(|(name, _)| *name == platform) else {
+        bail!("no recorded ICU digest for the platform {platform}");
+    };
+    let bytes = std::fs::read(&path).with_context(|| format!("reading {path}"))?;
+    if crate::case::sha256(&bytes) != *digest {
+        bail!("the ICU extension at {path} is not the one recorded for {platform}");
     }
+    connection
+        .execute_batch("LOAD icu")
+        .context("loading DuckDB's ICU extension")?;
     let (loaded, icu): (bool, String) = connection.query_row(
         "SELECT loaded, extension_version FROM duckdb_extensions() WHERE extension_name = 'icu'",
         [],

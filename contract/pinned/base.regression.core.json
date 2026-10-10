@@ -1,0 +1,605 @@
+{
+ "description": "base.regression's describe_source on the core, as python-core recorded it at T1.11b: the operation's input, every fetch the core asked for with its plan (the step trace), and the SourceDescription it answered. sdm-testkit's tests/duckdb_provider.rs holds rust-host to it and contract/tests/test_schema_route.py holds python-core to it, so CI gates the two hosts' equality until T1.18's comparator does.",
+ "inputs": [
+  {
+   "check_keys": true,
+   "op": "describe_source",
+   "provider": {
+    "dialect": "duckdb",
+    "provider": "sql"
+   },
+   "source": {
+    "primary_keys": {},
+    "tables": [],
+    "time_columns": {}
+   }
+  }
+ ],
+ "fetches": [
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "table_name",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND database_name = current_database() AND schema_name = current_schema()"
+     }
+    ]
+   },
+   "request": {
+    "part": "tables",
+    "request": "describe",
+    "tables": []
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "cid",
+       "nullable": false,
+       "type": {
+        "type": "int32"
+       }
+      },
+      {
+       "name": "name",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "notnull",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      },
+      {
+       "name": "dflt_value",
+       "nullable": true,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "pk",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "PRAGMA table_info(\"orders\")"
+     }
+    ]
+   },
+   "request": {
+    "part": "columns",
+    "request": "describe",
+    "tables": [
+     "orders"
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "constraint_type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "constraint_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'orders'\n  AND database_name = current_database() AND schema_name = current_schema()"
+     }
+    ]
+   },
+   "request": {
+    "part": "keys",
+    "request": "describe",
+    "tables": [
+     "orders"
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "discover"
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT \"order_id\", \"user_id\", \"price\", \"ts\" FROM \"orders\" LIMIT 1000"
+     }
+    ]
+   },
+   "request": {
+    "columns": [
+     "order_id",
+     "user_id",
+     "price",
+     "ts"
+    ],
+    "limit": 1000,
+    "request": "preview",
+    "table": "orders"
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "cid",
+       "nullable": false,
+       "type": {
+        "type": "int32"
+       }
+      },
+      {
+       "name": "name",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "notnull",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      },
+      {
+       "name": "dflt_value",
+       "nullable": true,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "pk",
+       "nullable": false,
+       "type": {
+        "type": "bool"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "PRAGMA table_info(\"users\")"
+     }
+    ]
+   },
+   "request": {
+    "part": "columns",
+    "request": "describe",
+    "tables": [
+     "users"
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "constraint_type",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "constraint_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'users'\n  AND database_name = current_database() AND schema_name = current_schema()"
+     }
+    ]
+   },
+   "request": {
+    "part": "keys",
+    "request": "describe",
+    "tables": [
+     "users"
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "discover"
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT \"user_id\", \"age\", \"country\" FROM \"users\" LIMIT 1000"
+     }
+    ]
+   },
+   "request": {
+    "columns": [
+     "user_id",
+     "age",
+     "country"
+    ],
+    "limit": 1000,
+    "request": "preview",
+    "table": "users"
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "constraint_index",
+       "nullable": false,
+       "type": {
+        "type": "int64"
+       }
+      },
+      {
+       "name": "referenced_table",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "constraint_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      },
+      {
+       "name": "referenced_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'orders'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'"
+     }
+    ]
+   },
+   "request": {
+    "part": "foreign_keys",
+    "request": "describe",
+    "tables": [
+     "orders"
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "constraint_index",
+       "nullable": false,
+       "type": {
+        "type": "int64"
+       }
+      },
+      {
+       "name": "referenced_table",
+       "nullable": false,
+       "type": {
+        "type": "utf8"
+       }
+      },
+      {
+       "name": "constraint_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      },
+      {
+       "name": "referenced_column_names",
+       "nullable": false,
+       "type": {
+        "item": {
+         "name": "l",
+         "nullable": true,
+         "type": {
+          "type": "utf8"
+         }
+        },
+        "type": "list"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'users'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'"
+     }
+    ]
+   },
+   "request": {
+    "part": "foreign_keys",
+    "request": "describe",
+    "tables": [
+     "users"
+    ]
+   }
+  },
+  {
+   "plan": {
+    "expect": {
+     "expect": "schema",
+     "fields": [
+      {
+       "name": "k",
+       "nullable": false,
+       "type": {
+        "type": "int32"
+       }
+      },
+      {
+       "name": "n",
+       "nullable": false,
+       "type": {
+        "type": "int64"
+       }
+      },
+      {
+       "name": "d",
+       "nullable": false,
+       "type": {
+        "type": "int64"
+       }
+      },
+      {
+       "name": "z",
+       "nullable": false,
+       "type": {
+        "type": "int64"
+       }
+      }
+     ]
+    },
+    "plan": "sql",
+    "statements": [
+     {
+      "dialect": "duckdb",
+      "params": [],
+      "text": "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\""
+     }
+    ]
+   },
+   "request": {
+    "keys": [
+     {
+      "columns": [
+       "order_id"
+      ],
+      "table": "orders"
+     },
+     {
+      "columns": [
+       "user_id"
+      ],
+      "table": "users"
+     }
+    ],
+    "request": "key_counts"
+   }
+  }
+ ],
+ "described": {
+  "links": [],
+  "tables": [
+   {
+    "columns": [
+     {
+      "dtype": "int",
+      "name": "order_id",
+      "received": {
+       "type": "int64"
+      },
+      "stype": "ID"
+     },
+     {
+      "dtype": "int",
+      "name": "user_id",
+      "received": {
+       "type": "int64"
+      },
+      "stype": "ID"
+     },
+     {
+      "dtype": "float",
+      "name": "price",
+      "received": {
+       "type": "float64"
+      },
+      "stype": "numerical"
+     },
+     {
+      "dtype": "date",
+      "name": "ts",
+      "received": {
+       "type": "timestamp",
+       "unit": "us",
+       "zone": null
+      },
+      "stype": "timestamp"
+     }
+    ],
+    "duplicate_keys": {
+     "t": "u64",
+     "v": "0"
+    },
+    "name": "orders",
+    "primary_key": [
+     "order_id"
+    ],
+    "time_column": "ts"
+   },
+   {
+    "columns": [
+     {
+      "dtype": "int",
+      "name": "user_id",
+      "received": {
+       "type": "int64"
+      },
+      "stype": "ID"
+     },
+     {
+      "dtype": "int",
+      "name": "age",
+      "received": {
+       "type": "int32"
+      },
+      "stype": "numerical"
+     },
+     {
+      "dtype": "string",
+      "name": "country",
+      "received": {
+       "type": "utf8"
+      },
+      "stype": "categorical"
+     }
+    ],
+    "duplicate_keys": {
+     "t": "u64",
+     "v": "0"
+    },
+    "name": "users",
+    "primary_key": [
+     "user_id"
+    ],
+    "time_column": null
+   }
+  ]
+ }
+}
