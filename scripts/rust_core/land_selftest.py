@@ -36,6 +36,8 @@ BASE = 'b' * 8 + '2' * 32
 CHECK = 'a' * 8 + '3' * 32
 OTHER = 'd' * 8 + '4' * 32
 LAND = 'e' * 8 + '5' * 32
+#: Shares the candidate's first eight digits, so that prefix is ambiguous.
+TWIN = 'c' * 8 + '6' * 32
 TOPIC = 'rust-core-phase-1-lane-a'
 PHASE = 'rust-core-phase-1'
 SIGNOFF = 'Signed-off-by: Test Person <test@example.com>'
@@ -216,6 +218,7 @@ class Case:
         self.fake = fake or Fake()
         self.lines: list[str] = []
         self.code: int | None = None
+        self.calls: list[tuple[str, ...]] = []
         self.reviews = [
             self.review(
                 'a.txt', f'APPROVE\n\nReviewed {CAND[:7]}; no findings.\n'
@@ -243,8 +246,9 @@ class Case:
         return self.call(['verify', sha, '--appear-timeout', '0'])
 
     def call(self, argv: list[str]) -> Case:
-        tools = land.Tools(run=self.fake, sleep=lambda _: None)
+        tools = land.Tools(run=self.fake, sleep=lambda _: None, repo='o/r')
         self.code = land.main(argv, tools, self.lines.append)
+        self.calls = tools.calls
         return self
 
     @property
@@ -320,7 +324,8 @@ def _(tmp: Path) -> tuple[bool, str]:
     message = c.fake.committed[0] if c.fake.committed else ''
     expected = (
         r'Land T1\.99: a test package\n\n'
-        r'Both reviews approve the candidate c{7}; (?:[^\n]{1,72}\n)+\n'
+        r'Both reviews approve the candidate c{7}\.\n\n'
+        rf'Candidate run 1 green at {CAND}; (?:[^\n]{{1,72}}\n)+\n'
         r'Reviewed-by: independent reviewer \(fresh agent\) and Codex, T1\.99\n'
         r'Protected-paths: \.github/workflows/ci\.yml \(no gate removed\)\n'
         rf'Base-SHA: {BASE}\n'
@@ -498,6 +503,7 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 @case('names_candidate: full, prefix, embedded and too short')
 def _(tmp: Path) -> tuple[bool, str]:
+    tools = land.Tools(run=Fake())
     checks = {
         f'at {CAND}.': True,
         f'at {CAND[:7]};': True,
@@ -509,9 +515,83 @@ def _(tmp: Path) -> tuple[bool, str]:
     wrong = {
         text: expect
         for text, expect in checks.items()
-        if land.names_candidate(text, CAND) != expect
+        if (land.names_candidate(tools, text, CAND) is None) != expect
     }
     return not wrong, 'as expected' if not wrong else f'wrong: {wrong}'
+
+
+def with_twin() -> Fake:
+    fake = Fake()
+    fake.commits[TWIN] = {'parent': BASE, 'tree': 'tree-twin', 'message': ''}
+    return fake
+
+
+@case('refused: a review naming the candidate by an ambiguous prefix')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp, with_twin())
+    bad = c.review('bad.txt', f'APPROVE\nReviewed {CAND[:8]}.\n')
+    return refused(c.land(reviews=[c.reviews[0], bad]), 'ambiguous')
+
+
+@case('refused: a review naming the twin, whose prefix the candidate shares')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp, with_twin())
+    bad = c.review('bad.txt', f'APPROVE\nReviewed {TWIN[:12]}.\n')
+    return refused(
+        c.land(reviews=[c.reviews[0], bad]), 'does not name the candidate'
+    )
+
+
+@case('lands: a longer prefix that resolves to the candidate alone')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp, with_twin())
+    good = c.review('good.txt', f'APPROVE\nReviewed {CAND[:9]}.\n')
+    c.land(reviews=[c.reviews[1], good])
+    return c.code == 0, 'landed' if c.code == 0 else c.text
+
+
+# --- the branches -------------------------------------------------------------
+
+
+for topic in (
+    'main',
+    'master',
+    'rust-core',
+    PHASE,
+    'rust-core-phase-2-lane-a',
+    'feature-x',
+    f'{PHASE}-',
+    f'{PHASE}-a..b',
+    f'{PHASE}-x.lock',
+    f'refs/heads/{PHASE}-lane-a',
+):
+
+    @case(f'refused: --topic-branch {topic}')
+    def _(tmp: Path, topic: str = topic) -> tuple[bool, str]:
+        c = Case(tmp).land('--topic-branch', topic)
+        ok, detail = refused(c, 'topic branch')
+        # Refused before anything was asked of git or gh.
+        return ok and not c.calls, detail
+
+
+for phase in ('main', 'rust-core', f'{PHASE}-lane-a', 'rust-core-phase-2'):
+
+    @case(f'refused: --phase-branch {phase}')
+    def _(tmp: Path, phase: str = phase) -> tuple[bool, str]:
+        c = Case(tmp).land('--phase-branch', phase)
+        ok, detail = refused(c, 'phase branch')
+        return ok and not c.calls, detail
+
+
+@case('lands: a task-named topic branch under the phase branch')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp).land('--topic-branch', f'{PHASE}-t1.12')
+    ok = c.code == 0 and any(
+        f'refs/heads/{PHASE}-t1.12' in ref
+        for push in c.fake.pushes
+        for ref in push
+    )
+    return ok, 'landed' if ok else c.text
 
 
 # --- the candidate's CI run ---------------------------------------------------
@@ -600,8 +680,13 @@ def _(tmp: Path) -> tuple[bool, str]:
 @case('refused: the remote refuses the push (the phase branch moved)')
 def _(tmp: Path) -> tuple[bool, str]:
     c = Case(tmp, Fake(refuse_push=PHASE)).land()
-    ok = c.code == 2 and 'rejected' in c.text and 'LANDED' not in c.text
-    return ok, 'reported, not landed' if ok else c.text
+    ok = (
+        c.code == 2
+        and 'rejected' in c.text
+        and 'LANDED' not in c.text
+        and f'git reset --soft {CAND}' in c.text
+    )
+    return ok, 'reported with the undo, not landed' if ok else c.text
 
 
 @case('waits: a cancelled candidate run lands only after the landing run')
@@ -618,7 +703,16 @@ def _(tmp: Path) -> tuple[bool, str]:
         ]
         and 'fast-forwarded' in c.text
     )
-    return ok, 'topic, watched, then phase' if ok else f'{pushes}: {c.text}'
+    message = ' '.join((c.fake.committed or [''])[0].split())
+    named = (
+        f'Candidate CI not relied on (run 1: cancelled at {CAND}); the phase '
+        "branch moves only when this commit's own exact-SHA run is green"
+    ) in message and 'green at' not in message
+    return ok and named, (
+        'topic, watched, then phase; the message names the evidence'
+        if ok and named
+        else f'{pushes}: {message} | {c.text}'
+    )
 
 
 @case('waits: a red landing run leaves the phase branch where it was')
@@ -690,6 +784,43 @@ def _(tmp: Path) -> tuple[bool, str]:
     c.verify()
     ok = c.code == 1 and 'changes files' in c.text
     return ok, 'reported' if ok else c.text
+
+
+@case('verify: a cancelled phase run beside a green topic run passes')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp, landing_conclusion={PHASE: 'cancelled'}).verify()
+    ok = (
+        c.code == 0
+        and 'CANC' in c.text
+        and 'same tree is green' in c.text
+        and 'VERIFY FAILED' not in c.text
+    )
+    return ok, 'reported cancelled, passed' if ok else c.text
+
+
+@case('verify: both cancelled, the candidate green: passes on the tree')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(
+        tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'}
+    ).verify()
+    ok = c.code == 0 and f'at {CAND[:12]}' in c.text
+    return ok, "the candidate's run stands" if ok else c.text
+
+
+@case('verify: cancelled with no green run asks for a rerun, not a revert')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'})
+    for run in c.fake.runs[CAND]:
+        run['conclusion'] = 'cancelled'
+    c.verify()
+    ok = (
+        c.code == 3
+        and 'VERIFY INCOMPLETE' in c.text
+        and 'gh run rerun' in c.text
+        and 'Nothing was reverted' not in c.text
+        and not c.fake.pushes
+    )
+    return ok, 'rerun asked' if ok else c.text
 
 
 def main() -> int:

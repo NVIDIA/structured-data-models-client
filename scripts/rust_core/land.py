@@ -20,12 +20,17 @@ concluded success. The landing commit's runs are recorded afterwards
 
 Before it changes anything it refuses, naming the reason, unless:
 
+- the phase branch is exactly ``rust-core-phase-1`` and the topic branch a
+  package branch under it (``rust-core-phase-1-<name>``, a lane
+  ``rust-core-phase-1-lane-<x>`` included), never ``main``, ``rust-core``
+  or anything else;
 - the worktree is clean, HEAD is the candidate, and the candidate descends
   from the phase branch's head on the remote without being it;
 - the checkpoint is a commit the candidate descends from;
 - there are at least two review files, distinct, each whose first line is
   exactly ``APPROVE`` and which names the candidate by its full SHA or a
-  prefix of at least seven characters;
+  prefix of at least seven characters that git resolves to the candidate
+  and to nothing else;
 - the newest CI run ``gh`` reports on the candidate's exact SHA completed
   with conclusion success; a cancelled, failed or unfinished run does not
   count (T1.8b's candidate run was cancelled).
@@ -33,10 +38,15 @@ Before it changes anything it refuses, naming the reason, unless:
 It then commits the landing commit (``git commit --allow-empty -s``) with
 ``Reviewed-by``, ``Protected-paths``, ``Base-SHA`` (the phase head) and
 ``Checkpoint-SHA`` trailers, as earlier landing commits do, checks that the
-commit's tree is the candidate's and its parent the candidate, and pushes
+commit's tree is the candidate's and its parent the candidate (so a
+landing whose tree differs is never made), and pushes
 it to the topic branch and the phase branch in one atomic push, which the
 remote refuses if the phase branch moved. It prints the landing SHA and
 the landing runs once they appear.
+
+The landing commit's message names the CI evidence it lands on: the
+candidate's green run, by id and SHA, or, on the other path, the
+candidate's run that was not green and the landing run that must be.
 
 ``--wait-for-landing-run`` is the decision's other path, for a candidate
 whose run is not green: the CI check is reported rather than required, the
@@ -44,8 +54,11 @@ landing commit is pushed to the topic branch only, and the phase branch is
 fast-forwarded only after the landing commit's own run concludes success.
 
 ``verify`` waits for the runs on a landing SHA (the topic branch's and the
-phase branch's) and reports each. On a failure it prints how to revert the
-fast-forward and changes nothing: it never reverts by itself.
+phase branch's) and reports each. A cancelled run is reported as cancelled,
+not failed: it passes when another run on the same SHA, or on the
+candidate, whose tree the landing commit shares, is green, and otherwise
+asks for a rerun. On a failure it prints how to revert the fast-forward and
+changes nothing: it never reverts by itself.
 
 ``--dry-run`` makes every check, prints the landing commit it would make,
 and commits and pushes nothing.
@@ -66,6 +79,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PHASE_BRANCH = 'rust-core-phase-1'
+#: A package's topic branch: a branch under the phase branch, a lane
+#: (``rust-core-phase-1-lane-a``) or a task (``rust-core-phase-1-t1.12``).
+TOPIC_BRANCH = re.compile(
+    re.escape(PHASE_BRANCH) + r'-[A-Za-z0-9](?:[A-Za-z0-9_-]|\.(?!\.))*'
+)
 WORKFLOW = 'ci.yml'
 APPROVE = 'APPROVE'
 MIN_PREFIX = 7
@@ -182,18 +200,69 @@ def check_descent(
         )
 
 
-def names_candidate(text: str, candidate: str) -> bool:
-    """Whether the text names the candidate: its full SHA, or a prefix of at
-    least seven hex digits standing as a word of its own."""
-    for token in re.findall(
-        r'(?<![0-9a-fA-F])[0-9a-fA-F]{7,40}(?![0-9a-fA-F])', text
-    ):
-        if len(token) >= MIN_PREFIX and candidate.startswith(token.lower()):
-            return True
-    return False
+def check_branches(phase: str, topic: str) -> None:
+    """Refuses a destination other than the phase branch and a package
+    branch under it, before anything is fetched, committed or pushed."""
+    if phase != PHASE_BRANCH:
+        raise Refusal(
+            f'the phase branch is {phase!r}; land.py lands only on '
+            f'{PHASE_BRANCH!r}'
+        )
+    if topic in ('main', 'master', 'rust-core', PHASE_BRANCH):
+        raise Refusal(
+            f'the topic branch is {topic!r}; a landing pushes a package branch '
+            f'({PHASE_BRANCH}-<name>, a lane {PHASE_BRANCH}-lane-<x>) and the '
+            'phase branch, never main, rust-core or the phase branch as topic'
+        )
+    if not TOPIC_BRANCH.fullmatch(topic) or topic.endswith(('.', '.lock')):
+        raise Refusal(
+            f'the topic branch {topic!r} is not a package branch '
+            f'({PHASE_BRANCH}-<name> or {PHASE_BRANCH}-lane-<x>)'
+        )
 
 
-def check_reviews(paths: Sequence[str], candidate: str) -> list[Path]:
+#: A hex word of seven to forty digits, standing on its own.
+HEX_WORD = re.compile(r'(?<![0-9a-fA-F])[0-9a-fA-F]{7,40}(?![0-9a-fA-F])')
+
+
+def names_candidate(tools: Tools, text: str, candidate: str) -> str | None:
+    """None when the text names the candidate, by its full SHA or by an
+    abbreviation git resolves to the candidate and to nothing else; else
+    why not. An abbreviation that is the candidate's prefix but that git
+    cannot resolve uniquely names no commit, so it is refused."""
+    ambiguous: list[str] = []
+    for token in HEX_WORD.findall(text):
+        token = token.lower()
+        if not candidate.startswith(token):
+            continue
+        if len(token) == 40:
+            return None
+        if resolve_quiet(tools, token) == candidate:
+            return None
+        ambiguous.append(token)
+    if ambiguous:
+        return (
+            f'names the candidate only by {", ".join(ambiguous)}, which git '
+            'does not resolve to the candidate alone (ambiguous); use the '
+            'full SHA'
+        )
+    return (
+        f'does not name the candidate {candidate[:12]} (its full SHA or an '
+        f'unambiguous prefix of at least {MIN_PREFIX} characters)'
+    )
+
+
+def resolve_quiet(tools: Tools, rev: str) -> str | None:
+    done = tools.attempt(
+        'git', 'rev-parse', '--verify', '--quiet', rev + '^{commit}'
+    )
+    sha = done.stdout.strip()
+    return sha if done.returncode == 0 and len(sha) == 40 else None
+
+
+def check_reviews(
+    tools: Tools, paths: Sequence[str], candidate: str
+) -> list[Path]:
     if len(paths) < 2:
         raise Refusal(
             f'{len(paths)} review file(s); a landing needs both reviews, '
@@ -224,11 +293,9 @@ def check_reviews(paths: Sequence[str], candidate: str) -> list[Path]:
                 f'{raw}: the first line is {first[:60]!r}, not exactly '
                 f'{APPROVE!r}'
             )
-        if not names_candidate(text, candidate):
-            problems.append(
-                f'{raw}: does not name the candidate {candidate[:12]} (its full '
-                f'SHA or a prefix of at least {MIN_PREFIX} characters)'
-            )
+        why = names_candidate(tools, text, candidate)
+        if why:
+            problems.append(f'{raw}: {why}')
     if problems:
         raise Refusal(
             'the reviews do not approve the candidate:\n- '
@@ -290,6 +357,7 @@ class Landing:
     base: str
     checkpoint: str
     summary: str
+    evidence: str
 
     def message(self) -> str:
         subject = (
@@ -306,7 +374,7 @@ class Landing:
         # Wrapped as the earlier landing commits are, paragraph by paragraph.
         summary = '\n\n'.join(
             textwrap.fill(' '.join(part.split()), 72)
-            for part in self.summary.split('\n\n')
+            for part in (*self.summary.split('\n\n'), self.evidence)
             if part.strip()
         )
         return f'{subject}\n\n{summary}\n\n' + '\n'.join(trailers) + '\n'
@@ -413,26 +481,40 @@ def watch(tools: Tools, run_id: object) -> dict[str, object]:
 def land(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
+    check_branches(args.phase_branch, args.topic_branch)
     candidate = resolve(tools, args.candidate, 'the candidate')
     check_worktree(tools, candidate)
     base = phase_head(tools, args.remote, args.phase_branch)
     checkpoint = resolve(tools, args.checkpoint, 'the checkpoint')
     check_descent(tools, candidate, base, checkpoint, args.phase_branch)
-    check_reviews(args.review, candidate)
+    check_reviews(tools, args.review, candidate)
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
     out(f'ok   {len(args.review)} reviews approve {candidate[:12]}')
     if args.wait_for_landing_run:
-        try:
-            green = check_candidate_ci(tools, candidate)
-            out(
-                f'note the candidate is green ({describe(green)}); landing waits anyway'
-            )
-        except Refusal as why:
-            out(f'note {why}')
+        newest = (runs_on(tools, candidate) or [None])[0]
+        state = (
+            'no run'
+            if newest is None
+            else f'run {newest.get("databaseId")}: '
+            f'{newest.get("conclusion") or newest.get("status")}'
+        )
+        out(
+            f"note the candidate's CI ({state}) is not relied on; landing waits"
+        )
+        evidence = (
+            f'Candidate CI not relied on ({state} at {candidate}); the phase '
+            "branch moves only when this commit's own exact-SHA run is "
+            'green (E43 (b), --wait-for-landing-run).'
+        )
     else:
         green = check_candidate_ci(tools, candidate)
         out(f'ok   {describe(green)}, on {candidate[:12]} itself')
+        evidence = (
+            f'Candidate run {green.get("databaseId")} green at {candidate}; '
+            'this commit changes no file, so the phase branch moves at once '
+            'and its own runs are recorded afterwards (E43 (b)).'
+        )
     title = one_line(args.title, '--title')
     package = package_of(title)
     reviewer = one_line(
@@ -441,8 +523,7 @@ def land(
         '--reviewer',
     )
     summary = args.summary or (
-        f'Both reviews approve the candidate {candidate[:7]}; its CI run on that '
-        'SHA is green, and this commit changes no file.'
+        f'Both reviews approve the candidate {candidate[:7]}.'
     )
     landing = Landing(
         title=title,
@@ -451,6 +532,7 @@ def land(
         base=base,
         checkpoint=checkpoint,
         summary=summary.strip(),
+        evidence=evidence,
     )
     if args.dry_run:
         out('dry run: every check passed; the landing commit would read:\n')
@@ -461,8 +543,12 @@ def land(
     out(f"ok   landing commit {sha}: empty, tree equal to the candidate's")
     topic_ref = f'{sha}:refs/heads/{args.topic_branch}'
     phase_ref = f'{sha}:refs/heads/{args.phase_branch}'
+    undo = (
+        f'the landing commit {sha[:12]} is made but was not pushed; before '
+        f'running land.py again, undo it with `git reset --soft {candidate}`'
+    )
     if args.wait_for_landing_run:
-        tools.git('push', '--quiet', args.remote, topic_ref)
+        push(tools, undo, args.remote, topic_ref)
         out(f'ok   pushed {args.topic_branch}; waiting for the landing run')
         runs = wait_for_runs(tools, sha, [args.topic_branch])
         if args.topic_branch not in runs:
@@ -483,9 +569,7 @@ def land(
     else:
         # One atomic push: the remote refuses both if the phase branch has
         # moved since the fetch above, since this is not a forced update.
-        tools.git(
-            'push', '--quiet', '--atomic', args.remote, topic_ref, phase_ref
-        )
+        push(tools, undo, '--atomic', args.remote, topic_ref, phase_ref)
         out(
             f'ok   pushed {args.topic_branch} and fast-forwarded '
             f'{args.phase_branch} to {sha} (decision E43 (b))'
@@ -501,6 +585,13 @@ def land(
         )
     out(f'next: land.py verify {sha}')
     return 0
+
+
+def push(tools: Tools, undo: str, *args: str) -> None:
+    try:
+        tools.git('push', '--quiet', *args)
+    except Refusal as why:
+        raise Refusal(f'{why}\n{undo}') from None
 
 
 def revert_instructions(
@@ -525,6 +616,8 @@ def revert_instructions(
 def verify(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
+    if args.phase_branch != PHASE_BRANCH:
+        raise Refusal(f'the phase branch is {args.phase_branch!r}, not {PHASE_BRANCH!r}')
     sha = resolve(tools, args.landing, 'the landing commit')
     trailers = trailers_of(tools, sha)
     base = trailers.get('Base-SHA')
@@ -548,21 +641,59 @@ def verify(
             f'no CI run on {sha[:12]} on {args.phase_branch}; is the phase '
             'branch at the landing?'
         )
+    cancelled: list[dict[str, object]] = []
+    finals: list[dict[str, object]] = []
     for _branch, run in sorted(every.items()):
         final = run
         if run.get('status') != 'completed':
             out(f'wait {describe(run)} {run.get("url")}')
             final = watch(tools, run.get('databaseId'))
-        out(
-            f'{"ok  " if final.get("conclusion") == "success" else "FAIL"} {describe(final)} {final.get("url")}'
+        finals.append(final)
+        conclusion = final.get('conclusion')
+        mark = {'success': 'ok  ', 'cancelled': 'CANC'}.get(
+            str(conclusion), 'FAIL'
         )
-        if final.get('conclusion') != 'success':
+        out(f'{mark} {describe(final)} {final.get("url")}')
+        if conclusion == 'cancelled':
+            cancelled.append(final)
+        elif conclusion != 'success':
             problems.append(f'{describe(final)}')
+    unresolved: list[dict[str, object]] = []
+    if cancelled:
+        # A cancelled run says nothing about the tree. Another green run on
+        # the same SHA, or on the candidate, whose tree an empty landing
+        # commit shares, is the evidence instead.
+        green = [f for f in finals if f.get('conclusion') == 'success']
+        if not green and tree == parent_tree:
+            parent = tools.git('rev-parse', sha + '^').strip()
+            green = [
+                r
+                for r in runs_on(tools, parent)
+                if r.get('status') == 'completed'
+                and r.get('conclusion') == 'success'
+            ][:1]
+        for run in cancelled:
+            if green:
+                out(
+                    f'note {describe(run)} was cancelled; the same tree is green '
+                    f'in run {green[0].get("databaseId")} at '
+                    f'{str(green[0].get("headSha"))[:12]}'
+                )
+            else:
+                unresolved.append(run)
     if problems:
         out('VERIFY FAILED:\n- ' + '\n- '.join(problems))
         out(revert_instructions(sha, base, args.phase_branch, args.remote))
         return 1
-    out(f'VERIFIED {sha}: every run on it is green')
+    if unresolved:
+        out(
+            'VERIFY INCOMPLETE: cancelled, with no green run on the same tree; '
+            'nothing failed, so rerun rather than revert:'
+        )
+        for run in unresolved:
+            out(f'  gh run rerun {run.get("databaseId")}   # then verify again')
+        return 3
+    out(f'VERIFIED {sha}: every run on it is green or stands for a green tree')
     return 0
 
 
