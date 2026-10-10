@@ -19,10 +19,8 @@ core does not take yet is refused by name. The reference comparison is
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import json
-import re
 import socket
 import sys
 import threading
@@ -531,42 +529,11 @@ def test_a_refusal_with_deeply_nested_details_is_shown_as_on_the_old_route(
         assert core.__cause__ is None and core.__context__ is None
 
 
-def _texts(value: Any) -> list[str]:
-    r"""Every text an exception holds or shows, found by walking it without
-    recursion: ``str``, ``repr``, its arguments and every attribute, every
-    key and value at any depth, each number by its spelling."""
-    found = [str(value), repr(value)]
-    stack: list[Any] = [value.args, vars(value)]
-    while stack:
-        item = stack.pop()
-        if isinstance(item, dict):
-            for key, member in item.items():
-                found.append(str(key))
-                stack.append(member)
-        elif isinstance(item, (list, tuple, set)):
-            stack.extend(item)
-        elif isinstance(item, (str, int, float)) and not isinstance(item, bool):
-            found.append(item if isinstance(item, str) else repr(item))
-        elif item is not None and not isinstance(item, bool):
-            found.append(repr(item))
-    return found
-
-
-def _basic_forms(pair: str) -> list[str]:
-    raw = pair.encode()
-    standard = base64.b64encode(raw).decode()
-    urlsafe = base64.urlsafe_b64encode(raw).decode()
-    return [standard, standard.rstrip('='), urlsafe, urlsafe.rstrip('=')]
-
-
 @contextmanager
-def _echoing(
-    echoes: list[Any], user: str, password: str, code_as_object: bool = False
-) -> Iterator[str]:
-    r"""An endpoint refusing with 401 whose every field echoes each of
-    ``echoes`` and the Authorization header it was sent, each in another
-    JSON shape, beside a sentinel and a word of its own; its URL carries
-    ``user`` and ``password``."""
+def _echoing_our_credential() -> Iterator[str]:
+    r"""An endpoint refusing with 401 whose detail and other fields echo
+    the Authorization header it was sent and the URL's credential, beside
+    a sentinel of its own; its URL carries the credential."""
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -577,19 +544,11 @@ def _echoing(
         def do_POST(self) -> None:  # noqa: N802 - http.server's name
             self.rfile.read(int(self.headers.get('Content-Length') or 0))
             sent = self.headers.get('Authorization', '')
-            every = [sent, *echoes]
             body = json.dumps(
                 {
-                    'code': {'h': sent, 'all': every}
-                    if code_as_object
-                    else every,
-                    'detail': 'refused '
-                    + ' and '.join(str(e) for e in every)
-                    + ' (ENDPOINT-ONLY-7c2, a pwd and a password, ab testing)',
-                    'title': {'h': sent},
-                    'invalid_params': [{'name': e, 'reason': e} for e in every],
-                    'seen': {str(e): [e, {'again': e}] for e in every},
-                    'number': 4321,
+                    'code': {'h': sent},
+                    'detail': f'credential {sent} refused (ENDPOINT-ONLY-7c2)',
+                    'seen': {'user': 'sdm:SECRETPW-77', 'header': [sent]},
                 }
             ).encode()
             self.send_response(401)
@@ -602,83 +561,30 @@ def _echoing(
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        port = server.server_address[1]
-        yield f'http://{user}:{password}@127.0.0.1:{port}'
+        yield f'http://sdm:SECRETPW-77@127.0.0.1:{server.server_address[1]}'
     finally:
         server.shutdown()
         server.server_close()
         thread.join()
 
 
-@pytest.mark.parametrize(
-    ('user', 'password', 'secrets'),
-    [
-        # A long password with a character the URL escapes: every spelling
-        # an exact echo may take.
-        (
-            'sdm',
-            'SECRET%2FPW-77',
-            [
-                'SECRET%2FPW-77',
-                'SECRET/PW-77',
-                'SECRET%2fPW-77',
-                'SECRET%252FPW-77',
-                'sdm:SECRET/PW-77',
-                'sdm:SECRET%2FPW-77',
-                *_basic_forms('sdm:SECRET/PW-77'),
-            ],
-        ),
-        # A short password (review round 4, Codex P2), and a short user
-        # name, which is not a credential on its own.
-        ('ab', 'pw', ['pw', 'ab:pw', *_basic_forms('ab:pw')]),
-        # A numeric password, echoed as a number too.
-        ('numeric', '4321', ['4321', 'numeric', *_basic_forms('numeric:4321')]),
-        # The subagent's round-4 repro: a code that is an object, holding
-        # the Authorization header (the round-3 scrub skipped any code that
-        # was not text).
-        (
-            'sdm',
-            'SECRETPW-77',
-            [
-                'SECRETPW-77',
-                'sdm:SECRETPW-77',
-                *_basic_forms('sdm:SECRETPW-77'),
-            ],
-        ),
-    ],
-)
-def test_no_spelling_of_our_credential_survives_anywhere_in_the_refusal(
+def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
-    user: str,
-    password: str,
-    secrets: list[str],
 ) -> None:
-    # E47, orchestrator reading (a): the whole refusal, every field and
-    # JSON shape, keys included, goes through one scrub of each exact
-    # spelling of our credentials; the endpoint's own words, and words
-    # that only hold a short credential's letters, survive.
+    # E47: the refusal exactly as the old route shows it, an echo of our
+    # credential in the endpoint's own text included (a scrub of such
+    # echoes was tried in fix rounds 3 and 4 and removed); nothing of the
+    # transport's, and so nothing of the URL, is chained to it.
     request = _materialized(monkeypatch)
-    echoes: list[Any] = list(secrets)
-    if password.isdigit():
-        echoes.append(int(password))
-    with _echoing(echoes, user, password, password == 'SECRETPW-77') as url:
+    with _echoing_our_credential() as url:
         core, old = _both(monkeypatch, request, url)
     assert isinstance(core, NimRequestError) and core.status_code == 401
-    shown = _texts(core)
-    for secret in secrets:
-        boundary = (
-            rf'(?<![A-Za-z0-9]){re.escape(secret)}(?![A-Za-z0-9])'
-            if len(secret) < 3
-            else re.escape(secret)
-        )
-        leaked = [text for text in shown if re.search(boundary, text)]
-        assert leaked == [], (secret, leaked[:2])
-    assert '<redacted>' in str(core)
+    assert (type(core), core.code, str(core), repr(core)) == (
+        type(old),
+        old.code,
+        str(old),
+        repr(old),
+    )
+    assert core.details == old.details
     assert 'ENDPOINT-ONLY-7c2' in str(core)
-    assert 'a pwd and a password' in str(core)
-    if user == 'ab':
-        # A user name under 3 characters is not scrubbed on its own.
-        assert 'ab testing' in str(core)
-    # Keys that the scrub made one keep every value.
-    assert len(core.details['seen']) == len(old.details['seen'])
     assert core.__cause__ is None and core.__context__ is None

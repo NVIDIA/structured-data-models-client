@@ -37,11 +37,9 @@ the old route: the adapter's naming of the tables and columns of our schema
 a refusal is about, and the Databricks transport's naming of the serving
 endpoint (both the user's own configuration), never a value, a credential
 or a URL. The transport's exception, and with it the endpoint's URL and any
-credential the URL holds, is not chained, nor any other context; and every
-spelling of an exact credential of ours the endpoint echoes, in any field of
-its refusal, keys included, is replaced by ``<redacted>`` before it is shown
-(:mod:`.scrub`; E47, orchestrator reading, owner to confirm). The old route, the
-reference's in this phase, shows such an echo unchanged. A failed transport
+credential the URL holds, is not chained, nor any other context. As on the
+old route, an endpoint that echoes a credential of ours in its own text has
+it shown: a scrub of such echoes was tried and removed (E47). A failed transport
 (the endpoint could not be reached, or its answer could not be read) is
 told to the core, which ends the run with ``TRANSPORT_ERROR``; any other
 error of the transport keeps its code and gets a fixed sentence.
@@ -59,7 +57,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
-from sdm_client._rust import codec, scrub
+from sdm_client._rust import codec
 from sdm_client._rust.run import TransportFailed, run
 from sdm_client.errors import NimRequestError, StructuredDataError
 
@@ -150,25 +148,43 @@ def _encoded(value: Any) -> bytes:
     return ''.join(out).encode()
 
 
-def _refusal(refused: NimRequestError, found: Any) -> NimRequestError:
-    r"""The endpoint's refusal as this route raises it: the old route's
-    class, status, code, message and details, the endpoint's own text and
-    the client's explanation of it (decision E47), but a new exception, so
-    nothing of the transport's (its URL, a credential) is chained to it.
-    Every field of it, of any JSON shape and depth, keys included, goes
-    through one scrub of each exact credential of ours (:mod:`.scrub`,
-    E47's orchestrator reading (a)), without recursion."""
+def _copied(value: Any) -> Any:
+    r"""``value``, JSON the transport decoded, copied without recursion at any
+    depth, unchanged."""
+    if not isinstance(value, (dict, list, tuple)):
+        return value
+    root: Any = {} if isinstance(value, dict) else []
+    stack: list[tuple[Any, Any]] = [(value, root)]
+    while stack:
+        source, target = stack.pop()
+        pairs = (
+            source.items() if isinstance(source, dict) else enumerate(source)
+        )
+        for key, item in pairs:
+            copied: Any = item
+            if isinstance(item, (dict, list, tuple)):
+                copied = {} if isinstance(item, dict) else []
+                stack.append((item, copied))
+            if isinstance(target, dict):
+                target[key] = copied
+            else:
+                target.append(copied)
+    return root
+
+
+def _refusal(refused: NimRequestError) -> NimRequestError:
+    r"""The endpoint's refusal as this route raises it: exactly the old
+    route's class, status, code, message and details, the endpoint's own
+    text and the client's explanation of it (decision E47), but a new
+    exception, so nothing of the transport's (its URL, a credential) is
+    chained to it. Its details are copied without recursion, at any depth
+    the transport read."""
     details = refused.details if isinstance(refused.details, dict) else {}
-    record = scrub.scrubbed(
-        {'message': refused.message, 'code': refused.code, 'details': details},
-        found,
-    )
-    message = record['message']
     return type(refused)(
         refused.status_code,
-        code=record['code'],
-        message=message if isinstance(message, str) else str(message),
-        details=record['details'],
+        code=refused.code,
+        message=refused.message,
+        details=_copied(details),
     )
 
 
@@ -229,10 +245,7 @@ def predict(
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is
             # chained to the transport's exception.
-            found = scrub.pattern(
-                scrub.forms(scrub.credentials(client._transport))
-            )
-            raise _refusal(refused, found)
+            raise _refusal(refused)
         if failure is not None:
             raise failure
         return _encoded(answer)

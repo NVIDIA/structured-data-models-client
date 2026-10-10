@@ -43,10 +43,11 @@ route shows it. A sentinel only the endpoint writes is asserted to reach
 to hiding; and an endpoint that echoes our data has that echo shown
 verbatim, as on the old route, which is the case the owner accepted. Our
 own sentinels still reach nothing through our code: the credential in the
-URL is never chained or added, and, by E47's orchestrator reading, an
-endpoint echoing it (or the Authorization header made of it) has the echo
-replaced by ``<redacted>``. The client adds only its own explanations,
-which name our schema's tables and columns, never a value.
+URL is never chained or added. As on the old route, an endpoint that echoes
+our credential in its own text has it shown, and the refusal is the old
+route's exactly (a scrub of such echoes was tried in fix rounds 3 and 4 and
+removed, E47). The client adds only its own explanations, which name our
+schema's tables and columns, never a value.
 """
 
 from __future__ import annotations
@@ -306,7 +307,6 @@ _ENDPOINT_S_OWN = {
 
 #: The ``Authorization`` header the transport builds of the URL's userinfo.
 _BASIC_TOKEN = base64.b64encode(f'sdm:{DSN}'.encode()).decode()
-_BASIC = f'Basic {_BASIC_TOKEN}'
 
 
 def _shows_the_endpoint_s_own_words(error: NimRequestError) -> None:
@@ -426,16 +426,6 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
         'refusal: a 422 in the endpoint s own words behind a credential': (
             answered(endpoint_s_refusal, 422)
         ),
-        'refusal: a 401 echoing our credential, behind it': answered(
-            json.dumps(
-                {
-                    'code': 'UNAUTHORIZED',
-                    'detail': f'{{AUTH}} for sdm:{DSN} refused ({ENDPOINT})',
-                    'seen': {'header': '{AUTH}', 'password': DSN},
-                }
-            ).encode(),
-            401,
-        ),
         'refusal: a 500 behind a credential': answered(
             b'{"code": "INTERNAL_ERROR", "detail": "internal failure"}', 500
         ),
@@ -468,13 +458,6 @@ def test_no_sentinel_reaches_anything_written(
         assert error.__cause__ is None and error.__context__ is None, name
         if 'own words' in name:
             _shows_the_endpoint_s_own_words(error)
-        if 'echoing our credential' in name:
-            # E47, orchestrator reading: each exact credential of ours the
-            # endpoint echoes is replaced; its own words still reach the
-            # exception.
-            shown = str(error) + repr(error.details)
-            assert _BASIC not in shown and _BASIC_TOKEN not in shown
-            assert '<redacted>' in shown and ENDPOINT in str(error)
     else:
         # The error is the core's, raised with no cause chained.
         assert error.__cause__ is None and error.__suppress_context__, name
@@ -483,7 +466,7 @@ def test_no_sentinel_reaches_anything_written(
         'codec': {'INVALID_MESSAGE', 'INVALID_RESPONSE'},
         'provider': {'PROVIDER_ERROR'},
         'transport': {'TRANSPORT_ERROR'},
-        'refusal': {_ENDPOINT_CODE, 'INTERNAL_ERROR', 'UNAUTHORIZED'},
+        'refusal': {_ENDPOINT_CODE, 'INTERNAL_ERROR'},
         'panic': {'INTERNAL_ERROR'},
     }[path]
     assert error.code in expected, (name, error.code)
@@ -671,3 +654,51 @@ def test_the_client_s_own_explanation_names_schema_columns_never_values(
     assert 'users.country' in str(error)
     assert seen.leaks() == []
     assert error.__cause__ is None and error.__context__ is None
+
+
+def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""As on the old route, an endpoint that echoes our credential (the
+    Authorization header made of the URL's userinfo, and the password) in
+    its own refusal has it shown: the core route's refusal is the old
+    route's exactly (E47; a scrub of such echoes was tried in fix rounds 3
+    and 4 and removed by change of method). Our own code adds nothing: the
+    credential is nowhere in the exception but where the endpoint's text
+    puts it, and nothing is chained."""
+    echoing = json.dumps(
+        {
+            'code': 'UNAUTHORIZED',
+            'detail': f'{{AUTH}} for sdm:{DSN} refused ({ENDPOINT})',
+            'seen': {'header': '{AUTH}', 'password': DSN},
+        }
+    ).encode()
+    shown = {}
+    with _answering(echoing, 401) as url:
+        for route, routes in (
+            ('core', CORE),
+            (
+                'old',
+                ','.join(
+                    _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
+                ),
+            ),
+        ):
+            monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+            with pytest.raises(NimRequestError) as raised:
+                _predict(url)
+            shown[route] = raised.value
+    core, old = shown['core'], shown['old']
+    assert (str(core), repr(core), core.code, core.status_code) == (
+        str(old),
+        repr(old),
+        old.code,
+        old.status_code,
+    )
+    assert core.details == old.details
+    assert DSN in str(core) and _BASIC_TOKEN in str(core)
+    assert ENDPOINT in str(core)
+    assert core.__cause__ is None and core.__context__ is None
+    # Beyond the endpoint's own text, the formatted exception holds none.
+    formatted = ''.join(traceback.format_exception(core)).replace(str(core), '')
+    assert DSN not in formatted and _BASIC_TOKEN not in formatted

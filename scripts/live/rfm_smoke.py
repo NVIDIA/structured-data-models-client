@@ -182,10 +182,11 @@ def _quiet_the_world() -> None:
 
 
 def _the_client_s(category: type[Warning]) -> bool:
-    r"""Whether a warning is the client's own, by its category alone: one of
-    the client's categories (``SDMWarning`` and its subclasses, and the
-    class the core's warnings are shown as, which the client defines). Its
-    text and where it was raised say nothing: the client attributes its
+    r"""Whether a warning is the client's own, by its category alone: a
+    category defined in an ``sdm_client`` module (``SDMWarning`` and the
+    client's subclasses of it, and the class the core's warnings are shown
+    as); a subclass defined anywhere else is not, whatever it derives from.
+    Its text and where it was raised say nothing: the client attributes its
     warnings to the caller's line, and anyone may write ``[CODE]``."""
     module = getattr(category, '__module__', '') or ''
     return module == 'sdm_client' or module.startswith('sdm_client.')
