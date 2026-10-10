@@ -33,8 +33,7 @@ RUNNER = ROOT / 'contract/runners/run_python.py'
 COMPARE = ROOT / 'scripts/rust_core/compare.py'
 CASES = ROOT / 'contract/cases'
 REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
-S0 = CASES / 's0'
-ACCEPTED = S0 / 's0.accept.sum-window.json'
+ACCEPTED = CASES / 's0/s0.accept.sum-window.json'
 
 
 def _module(path: Path, name: str) -> ModuleType:
@@ -88,12 +87,24 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
 ) -> None:
     core, old = tmp_path / 'python-core.jsonl', tmp_path / 'python-old.jsonl'
     for mode, out in (('python-core', core), ('python-old', old)):
-        run = _run(mode, out, S0)
+        run = _run(mode, out, CASES)
         assert run.returncode == 0, run.stderr
-    compared = _compare(S0, core, old)
+    # Every case, base.regression's diagnostic one included (T1.11b), whose
+    # differences the comparator reports and gates none.
+    compared = _compare(CASES, core, old)
     assert compared.returncode == 0, compared.stdout
+    assert 'DIFFERS' not in compared.stdout
+    operations = {
+        'S0': ['validate_query'],
+        'S1': ['describe_source'],
+    }
     for observation in _observations(core):
-        assert observation['identity']['operations'] == ['validate_query']
+        slice_ = next(
+            case['slice']
+            for case, _ in run_python.load_cases([CASES])
+            if case['id'] == observation['case']
+        )
+        assert observation['identity']['operations'] == operations[slice_]
         assert observation['identity']['native'] is not None
     for observation in _observations(old):
         assert observation['identity']['native_loaded'] is False
