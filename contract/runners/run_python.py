@@ -912,11 +912,137 @@ def _canonical_text(value: Any) -> str:
 
 
 #: DuckDB types a Python driver reads into Python values with less than
-#: their precision: ``TIME_NS`` and ``TIMESTAMP_NS`` to microseconds, and an
-#: ``INTERVAL`` to a ``timedelta`` that folds its months into days. Values
-#: of such a column, nested ones included, read as rows (``fetchall``) are
-#: unencodable, never compared as if exact.
-_LOSSY_AS_ROWS = ('TIME_NS', 'TIMESTAMP_NS', 'INTERVAL')
+#: their precision: ``TIME_NS`` and ``TIMESTAMP_NS`` to microseconds, an
+#: ``INTERVAL`` to a ``timedelta`` that folds its months into days, a
+#: ``UNION`` to its member's value without its tag, and a ``MAP`` to a
+#: dictionary the canonical form would take for a struct (an Arrow map is
+#: unencodable, so the two reads could never agree). A value of a column of
+#: such a type, or of one holding such a type at any depth, read as rows
+#: (``fetchall``) is unencodable, never compared as if exact.
+_LOSSY_AS_ROWS = frozenset(
+    ('TIME_NS', 'TIMESTAMP_NS', 'INTERVAL', 'UNION', 'MAP')
+)
+
+
+class _TypeText:
+    r"""A DuckDB type as its description spells it, read into nodes: a
+    name and the types it holds (a list's or array's element, a struct's
+    or union's members, a map's key and value), field names read and set
+    aside, never taken for types."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.at = 0
+
+    def _peek(self) -> str:
+        return self.text[self.at] if self.at < len(self.text) else ''
+
+    def _skip_spaces(self) -> None:
+        while self._peek() == ' ':
+            self.at += 1
+
+    def _name(self) -> str:
+        r"""A field name: double-quoted (``""`` an escaped quote) or bare,
+        up to the space before its type."""
+        self._skip_spaces()
+        if self._peek() == '"':
+            self.at += 1
+            while True:
+                end = self.text.index('"', self.at)
+                if self.text[end + 1 : end + 2] == '"':
+                    self.at = end + 2
+                    continue
+                self.at = end + 1
+                return ''
+        while self._peek() not in (' ', ''):
+            self.at += 1
+        return ''
+
+    def _balanced(self) -> None:
+        r"""Skips a parenthesised argument list that holds no types (a
+        decimal's precision, an enum's quoted members)."""
+        depth = 0
+        while self.at < len(self.text):
+            char = self.text[self.at]
+            if char == "'":
+                end = self.at + 1
+                while True:
+                    end = self.text.index("'", end)
+                    if self.text[end + 1 : end + 2] == "'":
+                        end += 2
+                        continue
+                    break
+                self.at = end + 1
+                continue
+            self.at += 1
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0:
+                    return
+        raise ValueError('unbalanced')
+
+    def node(self) -> tuple[str, list[Any]]:
+        self._skip_spaces()
+        start = self.at
+        while self._peek() not in ('(', '[', ',', ')', ''):
+            self.at += 1
+        name = self.text[start : self.at].strip().upper()
+        if not name:
+            raise ValueError('no type')
+        children: list[Any] = []
+        if self._peek() == '(':
+            if name in ('STRUCT', 'UNION'):
+                self.at += 1
+                while True:
+                    self._name()
+                    children.append(self.node())
+                    self._skip_spaces()
+                    if self._peek() == ',':
+                        self.at += 1
+                        continue
+                    if self._peek() != ')':
+                        raise ValueError('a member')
+                    self.at += 1
+                    break
+            elif name == 'MAP':
+                self.at += 1
+                children.append(self.node())
+                if self._peek() != ',':
+                    raise ValueError('a map key')
+                self.at += 1
+                children.append(self.node())
+                self._skip_spaces()
+                if self._peek() != ')':
+                    raise ValueError('a map value')
+                self.at += 1
+            else:
+                self._balanced()
+        while self._peek() == '[':
+            end = self.text.index(']', self.at)
+            self.at = end + 1
+            name, children = 'LIST', [(name, children)]
+        return name, children
+
+
+def _lossy_as_rows(duckdb_type: str) -> bool:
+    r"""Whether a Python driver reads a column of ``duckdb_type`` with less
+    than its precision: the type, read into nodes, is or holds one of
+    :data:`_LOSSY_AS_ROWS`; a type spelling this cannot read counts as
+    lossy, so it fails closed."""
+
+    def lossy(node: tuple[str, list[Any]]) -> bool:
+        name, children = node
+        return name in _LOSSY_AS_ROWS or any(lossy(c) for c in children)
+
+    reader = _TypeText(duckdb_type)
+    try:
+        node = reader.node()
+    except ValueError:
+        return True
+    reader._skip_spaces()
+    return reader.at != len(duckdb_type) or lossy(node)
 
 
 def _texts(rows: Iterable[list[Any]]) -> list[str]:
@@ -951,9 +1077,7 @@ def result_values(
     hold, and every value of a column whose type the driver reads with less
     than its precision (:data:`_LOSSY_AS_ROWS`)."""
     odd: list[str] = []
-    lossy = [
-        any(name in kind for name in _LOSSY_AS_ROWS) for kind in types or []
-    ]
+    lossy = [_lossy_as_rows(kind) for kind in types or []]
     cells = []
     for row in rows:
         cells.append(

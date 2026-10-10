@@ -201,3 +201,62 @@ def test_a_value_the_form_does_not_hold_is_named() -> None:
     assert odd == ['builtins.object']
     values = run_python.result_values(['x'], None, [(object(),)])
     assert values['unencodable'] == ['builtins.object']
+
+
+@pytest.mark.parametrize(
+    ('duckdb_type', 'lossy'),
+    [
+        # Field names that look like types are names, not types.
+        ('STRUCT(INTERVAL_COUNT INTEGER)', False),
+        ('STRUCT(TIMESTAMP_NS_VALID BOOLEAN, "UNION" VARCHAR)', False),
+        ("ENUM('INTERVAL', 'TIME_NS')", False),
+        ('STRUCT(k INTEGER, v VARCHAR)', False),
+        ('INTEGER[2]', False),
+        ('DECIMAL(10,2)', False),
+        ('TIMESTAMP WITH TIME ZONE', False),
+        ('MAP(VARCHAR, INTEGER)', True),
+        # The types themselves, at any depth.
+        ('TIME_NS', True),
+        ('STRUCT("a b" TIME_NS)', True),
+        ('STRUCT("x""y" STRUCT(t TIMESTAMP_NS))', True),
+        ('INTERVAL[][]', True),
+        ('UNION(i INTEGER, j VARCHAR)', True),
+        ('STRUCT(u UNION(i INTEGER))[]', True),
+        # A spelling it cannot read fails closed.
+        ('STRUCT(a', True),
+    ],
+)
+def test_lossiness_is_read_from_the_types(
+    duckdb_type: str, lossy: bool
+) -> None:
+    assert run_python._lossy_as_rows(duckdb_type) is lossy
+
+
+def test_a_union_read_as_rows_never_compares_equal() -> None:
+    r"""``fetchall`` gives a union's value without its tag, so ``i := 1``
+    and ``j := 1`` would read alike: read as rows, both are unencodable."""
+    reads = []
+    for member in ('i', 'j'):
+        cursor = duckdb.connect().cursor()
+        cursor.execute(
+            f'SELECT union_value({member} := 1)::UNION(i INTEGER, j INTEGER)'
+            ' AS u'
+        )
+        types = [str(column[1]) for column in cursor.description]
+        reads.append(run_python.result_values(['u'], types, cursor.fetchall()))
+    assert all(read['unencodable'] for read in reads)
+
+
+def test_struct_fields_named_like_types_read_as_rows_and_as_arrow() -> None:
+    cursor = duckdb.connect().cursor()
+    query = (
+        'SELECT struct_pack(INTERVAL_COUNT := 1) AS a, '
+        'struct_pack(TIMESTAMP_NS_VALID := true) AS b'
+    )
+    cursor.execute(query)
+    types = [str(column[1]) for column in cursor.description]
+    rows = run_python.result_values(['a', 'b'], types, cursor.fetchall())
+    cursor.execute(query)
+    arrow = run_python.arrow_values(cursor.to_arrow_table(), types)
+    assert rows['unencodable'] == []
+    assert rows == arrow

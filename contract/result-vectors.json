@@ -789,6 +789,260 @@
           ]
         ]
       ]
+    },
+    {
+      "name": "struct fields named like types",
+      "sql": "SELECT struct_pack(INTERVAL_COUNT := 1) AS a, struct_pack(TIMESTAMP_NS_VALID := true, \"UNION\" := 'u') AS b",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<INTERVAL_COUNT: int32>"
+        },
+        {
+          "name": "b",
+          "type": "struct<TIMESTAMP_NS_VALID: bool, UNION: string>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "STRUCT(INTERVAL_COUNT INTEGER)",
+          "STRUCT(TIMESTAMP_NS_VALID BOOLEAN, \"UNION\" VARCHAR)"
+        ],
+        "ordered": "f8fb88049236e0a42baed3ac1ba7a0bc49e6165e69b3e369b97a2d4c71b6e7ee",
+        "unordered": "f8fb88049236e0a42baed3ac1ba7a0bc49e6165e69b3e369b97a2d4c71b6e7ee",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "INTERVAL_COUNT",
+                [
+                  "i",
+                  "1"
+                ]
+              ]
+            ]
+          ],
+          [
+            "struct",
+            [
+              [
+                "TIMESTAMP_NS_VALID",
+                true
+              ],
+              [
+                "UNION",
+                [
+                  "s",
+                  "u"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "nested nanoseconds and intervals",
+      "sql": "SELECT struct_pack(t := TIME_NS '00:00:00.000000001') AS a, [TIMESTAMP_NS '2020-01-01 00:00:00.000000001'] AS b, struct_pack(i := INTERVAL 1 DAY) AS c",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<t: time64[ns]>"
+        },
+        {
+          "name": "b",
+          "type": "list<l: timestamp[ns]>"
+        },
+        {
+          "name": "c",
+          "type": "struct<i: month_day_nano_interval>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c"
+        ],
+        "types": [
+          "STRUCT(t TIME_NS)",
+          "TIMESTAMP_NS[]",
+          "STRUCT(i INTERVAL)"
+        ],
+        "ordered": "683cd5fc4ab358110731b8d2fa31e8bc1822a50ebb5cdaceec422f6b94ba58c1",
+        "unordered": "683cd5fc4ab358110731b8d2fa31e8bc1822a50ebb5cdaceec422f6b94ba58c1",
+        "unencodable": [
+          "arrow:month_day_nano_interval"
+        ]
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "t",
+                [
+                  "time",
+                  "1"
+                ]
+              ]
+            ]
+          ],
+          [
+            "list",
+            [
+              [
+                "ts",
+                "1577836800000000001"
+              ]
+            ]
+          ],
+          [
+            "struct",
+            [
+              [
+                "i",
+                [
+                  "?",
+                  "arrow:month_day_nano_interval"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "an enum",
+      "setup": "CREATE TYPE mood AS ENUM ('calm', 'cross')",
+      "sql": "SELECT 'cross'::mood AS a, ['calm'::mood, NULL] AS b",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "dictionary<values=string, indices=uint8, ordered=0>"
+        },
+        {
+          "name": "b",
+          "type": "list<l: dictionary<values=string, indices=uint8, ordered=0>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "ENUM('calm', 'cross')",
+          "ENUM('calm', 'cross')[]"
+        ],
+        "ordered": "e63acc69c4ffafce0cc6142e6946cac77e710bafcc3c8639b621fd064253d5e5",
+        "unordered": "e63acc69c4ffafce0cc6142e6946cac77e710bafcc3c8639b621fd064253d5e5",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "s",
+            "cross"
+          ],
+          [
+            "list",
+            [
+              [
+                "s",
+                "calm"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a map",
+      "sql": "SELECT MAP {'k': 1} AS a",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "map<string, int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "MAP(VARCHAR, INTEGER)"
+        ],
+        "ordered": "842e1be7719598137c0ceb4eeb5aadbef472f93ae7ae304b1a0c219b2f85ee8a",
+        "unordered": "842e1be7719598137c0ceb4eeb5aadbef472f93ae7ae304b1a0c219b2f85ee8a",
+        "unencodable": [
+          "arrow:map<string, int32>"
+        ]
+      },
+      "rows": [
+        [
+          [
+            "?",
+            "arrow:map<string, int32>"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "unions of one value under two tags",
+      "sql": "SELECT union_value(i := 1)::UNION(i INTEGER, j INTEGER) AS a, union_value(j := 1)::UNION(i INTEGER, j INTEGER) AS b",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "sparse_union<i: int32=0, j: int32=1>"
+        },
+        {
+          "name": "b",
+          "type": "sparse_union<i: int32=0, j: int32=1>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "UNION(i INTEGER, j INTEGER)",
+          "UNION(i INTEGER, j INTEGER)"
+        ],
+        "ordered": "3d39fac6a4e684f07cacd9355fc5cbc949054a228da10702083596d3c76028b4",
+        "unordered": "3d39fac6a4e684f07cacd9355fc5cbc949054a228da10702083596d3c76028b4",
+        "unencodable": [
+          "arrow:sparse_union<i: int32=0, j: int32=1>"
+        ]
+      },
+      "rows": [
+        [
+          [
+            "?",
+            "arrow:sparse_union<i: int32=0, j: int32=1>"
+          ],
+          [
+            "?",
+            "arrow:sparse_union<i: int32=0, j: int32=1>"
+          ]
+        ]
+      ]
     }
   ]
 }

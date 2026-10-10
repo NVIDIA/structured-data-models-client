@@ -42,7 +42,7 @@ use duckdb::arrow::datatypes::{
     DurationSecondType, Field, Int8Type, Int16Type, Int32Type, Int64Type, IntervalUnit,
     Time32MillisecondType, Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimeUnit,
     TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
-    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
+    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type, UnionMode,
 };
 use duckdb::arrow::record_batch::RecordBatch;
 use serde_json::{Value, json};
@@ -379,6 +379,34 @@ pub fn arrow_type(data_type: &DataType) -> String {
             fields
                 .iter()
                 .map(|f| child(f))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        // As pyarrow spells them; arrow-rs keeps a dictionary's order on
+        // its field, not its type, and DuckDB writes an unordered one.
+        DataType::Dictionary(indices, values) => format!(
+            "dictionary<values={}, indices={}, ordered=0>",
+            arrow_type(values),
+            arrow_type(indices)
+        ),
+        DataType::Map(entries, sorted) => match entries.data_type() {
+            DataType::Struct(fields) if fields.len() == 2 => format!(
+                "map<{}, {}{}>",
+                arrow_type(fields[0].data_type()),
+                arrow_type(fields[1].data_type()),
+                if *sorted { ", keys_sorted" } else { "" }
+            ),
+            other => format!("{other:?}"),
+        },
+        DataType::Union(fields, mode) => format!(
+            "{}_union<{}>",
+            match mode {
+                UnionMode::Sparse => "sparse",
+                UnionMode::Dense => "dense",
+            },
+            fields
+                .iter()
+                .map(|(id, field)| format!("{}={id}", child(field)))
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
