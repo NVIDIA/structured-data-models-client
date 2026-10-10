@@ -23,7 +23,13 @@ Before it changes anything it refuses, naming the reason, unless:
 - the phase branch is exactly ``rust-core-phase-1`` and the topic branch a
   package branch under it (``rust-core-phase-1-<name>``, a lane
   ``rust-core-phase-1-lane-<x>`` included), never ``main``, ``rust-core``
-  or anything else;
+  or anything else; a name under ``rust-core-phase-1-lane-`` must be a
+  lane, ``<x>`` lower-case letters and digits;
+- on a lane, the package ``--title`` names (``Land <ID>: ...``) is the one
+  ``lane.py start`` recorded for this worktree (``git config --worktree
+  sdm.package``), and every commit the candidate adds to the phase head
+  names that package in its subject or body, so a second package's commits
+  never land under the first's title;
 - the worktree is clean, HEAD is the candidate, and the candidate descends
   from the phase branch's head on the remote without being it;
 - the checkpoint is a commit the candidate descends from;
@@ -41,8 +47,10 @@ It then commits the landing commit (``git commit --allow-empty -s``) with
 commit's tree is the candidate's and its parent the candidate (so a
 landing whose tree differs is never made), and pushes
 it to the topic branch and the phase branch in one atomic push, which the
-remote refuses if the phase branch moved. It prints the landing SHA and
-the landing runs once they appear.
+remote refuses if the phase branch moved. On a lane it then reads both
+branches back from the remote and reports, exiting 1, if the lane is not
+the phase head, since the lane's next package starts from there. It
+prints the landing SHA and the landing runs once they appear.
 
 The landing commit's message names the CI evidence it lands on: the
 candidate's green run, by id and SHA, or, on the other path, the
@@ -84,6 +92,13 @@ PHASE_BRANCH = 'rust-core-phase-1'
 TOPIC_BRANCH = re.compile(
     re.escape(PHASE_BRANCH) + r'-[A-Za-z0-9](?:[A-Za-z0-9_-]|\.(?!\.))*'
 )
+#: A lane branch is this prefix and a lane name (decision E43, CI2).
+LANE_PREFIX = PHASE_BRANCH + '-lane-'
+LANE_NAME = re.compile(r'[a-z0-9]{1,16}')
+#: A package: a task (``T1.11e``) or a process package (``CI3``).
+PACKAGE_ID = re.compile(r'T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+')
+#: Where ``lane.py start`` records a lane worktree's package.
+PACKAGE_KEY = 'sdm.package'
 WORKFLOW = 'ci.yml'
 APPROVE = 'APPROVE'
 MIN_PREFIX = 7
@@ -219,6 +234,117 @@ def check_branches(phase: str, topic: str) -> None:
             f'the topic branch {topic!r} is not a package branch '
             f'({PHASE_BRANCH}-<name> or {PHASE_BRANCH}-lane-<x>)'
         )
+    if topic.startswith(LANE_PREFIX) and lane_of(topic) is None:
+        raise Refusal(
+            f'the topic branch {topic!r} is under {LANE_PREFIX} but is not a '
+            f'lane; a lane is {LANE_PREFIX}<x>, <x> lower-case letters and '
+            'digits'
+        )
+
+
+def lane_of(branch: str) -> str | None:
+    """The lane's name when ``branch`` is a lane branch, else None."""
+    if not branch.startswith(LANE_PREFIX):
+        return None
+    name = branch.removeprefix(LANE_PREFIX)
+    return name if LANE_NAME.fullmatch(name) else None
+
+
+def names_package(text: str, package: str) -> bool:
+    """Whether ``text`` names ``package`` as a word of its own: ``T1.11``
+    is not named by ``T1.11e``, nor ``CI3`` by ``CI30``."""
+    return (
+        re.search(
+            rf'(?<![A-Za-z0-9.]){re.escape(package)}(?![A-Za-z0-9])', text
+        )
+        is not None
+    )
+
+
+def recorded_package(tools: Tools, path: str | None = None) -> str | None:
+    """The package ``lane.py start`` recorded for the worktree at ``path``
+    (the current one by default): ``sdm.package`` in that worktree's own
+    configuration. Without ``extensions.worktreeConfig`` git has no
+    per-worktree configuration, so nothing counts as recorded."""
+    where = ('-C', path) if path else ()
+    ext = tools.attempt(
+        'git', *where, 'config', '--bool', '--get', 'extensions.worktreeConfig'
+    )
+    if ext.returncode != 0 or ext.stdout.strip() != 'true':
+        return None
+    done = tools.attempt(
+        'git', *where, 'config', '--worktree', '--get', PACKAGE_KEY
+    )
+    value = done.stdout.strip()
+    return value if done.returncode == 0 and value else None
+
+
+def commits_not_naming(
+    tools: Tools, base: str, head: str, package: str, *where: str
+) -> list[tuple[str, str]]:
+    """The commits in ``base..head`` whose message does not name
+    ``package``, each as (SHA, subject)."""
+    out = tools.git(*where, 'log', '--format=%H%x00%B%x1e', f'{base}..{head}')
+    missing: list[tuple[str, str]] = []
+    for entry in out.split('\x1e'):
+        sha, sep, body = entry.strip('\n').partition('\x00')
+        if sep and not names_package(body, package):
+            missing.append((sha, body.split('\n', 1)[0]))
+    return missing
+
+
+def check_lane_package(tools: Tools, topic: str, package: str) -> None:
+    """On a lane, the package the title names is the worktree's."""
+    if not PACKAGE_ID.fullmatch(package):
+        raise Refusal(
+            f'--title names {package!r}, not a package ID such as T1.11e or '
+            f"CI3; a lane's landing title is 'Land <ID>: <summary>'"
+        )
+    recorded = recorded_package(tools)
+    if recorded is None:
+        raise Refusal(
+            f'{topic} is a lane, and this worktree records no package '
+            f'(`git config --worktree {PACKAGE_KEY}`); start the lane with '
+            '`scripts/rust_core/lane.py start`'
+        )
+    if recorded != package:
+        raise Refusal(
+            f'the title lands {package}, but this worktree of {topic} records '
+            f'{recorded} (`git config --worktree {PACKAGE_KEY}`); a lane '
+            'carries one package at a time'
+        )
+
+
+def check_lane_commits(
+    tools: Tools, base: str, candidate: str, package: str
+) -> None:
+    missing = commits_not_naming(tools, base, candidate, package)
+    if missing:
+        raise Refusal(
+            f'commits on the lane do not name {package}, so they may be '
+            "another package's:\n- "
+            + '\n- '.join(f'{sha[:12]} {subject}' for sha, subject in missing)
+        )
+
+
+def confirm_lane(
+    tools: Tools, remote: str, topic: str, phase: str, sha: str
+) -> str | None:
+    """None when the remote has the lane and the phase branch both at
+    ``sha``; else what it has."""
+    out = tools.git(
+        'ls-remote', remote, f'refs/heads/{topic}', f'refs/heads/{phase}'
+    )
+    tips = {
+        ref.removeprefix('refs/heads/'): tip
+        for tip, _, ref in (line.partition('\t') for line in out.splitlines())
+    }
+    if tips.get(topic) == sha and tips.get(phase) == sha:
+        return None
+    return ', '.join(
+        f'{branch} at {(tips.get(branch) or "nothing")[:12]}'
+        for branch in (topic, phase)
+    )
 
 
 #: A hex word of seven to forty digits, standing on its own.
@@ -482,14 +608,26 @@ def land(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
     check_branches(args.phase_branch, args.topic_branch)
+    title = one_line(args.title, '--title')
+    package = package_of(title)
+    on_lane = lane_of(args.topic_branch) is not None
+    if on_lane:
+        check_lane_package(tools, args.topic_branch, package)
     candidate = resolve(tools, args.candidate, 'the candidate')
     check_worktree(tools, candidate)
     base = phase_head(tools, args.remote, args.phase_branch)
     checkpoint = resolve(tools, args.checkpoint, 'the checkpoint')
     check_descent(tools, candidate, base, checkpoint, args.phase_branch)
+    if on_lane:
+        check_lane_commits(tools, base, candidate, package)
     check_reviews(tools, args.review, candidate)
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
+    if on_lane:
+        out(
+            f'ok   the lane carries {package}, the package this worktree '
+            'records, and every commit names it'
+        )
     out(f'ok   {len(args.review)} reviews approve {candidate[:12]}')
     if args.wait_for_landing_run:
         newest = (runs_on(tools, candidate) or [None])[0]
@@ -515,8 +653,6 @@ def land(
             'this commit changes no file, so the phase branch moves at once '
             'and its own runs are recorded afterwards (E43 (b)).'
         )
-    title = one_line(args.title, '--title')
-    package = package_of(title)
     reviewer = one_line(
         args.reviewer
         or f'independent reviewer (fresh agent) and Codex, {package}',
@@ -575,6 +711,20 @@ def land(
             f'{args.phase_branch} to {sha} (decision E43 (b))'
         )
     out(f'LANDED {sha}')
+    status = 0
+    if on_lane:
+        mismatch = confirm_lane(
+            tools, args.remote, args.topic_branch, args.phase_branch, sha
+        )
+        if mismatch:
+            out(
+                f'LANE MISMATCH: the remote has {mismatch}, not both at {sha}; '
+                "the lane's next package starts from the phase head, so "
+                'look before `lane.py start`'
+            )
+            status = 1
+        else:
+            out(f'ok   {args.topic_branch} equals {args.phase_branch} at {sha}')
     runs = wait_for_runs(tools, sha, [args.topic_branch, args.phase_branch])
     for branch in (args.topic_branch, args.phase_branch):
         run = runs.get(branch)
@@ -584,7 +734,7 @@ def land(
             else f'run  {branch}: not yet listed; `land.py verify {sha}` finds it'
         )
     out(f'next: land.py verify {sha}')
-    return 0
+    return status
 
 
 def push(tools: Tools, undo: str, *args: str) -> None:

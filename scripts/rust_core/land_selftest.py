@@ -79,7 +79,11 @@ class Fake:
     remote_phase: str = BASE
     commits: dict[str, dict[str, str]] = field(
         default_factory=lambda: {
-            CAND: {'parent': BASE, 'tree': 'tree-cand', 'message': ''},
+            CAND: {
+                'parent': BASE,
+                'tree': 'tree-cand',
+                'message': 'T1.99: a test package\n\nThe work.\n',
+            },
             BASE: {'parent': CHECK, 'tree': 'tree-base', 'message': ''},
             CHECK: {'parent': '', 'tree': 'tree-check', 'message': ''},
             OTHER: {'parent': '', 'tree': 'tree-other', 'message': ''},
@@ -100,6 +104,14 @@ class Fake:
     landing_conclusion: dict[str, str] = field(default_factory=dict)
     pushes: list[tuple[str, ...]] = field(default_factory=list)
     committed: list[str] = field(default_factory=list)
+    #: The worktree's configuration: whether it has its own, and the
+    #: package recorded there (``lane.py start``).
+    worktree_config: bool = True
+    package: str | None = 'T1.99'
+    #: The branches on the remote, as pushes leave them; a seeded value
+    #: stands for a push by someone else after the landing.
+    remote_refs: dict[str, str] = field(default_factory=dict)
+    moved_after_push: dict[str, str] = field(default_factory=dict)
 
     def sha(self, rev: str) -> str | None:
         rev = rev.removesuffix('^{commit}')
@@ -163,6 +175,28 @@ class Fake:
             self.head = LAND
             self.committed.append(message)
             return ok
+        if args[0] == 'config':
+            if args[-1] == 'extensions.worktreeConfig':
+                return land.Completed(
+                    0 if self.worktree_config else 1,
+                    'true\n' if self.worktree_config else '',
+                )
+            if args[1:] == ['--worktree', '--get', land.PACKAGE_KEY]:
+                if self.package is None:
+                    return land.Completed(1)
+                return land.Completed(0, self.package + '\n')
+            raise AssertionError(f'unexpected git {args}')
+        if args[0] == 'ls-remote':
+            refs = {**self.remote_refs, **self.moved_after_push}
+            lines = [f'{refs[ref]}\t{ref}' for ref in args[2:] if ref in refs]
+            return land.Completed(0, ''.join(line + '\n' for line in lines))
+        if args[0] == 'log' and '..' in args[-1]:
+            base, head = (self.sha(r) for r in args[-1].split('..'))
+            entries = []
+            while head and head != base:
+                entries.append(f'{head}\x00{self.commits[head]["message"]}')
+                head = self.commits[head]['parent']
+            return land.Completed(0, '\x1e\n'.join(entries) + '\x1e\n')
         if args[0] == 'log':
             message = self.commits[self.sha(args[-1]) or '']['message']
             block = message.strip().split('\n\n')[-1]
@@ -176,6 +210,7 @@ class Fake:
                     sha, branch = ref.split(':refs/heads/')
                     if branch == PHASE:
                         self.remote_phase = sha
+                    self.remote_refs[f'refs/heads/{branch}'] = sha
                     self.runs.setdefault(sha, []).append(
                         ci_run(
                             sha,
@@ -382,7 +417,7 @@ def _(tmp: Path) -> tuple[bool, str]:
 @case('refused: a candidate that is not a commit')
 def _(tmp: Path) -> tuple[bool, str]:
     c = Case(tmp)
-    c.call(['--candidate', 'f' * 12, '--topic-branch', TOPIC, '--title', 't',
+    c.call(['--candidate', 'f' * 12, '--topic-branch', TOPIC, '--title', 'T1.99: t',
             '--protected-paths', 'p', '--checkpoint', CHECK,
             '--review', c.reviews[0], '--review', c.reviews[1]])  # fmt: skip
     return refused(c, 'is not a commit')
@@ -564,6 +599,10 @@ for topic in (
     f'{PHASE}-a..b',
     f'{PHASE}-x.lock',
     f'refs/heads/{PHASE}-lane-a',
+    f'{PHASE}-lane-',
+    f'{PHASE}-lane-A',
+    f'{PHASE}-lane-1.b',
+    f'{PHASE}-lane-a_b',
 ):
 
     @case(f'refused: --topic-branch {topic}')
@@ -821,6 +860,112 @@ def _(tmp: Path) -> tuple[bool, str]:
         and not c.fake.pushes
     )
     return ok, 'rerun asked' if ok else c.text
+
+
+# --- a lane carries one package -----------------------------------------------
+
+
+def package_calls(c: Case) -> list[tuple[str, ...]]:
+    return [call for call in c.calls if call[:2] == ('git', 'config')]
+
+
+@case('lands: a lane whose worktree records the package the title names')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp).land('--title', 'Land T1.99: a test package')
+    ok = (
+        c.code == 0
+        and bool(package_calls(c))
+        and f'ok   {TOPIC} equals {PHASE} at {LAND}' in c.text
+    )
+    return ok, 'checked and landed' if ok else c.text
+
+
+@case('refused: a lane whose worktree records another package')
+def _(tmp: Path) -> tuple[bool, str]:
+    return refused(Case(tmp, Fake(package='T1.98')).land(), 'records T1.98')
+
+
+@case('refused: a lane whose worktree records no package')
+def _(tmp: Path) -> tuple[bool, str]:
+    return refused(Case(tmp, Fake(package=None)).land(), 'records no package')
+
+
+@case('refused: a lane in a clone without per-worktree configuration')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp, Fake(worktree_config=False)).land()
+    return refused(c, 'records no package')
+
+
+for title in ('a test package', 'Land t1.99: lower case', 'Land T1.99a1: x'):
+
+    @case(f'refused: a lane landed under the title {title!r}')
+    def _(tmp: Path, title: str = title) -> tuple[bool, str]:
+        c = Case(tmp).land('--title', title)
+        return refused(c, 'not a package ID')
+
+
+@case("refused: a lane commit that does not name the title's package")
+def _(tmp: Path) -> tuple[bool, str]:
+    fake = Fake()
+    fake.commits[CAND]['message'] = 'T1.98: the previous package\n'
+    return refused(Case(tmp, fake).land(), 'T1.98: the previous package')
+
+
+@case('refused: a lane commit naming only a longer ID (T1.99a, T1.990)')
+def _(tmp: Path) -> tuple[bool, str]:
+    fake = Fake()
+    fake.commits[CAND]['message'] = 'T1.99a and T1.990 and xT1.99\n'
+    return refused(Case(tmp, fake).land(), 'do not name T1.99')
+
+
+@case('lands: a task branch is not held to a recorded package')
+def _(tmp: Path) -> tuple[bool, str]:
+    fake = Fake(package=None)
+    fake.commits[CAND]['message'] = 'no package named\n'
+    c = Case(tmp, fake).land('--topic-branch', f'{PHASE}-t1.12')
+    ok = c.code == 0 and not package_calls(c) and 'equals' not in c.text
+    return ok, 'landed, nothing read' if ok else c.text
+
+
+@case('reported: the lane is not the phase head after the push')
+def _(tmp: Path) -> tuple[bool, str]:
+    fake = Fake(moved_after_push={f'refs/heads/{TOPIC}': OTHER})
+    c = Case(tmp, fake).land()
+    ok = (
+        c.code == 1
+        and f'LANDED {LAND}' in c.text
+        and 'LANE MISMATCH' in c.text
+        and f'{TOPIC} at {OTHER[:12]}' in c.text
+    )
+    return ok, 'landed, the mismatch reported' if ok else c.text
+
+
+@case('waits: on a lane, the lane is confirmed after the phase push')
+def _(tmp: Path) -> tuple[bool, str]:
+    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
+    c = Case(tmp, Fake(runs=runs)).land('--wait-for-landing-run')
+    ok = c.code == 0 and f'ok   {TOPIC} equals {PHASE} at {LAND}' in c.text
+    return ok, 'confirmed' if ok else c.text
+
+
+def names(text: str, package: str) -> bool:
+    return land.names_package(text, package)
+
+
+@case('names_package: a word of its own, case and suffix exact')
+def _(tmp: Path) -> tuple[bool, str]:
+    checks = {
+        ('T1.11e: the work', 'T1.11e'): True,
+        ('Fix (T1.11e).', 'T1.11e'): True,
+        ('body\n\nPart of CI3.', 'CI3'): True,
+        ('T1.11e', 'T1.11'): False,
+        ('CI30', 'CI3'): False,
+        ('t1.11e', 'T1.11e'): False,
+        ('xT1.11e', 'T1.11e'): False,
+        ('1.T1.11e', 'T1.11e'): False,
+    }
+    wrong = {k: v for k, v in checks.items() if names(*k) != v}
+    return not wrong, 'as expected' if not wrong else f'wrong: {wrong}'
 
 
 def main() -> int:
