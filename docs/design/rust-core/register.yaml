@@ -566,19 +566,52 @@ entries:
   kind: drop
   old_behavior: >-
     The in-memory sampler's seconds round trip of -9223372036854775807 ns
-    (pd.Timestamp.min) wraps to 2262-04-11T23:47:16.709551616.
-  new_behavior: The core gives 1677-09-21T00:12:43 and does not reproduce the wrap.
+    (pd.Timestamp.min) wraps to 2262-04-11T23:47:16.709551616. A graph with
+    no time column is anchored at that sentinel, so after the wrap the
+    comparison at inference/payload.py:469-471 no longer sees it: the
+    in-memory route's payload gains an anchor time column holding the wrapped
+    instant for every instance, and the end-time check at
+    base/sampler.py:321-326 keeps every end time. The SQL samplers make no
+    round trip (base/sql_sampler.py:573), keep the sentinel, send no anchor
+    time column and clear every end time.
+  new_behavior: >-
+    The core gives 1677-09-21T00:12:43 and does not reproduce the wrap; it
+    handles the no-time marker explicitly (decision 30), so the payload of a
+    graph with no time column has no anchor time column on any route, as the
+    reference's SQL samplers send it.
   affected_inputs: >-
-    Only the Timestamp.min sentinel, which inference/payload.py:469-471 on the
-    reference compares against.
-  cases: [T0.6, M3]
+    Only the Timestamp.min sentinel, the anchor of a graph with no time
+    column, and only on the in-memory route, the one sampler that round trips
+    through seconds: its payload's anchor time column and the end-time
+    columns it sends. No Phase 1 case: Phase 1 runs the SQL path, which keeps
+    the sentinel, and every inventory case is a DuckDB source.
+  cases: [T0.6, M3, T1.21]
   status: approved
   approved_by: owner
   decision_ref: 30
   notes: >-
-    Recommendation: drop the wrap, after Phase 1 checks whether that comparison
-    still sees the sentinel after the sampler's round trip; if a public answer
-    changes, the entry records it before approval.
+    Answered at T1.21 from the reference alone (b413e9a), by the
+    algorithm-level probes in contract/tests/test_register_probes.py, which
+    pass against the reference checkout and on the candidate's default
+    route, whose four files they reach are the reference's byte for byte. A
+    four-user graph with no time column and an end-time column, sampled at
+    its default anchor (pd.Timestamp.min) and laid out by payload.py's
+    _instance_dataframe: on the in-memory sampler the anchors come back as
+    9223372036709551616 ns, the instance table gains __kumo_anchor_time
+    holding 2262-04-11T23:47:16.709551616 four times, and the three end
+    times stay; on DuckDB the anchors come back as the sentinel, no anchor
+    time column is added, and all four end times are cleared. So the
+    comparison does not see the sentinel after the round trip, and a public
+    answer changes when the core takes the in-memory route: that route's
+    payload loses the wrapped anchor time column. The end-time check is a
+    second reader of the same value: with the marker kept, the in-memory
+    route would clear every end time as the SQL route does, another changed
+    public answer, which this entry records and does not decide (proposed to
+    the owner: follow the SQL route). Neither shows in Phase 1, and the
+    public in-memory proof is Phase 4's (H24). Decision 30's condition, that
+    a changed public answer is recorded here, is met by this note. Phase 0's
+    recommendation: drop the wrap, after Phase 1 checks whether that
+    comparison still sees the sentinel after the sampler's round trip.
 
 - id: DT-4
   title: pandas 3 reading year-first text as year, day, month under dayfirst
@@ -719,21 +752,49 @@ entries:
 
 - id: ORD-1
   title: Tie order of the shared train set by entity time
-  kind: keep
+  kind: change
   old_behavior: >-
     sample_target sorts a shared train set by entity time with
     sort_values(ascending=False), numpy's unstable quicksort, so rows tying on
-    time come out in introsort's order.
-  new_behavior: "Proposed: the core reproduces that tie order."
-  affected_inputs: Relational requests with a shared static train set whose entity times tie.
-  cases: [T0.6]
+    time come out in introsort's order. It sorts only when the anchor is
+    'entity' (base/sampler.py:777-783): a static query materialized with
+    anchor_time='entity', whose entity table has a time column. On the
+    reference host (arm64, numpy 2.5.3, pandas 3.0.6) tied rows keep their
+    shuffled order up to 16 rows and lose it from 17.
+  new_behavior: >-
+    Proposed: the core orders the shared train set by entity time, newest
+    first, with tied rows in their shuffled order (RS-1's draw), the order
+    sort_values(ascending=False, kind='stable') gives; up to 16 rows that is
+    also the reference's order on its host.
+  affected_inputs: >-
+    Static queries materialized with anchor_time='entity' whose entities tie
+    on time, more than 16 of them: the order of the context rows, and which
+    tied rows fill the context when more qualify than it holds. No case of
+    the Phase 1b inventory or of contract/cases.
+  cases: [T0.6, T1.21]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    random-streams.md, "A neighbouring ordering question". Recommendation:
-    reproduce it if Phase 1 shows it reaches a payload; otherwise register a
-    stable order as a change.
+    Measured at T1.21 by contract/tests/test_register_probes.py, which
+    passes against the reference checkout (b413e9a) and on the candidate's
+    default route. The tie order reaches no inventory payload: the case
+    schema takes an ISO date as materialize's anchor_time, so no case can
+    name 'entity'; running the 40 inventory cases and the three of
+    contract/cases, 31 of them reach sample_target, in 32 calls (30
+    temporal, 2 static), every one anchored at a timestamp, so none takes
+    the sort. The control, a public materialize on DuckDB with
+    anchor_time='entity' over 40 users tying on two times, reaches it; run
+    by hand on the reference, its context rows came out in another order
+    than with kind='stable', so the tie order does reach a payload when a
+    caller asks for that anchor. The core route refuses that anchor in
+    Phase 1 (anchor_entity, T1.24), so no Phase 1 answer depends on this
+    entry. Recommendation, as random-streams.md and Phase 1 decision Q3
+    propose when no inventory payload shows the order: register a stable
+    order as this change. Reproducing it would mean porting numpy's introsort
+    for datetime64, and the order is the host's: only the reference host was
+    measured. A change, so the owner decides; until then the comparator does
+    not normalize tie order (Q3).
 
 - id: ORD-2
   title: NULL times and emit order of the latest-neighbor fetch
