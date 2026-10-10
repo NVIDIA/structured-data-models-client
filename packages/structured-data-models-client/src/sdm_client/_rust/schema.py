@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: the host-held rules here (design, "Host-held semantics"),
+# link inference, key marking, edit stamps and the schema's warnings
+# (T1.23) and the option refusals (T1.24), are deleted in Phase 1 by those
+# tasks; building today's Schema from the description stays the host's.
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 

@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: the host-held rules here (design, "Host-held semantics"),
+# the option refusals (T1.24), the run mode, entity count, shape, limits and
+# capped-context notice (T1.28) and the index warning's once-flag (T1.26,
+# after the owner's answer on state lifetime), are deleted in Phase 1 by
+# those tasks; casting the entities to the key's type stays the host's.
 
 r"""``materialize`` on the core: the request's gathering (T1.11c).
 

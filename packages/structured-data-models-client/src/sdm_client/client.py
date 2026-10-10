@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: on the core route, predict's host-held rules (design,
+# "Host-held semantics"): the model and output checks, the empty answer,
+# the merge of the parts and the notice of an absent output; their use on
+# the core route is deleted in Phase 1 by T1.28, and the old route's own
+# goes in Phase 5.
 
 r"""One connection to one NIM, serving every model it can reach.
 

@@ -143,10 +143,18 @@ _TEST_OPS_MODULE = re.compile(
     r'#\[cfg\(feature\s*=\s*"test-ops"\)\]\s*(?:pub\s+)?mod\s+test_ops\s*;'
 )
 
-# Bridge files (decision F7): the private seam deleted in Phase 5.
+# Bridge files (decision F7): the private seam deleted in Phase 5, and the
+# files that keep a rule of the design's "Host-held semantics" ledger on a
+# core route, each deleted from that route by its owning task (T1.11f).
+_CLIENT = 'packages/structured-data-models-client/src/sdm_client/'
 BRIDGE_FILES = (
-    Path('packages/structured-data-models-client/src/sdm_client/_routing.py'),
-    Path('packages/structured-data-models-client/src/sdm_client/_rust/s0.py'),
+    Path(_CLIENT + '_routing.py'),
+    Path(_CLIENT + '_rust/s0.py'),
+    Path(_CLIENT + '_rust/schema.py'),
+    Path(_CLIENT + '_rust/materialize.py'),
+    Path(_CLIENT + '_rust/predict.py'),
+    Path(_CLIENT + 'materializers/relational.py'),
+    Path(_CLIENT + 'client.py'),
 )
 SHIPPED_PYTHON = Path('packages/structured-data-models-client/src')
 _BRIDGE_HEADER = re.compile(r'^(?:#|//)\s*Bridge code\b.*', re.M)

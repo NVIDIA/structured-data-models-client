@@ -515,6 +515,12 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         ),
         f'{l0_deps.BRIDGE_FILES[1]}: no header naming the phase',
     )
+    ledger = l0_deps.BRIDGE_FILES[3]
+    bridges(
+        'a host-held semantics file without its header',
+        lambda r: edit(r / ledger, '# Bridge code:', '# Code:'),
+        f'{ledger}: no header naming the phase',
+    )
     bridges(
         'SDM_CORE_ROUTES read outside the bridge files',
         lambda r: append(
