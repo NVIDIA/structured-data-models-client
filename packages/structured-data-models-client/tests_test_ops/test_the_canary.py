@@ -658,6 +658,7 @@ def test_the_client_s_own_explanation_names_schema_columns_never_values(
 
 def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
 ) -> None:
     r"""As on the old route, an endpoint that echoes our credential (the
     Authorization header made of the URL's userinfo, and the password) in
@@ -665,7 +666,10 @@ def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
     route's exactly (E47; a scrub of such echoes was tried in fix rounds 3
     and 4 and removed by change of method). Our own code adds nothing: the
     credential is nowhere in the exception but where the endpoint's text
-    puts it, and nothing is chained."""
+    puts it, nothing is chained, and, on the core route, the canary's
+    watchers (the core's error, every log record at DEBUG, every warning,
+    stderr and stdout) find the credential, its token and the endpoint's
+    sentinel written nowhere else."""
     echoing = json.dumps(
         {
             'code': 'UNAUTHORIZED',
@@ -674,6 +678,7 @@ def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
         }
     ).encode()
     shown = {}
+    watched: dict[str, _Seen] = {}
     with _answering(echoing, 401) as url:
         for route, routes in (
             ('core', CORE),
@@ -685,9 +690,22 @@ def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
             ),
         ):
             monkeypatch.setenv(_routing.ENVIRONMENT, routes)
-            with pytest.raises(NimRequestError) as raised:
-                _predict(url)
+            with _watching(monkeypatch, capfd) as seen:
+                with pytest.raises(NimRequestError) as raised:
+                    _predict(url)
             shown[route] = raised.value
+            watched[route] = seen
+    for route, seen in watched.items():
+        # Not vacuous: the watchers saw the journey's own warning (the
+        # missing indices) on both routes.
+        assert any(where == 'warning' for where, _ in seen.texts), route
+        written = [
+            where
+            for where, text in seen.texts
+            for echoed in (DSN, _BASIC_TOKEN, ENDPOINT)
+            if echoed in text
+        ]
+        assert written == [], route
     core, old = shown['core'], shown['old']
     assert (str(core), repr(core), core.code, core.status_code) == (
         str(old),
