@@ -133,6 +133,22 @@ class Fake:
             return self.commits[sha]['parent'] if sha else None
         return self.sha(rev)
 
+    def merge_base(self, a: str | None, b: str | None) -> land.Completed:
+        """The common ancestor no other common ancestor descends from."""
+
+        def below(x: str, y: str | None) -> bool:
+            return x == y or (x, y) in self.ancestors
+
+        common = [c for c in self.commits if below(c, a) and below(c, b)]
+        best = [
+            c
+            for c in common
+            if not any(d != c and (c, d) in self.ancestors for d in common)
+        ]
+        if len(best) != 1:
+            return land.Completed(1)
+        return land.Completed(0, best[0] + '\n')
+
     def __call__(self, argv: Sequence[str]) -> land.Completed:
         args = list(argv)
         if args[0] == 'git':
@@ -154,11 +170,13 @@ class Fake:
             return (
                 land.Completed(0, value + '\n') if value else land.Completed(1)
             )
-        if args[0] == 'merge-base':
+        if args[0] == 'merge-base' and args[1] == '--is-ancestor':
             a, b = self.sha(args[2]), self.sha(args[3])
             return land.Completed(
                 0 if a == b or (a, b) in self.ancestors else 1
             )
+        if args[0] == 'merge-base':
+            return self.merge_base(self.sha(args[1]), self.sha(args[2]))
         if args[0] == 'commit':
             message = Path(args[args.index('-F') + 1]).read_text()
             if self.drop_trailer:
@@ -280,7 +298,6 @@ class Case:
             '--candidate', CAND[:10], '--topic-branch', TOPIC,
             '--title', 'T1.99: a test package',
             '--protected-paths', '.github/workflows/ci.yml (no gate removed)',
-            '--checkpoint', CHECK[:12],
         ]  # fmt: skip
         for path in self.reviews if reviews is None else reviews:
             argv += ['--review', path]
@@ -374,7 +391,7 @@ def _(tmp: Path) -> tuple[bool, str]:
         r'Reviewed-by: independent reviewer \(fresh agent\) and Codex, T1\.99\n'
         r'Protected-paths: \.github/workflows/ci\.yml \(no gate removed\)\n'
         rf'Base-SHA: {BASE}\n'
-        rf'Checkpoint-SHA: {CHECK}\n'
+        rf'Checkpoint-SHA: {BASE}\n'
         rf'{re.escape(SIGNOFF)}\n'
     )
     ok = re.fullmatch(expected, message) is not None
@@ -445,11 +462,73 @@ def _(tmp: Path) -> tuple[bool, str]:
     return refused(Case(tmp, Fake(remote_phase=CAND)).land(), 'nothing to land')
 
 
-@case('refused: the checkpoint is not an ancestor of the candidate')
+# --- the checkpoint (design, H2: the merge base of candidate and base) ---------
+
+
+@case('lands: without --checkpoint, the trailer is the computed merge base')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp).land()
+    message = c.fake.committed[0] if c.fake.committed else ''
+    ok = (
+        c.code == 0
+        and f'Checkpoint-SHA: {BASE}\n' in message
+        and ('git', 'merge-base', CAND, BASE) in c.calls
+        and f'the checkpoint is their merge base, {BASE}' in c.text
+    )
+    return ok, 'computed' if ok else f'exit {c.code}: {c.text} | {message}'
+
+
+@case('lands: a --checkpoint naming the merge base, by a prefix')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp).land('--checkpoint', BASE[:10])
+    message = c.fake.committed[0] if c.fake.committed else ''
+    ok = c.code == 0 and f'Checkpoint-SHA: {BASE}\n' in message
+    return ok, 'accepted' if ok else f'exit {c.code}: {c.text}'
+
+
+@case('lands: the merge base, not the phase head, when they differ')
+def _(tmp: Path) -> tuple[bool, str]:
+    # A fake whose merge-base answers an older commit than the phase head,
+    # so the trailer is shown to be git's answer, not a copy of Base-SHA.
+    fake = Fake()
+    fake.merge_base = lambda a, b: land.Completed(0, CHECK + '\n')  # type: ignore[method-assign]
+    c = Case(tmp, fake).land()
+    message = fake.committed[0] if fake.committed else ''
+    ok = (
+        c.code == 0
+        and f'Checkpoint-SHA: {CHECK}\n' in message
+        and f'Base-SHA: {BASE}\n' in message
+    )
+    return ok, "git's merge base" if ok else f'exit {c.code}: {message}'
+
+
+@case('refused: a --checkpoint that is an older ancestor, not the merge base')
+def _(tmp: Path) -> tuple[bool, str]:
+    # The mislabel checkpoint 3 found: the design-checkpoint review's SHA,
+    # an ancestor of both, passed in place of the merge base.
+    return refused(
+        Case(tmp).land('--checkpoint', CHECK[:12]),
+        f'the checkpoint {CHECK[:12]} is not the merge base',
+    )
+
+
+@case('refused: a --checkpoint that is not an ancestor of the candidate')
+def _(tmp: Path) -> tuple[bool, str]:
+    return refused(
+        Case(tmp).land('--checkpoint', OTHER), 'is not the merge base'
+    )
+
+
+@case('refused: a --checkpoint that is not a commit')
+def _(tmp: Path) -> tuple[bool, str]:
+    return refused(Case(tmp).land('--checkpoint', 'f' * 12), 'the checkpoint')
+
+
+@case('refused: no merge base to compute')
 def _(tmp: Path) -> tuple[bool, str]:
     fake = Fake()
-    fake.ancestors.discard((CHECK, CAND))
-    return refused(Case(tmp, fake).land(), 'checkpoint')
+    fake.merge_base = lambda a, b: land.Completed(1)  # type: ignore[method-assign]
+    return refused(Case(tmp, fake).land(), 'merge-base')
 
 
 # --- the reviews --------------------------------------------------------------

@@ -14,8 +14,8 @@ concluded success. The landing commit's runs are recorded afterwards
 
     land.py --candidate SHA --topic-branch NAME --review FILE --review FILE \\
         --title 'T1.12: the S0 case corpus' --protected-paths TEXT \\
-        --checkpoint SHA [--phase-branch rust-core-phase-1] [--reviewer TEXT] \\
-        [--summary TEXT] [--dry-run] [--wait-for-landing-run]
+        [--checkpoint SHA] [--phase-branch rust-core-phase-1] \\
+        [--reviewer TEXT] [--summary TEXT] [--dry-run] [--wait-for-landing-run]
     land.py verify LANDING_SHA [--phase-branch rust-core-phase-1]
 
 Before it changes anything it refuses, naming the reason, unless:
@@ -43,7 +43,12 @@ Before it changes anything it refuses, naming the reason, unless:
   still fast-forwards;
 - the worktree is clean, HEAD is the candidate, and the candidate descends
   from the phase branch's head on the remote without being it;
-- the checkpoint is a commit the candidate descends from;
+- ``--checkpoint``, when given, names the checkpoint land.py computes:
+  ``git merge-base CANDIDATE BASE``, the base being the phase head (the
+  design's "Reference observations and the gate", H2). land.py always
+  computes it and never takes it from the caller; the flag is only a
+  cross-check, so a design-checkpoint review's SHA passed in its place, as
+  every landing from T1.11a to T1.11e carried, is refused;
 - there are at least two review files, distinct, each whose first line is
   exactly ``APPROVE`` and which names the candidate by its full SHA or a
   prefix of at least seven characters that git resolves to the candidate
@@ -54,7 +59,8 @@ Before it changes anything it refuses, naming the reason, unless:
 
 It then commits the landing commit (``git commit --allow-empty -s``) with
 ``Reviewed-by``, ``Protected-paths``, ``Base-SHA`` (the phase head) and
-``Checkpoint-SHA`` trailers, as earlier landing commits do, checks that the
+``Checkpoint-SHA`` (the merge base computed above) trailers, as earlier
+landing commits do, checks that the
 commit's tree is the candidate's and its parent the candidate (so a
 landing whose tree differs is never made), and pushes
 it to the topic branch and the phase branch in one atomic push, which the
@@ -220,9 +226,7 @@ def phase_head(tools: Tools, remote: str, phase: str) -> str:
     return resolve(tools, f'refs/remotes/{remote}/{phase}', 'the phase head')
 
 
-def check_descent(
-    tools: Tools, candidate: str, base: str, checkpoint: str, phase: str
-) -> None:
+def check_descent(tools: Tools, candidate: str, base: str, phase: str) -> None:
     if candidate == base:
         raise Refusal(
             f'the candidate is the head of {phase} itself; there is nothing '
@@ -233,11 +237,34 @@ def check_descent(
             f'the candidate {candidate[:12]} does not descend from the head of '
             f'{phase} ({base[:12]}); rebase it onto that head and gate it again'
         )
-    if not tools.git_ok('merge-base', '--is-ancestor', checkpoint, candidate):
+
+
+def checkpoint_of(
+    tools: Tools, candidate: str, base: str, given: str | None
+) -> str:
+    """The checkpoint, ``git merge-base CANDIDATE BASE`` (the design's
+    "Reference observations and the gate", H2), computed here and never
+    taken from the caller. A ``--checkpoint`` that resolves to another
+    commit is refused: until T1.11f the caller's value was only checked to
+    be an ancestor, and seven landings carried the design-checkpoint
+    review's SHA in its place (checkpoint 3)."""
+    merged = tools.git('merge-base', candidate, base).strip()
+    if not re.fullmatch(r'[0-9a-f]{40}', merged):
         raise Refusal(
-            f'the checkpoint {checkpoint[:12]} is not an ancestor of the '
-            f'candidate {candidate[:12]}'
+            f'git merge-base of the candidate {candidate[:12]} and the phase '
+            f'head {base[:12]} gave {merged!r}, not a commit'
         )
+    if given is not None:
+        named = resolve(tools, given, 'the checkpoint')
+        if named != merged:
+            raise Refusal(
+                f'the checkpoint {named[:12]} is not the merge base of the '
+                f'candidate and the phase head, {merged[:12]}; the checkpoint '
+                'is `git merge-base CANDIDATE BASE` (design, H2), not a '
+                'design-checkpoint review; omit --checkpoint and land.py '
+                'computes it'
+            )
+    return merged
 
 
 def check_branches(phase: str, topic: str) -> None:
@@ -724,13 +751,14 @@ def land(
     candidate = resolve(tools, args.candidate, 'the candidate')
     check_worktree(tools, candidate)
     base = phase_head(tools, args.remote, args.phase_branch)
-    checkpoint = resolve(tools, args.checkpoint, 'the checkpoint')
-    check_descent(tools, candidate, base, checkpoint, args.phase_branch)
+    check_descent(tools, candidate, base, args.phase_branch)
+    checkpoint = checkpoint_of(tools, candidate, base, args.checkpoint)
     if on_lane:
         check_lane_commits(tools, base, candidate, package)
     check_reviews(tools, args.review, candidate)
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
+    out(f'ok   the checkpoint is their merge base, {checkpoint}')
     if on_lane:
         out(
             f'ok   the lane is checked out here and carries {package}, the '
@@ -994,7 +1022,10 @@ def parser_for(command: str) -> argparse.ArgumentParser:
         )
         parser.add_argument('--title', required=True)
         parser.add_argument('--protected-paths', required=True)
-        parser.add_argument('--checkpoint', required=True)
+        parser.add_argument(
+            '--checkpoint',
+            help='optional cross-check; land.py computes the merge base itself',
+        )
         parser.add_argument('--reviewer')
         parser.add_argument('--summary')
         parser.add_argument('--dry-run', action='store_true')
