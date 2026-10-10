@@ -22,6 +22,7 @@ chained, and nothing the driver wrote reaches a traceback (decision H17).
 
 from __future__ import annotations
 
+import builtins
 import warnings
 from typing import Any, NoReturn
 
@@ -115,11 +116,21 @@ ERRORS: dict[str, tuple[type[StructuredDataError], str]] = {
     ),
 }
 
+
+class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
+    r"""The class the core's sampler warnings are shown as: the reference's
+    ``UserWarning`` (a subclass of it, named so, so a filter, a
+    ``pytest.warns`` and an observation's class name see the reference's),
+    owned by this client, so where a warning came from can be told by its
+    category (T1.11d review round 4)."""
+
+
 #: Warning codes the core gives, with the class each is shown as; any other
 #: code is shown as :class:`~sdm_client.core.warnings.SDMWarning`. From
 #: T1.11c ``materialize`` gives the reference's sampler warnings, which the
 #: reference shows as ``UserWarning``: indices missing for its reads, a
-#: context reaching back before the data, an anchor after it.
+#: context reaching back before the data, an anchor after it; this client's
+#: own :class:`UserWarning`, so their provenance shows.
 WARNINGS: dict[str, type[Warning]] = {
     'MISSING_INDICES': UserWarning,
     'CONTEXT_BEFORE_DATA': UserWarning,
