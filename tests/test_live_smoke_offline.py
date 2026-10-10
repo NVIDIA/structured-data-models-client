@@ -347,6 +347,8 @@ def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
     assert 'warning UserWarning: the context is small' in run.stderr
     # The client's own, attributed to the caller's line, are shown too.
     assert 'warning SDMWarning: every context row agrees' in run.stderr
-    assert 'warning UserWarning: [MISSING_INDICES] Missing 3 indices' in run.stderr
+    assert (
+        'warning UserWarning: [MISSING_INDICES] Missing 3 indices' in run.stderr
+    )
     assert 'SYNTH_UNKNOWN_USER' not in run.stderr
     assert 'vanity-corp' not in run.stderr

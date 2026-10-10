@@ -163,7 +163,7 @@ def our_credentials(transport: Any) -> list[str]:
     the ``Basic`` token ``requests`` builds of them, each query value, the
     API key, and a Databricks workspace's token, password and client
     secret; longest first, so one that holds another is replaced whole."""
-    found: list[str] = []
+    found: list[Any] = []
     url = getattr(transport, 'url', None)
     if isinstance(url, str):
         parsed = urlparse(url)
