@@ -289,7 +289,11 @@ fn a_time_of_day_is_refused_as_a_time_column_by_name() {
         observed.answer,
         Answer::Error {
             kind: "unsupported".into(),
-            code: "UNSUPPORTED_REQUEST".into()
+            code: "UNSUPPORTED_REQUEST".into(),
+            fields: [("operation", "describe_source"), ("rule", "time_of_day")]
+                .into_iter()
+                .map(|(name, text)| (name.to_owned(), text.to_owned()))
+                .collect(),
         }
     );
 }

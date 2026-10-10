@@ -100,7 +100,9 @@ pub fn write(
         Answer::Validated(accepted) => (Some(*accepted), Value::Null, Value::Null),
         Answer::Described(_) | Answer::Materialized(_) => (None, Value::Null, Value::Null),
         Answer::Predicted(answer) => (None, answer.clone(), Value::Null),
-        Answer::Error { kind, code } => (None, Value::Null, json!({"kind": kind, "code": code})),
+        Answer::Error { kind, code, .. } => {
+            (None, Value::Null, json!({"kind": kind, "code": code}))
+        }
     };
     let materialized = observed.materialized.clone().unwrap_or(Value::Null);
     let described = observed.described.clone().unwrap_or(Value::Null);

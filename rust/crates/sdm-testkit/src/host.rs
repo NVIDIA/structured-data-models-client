@@ -31,7 +31,9 @@ use sdm_contract::ops::{
     RequestState, Seed, SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
-use sdm_contract::{CONTRACT_VERSION, ControlMessage, CoreError, HostFacts, Scalar, Step, Unit};
+use sdm_contract::{
+    CONTRACT_VERSION, ControlMessage, CoreError, Detail, HostFacts, Scalar, Step, Unit,
+};
 use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, read};
 use serde_json::{Value, json};
 
@@ -73,8 +75,15 @@ pub enum Answer {
     /// each number as its text, the model and call id the endpoint named,
     /// its metadata, and the result's columns and rows.
     Predicted(Value),
-    /// A core error's kind and code, as the contract spells them.
-    Error { kind: String, code: String },
+    /// A core error's kind and code, as the contract spells them, and its
+    /// text fields by name (`operation` and `rule` for a refusal of a rule
+    /// not ported), which the refusal maps read (T1.21b); the observation
+    /// records the kind and code.
+    Error {
+        kind: String,
+        code: String,
+        fields: BTreeMap<String, String>,
+    },
 }
 
 impl Answer {
@@ -130,9 +139,18 @@ fn spelled(value: impl serde::Serialize) -> Result<String> {
 }
 
 fn answer_of(error: &CoreError) -> Result<Answer> {
+    let fields = error
+        .fields
+        .iter()
+        .filter_map(|(name, detail)| match detail {
+            Detail::Scalar(Scalar::Utf8(text)) => Some((name.clone(), text.clone())),
+            _ => None,
+        })
+        .collect();
     Ok(Answer::Error {
         kind: spelled(error.kind)?,
         code: spelled(error.code)?,
+        fields,
     })
 }
 

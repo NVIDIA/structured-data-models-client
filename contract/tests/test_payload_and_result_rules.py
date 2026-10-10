@@ -84,7 +84,7 @@ def _run(mode: str, out: Path, *extra: str) -> list[dict[str, Any]]:
             *extra,
             '--out',
             str(out),
-            str(CASE.parent),
+            str(CASE),
         ],
         capture_output=True,
         text=True,
@@ -119,7 +119,7 @@ def test_h9_holds_on_base_regression_on_the_python_runners(
     reference = tmp_path / 'python-ref.jsonl'
     reference.write_text(json.dumps(_reference()) + '\n', encoding='utf-8')
     report = compare.compare(
-        [CASE.parent],
+        [CASE],
         reference,
         [runs['python-core'], runs['python-old']],
     )

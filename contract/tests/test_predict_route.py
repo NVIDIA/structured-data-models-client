@@ -89,7 +89,7 @@ def _core(tmp_path: Path) -> dict[str, Any]:
             'python-core',
             '--out',
             str(out),
-            str(CASE.parent),
+            str(CASE),
         ],
         capture_output=True,
         text=True,
