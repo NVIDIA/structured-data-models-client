@@ -79,7 +79,9 @@ def _runner() -> ModuleType:
 def _capture_check() -> ModuleType:
     r"""``capture_check.py``, whose E35 mask of a prediction payload this
     shares, so the rule is written once."""
-    spec = importlib.util.spec_from_file_location('capture_check', CAPTURE_CHECK)
+    spec = importlib.util.spec_from_file_location(
+        'capture_check', CAPTURE_CHECK
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -780,7 +780,7 @@ def _predicts_on_the_core(request: Request) -> Any | None:
     r"""The core's ``predict`` bridge, when this call runs on the core.
 
     A request materialized over a DuckDB source predicts on the core when
-    ``SDM_CORE_ROUTES`` forces its paths there (T1.11d); every other call,
+    the routing seam forces its paths there (T1.11d); every other call,
     and every call by default, takes the old route. The bridge refuses, as
     the seam's own failure, a request the core did not materialize.
     """

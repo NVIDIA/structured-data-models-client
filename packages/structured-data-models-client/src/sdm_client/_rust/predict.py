@@ -86,8 +86,7 @@ def predict(
     state = getattr(request, '_core_state', None)
     if state is None:
         raise RouteError(
-            'predict on the core needs a request materialize built on the '
-            'core'
+            'predict on the core needs a request materialize built on the core'
         )
     if tuple(fields) != ('prediction',):
         raise _not_taken('outputs')

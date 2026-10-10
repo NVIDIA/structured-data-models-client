@@ -584,11 +584,19 @@ def _result_rows(stream: Any) -> dict[str, Any]:
             return {'f64_bits': struct.pack('>d', value).hex()}
         if kind == 'utf8':
             return {'utf8': value}
-        raise RunnerFailure('a result column of a type this runner does not record')
+        raise RunnerFailure(
+            'a result column of a type this runner does not record'
+        )
 
     rows = [
-        [cell(column['type'], value) for column, value in zip(columns, row, strict=True)]
-        for row in zip(*(table.column(i).to_pylist() for i in range(table.num_columns)), strict=True)
+        [
+            cell(column['type'], value)
+            for column, value in zip(columns, row, strict=True)
+        ]
+        for row in zip(
+            *(table.column(i).to_pylist() for i in range(table.num_columns)),
+            strict=True,
+        )
     ]
     return {'columns': columns, 'rows': rows}
 

@@ -915,6 +915,60 @@ entries:
     remove each rule's refusal, and this entry is set to rejected when the
     last one goes.
 
+- id: P1B-4
+  title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
+  kind: change
+  old_behavior: >-
+    The reference sends any gathered relational request to its model and
+    reads any answer its bindings read: every task kind, any outputs asked
+    for (probabilities, quantiles, scores, rankings, embeddings,
+    explanation), any prediction statistic, an answer whose items carry
+    those fields or item metadata, a prediction of any JSON type (an
+    integer, text, null or, through Python's reader, NaN and Infinity),
+    and an entity key of any declared dtype, read back as the client's
+    as_declared reads it.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    SDMClient.predict of a request materialized on the core over a DuckDB
+    source runs on the core's predict (T1.11d), which sends a regression
+    asked for its default output to kumo-relational and lays out an answer
+    of float predictions, by the reference's rules, and refuses every other
+    input with UNSUPPORTED_REQUEST naming the rule, never a value (fields
+    operation and rule): in the bridge, before the core runs, outputs (any
+    but the regression's default, prediction); in the core, model (the
+    tabular model), problem_type, prediction_statistic (a statistic not
+    written as text), entity_ref (a request with no entity reference
+    column), id_type (an entity key not declared int8 to int64, written as
+    an integer or as plain digits, or string), instance_id_type,
+    response_field (an answer carrying a field beyond its id, row_index
+    and prediction, named in field) and prediction_type (a prediction not
+    written as a JSON float). An answer holding NaN or Infinity, which
+    Python's reader takes and JSON does not hold, is INVALID_RESPONSE on
+    the core, where the reference reads it. A request not materialized on
+    the core has no core route (RouteError, the seam's own failure). The
+    default route is unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a request materialized on the core over a DuckDB
+    source, under a forced core route, with any of the inputs or answers
+    above; base.regression is none of them, and its request and result are
+    the reference's.
+  cases: [base.regression, T1.11d, T1.26, T1.28, T1.29]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by the implementer of T1.11d (Phase 1 decisions row E45), for
+    the owner: each is a refusal of an input or answer the reference
+    accepts, so it waits for the owner (P1B-1 process) and is never
+    self-approved; the route is not a default anywhere, so no caller meets
+    it. The tests that pin the refusals (sdm-core's tests/predict.rs, the
+    client's tests/test_the_predict_route.py) are diagnostic:
+    base.regression is diagnostic until T1.29. Recommendation: approve as
+    temporary, as P1B-2 and P1B-3; T1.28 (the generated wire types, the
+    response and the result layout) and the task kinds T1.29 brings remove
+    each rule's refusal, and this entry is set to rejected when the last
+    one goes.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1

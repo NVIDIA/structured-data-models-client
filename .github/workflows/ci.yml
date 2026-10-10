@@ -274,11 +274,14 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.10'
+      # The connectors are for the canary test's journey over DuckDB
+      # (T1.11d), which tests_test_ops runs here at the floor.
       - name: The binding's tests on the test-ops build
         run: |
           python -m venv /tmp/test-ops
           /tmp/test-ops/bin/pip install --quiet pytest $BINDING_FLOOR \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            ./packages/structured-data-models-connectors \
             "$(ls native-test-ops/*.whl)"
           /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
             -p no:cacheprovider --native-build test-ops

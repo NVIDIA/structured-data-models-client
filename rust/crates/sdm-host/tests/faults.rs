@@ -28,8 +28,11 @@ use arrow_array::{
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan};
 use sdm_contract::facts::PlatformFacts;
-use sdm_contract::ops::{Operation, ProfileName, ProfileSpec, QuerySchema, ValidateQuery};
-use sdm_contract::run::{FetchOutcome, FetchReply, ReplyId, StartRun};
+use sdm_contract::ops::{
+    Operation, Predict, ProfileName, ProfileSpec, QuerySchema, REQUEST_STATE_VERSION, RequestState,
+    ValidateQuery,
+};
+use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, ReplyId, StartRun};
 use sdm_contract::test_ops::{PanicAt, TestFetch, TestOperation};
 use sdm_contract::{
     CONTRACT_VERSION, ColumnType, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind,
@@ -668,4 +671,190 @@ fn canaries_reach_no_stderr() {
     );
     assert!(!stderr.contains(CANARY), "{stderr}");
     assert!(!stdout.contains(CANARY), "{stdout}");
+}
+
+/// A predict run through `HostRun` (T1.11d), its request state's payload
+/// `payload` at `version`.
+fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
+    HostRun::start(
+        &sdm_host::default_root(),
+        &start_message(Operation::Predict(Predict {
+            state: RequestState {
+                version,
+                payload: AttachmentId(1),
+                query: AttachmentId(2),
+            },
+            model: "kumo-relational".into(),
+            request_id: "sdm-000000000000".into(),
+        })),
+        Attachments::from([
+            (
+                AttachmentId(1),
+                Attachment::Bytes(payload.as_bytes().to_vec()),
+            ),
+            (
+                AttachmentId(2),
+                json(&"PREDICT SUM(o.x, 0, 1, days) FOR EACH u.id"),
+            ),
+        ]),
+    )
+    .map_err(error)
+}
+
+/// A regression's payload whose data hold the canary, as a request's may.
+fn planted_payload() -> String {
+    format!(
+        r#"{{"task":{{"kind":"regression"}},"schema":{{"related_tables":{{"u":{{"columns":{{"id":{{"dtype":"int64"}}}}}}}},"relationships":[{{"source_columns":["__kumo_entity_ref_0"],"target_columns":["id"],"target_table":"u"}}]}},"context":{{"instance_table":{{"format":"arrays","columns":["instance_id","c"],"rows":[[0,"{CANARY}"]]}}}},"predict":{{"instance_table":{{"format":"arrays","columns":["instance_id","__kumo_entity_ref_0"],"rows":[[1,5]]}}}},"metadata":{{"note":"postgres://user:{CANARY}@db.example/sales"}}}}"#
+    )
+}
+
+/// The run's error once its model call is answered with `outcome`.
+fn after_answer(outcome: ModelOutcome, body: Option<&str>) -> CoreError {
+    let run = predicting(REQUEST_STATE_VERSION, &planted_payload()).unwrap();
+    let ControlMessage::Step(sdm_contract::Step::CallModel(call)) =
+        read(&run.next().unwrap()).unwrap()
+    else {
+        panic!("a model call");
+    };
+    // The call carries the planted values: they reach the model, and the
+    // check below is of everything the errors after it write.
+    let Some(Attachment::Bytes(sent)) = run.take_attachment(call.body).unwrap() else {
+        panic!("a body");
+    };
+    assert!(String::from_utf8(sent).unwrap().contains(CANARY));
+    let reply = encode(&ControlMessage::ModelReply(ModelReply {
+        id: call.id,
+        outcome,
+    }))
+    .unwrap();
+    let attachments = match body {
+        Some(body) => {
+            Attachments::from([(AttachmentId(1), Attachment::Bytes(body.as_bytes().to_vec()))])
+        }
+        None => Attachments::new(),
+    };
+    run.reply(&reply, attachments).unwrap();
+    error(run.next().unwrap_err())
+}
+
+/// Every error path `predict` adds at T1.11d, each checked for the canary:
+/// a request state of another version, a payload that is not JSON, the
+/// model's answers the core cannot read or that are not this request's,
+/// an endpoint's refusal, and a transport that failed.
+#[test]
+fn predict_s_canaries_reach_no_error() {
+    let response = |status: u16| ModelOutcome::Response {
+        status,
+        content_type: "application/json".into(),
+        body: AttachmentId(1),
+    };
+    let mut errors = vec![
+        predicting(REQUEST_STATE_VERSION + 1, &planted_payload())
+            .err()
+            .unwrap(),
+        error(
+            predicting(REQUEST_STATE_VERSION, &format!("{{\"a\": \"{CANARY}\" 1}}"))
+                .unwrap()
+                .next()
+                .unwrap_err(),
+        ),
+    ];
+    for (status, body) in [
+        (200, format!("{{\"{CANARY}\"")),
+        (200, format!(r#"{{"id":"{CANARY}","model":5}}"#)),
+        (
+            200,
+            format!(
+                r#"{{"id":"r","model":"m","metadata":{{}},"predictions":[{{"id":"{CANARY}","row_index":0,"prediction":1.0}}]}}"#
+            ),
+        ),
+        (
+            200,
+            format!(
+                r#"{{"id":"r","model":"m","metadata":{{}},"predictions":[{{"id":"1","row_index":0,"prediction":"{CANARY}"}}]}}"#
+            ),
+        ),
+        (500, format!(r#"{{"detail":"no column {CANARY}"}}"#)),
+    ] {
+        errors.push(after_answer(response(status), Some(&body)));
+    }
+    errors.push(after_answer(
+        ModelOutcome::TransportError {
+            kind: ErrorKind::ModelEndpoint,
+            retryable: true,
+        },
+        None,
+    ));
+    assert_eq!(errors.len(), 8);
+    let codes: Vec<ErrorCode> = errors.iter().map(|e| e.code).collect();
+    assert_eq!(
+        codes,
+        [
+            ErrorCode::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            ErrorCode::InvalidResponse,
+            ErrorCode::InvalidResponse,
+            ErrorCode::InvalidResponse,
+            ErrorCode::UnsupportedRequest,
+            ErrorCode::InvalidResponse,
+            ErrorCode::TransportError,
+        ]
+    );
+    for err in &errors {
+        let mut chain = Some(err);
+        while let Some(e) = chain {
+            assert!(!written(e).contains(CANARY), "{}", written(e));
+            chain = e.cause.as_deref();
+        }
+    }
+}
+
+/// The panic canary is not vacuous: outside the host's containment, the
+/// test-only operation's body panics with the canary as its payload, which
+/// `HostRun` keeps out of every error (`canaries_reach_no_error`).
+#[test]
+fn a_test_only_panic_s_payload_is_the_canary() {
+    let mut run = sdm_core::start(
+        &sdm_host::default_root(),
+        StartRun {
+            contract: CONTRACT_VERSION,
+            facts: HostFacts {
+                now: Scalar::Timestamp {
+                    unit: Unit::Us,
+                    zone: Some("UTC".into()),
+                    value: 0,
+                },
+                local_zone: None,
+                zone_roots: vec![],
+                platform: PlatformFacts {
+                    os: "linux".into(),
+                    strftime_pads_year: false,
+                },
+            },
+            operation: Operation::Test(TestOperation::Panic {
+                at: PanicAt::Body,
+                payload: CANARY.into(),
+            }),
+        },
+        Attachments::new(),
+        Arc::new(NoZones),
+    )
+    .unwrap();
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run.next()))
+        .err()
+        .unwrap();
+    let message = payload
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+        .unwrap();
+    assert!(message.contains(CANARY), "{message}");
+}
+
+struct NoZones;
+
+impl sdm_core::Zones for NoZones {
+    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
+        Err(sdm_core::UnknownZone)
+    }
 }

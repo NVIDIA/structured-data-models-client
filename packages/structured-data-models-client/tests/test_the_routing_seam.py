@@ -164,8 +164,8 @@ def test_the_route_is_read_at_every_call(
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
         # A core path with no core route in this build.
         (
-            'client.predict/regression/duckdb',
-            'client.predict/regression/duckdb',
+            'client.predict/regression/sqlite',
+            'client.predict/regression/sqlite',
         ),
     ],
 )
