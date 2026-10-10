@@ -32,6 +32,7 @@ RUNNER = ROOT / 'contract/runners/run_python.py'
 COMPARE = ROOT / 'scripts/rust_core/compare.py'
 CASES = ROOT / 'contract/cases'
 REFERENCE = ROOT / 'contract/reference'
+REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 
 
 def _runner() -> ModuleType:
@@ -126,6 +127,25 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     dated = [case for case in cases.values() if case.get('register') == 'DT-9']
     assert len(dated) == 2
     assert {case['status'] for case in dated} == {'diagnostic'}
+    # Escapes as written in the query text, a backslash and its letters: a
+    # \\u escape and no surrogate in the accepted case; an escaped pair and
+    # a lone escaped surrogate in the two cases register PQL-1 holds.
+    escapes = pql('escapes')
+    assert '\\u00e9' in escapes and '\\ud' not in escapes
+    assert escapes.isascii()
+    assert '\\ud83d\\ude00' in pql('escape-surrogate-pair')
+    lone = pql('escape-lone-surrogate')
+    assert '\\ud83d' in lone and '\\ude' not in lone
+    # Every other diagnostic S0 case names a proposed register entry.
+    register = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    status = {entry['id']: entry['status'] for entry in register['entries']}
+    for case in cases.values():
+        if case['status'] == 'diagnostic' and case.get('register') != 'DT-9':
+            assert status[case['register']] == 'proposed', case['id']
+    assert {
+        case['id'] for case in cases.values() if case.get('register') == 'PQL-2'
+    } == {'s0.boundary.depth-999'}
+    assert pql('depth-999').count('(' * 999) == 1
 
 
 def test_the_reference_observations_validate_and_meet_each_expectation(

@@ -35,10 +35,18 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
         let observed = host::run(case, &bases()).unwrap();
         assert_eq!(observed.operations, ["validate_query"]);
         if case.status == Status::Diagnostic {
-            // Run and reported, gating nothing: the D8 and DT-9 cases,
-            // which the interim date reader answers with
-            // UNSUPPORTED_REQUEST until T1.6b (register DT-9).
-            assert_eq!(case.register.as_deref(), Some("DT-9"), "{}", case.id);
+            // Gating nothing against the reference, but held to the core's
+            // answer its register entry records, so a drift fails here: the
+            // D8 and DT-9 cases, which the interim date reader answers with
+            // UNSUPPORTED_REQUEST until T1.6b (DT-9); escaped surrogates
+            // (PQL-1) and the core's deepest query (PQL-2), which the core
+            // accepts where the reference refuses or raises.
+            let today = match case.register.as_deref() {
+                Some("DT-9") => ("refusal", Some("UNSUPPORTED_REQUEST".to_owned())),
+                Some("PQL-1" | "PQL-2") => ("success", None),
+                other => panic!("{}: a diagnostic S0 case under {other:?}", case.id),
+            };
+            assert_eq!(observed.answer.outcome(), today, "{}", case.id);
             continue;
         }
         let (result, code) = observed.answer.outcome();

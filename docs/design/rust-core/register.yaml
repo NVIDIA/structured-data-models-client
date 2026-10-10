@@ -16,6 +16,7 @@
 #   ORD-n  orderings found in Phase 0 that are not random streams
 #   P1B-n  Phase 1b inventory cases flagged `register` (T0.7)
 #   HOST-n the host layer's own limits (Phase 1, T1.7)
+#   PQL-n  PQL validation differences found by the S0 corpus (Phase 1, T1.12)
 #
 # Status: proposed entries wait for the independent reviewer, or for the owner
 # when they refuse an input Python accepted or the owner has to choose; the
@@ -1124,3 +1125,75 @@ entries:
     reference accepts needs the owner (P1B-1 process); T1.7c writes the
     generated list here and T1.33 marks each type reference-accepted or not,
     with a case where the inventory reaches one.
+
+# --- PQL validation (T1.12) ---------------------------------------------------
+
+- id: PQL-1
+  title: Escaped surrogates in a PQL string literal
+  kind: change
+  old_behavior: >-
+    The reference reads a string literal's escapes with Python's
+    unicode-escape codec, which leaves \uD800 to \uDFFF escapes as lone
+    surrogates, a pair included (\ud83d\ude00 is two of them, not one
+    character). Validation takes the literal; the old materializer then
+    refuses the call with INVALID_REQUEST (a UnicodeEncodeError,
+    "surrogates not allowed", when it writes the value).
+  new_behavior: >-
+    The core's escapes.rs joins an escaped pair into the character it
+    encodes and reads a lone surrogate as U+FFFD, and validate_query
+    accepts the query, so a core route that materializes would go on where
+    the reference refuses. Today only rust-host shows it: on the Python core
+    route the accepted query still goes through the shadow check and the
+    old materializer, which refuse as the reference does.
+  affected_inputs: >-
+    S0 (and every later core route) for a PQL string literal holding a
+    \u escape of a surrogate, paired or lone.
+  cases: [s0.boundary.escape-surrogate-pair, s0.boundary.escape-lone-surrogate]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.12's review (subagent P2-1); the orchestrator chose to
+    record it rather than stop. The core accepts input the reference
+    refuses, so it needs the owner. Alternatives: (a) keep the core's
+    reading, joining pairs and replacing lone surrogates; (b) match the
+    reference: refuse any escaped surrogate with INVALID_REQUEST at
+    validation (the reference refuses later, at materialize, with the same
+    code); (c) join valid pairs and refuse a lone surrogate by name. Both
+    cases are diagnostic until the owner decides; the one that matches the
+    decision then becomes acceptance.
+
+- id: PQL-2
+  title: PQL query depth past the reference's recursion limit
+  kind: change
+  old_behavior: >-
+    The reference has no depth limit of its own: its parser and the old
+    materializer recurse, and past about 455 nested levels (in the
+    contract runner under Python 3.12; the edge moves with the caller's
+    stack) the public call raises RecursionError.
+  new_behavior: >-
+    The core bounds depth (decision H27): validate_query accepts up to 999
+    nested levels, on its grown stack, and refuses 1,000 and more with
+    PQL_PARSE_SYNTAX. On the Python core route the accepted query still
+    goes through the shadow check's old validator, so the public call
+    raises RecursionError from about 455 to 999 levels, as the reference
+    does, and answers INVALID_REQUEST at 1,000 and above, where the
+    reference raises RecursionError.
+  affected_inputs: >-
+    S0 (and every later core route) for a query nested more deeply than
+    the reference's recursion limit allows.
+  cases: [s0.boundary.depth-999, T1.7c]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.12's review (Codex P2, subagent P3-2). It refuses nothing
+    the reference accepts, since the reference answers no such query.
+    Recommendation: keep the core's bounded behavior rather than reproduce
+    the reference's crash. The Python route's RecursionError up to 999
+    leaves with the shadow check and the old validator in Phase 5
+    (_rust/s0.py's bridge header; design, "Routing seam"). Executable:
+    s0.boundary.depth-999 (diagnostic: python-ref and python-core raise
+    RecursionError, rust-host accepts) and sdm-core's
+    tests/pql_adapter.rs, whose deepest() queries are accepted at 999
+    nested levels and refused at 1,000 (T1.7c).

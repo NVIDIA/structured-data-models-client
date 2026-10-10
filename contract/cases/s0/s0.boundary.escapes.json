@@ -13,7 +13,7 @@
   "cells": [],
   "input": {
     "base": "shop",
-    "pql": "PREDICT users.country = 'US\\t\\'\\\\\\/😀' FOR EACH users.user_id",
+    "pql": "PREDICT users.country = 'caf\\u00e9\\t\\'\\\\\\/' FOR EACH users.user_id",
     "materialize": {
       "indices": [
         0,
@@ -102,6 +102,6 @@
     "outcome": "success",
     "stage": "materialize"
   },
-  "why": "A string literal's escapes, read as Python's unicode-escape codec reads them (escapes, decision E9): \\u, \\t, \\', \\\\, \\/ (which stands for itself) and a surrogate pair joined into one character; accepted",
+  "why": "A string literal's escapes, read as Python's unicode-escape codec reads them (escapes, decision E9): \\u00e9 (é), \\t, \\', \\\\ and \\/ (which stands for itself); accepted on every runner. Surrogate escapes are s0.boundary.escape-surrogate-pair and s0.boundary.escape-lone-surrogate (register PQL-1)",
   "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
 }
