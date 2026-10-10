@@ -14,7 +14,7 @@ import json
 from typing import Any
 
 #: The contract version these messages are written for.
-CONTRACT = 8
+CONTRACT = 9
 
 FACTS: dict[str, Any] = {
     'now': {'t': 'ts', 'unit': 'us', 'zone': 'UTC', 'v': '1767225600000000'},
