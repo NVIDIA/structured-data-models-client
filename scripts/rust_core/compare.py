@@ -23,11 +23,13 @@ each acceptance case, the rules of Phase 1a so far (T1.10):
 - code: ``StructuredDataError.code``, or the code the S0 route maps the
   core's answer to, as expected and as the reference;
 - kind and code on the core: each core runner's outcome is the core's
-  answer as the S0 route maps it (accepted, a success; refused,
-  ``INVALID_REQUEST``; an error, a refusal with its code); ``python-core``
-  and ``rust-host`` started the same operations with the same inputs, and
-  the core answered both the same: the same acceptance, or an error of the
-  same kind and code;
+  answer as the route maps it (accepted, a success; refused,
+  ``INVALID_REQUEST``; an error, a refusal with its code; a description,
+  the call going on); ``python-core`` and ``rust-host`` started the same
+  operations with the same inputs, the core asked both for the same
+  fetches with the same plans (the step trace), and answered both the
+  same: the same acceptance or description, or an error of the same kind
+  and code;
 - route proof: ``python-core`` ran the case's core operations with
   ``sdm_client._native`` loaded; ``python-old`` and ``python-ref`` never
   loaded it; ``python-ref``'s guard passed; every runner ran DuckDB at the
@@ -254,11 +256,29 @@ def _inputs(
 def _core_consistent(
     report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
 ) -> None:
-    r"""The core's answer is the outcome, as the S0 route maps it: an
-    accepted query succeeds, a refused one is ``INVALID_REQUEST``, and a
-    core error is a refusal with its own code."""
+    r"""The core's answer is the outcome, as the route maps it: an accepted
+    query succeeds, a refused one is ``INVALID_REQUEST``, and a core error
+    is a refusal with its own code. ``describe_source`` answers with a
+    description or an error, never both, and its error ends the call there,
+    as a refusal with its code; a description lets the call go on, so the
+    outcome is the later calls'."""
     core = observation['core']
-    if core is None or 'validate_query' not in case.get('core', {}):
+    if core is None:
+        return
+    if 'describe_source' in case.get('core', {}):
+        where = f'{case["id"]}: {who}'
+        if (core['described'] is None) == (core['error'] is None):
+            report.fail(f'{where}: core: not one description or one error')
+        elif core['error'] is not None:
+            seen = (
+                observation['outcome']['result'],
+                observation['outcome']['code'],
+            )
+            wanted = ('refusal', core['error']['code'])
+            if seen != wanted:
+                _differ(report, where, 'outcome against core', wanted, seen)
+        return
+    if 'validate_query' not in case.get('core', {}):
         return
     outcome = observation['outcome']
     if core['error'] is not None:
@@ -300,8 +320,9 @@ def _core_agree(
     mine, theirs = python['core'], rust['core']
     if mine is None or theirs is None:
         return
-    if mine['inputs'] != theirs['inputs']:
-        _differ(report, where, 'core.inputs', None, None, show=False)
+    for field in ('inputs', 'fetches', 'described'):
+        if mine[field] != theirs[field]:
+            _differ(report, where, f'core.{field}', None, None, show=False)
     for field in ('accepted', 'error'):
         if mine[field] != theirs[field]:
             _differ(report, where, f'core.{field}', mine[field], theirs[field])
@@ -321,16 +342,24 @@ def _case_inputs(
 ) -> None:
     r"""A core runner's recorded inputs are the case's ``core`` inputs."""
     core = observation['core']
-    if core is None or 'validate_query' not in case.get('core', {}):
+    if core is None:
         return
-    spec = case['core']['validate_query']
-    wanted = {
-        'op': 'validate_query',
-        'query': case['input']['pql'],
-        'profile': spec['profile'],
-        'schema': spec['schema'],
-    }
-    if wanted not in core['inputs']:
+    wanted = []
+    if 'validate_query' in case.get('core', {}):
+        spec = case['core']['validate_query']
+        wanted.append(
+            {
+                'op': 'validate_query',
+                'query': case['input']['pql'],
+                'profile': spec['profile'],
+                'schema': spec['schema'],
+            }
+        )
+    if 'describe_source' in case.get('core', {}):
+        wanted.append(
+            {'op': 'describe_source', **case['core']['describe_source']}
+        )
+    if any(each not in core['inputs'] for each in wanted):
         _differ(
             report,
             f'{case["id"]}: {who}',

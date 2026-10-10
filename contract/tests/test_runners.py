@@ -33,7 +33,8 @@ RUNNER = ROOT / 'contract/runners/run_python.py'
 COMPARE = ROOT / 'scripts/rust_core/compare.py'
 CASES = ROOT / 'contract/cases'
 REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
-ACCEPTED = CASES / 's0/s0.accept.sum-window.json'
+S0 = CASES / 's0'
+ACCEPTED = S0 / 's0.accept.sum-window.json'
 
 
 def _module(path: Path, name: str) -> ModuleType:
@@ -87,9 +88,9 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
 ) -> None:
     core, old = tmp_path / 'python-core.jsonl', tmp_path / 'python-old.jsonl'
     for mode, out in (('python-core', core), ('python-old', old)):
-        run = _run(mode, out, CASES)
+        run = _run(mode, out, S0)
         assert run.returncode == 0, run.stderr
-    compared = _compare(CASES, core, old)
+    compared = _compare(S0, core, old)
     assert compared.returncode == 0, compared.stdout
     for observation in _observations(core):
         assert observation['identity']['operations'] == ['validate_query']

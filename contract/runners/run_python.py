@@ -393,13 +393,19 @@ class _Guard:
 
 
 class _Capture:
-    r"""What crossed ``sdm_client._native`` during one case."""
+    r"""What crossed ``sdm_client._native`` during one case: each operation
+    started with its inputs, each fetch the core asked for (its request and
+    plan, the step trace), and the core's answer: ``validate_query``'s
+    acceptance, ``describe_source``'s description, or an error."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
+        self.fetches: list[dict[str, Any]] = []
         self.accepted: bool | None = None
+        self.described: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
+        self._description: int | None = None
 
     def started(self, message: bytes, attachments: Any) -> None:
         operation = json.loads(message)['operation']
@@ -413,6 +419,22 @@ class _Capture:
                     'schema': json.loads(attachments[operation['schema']]),
                 }
             )
+        elif operation['op'] == 'describe_source':
+            self.inputs.append(
+                {
+                    'op': 'describe_source',
+                    'provider': operation['provider'],
+                    'source': json.loads(attachments[operation['source']]),
+                    'check_keys': operation['check_keys'],
+                }
+            )
+
+    def stepped(self, step: dict[str, Any]) -> None:
+        if step.get('step') == 'fetch':
+            self.fetches.extend(
+                {'request': asked['request'], 'plan': asked['plan']}
+                for asked in step['requests']
+            )
 
     def failed(self, error: Any) -> None:
         self.error = {'kind': str(error.kind), 'code': str(error.code)}
@@ -420,11 +442,19 @@ class _Capture:
     def done(self, result: dict[str, Any]) -> None:
         if 'accepted' in result:
             self.accepted = bool(result['accepted'])
+        if result.get('op') == 'describe_source':
+            self._description = result['description']
+
+    def taken(self, attachment: int, value: Any) -> None:
+        if attachment == self._description and isinstance(value, bytes):
+            self.described = json.loads(value)
 
     def core(self) -> dict[str, Any]:
         return {
             'inputs': self.inputs,
+            'fetches': self.fetches,
             'accepted': self.accepted,
+            'described': self.described,
             'error': self.error,
         }
 
@@ -444,9 +474,16 @@ class _Handle:
             self._capture.failed(error)
             raise
         message = codec.read(control, sent)
-        if message.get('message') == 'step' and message.get('step') == 'done':
-            self._capture.done(message['result'])
+        if message.get('message') == 'step':
+            self._capture.stepped(message)
+            if message.get('step') == 'done':
+                self._capture.done(message['result'])
         return control, sent
+
+    def take_attachment(self, attachment: int) -> Any:
+        value = self._handle.take_attachment(attachment)
+        self._capture.taken(attachment, value)
+        return value
 
     def reply(self, message: bytes, attachments: Any) -> None:
         try:
@@ -928,7 +965,9 @@ def _payload(body: bytes) -> dict[str, Any]:
 
 def _schema_projection(schema: Any) -> dict[str, Any]:
     r"""The public ``Schema``: each table's columns with their dtype and
-    stype, its key, time column and duplicate-key count, and the links."""
+    stype, its key, time column and duplicate-key count, and its
+    relationships, each as source table and column, then target table and
+    column."""
     tables = []
     for name, table in schema.tables.items():
         key = table.primary_key
@@ -953,7 +992,7 @@ def _schema_projection(schema: Any) -> dict[str, Any]:
             link.target_table,
             link.target_column,
         ]
-        for link in getattr(schema, 'links', [])
+        for link in schema.relationships
     ]
     return {'tables': tables, 'links': links}
 
