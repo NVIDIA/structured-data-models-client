@@ -594,10 +594,13 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             "query",
         ));
     };
-    // The sampler's construction, its check of the indexes it would use,
-    // comes before what the reference reads of the task (its entities, its
-    // seed, its shape), as it does there: the model is built, and its
-    // warning given, before the task table is.
+    // The index read, the sampler's check of the indexes it would use,
+    // comes before anything of the task is read, as the reference builds
+    // its sampler, and gives its warning, before its task table. The checks
+    // after it (null entities, then the seed, then the task's shape) are in
+    // this core's own order, not the reference's: an input with several
+    // errors may be refused for another of them than the reference's first
+    // (decision E41(k)(i)).
     missing_indexes(&asker, &graph).await?;
     if indices.null_count() > 0 {
         return Err(invalid("an entity to predict for is missing", "indices"));
