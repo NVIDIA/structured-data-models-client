@@ -107,11 +107,14 @@ jobs:
         run: python3 scripts/rust_core/selftest.py
         working-directory: .
       # land.py's checks, each passing a sound landing and refusing a seeded
-      # fault, against a scripted git and gh, and prune_caches.py's
-      # stale-cache rules, with no network (decision E43).
-      - name: land.py and prune_caches.py self-tests
+      # fault, against a scripted git and gh; lane.py's lane rules and
+      # land.py's on a lane, against real temporary git repositories and a
+      # fake gh; and prune_caches.py's stale-cache rules; with no network
+      # (decision E43, CI2).
+      - name: land.py, lane.py and prune_caches.py self-tests
         run: |
           python3 scripts/rust_core/land_selftest.py
+          python3 scripts/rust_core/lane_selftest.py
           python3 scripts/rust_core/prune_caches.py --selftest
         working-directory: .
       # The contract schema: regenerated from the types and compared with the

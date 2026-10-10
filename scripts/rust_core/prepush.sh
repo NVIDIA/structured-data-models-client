@@ -11,10 +11,14 @@
 # `uv run --python 3.12` (T1.10c's l0_scan.py failed on CI's 3.12 and passed
 # on a newer local Python):
 #
-#   cargo fmt --check; the three clippy runs CI makes; l0_deps.py and
-#   l0_scan.py; contract_lock.py; rust_notices.py --check; the hygiene
-#   check; ruff check and ruff format --check; the self-tests of land.py,
-#   replay_jobs.py (on temporary git repositories) and prune_caches.py.
+#   on a lane branch, that every commit since the phase head names the
+#   package the worktree records (lane.py check; it refuses a lane with no
+#   recorded package, and does nothing on any other branch); cargo fmt
+#   --check; the three clippy runs CI makes; l0_deps.py and l0_scan.py;
+#   contract_lock.py; rust_notices.py --check; the hygiene check; ruff
+#   check and ruff format --check; the self-tests of land.py, lane.py and
+#   replay_jobs.py (the last two on temporary git repositories) and
+#   prune_caches.py.
 #
 # --full adds the L0 self-tests (selftest.py), the contract schema lock test,
 # and replay_jobs.py: a clean virtual environment per CI job the change
@@ -116,6 +120,7 @@ check() {
   fi
 }
 
+check 'lane: one package (lane.py check)' . "${py[@]}" scripts/rust_core/lane.py check
 check 'cargo fmt --check' rust cargo fmt --all --check
 check 'clippy: workspace' rust \
   cargo clippy --workspace --exclude sdm-testkit --all-targets --locked -- -D warnings
@@ -131,6 +136,7 @@ check 'hygiene' . "${py[@]}" scripts/check_repo_hygiene.py all
 check 'ruff check' . "${ruff[@]}" check .
 check 'ruff format --check' . "${ruff[@]}" format --check .
 check 'land.py self-tests' . "${py[@]}" scripts/rust_core/land_selftest.py
+check 'lane.py self-tests' . "${py[@]}" scripts/rust_core/lane_selftest.py
 check 'replay_jobs.py self-tests' . \
   uv run --quiet --no-project --python 3.12 --with pyyaml \
   python3 scripts/rust_core/replay_selftest.py
