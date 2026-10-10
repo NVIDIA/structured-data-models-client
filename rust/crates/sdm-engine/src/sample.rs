@@ -122,7 +122,8 @@ pub struct Window {
 }
 
 /// A windowed `SUM` per example, as the reference's pandas executor gives
-/// it: of each row whose value is present and whose time falls in its
+/// it: of each row whose value is present (not null, and for a float not
+/// NaN, which pandas' sum skips) and whose time falls in its
 /// example's window, summed in row order, a float column at float32 with
 /// Kahan's compensation (register entry PK-2) and an integer column in
 /// int64; then read at float32, an example with no row giving 0.
@@ -147,7 +148,9 @@ pub fn sum_labels(
             let mut sum = vec![0_f32; examples];
             let mut compensation = vec![0_f32; examples];
             for row in 0..batch.len() {
-                let Some(value) = values[row] else { continue };
+                let Some(value) = values[row].filter(|v| !v.is_nan()) else {
+                    continue;
+                };
                 if !within(row) {
                     continue;
                 }
@@ -230,4 +233,34 @@ pub fn tie_break(table: &Table) -> Result<TieBreak, CoreError> {
         nulls_last: true,
     });
     Ok(TieBreak(terms))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Values, Window, sum_labels};
+
+    #[test]
+    fn a_nan_is_skipped_as_pandas_skips_it() {
+        // Example 0 holds only NaN, example 1 NaN and finite values, example
+        // 2 a null: each sums what is present, an example with none 0.
+        let values = Values::Float(vec![
+            Some(f32::NAN),
+            Some(1.5),
+            Some(f32::NAN),
+            Some(2.0),
+            None,
+        ]);
+        let labels = sum_labels(
+            3,
+            &[0, 1, 1, 1, 2],
+            &values,
+            &[Some(5); 5],
+            &[0, 0, 0],
+            Window {
+                start: Some(0),
+                end: 10,
+            },
+        );
+        assert_eq!(labels, [0.0, 3.5, 0.0]);
+    }
 }

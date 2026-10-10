@@ -21,7 +21,8 @@
 //! From T1.11c it renders the sampler's requests too: `sample_entities` as
 //! the reference's reservoir sample, text for text, and `neighbors` and
 //! `lookup` as the reference's joins against a key set, which the provider
-//! binds as the relation the plan names ([`SEEDS`]). Their texts are not
+//! binds as the relation the plan names ([`SEEDS`], or longer where the
+//! table joined has that name). Their texts are not
 //! the reference's: its key table's name is drawn from an object's address,
 //! and its columns are its own `__kumo_` names; the seeds' role-named
 //! columns (`key`, `batch`) could meet a source column's name, so the
@@ -49,8 +50,22 @@ const RENDERED: &[OptionalRequest] = &[
 ];
 
 /// The name a statement reads its seeds by: the key set the provider binds
-/// for it (registered as a relation, on the statement's own cursor).
+/// for it (registered as a relation, on the statement's own cursor), unless
+/// the table it joins has that name ([`seeds_for`]).
 pub(crate) const SEEDS: &str = "__sdm_seeds__";
+
+/// The relation a statement joining `table` reads its seeds by: [`SEEDS`],
+/// lengthened by underscores until it is not `table`'s name in any case
+/// (DuckDB matches names without case), so a source table of any name is
+/// read, never shadowed by the seeds bound on the cursor. The statement
+/// names no other table.
+pub(crate) fn seeds_for(table: &str) -> String {
+    let mut name = SEEDS.to_owned();
+    while name.to_lowercase() == table.to_lowercase() {
+        name.push('_');
+    }
+    name
+}
 
 /// The largest seed DuckDB's `REPEATABLE` takes: its parser refuses one
 /// from 2**31 (register entry RS-7).
@@ -116,7 +131,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
         } => {
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
-                relation: SEEDS.to_owned(),
+                relation: seeds_for(table),
             });
             neighbors(
                 request,
@@ -136,7 +151,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
         } => {
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
-                relation: SEEDS.to_owned(),
+                relation: seeds_for(table),
             });
             lookup(request, table, key, columns)?
         }
@@ -254,23 +269,12 @@ fn sample_entities(
 
 /// The table's columns asked for, read from its alias, after the seed's
 /// batch position under the reference's name.
-fn joined_columns(
-    request: &DataRequest,
-    table: &str,
-    columns: &[String],
-) -> Result<String, CoreError> {
+fn joined_columns(request: &DataRequest, columns: &[String]) -> Result<String, CoreError> {
     if columns.is_empty() {
         return Err(sdm_contract::data::refused(
             request,
             "columns",
             "the request names no columns",
-        ));
-    }
-    if table == SEEDS {
-        return Err(not_taken(
-            request,
-            "table",
-            "a table may not have the name its seeds are read by",
         ));
     }
     Ok(columns
@@ -313,12 +317,12 @@ fn neighbors(
     per_seed: Option<u64>,
     order: Option<&TieBreak>,
 ) -> Result<String, CoreError> {
-    let projected = joined_columns(request, table, columns)?;
+    let projected = joined_columns(request, columns)?;
     let mut text = format!(
         "SELECT s.{batch} AS {helper}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = s.{seed_key}",
         batch = identifier(SEED_BATCH),
         helper = identifier(BATCH_COLUMN),
-        seeds = identifier(SEEDS),
+        seeds = identifier(&seeds_for(table)),
         table = identifier(table),
         key = identifier(key),
         seed_key = identifier(SEED_KEY),
@@ -358,13 +362,13 @@ fn lookup(
     key: &str,
     columns: &[String],
 ) -> Result<String, CoreError> {
-    let projected = joined_columns(request, table, columns)?;
+    let projected = joined_columns(request, columns)?;
     let batch = identifier(SEED_BATCH);
     Ok(format!(
         "SELECT s.{batch} AS {helper}, COUNT(*) OVER (PARTITION BY s.{batch}) AS {matches}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = s.{seed_key}\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n) = 1",
         helper = identifier(BATCH_COLUMN),
         matches = identifier(MATCHES_COLUMN),
-        seeds = identifier(SEEDS),
+        seeds = identifier(&seeds_for(table)),
         table = identifier(table),
         key = identifier(key),
         seed_key = identifier(SEED_KEY),

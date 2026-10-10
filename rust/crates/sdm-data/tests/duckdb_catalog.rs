@@ -217,3 +217,41 @@ fn a_host_provider_is_held_to_the_same_shapes() {
         ExpectedSchema::Schema { .. }
     ));
 }
+
+/// A table whose name, in any case, is the one the seeds are bound by is
+/// read, not shadowed: its statement binds the seeds under another name.
+#[test]
+fn a_table_named_as_the_seeds_are_is_still_the_table_read() {
+    use sdm_contract::data::{AttachmentId, KeySet, SqlParam};
+    for table in ["__sdm_seeds__", "__SDM_Seeds__", "orders"] {
+        let request = DataRequest::Lookup {
+            table: table.into(),
+            key: "id".into(),
+            columns: vec!["id".into()],
+            seeds: KeySet {
+                attachment: AttachmentId(1),
+                columns: ["key", "batch"]
+                    .map(|name| sdm_contract::Field {
+                        name: name.into(),
+                        column_type: sdm_contract::ColumnType::Int64,
+                        nullable: false,
+                        metadata: Default::default(),
+                    })
+                    .into(),
+            },
+        };
+        let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &duckdb()).unwrap()
+        else {
+            panic!("not SQL");
+        };
+        let [SqlParam::KeySet { relation, .. }] = statements[0].params.as_slice() else {
+            panic!("not one key set");
+        };
+        assert_ne!(relation.to_lowercase(), table.to_lowercase());
+        assert!(
+            statements[0]
+                .text
+                .contains(&format!("FROM \"{relation}\" s\nJOIN \"{table}\" t"))
+        );
+    }
+}
