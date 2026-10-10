@@ -312,12 +312,17 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                         'state': materialized,
                     }
                 )
+                # A result with a row: from T1.11e the comparator's
+                # `reach` rule gates base.regression reaching its result.
                 predicted = {
                     'body': {},
                     'model': 'kumo-relational',
                     'request_id': 'r1',
                     'metadata': {},
-                    'result': {'columns': [], 'rows': []},
+                    'result': {
+                        'columns': [{'name': 'ENTITY', 'type': 'int64'}],
+                        'rows': [[{'i64': '0'}]],
+                    },
                 }
             observation['core'] = {
                 'inputs': inputs,
