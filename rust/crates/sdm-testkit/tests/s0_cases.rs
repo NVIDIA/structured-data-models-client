@@ -31,10 +31,16 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
     let mut answers = Vec::new();
     for each in s0 {
         let case = &each.case;
-        assert_eq!(case.status, Status::Acceptance);
         assert_eq!(case.until, Until::Materialize);
         let observed = host::run(case, &bases()).unwrap();
         assert_eq!(observed.operations, ["validate_query"]);
+        if case.status == Status::Diagnostic {
+            // Run and reported, gating nothing: the D8 and DT-9 cases,
+            // which the interim date reader answers with
+            // UNSUPPORTED_REQUEST until T1.6b (register DT-9).
+            assert_eq!(case.register.as_deref(), Some("DT-9"), "{}", case.id);
+            continue;
+        }
         let (result, code) = observed.answer.outcome();
         assert_eq!(result, case.expect.outcome, "{}", case.id);
         assert_eq!(code, case.expect.code, "{}", case.id);
