@@ -13,11 +13,15 @@
 //! `scripts/rust_core/compare.py`. [`duck`] is its DuckDB: the connection,
 //! with ICU loaded, and the provider that answers a fetch; [`bases`] reads
 //! `contract/bases.yaml`. [`endpoint`] is the scripted model endpoint's
-//! rule (T1.11d), which the host answers each model call with.
+//! rule (T1.11d), which the host answers each model call with. [`driver`]
+//! records what the provider ran, each result in [`values`]' canonical
+//! form, for the observation's `driver` section (T1.11e).
 
 pub mod bases;
 pub mod case;
+pub mod driver;
 pub mod duck;
 pub mod endpoint;
 pub mod host;
 pub mod observation;
+pub mod values;

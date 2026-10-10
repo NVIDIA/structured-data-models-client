@@ -5,7 +5,9 @@
 //! The observation writer: what the pure-Rust host saw of one case, in the
 //! format of `contract/observation.schema.json` (`sdm-observation/1`). A
 //! field this host cannot observe is null, never filled in: it has no
-//! stage, exception class, warnings section or Python runtime cell.
+//! stage, exception class, warnings section or Python runtime cell. From
+//! T1.11e a case whose operations read data has a `driver` section, what
+//! the DuckDB provider ran ([`crate::driver`]).
 
 use std::path::Path;
 use std::process::Command;
@@ -102,7 +104,7 @@ pub fn write(
     };
     let materialized = observed.materialized.clone().unwrap_or(Value::Null);
     let described = observed.described.clone().unwrap_or(Value::Null);
-    json!({
+    let mut observation = json!({
         "format": FORMAT,
         "case": loaded.case.id,
         "identity": {
@@ -129,5 +131,11 @@ pub fn write(
             "predicted": predicted,
             "error": error,
         },
-    })
+    });
+    // What the provider ran, for a case whose operations read data; a
+    // case that reads none has no driver section (T1.11e).
+    if let Some(driver) = &observed.driver {
+        observation["driver"] = driver.clone();
+    }
+    observation
 }

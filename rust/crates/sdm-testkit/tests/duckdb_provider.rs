@@ -219,7 +219,9 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     assert_eq!(Value::from(observed.inputs.clone()), pinned["inputs"]);
     // predict's call and result (T1.11d): the call's request id compared by
     // presence and type only, as capture_check.masked compares it (decision
-    // E35, PROPOSED), since each host draws its own; everything else exactly.
+    // E35, approved by the owner on 2026-10-10, the one exclusion of
+    // contract/compare-policy.yaml), since each host draws its own;
+    // everything else exactly.
     let mut masked = predicted.clone();
     let id = &mut masked["body"]["metadata"]["request_id"];
     assert!(id.is_string(), "{id}");
@@ -735,4 +737,89 @@ fn two_key_sets_bound_to_one_name_are_refused() {
         (AttachmentId(2), keys(&["2"])),
     ]);
     assert!(duck::answer_with(&connection, &step, &both).is_err());
+}
+
+/// The committed reference observation of `case`.
+fn reference_of(case: &str) -> Value {
+    let directory = contract().join("reference");
+    let mut files: Vec<_> = std::fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|e| e == "jsonl"))
+        .collect();
+    assert_eq!(files.len(), 1, "one reference observation file");
+    let text = std::fs::read_to_string(files.remove(0)).unwrap();
+    text.lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .find(|observation| observation["case"] == case)
+        .unwrap()
+}
+
+/// Decision H9, measured at T1.11e: on `base.regression` this host's DuckDB
+/// provider runs the reference's number of statements in each public call
+/// (10 in `Schema.from_source`, 6 in `materialize`, none in `predict`), and
+/// each returns the reference statement's result: its columns, its Arrow
+/// schema where the reference read Arrow, and its rows in canonical form,
+/// in order for the one statement whose order is total (`_by_fkey`,
+/// `contract/compare-policy.yaml`'s `ordered`), as a multiset otherwise.
+/// Its record is complete: DuckDB's own query log counts the same
+/// statements, the three key sets bound, and the same texts.
+#[test]
+fn base_regression_s_statements_return_the_reference_s_results() {
+    let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let observed = host::run(&loaded[0].case, &bases).unwrap();
+    let driver = observed.driver.expect("a driver record");
+    let reference = reference_of("base.regression");
+    let theirs = reference["driver"]["capture"]["statements"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let ours = driver["capture"]["statements"].as_array().unwrap().clone();
+    let per_stage = |statements: &[Value]| -> Vec<(String, usize)> {
+        ["from_source", "materialize", "predict"]
+            .iter()
+            .map(|stage| {
+                let n = statements.iter().filter(|s| s["stage"] == *stage).count();
+                ((*stage).to_owned(), n)
+            })
+            .collect()
+    };
+    let counts = vec![
+        ("from_source".to_owned(), 10),
+        ("materialize".to_owned(), 6),
+        ("predict".to_owned(), 0),
+    ];
+    assert_eq!(per_stage(&ours), counts);
+    assert_eq!(per_stage(&theirs), counts);
+    // The record is complete: DuckDB logged the same statements, and the
+    // three bindings, and every text it logs as written is the one run.
+    let logged = &driver["query_log"];
+    assert_eq!(logged["statements"], 16);
+    assert_eq!(logged["bindings"], 3);
+    assert_eq!(logged["compared"], 14);
+    assert_eq!(logged["differing"], serde_json::json!([]));
+    assert_eq!(driver["capture"]["bindings"].as_array().unwrap().len(), 3);
+    for (position, (a, b)) in ours.iter().zip(&theirs).enumerate() {
+        assert_eq!(a["stage"], b["stage"], "{position}");
+        let [ra] = a["results"].as_array().unwrap().as_slice() else {
+            panic!("{position}: one result read");
+        };
+        let [rb] = b["results"].as_array().unwrap().as_slice() else {
+            panic!("{position}: one result read by the reference");
+        };
+        let (va, vb) = (&ra["values"], &rb["values"]);
+        assert_eq!(va["unencodable"], serde_json::json!([]), "{position}");
+        assert_eq!(vb["unencodable"], serde_json::json!([]), "{position}");
+        assert_eq!(va["columns"], vb["columns"], "{position}: columns");
+        assert_eq!(ra["rows"], rb["rows"], "{position}: rows");
+        if rb.get("schema").is_some() {
+            assert_eq!(ra["schema"], rb["schema"], "{position}: Arrow schema");
+        }
+        assert_eq!(va["unordered"], vb["unordered"], "{position}: rows");
+        // _by_fkey, the sixth of materialize's six, ordered totally.
+        if position == 15 {
+            assert_eq!(va["ordered"], vb["ordered"], "{position}: order");
+        }
+    }
 }

@@ -176,10 +176,13 @@ jobs:
       - run: cargo test --workspace --locked
       # The pure-Rust host over the contract cases, its observations compared
       # with the cases' expectations and reference observations (T1.10;
-      # T1.18 moves this to the checkpoint's comparator). The test host links
-      # no Python. Its DuckDB loads ICU explicitly, installing DuckDB's signed
-      # extension for its version the first time, from the cache above when
-      # it holds it (decision E37).
+      # T1.18 moves this to the checkpoint's comparator), from T1.11e under
+      # contract/compare-policy.yaml, which pyyaml reads: its statements and
+      # their results against the reference's (H9), its call against the
+      # reference's request, and base.regression reaching its result. The
+      # test host links no Python. Its DuckDB loads ICU explicitly, installing
+      # DuckDB's signed extension for its version the first time, from the
+      # cache above when it holds it (decision E37).
       - run: cargo run -p sdm-testkit --bin sdm-contract-run --locked -- --out ../rust-host.jsonl ../contract/cases
       - run: |
           cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt
@@ -188,7 +191,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: |
-          pip install jsonschema
+          pip install jsonschema pyyaml
           python scripts/rust_core/compare.py --cases contract/cases --reference contract/reference/*.jsonl rust-host.jsonl
         working-directory: .
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}

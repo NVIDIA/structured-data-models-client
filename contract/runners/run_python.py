@@ -813,12 +813,152 @@ def _arrow_digest(table: Any) -> str:
     return digest(sink.getvalue().to_pybytes())
 
 
+_EPOCH_DAYS = 719163  # date(1970, 1, 1).toordinal()
+
+
+def _nanos(days: int, seconds: int, micros: int, nanos: int = 0) -> str:
+    return str(((days * 86400 + seconds) * 1_000_000 + micros) * 1000 + nanos)
+
+
+def canonical_cell(value: Any, odd: list[str]) -> Any:
+    r"""One value of a result in its canonical form (decision H9; design,
+    "Observations and comparator"): the value itself, never its Python
+    spelling, so a row read with ``fetchall`` and the same row read as
+    Arrow give the same cell, and the pure-Rust host writes the same cell
+    from Arrow (``sdm-testkit``'s ``values``; both held to
+    ``contract/result-vectors.json``). A null is ``null`` and a boolean
+    itself; anything else is a list naming its kind: ``["i", digits]``,
+    ``["f", the IEEE-754 bits of the value as a double, 16 hex digits]``,
+    ``["s", text]``, ``["b", hex]``, ``["d", unscaled digits, scale]``,
+    ``["date", days since 1970-01-01]``, ``["ts", nanoseconds since
+    1970-01-01 on the wall clock]``, ``["tstz", nanoseconds since the UTC
+    epoch]``, ``["time", nanoseconds since midnight]``, ``["dur",
+    nanoseconds]``, ``["list", cells]`` and ``["struct", [[name, cell],
+    ...]]``. A value of any other kind is ``["?", its type's name]`` and is
+    listed as unencodable, which the comparator never takes as equal."""
+    import datetime as dt
+    from decimal import Decimal
+
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return ['i', str(value)]
+    if isinstance(value, float):
+        return ['f', struct.pack('>d', value).hex()]
+    if isinstance(value, str):
+        return ['s', value]
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return ['b', bytes(value).hex()]
+    if isinstance(value, Decimal):
+        sign, digits, exponent = value.as_tuple()
+        if isinstance(exponent, int):
+            unscaled = int(''.join(map(str, digits)) or '0')
+            unscaled = -unscaled if sign else unscaled
+            if exponent > 0:
+                return ['d', str(unscaled * 10**exponent), 0]
+            return ['d', str(unscaled), -exponent]
+    elif isinstance(value, dt.datetime):
+        # A pandas Timestamp (pyarrow's reading of a nanosecond timestamp)
+        # carries its nanoseconds as ``value``, on the wall clock when it
+        # has no zone and in UTC when it has one.
+        exact = getattr(value, 'value', None)
+        if value.tzinfo is None:
+            if isinstance(exact, int):
+                return ['ts', str(exact)]
+            delta = value - dt.datetime(1970, 1, 1)
+            return [
+                'ts',
+                _nanos(delta.days, delta.seconds, delta.microseconds),
+            ]
+        if isinstance(exact, int):
+            return ['tstz', str(exact)]
+        delta = value - dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+        return ['tstz', _nanos(delta.days, delta.seconds, delta.microseconds)]
+    elif isinstance(value, dt.date):
+        return ['date', value.toordinal() - _EPOCH_DAYS]
+    elif isinstance(value, dt.time) and value.tzinfo is None:
+        seconds = (value.hour * 60 + value.minute) * 60 + value.second
+        return ['time', _nanos(0, seconds, value.microsecond)]
+    elif isinstance(value, dt.timedelta):
+        exact = getattr(value, 'value', None)
+        if isinstance(exact, int):
+            return ['dur', str(exact)]
+        return [
+            'dur',
+            _nanos(value.days, value.seconds, value.microseconds),
+        ]
+    elif isinstance(value, (list, tuple)):
+        return ['list', [canonical_cell(item, odd) for item in value]]
+    elif isinstance(value, dict) and all(isinstance(k, str) for k in value):
+        return [
+            'struct',
+            [[k, canonical_cell(v, odd)] for k, v in value.items()],
+        ]
+    name = f'{type(value).__module__}.{type(value).__qualname__}'
+    odd.append(name)
+    return ['?', name]
+
+
+def _canonical_text(value: Any) -> str:
+    r"""The one text of a canonical row: compact JSON, ASCII only, so its
+    order as text is its order as bytes in any language."""
+    return json.dumps(
+        value, ensure_ascii=True, separators=(',', ':'), allow_nan=False
+    )
+
+
+def result_values(
+    columns: list[str], types: list[str] | None, rows: Iterable[Any]
+) -> dict[str, Any]:
+    r"""A result's columns and its rows in canonical form
+    (:func:`canonical_cell`):
+    the SHA-256 of the rows in the order read (``ordered``) and of the same
+    rows sorted by their canonical text (``unordered``, so two results
+    holding the same rows in another order agree, duplicates counted);
+    ``types`` are DuckDB's own names of the columns' types where a Python
+    driver gives them (``description``), and ``unencodable`` names every
+    value of a kind the canonical form does not hold."""
+    odd: list[str] = []
+    texts = [
+        _canonical_text([canonical_cell(value, odd) for value in row])
+        for row in rows
+    ]
+    return {
+        'columns': list(columns),
+        'types': types,
+        'ordered': digest(('[' + ','.join(texts) + ']').encode()),
+        'unordered': digest(('[' + ','.join(sorted(texts)) + ']').encode()),
+        'unencodable': sorted(set(odd)),
+    }
+
+
+def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
+    r"""An Arrow table's :func:`result_values`, read column by column, so
+    two columns of one name stay two."""
+    columns = [column.to_pylist() for column in table.columns]
+    rows = zip(*columns, strict=True) if columns else [()] * table.num_rows
+    return result_values(table.schema.names, types, rows)
+
+
+def _description(driver: Any) -> tuple[list[str], list[str]] | None:
+    r"""The columns of the result a driver holds, as its ``description``
+    names them and their DuckDB types, or None when it gives none."""
+    try:
+        described = driver.description
+    except Exception:  # noqa: BLE001 - the capture's own reading
+        return None
+    if not described:
+        return None
+    return [str(c[0]) for c in described], [str(c[1]) for c in described]
+
+
 class DriverLog:
     r"""What the capture recorded of one case: each statement, in the order
     the driver ran them, with its handle (0 the connection the source was
-    given, then each derived cursor in the order made), typed parameters
-    and every result read from it; each relation bound by name; and what
-    it could not record."""
+    given, then each derived cursor in the order made), the public call it
+    ran in (``stage``: ``from_source``, ``materialize`` or ``predict``),
+    typed parameters and every result read from it; each relation bound by
+    name; and what it could not record."""
 
     def __init__(self) -> None:
         self.statements: list[dict[str, Any]] = []
@@ -827,6 +967,8 @@ class DriverLog:
         self.incomplete: list[str] = []
         self.passed: list[str] = []
         self.handles = 0
+        #: The public call the runner is making, set by it before each.
+        self.stage: str | None = None
 
     def handle(self) -> int:
         number = self.handles
@@ -891,6 +1033,7 @@ class _Captured:
         )
         statement: dict[str, Any] = {
             'handle': self._handle,
+            'stage': self._log.stage,
             'sql': query if isinstance(query, str) else None,
             'parameters': _parameters(parameters),
             'results': [],
@@ -913,13 +1056,20 @@ class _Captured:
         if statement is None:
             self._log.incomplete.append(f'{method}:no_statement')
             return answer
-        if method in _ROWS:
-            rows = list(answer)
+        # The result's columns and DuckDB's types for them, read from the
+        # driver's description, which runs nothing.
+        described = _description(self._driver)
+        names, types = described if described else ([], None)
+        if method in _ROWS or method in _ROW:
+            if method in _ROWS:
+                rows = list(answer)
+            else:
+                rows = [] if answer is None else [answer]
             result = {'method': method, 'rows': len(rows)}
             result['digest'] = _rows_digest(rows)
-        elif method in _ROW:
-            result = {'method': method, 'rows': 0 if answer is None else 1}
-            result['digest'] = _rows_digest([] if answer is None else [answer])
+            if described is None:
+                self._log.incomplete.append(f'{method}:no_description')
+            result['values'] = result_values(names, types, rows)
         else:
             result = {
                 'method': method,
@@ -929,6 +1079,7 @@ class _Captured:
                     for field in answer.schema
                 ],
                 'digest': _arrow_digest(answer),
+                'values': arrow_values(answer, types),
             }
         statement['results'].append(result)
         return answer
@@ -951,6 +1102,7 @@ class _Captured:
     def register(self, name: Any, value: Any) -> Any:
         binding: dict[str, Any] = {
             'handle': self._handle,
+            'stage': self._log.stage,
             'name': name,
             'type': f'{type(value).__module__}.{type(value).__qualname__}',
         }
@@ -963,6 +1115,7 @@ class _Captured:
                 for field in value.schema
             ]
             binding['digest'] = _arrow_digest(value)
+            binding['values'] = arrow_values(value)
         else:
             self._log.incomplete.append('register:not_arrow')
         self._log.bindings.append(binding)
@@ -1213,6 +1366,8 @@ def _call(
     )
     public: dict[str, Any] = {'schema': None, 'payloads': [], 'result': None}
     stage = 'from_source'
+    if log is not None:
+        log.stage = stage
     with (
         serve() as (url, received),
         warnings.catch_warnings(record=True) as shown,
@@ -1225,11 +1380,15 @@ def _call(
             public['schema'] = _schema_projection(schema)
             if case['until'] != 'from_source':
                 stage = 'materialize'
+                if log is not None:
+                    log.stage = stage
                 request = PredictiveQuery(given['pql'], schema).materialize(
                     **arguments
                 )
             if case['until'] == 'predict':
                 stage = 'predict'
+                if log is not None:
+                    log.stage = stage
                 with SDMClient(url) as client:
                     result = client.predict(request, model=KumoRelational())
                 public['result'] = _result_projection(result)

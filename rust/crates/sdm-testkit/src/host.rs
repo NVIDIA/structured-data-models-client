@@ -37,6 +37,7 @@ use serde_json::{Value, json};
 
 use crate::bases::Bases;
 use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput};
+use crate::driver::{self, DriverLog};
 use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
@@ -53,6 +54,9 @@ pub struct Observed {
     /// the answer, which a later `predict` replaces.
     pub materialized: Option<Value>,
     pub answer: Answer,
+    /// What the DuckDB provider ran, and DuckDB's query log, for a case
+    /// whose operations read data (the observation's `driver`, T1.11e).
+    pub driver: Option<Value>,
 }
 
 /// The core's answer to the case's operation.
@@ -207,6 +211,7 @@ pub fn run(case: &Case, bases: &Bases) -> Result<Observed> {
         described: None,
         materialized: None,
         answer,
+        driver: None,
     })
 }
 
@@ -232,6 +237,7 @@ fn drive(
     handle: HostRun,
     connection: &duckdb::Connection,
     fetches: &mut Vec<Value>,
+    log: &mut DriverLog,
 ) -> Result<std::result::Result<(OperationResult, HostRun), Answer>> {
     loop {
         let out = match handle.next() {
@@ -264,18 +270,22 @@ fn drive(
                             }
                         }
                     }
-                    let (outcome, attachments) = match duck::answer_with(connection, step, &keys) {
-                        Ok(fetched) => (
-                            FetchOutcome::Data {
-                                data: AttachmentId(1),
-                            },
-                            BTreeMap::from([(
-                                AttachmentId(1),
-                                Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
-                            )]),
-                        ),
-                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
-                    };
+                    let (outcome, attachments) =
+                        match duck::answer_logged(connection, step, &keys, log) {
+                            Ok(fetched) => (
+                                FetchOutcome::Data {
+                                    data: AttachmentId(1),
+                                },
+                                BTreeMap::from([(
+                                    AttachmentId(1),
+                                    Attachment::Arrow(ArrowData::new(
+                                        fetched.schema,
+                                        fetched.batches,
+                                    )),
+                                )]),
+                            ),
+                            Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
+                        };
                     let reply = encode(&ControlMessage::FetchReply(FetchReply {
                         id: step.id,
                         outcome,
@@ -298,6 +308,25 @@ fn drive(
 /// the DuckDB provider; then, when the case names it, `materialize` over
 /// the same base.
 fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Observed> {
+    let connection = database(case, bases)?;
+    // After the setup, as the Python runner turns it on (design, "Driver
+    // capture"), so the log holds what the case's operations ran.
+    driver::enable_query_log(&connection)?;
+    let mut log = DriverLog::default();
+    let mut observed = describe_on(case, spec, &connection, &mut log)?;
+    let logged = driver::query_log(&connection)?;
+    observed.driver = Some(log.record(&logged));
+    Ok(observed)
+}
+
+/// `describe_source`, then `materialize` and `predict` when the case names
+/// them, on `connection`, recording what the provider ran in `log`.
+fn describe_on(
+    case: &Case,
+    spec: &DescribeSourceInput,
+    connection: &duckdb::Connection,
+    log: &mut DriverLog,
+) -> Result<Observed> {
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
             "{}: core.describe_source.provider is not a ProviderChoice",
@@ -310,7 +339,6 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
             case.id
         )
     })?;
-    let connection = database(case, bases)?;
     // What this host sends, as it encodes it, is what it records.
     let source_bytes = serde_json::to_vec(&source)?;
     let input = json!({
@@ -337,6 +365,7 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
         described: None,
         materialized: None,
         answer: Answer::Validated(false),
+        driver: None,
     };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
@@ -345,7 +374,8 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
             return Ok(observed);
         }
     };
-    let described = match drive(case, handle, &connection, &mut observed.fetches)? {
+    log.stage = "from_source";
+    let described = match drive(case, handle, connection, &mut observed.fetches, log)? {
         Err(answer) => {
             observed.answer = answer;
             return Ok(observed);
@@ -364,10 +394,11 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
     let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
         return Ok(observed);
     };
-    let Some(state) = materialize(case, spec, &connection, &mut observed)? else {
+    let Some(state) = materialize(case, spec, connection, &mut observed, log)? else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
+        log.stage = "predict";
         predict(case, spec, state, &mut observed)?;
     }
     Ok(observed)
@@ -457,7 +488,9 @@ fn materialize(
     spec: &MaterializeInput,
     connection: &duckdb::Connection,
     observed: &mut Observed,
+    log: &mut DriverLog,
 ) -> Result<Option<HeldState>> {
+    log.stage = "materialize";
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
             "{}: core.materialize.provider is not a ProviderChoice",
@@ -525,7 +558,7 @@ fn materialize(
             return Ok(None);
         }
     };
-    match drive(case, handle, connection, &mut observed.fetches)? {
+    match drive(case, handle, connection, &mut observed.fetches, log)? {
         Err(answer) => {
             observed.answer = answer;
             Ok(None)
@@ -558,7 +591,8 @@ fn materialize(
 
 /// The id this host's `predict` requests carry. The reference's client
 /// draws one at random for every request; this host draws none, and the
-/// comparison leaves its value out under decision E35 (PROPOSED).
+/// comparison leaves its value out under decision E35 (approved by the
+/// owner on 2026-10-10; `contract/compare-policy.yaml`).
 pub const REQUEST_ID: &str = "sdm-000000000000";
 
 /// One Arrow result as rows of tagged cells, the same for both core

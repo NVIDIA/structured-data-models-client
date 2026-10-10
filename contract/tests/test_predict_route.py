@@ -21,8 +21,9 @@ claim and what holds it:
   count and rows' digest, and the query-log counts) equals the committed
   reference observation's, with ``capture_check.projection``, whose one
   exclusion is the value of ``metadata.request_id`` (decision E35,
-  PROPOSED for the owner, not approved; the field must be present alike
-  with a value of the same type).
+  approved by the owner on 2026-10-10, ``contract/compare-policy.yaml``'s
+  one exclusion; the field must be present alike with a value of the
+  same type).
 - The request the endpoint received is the call the core wrote, and the
   state predict was started with is the one materialize answered: the
   request state crossed runs as the host held it.

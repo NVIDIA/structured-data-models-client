@@ -29,9 +29,9 @@ A payload is compared parsed. Only the value of ``metadata.request_id``,
 which the client draws at random for every request, is left out
 (:data:`RANDOM_PATHS`): the field must be present or absent in both runs
 alike, with a value of the same JSON type. The payload's raw SHA-256
-differs with that value, so it is not compared. This exclusion is
-PROPOSED and waits for the owner's approval at T1.11e (decision E35); it
-is not an approved comparison rule.
+differs with that value, so it is not compared. The exclusion is the one
+entry of ``contract/compare-policy.yaml``'s ``exclusions``, approved by the
+owner on 2026-10-10 (decision E35), which :func:`policy` reads and checks.
 """
 
 from __future__ import annotations
@@ -39,14 +39,96 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
+POLICY = Path(__file__).resolve().parents[1] / 'compare-policy.yaml'
+#: The policy's format, and what a rule may be.
+POLICY_FORMAT = 'sdm-compare-policy/1'
+RULE_CLASSES = ('gate', 'diagnostic')
+STAGES = ('from_source', 'materialize', 'predict')
+
+
+class PolicyError(Exception):
+    r"""``compare-policy.yaml`` is not a policy this checker can apply."""
+
+
+def policy(path: Path = POLICY) -> dict[str, Any]:
+    r"""The comparator's policy, checked: every rule a gate or diagnostic;
+    every exclusion value only (``keeps: [presence, type]``), of a payload,
+    naming its decision, with a status that reads "approved by owner" and a
+    date (an exclusion waits for the owner, decisions.md's preamble; an
+    unapproved one is refused here, never applied); ``ordered`` statement
+    positions by case and stage; ``reach`` stages by case."""
+    import yaml
+
+    loaded = yaml.safe_load(path.read_text(encoding='utf-8'))
+    if not isinstance(loaded, dict) or set(loaded) != {
+        'format',
+        'rules',
+        'exclusions',
+        'ordered',
+        'reach',
+    }:
+        raise PolicyError('not a policy: its sections')
+    if loaded['format'] != POLICY_FORMAT:
+        raise PolicyError(f'not {POLICY_FORMAT}')
+    rules = loaded['rules']
+    if not isinstance(rules, dict) or any(
+        value not in RULE_CLASSES for value in rules.values()
+    ):
+        raise PolicyError('a rule is neither a gate nor diagnostic')
+    for exclusion in loaded['exclusions']:
+        if set(exclusion) != {
+            'id',
+            'decision',
+            'status',
+            'in',
+            'path',
+            'keeps',
+        }:
+            raise PolicyError('an exclusion: its fields')
+        if not re.fullmatch(
+            r'approved by owner \d{4}-\d{2}-\d{2}', str(exclusion['status'])
+        ):
+            raise PolicyError(
+                f'exclusion {exclusion["id"]}: not owner-approved'
+            )
+        if exclusion['in'] != 'payload':
+            raise PolicyError(f'exclusion {exclusion["id"]}: not of a payload')
+        if exclusion['keeps'] != ['presence', 'type']:
+            raise PolicyError(f'exclusion {exclusion["id"]}: not value only')
+        path = exclusion['path']
+        if (
+            not isinstance(path, list)
+            or not path
+            or not all(isinstance(part, str) for part in path)
+        ):
+            raise PolicyError(f'exclusion {exclusion["id"]}: its path')
+    for case, stages in loaded['ordered'].items():
+        if not isinstance(stages, dict) or any(
+            stage not in STAGES
+            or not isinstance(positions, list)
+            or not all(isinstance(p, int) and p >= 0 for p in positions)
+            for stage, positions in stages.items()
+        ):
+            raise PolicyError(f'ordered: {case}')
+    for case, stage in loaded['reach'].items():
+        if stage not in STAGES:
+            raise PolicyError(f'reach: {case}')
+    return loaded
+
+
 #: The payload paths the client fills at random, whose value (not presence
-#: or type) is left out of conservation. PROPOSED, not approved: the owner
-#: decides at T1.11e (decision E35; design, T1.11a row).
-RANDOM_PATHS = (('metadata', 'request_id'),)
+#: or type) is left out of conservation and comparison: the policy's
+#: exclusions, each owner-approved (decision E35, 2026-10-10).
+RANDOM_PATHS = tuple(
+    tuple(exclusion['path'])
+    for exclusion in policy()['exclusions']
+    if exclusion['in'] == 'payload'
+)
 
 
 def _json_type(value: Any) -> str:
@@ -69,7 +151,8 @@ def masked(parsed: Any) -> Any:
     :data:`RANDOM_PATHS` replaced by its JSON type, as conservation compares
     it. The same rule holds the core's call (the payload it writes for the
     endpoint, ``core.predicted.body``) across the core runners and to its
-    pin (T1.11d): one value, ``metadata.request_id``, under E35, PROPOSED."""
+    pin (T1.11d): one value, ``metadata.request_id``, under E35, approved by
+    the owner on 2026-10-10."""
     parsed = copy.deepcopy(parsed)
     for path in RANDOM_PATHS:
         node = parsed

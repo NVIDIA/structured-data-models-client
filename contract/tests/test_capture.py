@@ -153,6 +153,12 @@ class ScriptedConnection:
         self._pending = [row for batch in self._batches for row in batch]
         return self
 
+    @property
+    def description(self) -> list[tuple[Any, ...]]:
+        # As DuckDB's: the columns of the result last run and their types;
+        # reading it is no call.
+        return [('a', 'BIGINT'), ('b', 'VARCHAR')]
+
     def fetchone(self) -> Any:
         self._call('fetchone')
         return self._pending.pop(0) if self._pending else None
@@ -288,13 +294,21 @@ def test_the_scripted_cursor_control() -> None:
     assert log.bindings == [
         {
             'handle': 3,
+            'stage': None,
             'name': 'seeds',
             'type': 'pyarrow.lib.Table',
             'rows': 3,
             'schema': [{'name': 'k', 'type': 'int64'}],
             'digest': run_python._arrow_digest(pa.table({'k': [1, 2, 3]})),
+            'values': run_python.arrow_values(pa.table({'k': [1, 2, 3]})),
         }
     ]
+    # Each result read has its values in canonical form, with the driver's
+    # column names and types (T1.11e); the rows read, not those left.
+    first = log.statements[0]['results'][0]['values']
+    assert first == run_python.result_values(
+        ['a', 'b'], ['BIGINT', 'VARCHAR'], [(1, 'x')]
+    )
     assert log.incomplete == [] and log.passed == []
     # Batch boundaries do not reach a result's digest (decision H9).
     one = pa.Table.from_batches([got[7].combine_chunks().to_batches()[0]])

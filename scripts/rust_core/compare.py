@@ -15,42 +15,77 @@ or a case a given runner did not observe, is a runner failure. Each
 observation must be of the case and bases files compared (their SHA-256 in
 its identity), and leaves null only what its runner cannot observe: a
 Python runner always has a stage, and a class for a refusal. Then, for
-each acceptance case, the rules of Phase 1a so far (T1.10):
+each case, the rules ``contract/compare-policy.yaml`` names, each a gate or
+diagnostic there (the policy must name exactly the rules this runs). A
+gate's difference fails an acceptance case; in a diagnostic case every
+difference is reported, not gated, but for ``reach`` on the cases the
+policy names under ``reach``. A diagnostic rule only reports. The rules:
 
-- outcome: the call succeeded or refused, as expected and as the reference
-  did, at the same stage and with the same exception class wherever both
-  sides observe them;
-- code: ``StructuredDataError.code``, or the code the S0 route maps the
-  core's answer to, as expected and as the reference;
-- kind and code on the core: each core runner's outcome is the core's
-  answer as the route maps it (accepted, a success; refused,
-  ``INVALID_REQUEST``; an error, a refusal with its code; a description,
-  the call going on); ``python-core`` and ``rust-host`` started the same
-  operations with the same inputs, the core asked both for the same
-  fetches with the same plans (the step trace), and answered both the
-  same: the same acceptance, description or request state (from T1.11c,
-  its payload included), the same call and result of ``predict`` (from
-  T1.11d; the call's ``metadata.request_id`` compared by presence and type
-  only, the one value ``capture_check.masked`` leaves out under decision
-  E35, PROPOSED), or an error of the same kind and code;
-- route proof: ``python-core`` ran the case's core operations with
+- ``outcome`` (T1.10): the call succeeded or refused, as expected and as
+  the reference did, at the same stage and with the same exception class
+  and ``StructuredDataError.code`` wherever both sides observe them; each
+  core runner's outcome is the core's answer as the route maps it
+  (accepted, a success; refused, ``INVALID_REQUEST``; an error, a refusal
+  with its code; a description or request state, the call going on);
+- ``route``: ``python-core`` ran the case's core operations with
   ``sdm_client._native`` loaded; ``python-old`` and ``python-ref`` never
   loaded it; ``python-ref``'s guard passed; every runner ran DuckDB at the
-  reference's version.
+  reference's version;
+- ``inputs``: each observation is of the case and bases files compared,
+  and the core runners started the case's core operations with its inputs;
+- ``reach`` (T1.11e): a case named under ``reach`` reached its result on
+  every runner: a success at that stage, and from ``predict`` a result with
+  rows (the public result on a Python runner, the core's on a core runner);
+- ``schema``, ``warnings``, ``result`` (T1.11e): each Python runner's public
+  ``Schema``, warning classes in order, and result through ``to_pandas()``
+  (columns and dtypes, rows, and their digest in order) are the
+  reference's;
+- ``payload`` (T1.11e): each request the scripted endpoint received is the
+  reference's, parsed, every number compared as its kind (an integer or a
+  float token) and its exact decimal value, the policy's exclusions left
+  out (the value of ``metadata.request_id``, decision E35, approved by the
+  owner on 2026-10-10; presence and type still compared); on
+  ``rust-host``, the call the core wrote is the reference's request, and
+  on ``python-core`` it is the request the endpoint received;
+- ``core``: ``python-core`` and ``rust-host`` started the same operations
+  with the same inputs, the core asked both for the same fetches with the
+  same plans (the step trace), and answered both the same: the same
+  acceptance, description or request state, payload included, the same
+  call and result of ``predict`` (the call under the exclusions), or an
+  error of the same kind and code, under one contract version;
+- ``sql.count`` and ``sql.result`` (decision H9, T1.11e): against the
+  reference, per public call, the number of statements run (setup
+  excluded), and each statement's result: its columns, DuckDB's type names
+  where both runners read them from a Python driver, its Arrow schema
+  where both read Arrow, and its rows in canonical form, in order only for
+  a statement the policy's ``ordered`` names, otherwise as a multiset;
+  between the core runners, each statement's result likewise. A runner's
+  record of what ran (the driver capture on a Python runner, the
+  provider's own record on ``rust-host``) must be complete, its counts
+  equal to DuckDB's own query log; ``rust-host`` is held to the public
+  calls whose core operations the case names, since it makes no other;
+- ``sql.text``, ``sql.parameters``, ``sql.bindings``: each statement's raw
+  text and typed parameters, and the relations bound, against the
+  reference's: reported (H9).
 
 The fields ``rust-host`` cannot observe, a stage and an exception class,
-are null there and not compared, never treated as equal. Diagnostic cases are
-reported, not gated. The first difference per case, runner and field is
-printed with its path; message text is never compared, and input values are
-never printed. Exit status 1 on any difference or runner failure.
+are null there and not compared, never treated as equal; it has no public
+call, so the host rules hold the Python runners only. The first difference
+per case, runner and field is printed with its path; message text is never
+compared, and input values are never printed. Each runner's statement count
+per public call is printed for information. Exit status 1 on any gating
+difference or runner failure.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import json
+import re
 import sys
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -65,6 +100,31 @@ OUTCOME = ('result', 'stage', 'error', 'code')
 #: observes both, and a null there is a defect, never a pass.
 UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
 PYTHON = ('python-ref', 'python-core', 'python-old')
+#: The rules this comparator runs, which the policy must name exactly.
+RULES = (
+    'outcome',
+    'route',
+    'inputs',
+    'reach',
+    'schema',
+    'warnings',
+    'result',
+    'payload',
+    'core',
+    'sql.count',
+    'sql.result',
+    'sql.text',
+    'sql.parameters',
+    'sql.bindings',
+)
+#: The public call each core operation that reads data runs in.
+STAGE_OF = {
+    'describe_source': 'from_source',
+    'materialize': 'materialize',
+    'predict': 'predict',
+}
+STAGES = ('from_source', 'materialize', 'predict')
+_INTEGER = re.compile(r'-?(0|[1-9][0-9]*)')
 
 
 def _runner() -> ModuleType:
@@ -76,6 +136,7 @@ def _runner() -> ModuleType:
     return module
 
 
+@functools.cache
 def _capture_check() -> ModuleType:
     r"""``capture_check.py``, whose E35 mask of a prediction payload this
     shares, so the rule is written once."""
@@ -90,7 +151,7 @@ def _capture_check() -> ModuleType:
 
 def _predicted(core: dict[str, Any]) -> Any:
     r"""``core.predicted``, its call's request id compared by presence and
-    type only (decision E35, PROPOSED)."""
+    type only (decision E35, approved by the owner on 2026-10-10)."""
     predicted = core.get('predicted')
     if not isinstance(predicted, dict) or 'body' not in predicted:
         return predicted
@@ -98,15 +159,46 @@ def _predicted(core: dict[str, Any]) -> Any:
 
 
 class Report:
-    def __init__(self) -> None:
-        self.failures: list[str] = []
-        self.notes: list[str] = []
+    r"""Differences by rule: a gate's is a failure, a diagnostic rule's a
+    note; a difference with no rule (the files, a runner failure) always
+    fails. :meth:`demote` turns a diagnostic case's failures into notes,
+    but for the rules it keeps."""
 
-    def fail(self, text: str) -> None:
-        self.failures.append(text)
+    def __init__(self, rules: dict[str, str] | None = None) -> None:
+        self.failures: list[tuple[str | None, str]] = []
+        self.notes: list[str] = []
+        self.info: list[str] = []
+        self.rules = rules or {}
+
+    def fail(self, text: str, rule: str | None = None) -> None:
+        if rule is not None and self.rules.get(rule) == 'diagnostic':
+            self.notes.append(f'diagnostic rule {rule}: {text}')
+        else:
+            self.failures.append((rule, text))
 
     def note(self, text: str) -> None:
         self.notes.append(text)
+
+    def demote(self, since: int, keep: tuple[str, ...] = ()) -> None:
+        kept = []
+        for rule, text in self.failures[since:]:
+            if rule in keep:
+                kept.append((rule, text))
+            else:
+                self.notes.append(
+                    f'diagnostic: {text}'
+                    if rule is None
+                    else f'diagnostic: {rule}: {text}'
+                )
+        del self.failures[since:]
+        self.failures.extend(kept)
+
+    @property
+    def texts(self) -> list[str]:
+        return [
+            text if rule is None else f'{rule}: {text}'
+            for rule, text in self.failures
+        ]
 
 
 def _observations(
@@ -152,13 +244,15 @@ def _differ(
     observed: Any,
     *,
     show: bool = True,
+    rule: str = 'outcome',
 ) -> None:
     if show:
         report.fail(
-            f'{where}: {field}: expected {expected!r}, observed {observed!r}'
+            f'{where}: {field}: expected {expected!r}, observed {observed!r}',
+            rule,
         )
     else:
-        report.fail(f'{where}: {field}: differs')
+        report.fail(f'{where}: {field}: differs', rule)
 
 
 def _expectation(
@@ -218,19 +312,27 @@ def _route(
     wanted = sorted(case.get('core', {}))
     if who == 'python-core':
         if identity['native_loaded'] is not True or identity['native'] is None:
-            report.fail(f'{where}: route: sdm_client._native was not loaded')
+            report.fail(
+                f'{where}: route: sdm_client._native was not loaded', 'route'
+            )
         missing = [op for op in wanted if op not in identity['operations']]
         if missing or observation['core'] is None:
-            report.fail(f'{where}: route: {missing} did not run on the core')
+            report.fail(
+                f'{where}: route: {missing} did not run on the core', 'route'
+            )
     elif who in ('python-old', 'python-ref'):
         if identity['native_loaded'] is not False or identity['operations']:
-            report.fail(f'{where}: route: the old route loaded the core')
+            report.fail(
+                f'{where}: route: the old route loaded the core', 'route'
+            )
         if who == 'python-ref' and identity['reference'] is None:
-            report.fail(f'{where}: route: no reference guard result')
+            report.fail(f'{where}: route: no reference guard result', 'route')
     elif who == 'rust-host':
         missing = [op for op in wanted if op not in identity['operations']]
         if missing or observation['core'] is None:
-            report.fail(f'{where}: route: {missing} did not run on the host')
+            report.fail(
+                f'{where}: route: {missing} did not run on the host', 'route'
+            )
 
 
 def _shape(
@@ -241,25 +343,35 @@ def _shape(
     outcome = observation['outcome']
     if who in PYTHON:
         if outcome['stage'] is None:
-            report.fail(f'{where}: outcome.stage: null on a Python runner')
+            report.fail(
+                f'{where}: outcome.stage: null on a Python runner', 'outcome'
+            )
         if outcome['result'] == 'refusal' and outcome['error'] is None:
-            report.fail(f'{where}: outcome.error: a refusal without a class')
+            report.fail(
+                f'{where}: outcome.error: a refusal without a class', 'outcome'
+            )
         if outcome['result'] == 'success' and (
             outcome['error'] is not None or outcome['code'] is not None
         ):
-            report.fail(f'{where}: outcome: a success with an error')
+            report.fail(f'{where}: outcome: a success with an error', 'outcome')
         if observation['host'] is None:
-            report.fail(f'{where}: host: null on a Python runner')
+            report.fail(f'{where}: host: null on a Python runner', 'outcome')
         if observation['identity']['inputs']['bases'] is None:
-            report.fail(f'{where}: identity.inputs.bases: null')
+            report.fail(f'{where}: identity.inputs.bases: null', 'outcome')
         if (observation['core'] is None) != (who != 'python-core'):
-            report.fail(f'{where}: core: present only on python-core')
+            report.fail(
+                f'{where}: core: present only on python-core', 'outcome'
+            )
     else:
         for field in UNOBSERVED_BY_RUST_HOST:
             if outcome[field] is not None:
-                report.fail(f'{where}: outcome.{field}: not observable here')
+                report.fail(
+                    f'{where}: outcome.{field}: not observable here', 'outcome'
+                )
         if observation['host'] is not None or observation['core'] is None:
-            report.fail(f'{where}: a host section, or no core section')
+            report.fail(
+                f'{where}: a host section, or no core section', 'outcome'
+            )
 
 
 def _inputs(
@@ -273,9 +385,13 @@ def _inputs(
     inputs = observation['identity']['inputs']
     where = f'{case["id"]}: {who}'
     if inputs['case'] != digests[case['id']]:
-        report.fail(f'{where}: identity.inputs.case: not this case file')
+        report.fail(
+            f'{where}: identity.inputs.case: not this case file', 'inputs'
+        )
     if inputs['bases'] is not None and inputs['bases'] != digests['']:
-        report.fail(f'{where}: identity.inputs.bases: not this bases file')
+        report.fail(
+            f'{where}: identity.inputs.bases: not this bases file', 'inputs'
+        )
 
 
 def _core_consistent(
@@ -296,7 +412,9 @@ def _core_consistent(
         # call there, as a refusal with its code.
         where = f'{case["id"]}: {who}'
         if (core['predicted'] is None) == (core['error'] is None):
-            report.fail(f'{where}: core: not one prediction or one error')
+            report.fail(
+                f'{where}: core: not one prediction or one error', 'outcome'
+            )
         elif core['error'] is not None:
             seen = (
                 observation['outcome']['result'],
@@ -312,7 +430,9 @@ def _core_consistent(
         # the call there, as a refusal with its code.
         where = f'{case["id"]}: {who}'
         if (core['materialized'] is None) == (core['error'] is None):
-            report.fail(f'{where}: core: not one request state or one error')
+            report.fail(
+                f'{where}: core: not one request state or one error', 'outcome'
+            )
         elif core['error'] is not None:
             seen = (
                 observation['outcome']['result'],
@@ -325,7 +445,9 @@ def _core_consistent(
     if 'describe_source' in case.get('core', {}):
         where = f'{case["id"]}: {who}'
         if (core['described'] is None) == (core['error'] is None):
-            report.fail(f'{where}: core: not one description or one error')
+            report.fail(
+                f'{where}: core: not one description or one error', 'outcome'
+            )
         elif core['error'] is not None:
             seen = (
                 observation['outcome']['result'],
@@ -341,9 +463,11 @@ def _core_consistent(
     if core['error'] is not None:
         wanted = ('refusal', core['error']['code'])
         if core['accepted'] is not None:
-            report.fail(f'{case["id"]}: {who}: core: an answer and an error')
+            report.fail(
+                f'{case["id"]}: {who}: core: an answer and an error', 'outcome'
+            )
     elif core['accepted'] is None:
-        report.fail(f'{case["id"]}: {who}: core: no answer')
+        report.fail(f'{case["id"]}: {who}: core: no answer', 'outcome')
         return
     else:
         wanted = (
@@ -373,18 +497,36 @@ def _core_agree(
             'identity.operations',
             python['identity']['operations'],
             rust['identity']['operations'],
+            rule='core',
         )
     mine, theirs = python['core'], rust['core']
     if mine is None or theirs is None:
         return
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if mine[field] != theirs[field]:
-            _differ(report, where, f'core.{field}', None, None, show=False)
+            _differ(
+                report,
+                where,
+                f'core.{field}',
+                None,
+                None,
+                show=False,
+                rule='core',
+            )
     if _predicted(mine) != _predicted(theirs):
-        _differ(report, where, 'core.predicted', None, None, show=False)
+        _differ(
+            report, where, 'core.predicted', None, None, show=False, rule='core'
+        )
     for field in ('accepted', 'error'):
         if mine[field] != theirs[field]:
-            _differ(report, where, f'core.{field}', mine[field], theirs[field])
+            _differ(
+                report,
+                where,
+                f'core.{field}',
+                mine[field],
+                theirs[field],
+                rule='core',
+            )
     for field in ('contract',):
         if python['identity'][field] != rust['identity'][field]:
             _differ(
@@ -393,6 +535,7 @@ def _core_agree(
                 f'identity.{field}',
                 python['identity'][field],
                 rust['identity'][field],
+                rule='core',
             )
 
 
@@ -444,13 +587,355 @@ def _case_inputs(
             None,
             None,
             show=False,
+            rule='inputs',
         )
 
 
+def _path_of(mine: Any, theirs: Any, path: str) -> str | None:
+    r"""Where two values first differ, as a path, never the values."""
+    found: str | None = _capture_check()._first_difference(mine, theirs, path)
+    return found
+
+
+def _lossless(value: Any) -> Any:
+    r"""A parsed payload with each number (``{"number": text}``) as its kind
+    (an integer token or a float token) and its exact decimal value, so
+    ``1e-05`` and ``1e-5`` agree and ``1`` and ``1.0`` do not; nothing
+    passes through a double."""
+    if isinstance(value, dict):
+        if set(value) == {'number'} and isinstance(value['number'], str):
+            text = value['number']
+            kind = 'integer' if _INTEGER.fullmatch(text) else 'float'
+            return ['number', kind, Decimal(text)]
+        return {key: _lossless(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_lossless(item) for item in value]
+    return value
+
+
+def _payload(parsed: Any) -> Any:
+    r"""A payload as the ``payload`` rule compares it: under the policy's
+    exclusions (``capture_check.masked``), with lossless numbers."""
+    return _lossless(_capture_check().masked(parsed))
+
+
+def _reach(
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    stage: str,
+) -> None:
+    r"""The case reached its result at ``stage`` on this runner."""
+    where = f'{case["id"]}: {who}'
+    outcome = observation['outcome']
+    if outcome['result'] != 'success' or (
+        who != 'rust-host' and outcome['stage'] != stage
+    ):
+        report.fail(f'{where}: did not reach its result at {stage}', 'reach')
+        return
+    if stage != 'predict':
+        return
+    if who in PYTHON:
+        result = (observation.get('public') or {}).get('result')
+        if not result or not result.get('rows'):
+            report.fail(f'{where}: no public result with rows', 'reach')
+    if who in ('python-core', 'rust-host'):
+        predicted = (observation.get('core') or {}).get('predicted') or {}
+        if not (predicted.get('result') or {}).get('rows'):
+            report.fail(f'{where}: no result with rows from the core', 'reach')
+
+
+def _host_fields(
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    reference: dict[str, Any],
+) -> None:
+    r"""A Python runner's public fields against the reference's: the
+    ``schema``, ``warnings``, ``result`` and ``payload`` rules."""
+    where = f'{case["id"]}: {who} against python-ref'
+    mine, theirs = observation.get('public'), reference.get('public')
+    if mine is None or theirs is None:
+        report.fail(f'{where}: public: not recorded', 'schema')
+        return
+    found = _path_of(mine['schema'], theirs['schema'], 'public.schema')
+    if found:
+        report.fail(f'{where}: {found}', 'schema')
+    if observation['host']['warnings'] != reference['host']['warnings']:
+        report.fail(f'{where}: host.warnings: differ', 'warnings')
+    found = _path_of(mine['result'], theirs['result'], 'public.result')
+    if found:
+        report.fail(f'{where}: {found}', 'result')
+    sent = [
+        (each['method'], each['path'], _payload(each['parsed']))
+        for each in mine['payloads']
+    ]
+    wanted = [
+        (each['method'], each['path'], _payload(each['parsed']))
+        for each in theirs['payloads']
+    ]
+    found = _path_of(sent, wanted, 'public.payloads')
+    if found:
+        report.fail(f'{where}: {found}', 'payload')
+
+
+def _core_payload(
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    reference: dict[str, Any] | None,
+) -> None:
+    r"""The call the core wrote (``core.predicted.body``) is the request
+    the reference sent, on ``rust-host``, and the request the endpoint
+    received, on ``python-core``: the ``payload`` rule on the core."""
+    predicted = (observation.get('core') or {}).get('predicted')
+    if not predicted or predicted.get('body') is None:
+        return
+    body = _payload(predicted['body'])
+    if who == 'python-core':
+        sent = [
+            _payload(each['parsed'])
+            for each in (observation.get('public') or {}).get('payloads', [])
+        ]
+        found = _path_of([body], sent, 'core.predicted.body')
+        if found:
+            report.fail(
+                f'{case["id"]}: python-core: the call against the request '
+                f'received: {found}',
+                'payload',
+            )
+    if who == 'rust-host' and reference is not None:
+        wanted = [
+            _payload(each['parsed']) for each in reference['public']['payloads']
+        ]
+        found = _path_of([body], wanted, 'core.predicted.body')
+        if found:
+            report.fail(
+                f'{case["id"]}: rust-host against python-ref: {found}',
+                'payload',
+            )
+
+
+def _by_stage(
+    observation: dict[str, Any], key: str = 'statements'
+) -> dict[str, list[dict[str, Any]]] | None:
+    r"""A runner's statements (or bindings) by the public call they ran
+    in, in order; None when it recorded none (no capture)."""
+    capture = (observation.get('driver') or {}).get('capture')
+    if capture is None:
+        return None
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for each in capture[key]:
+        grouped.setdefault(each['stage'], []).append(each)
+    return grouped
+
+
+def _stages(case: dict[str, Any], who: str) -> tuple[str, ...]:
+    r"""The public calls whose statements this runner is held to: every
+    one on a Python runner, which makes the case's public calls through
+    the capture; on ``rust-host``, those whose core operations the case
+    names, since it makes no other."""
+    if who in PYTHON:
+        return STAGES
+    named = {STAGE_OF[op] for op in case.get('core', {}) if op in STAGE_OF}
+    return tuple(stage for stage in STAGES if stage in named)
+
+
+def counts(observation: dict[str, Any]) -> dict[str, int] | None:
+    r"""A runner's statement count per public call, setup excluded."""
+    grouped = _by_stage(observation)
+    if grouped is None:
+        return None
+    return {stage: len(grouped.get(stage, [])) for stage in STAGES}
+
+
+def _results(
+    report: Report,
+    where: str,
+    mine: dict[str, Any],
+    theirs: dict[str, Any],
+    ordered: bool,
+) -> None:
+    r"""One statement's results against another's: ``sql.result``."""
+    if (mine['error'] is None) != (theirs['error'] is None):
+        report.fail(f'{where}: one statement failed', 'sql.result')
+        return
+    if len(mine['results']) != len(theirs['results']):
+        report.fail(
+            f'{where}: {len(mine["results"])} results read, against '
+            f'{len(theirs["results"])}',
+            'sql.result',
+        )
+        return
+    for read, (a, b) in enumerate(
+        zip(mine['results'], theirs['results'], strict=True)
+    ):
+        at = f'{where} result {read}'
+        va, vb = a['values'], b['values']
+        if va['unencodable'] or vb['unencodable']:
+            # A value the canonical form does not hold is never equal.
+            report.fail(
+                f'{at}: values the canonical form does not hold: '
+                f'{sorted(set(va["unencodable"]) | set(vb["unencodable"]))}',
+                'sql.result',
+            )
+            continue
+        if va['columns'] != vb['columns']:
+            report.fail(f'{at}: columns differ', 'sql.result')
+        if (
+            va['types'] is not None
+            and vb['types'] is not None
+            and va['types'] != vb['types']
+        ):
+            report.fail(f'{at}: DuckDB types differ', 'sql.result')
+        if 'schema' in a and 'schema' in b and a['schema'] != b['schema']:
+            report.fail(f'{at}: Arrow schema differs', 'sql.result')
+        if a['rows'] != b['rows']:
+            report.fail(
+                f'{at}: {a["rows"]} rows, against {b["rows"]}', 'sql.result'
+            )
+        key = 'ordered' if ordered else 'unordered'
+        if va[key] != vb[key]:
+            report.fail(
+                f'{at}: rows differ '
+                + ('in order' if ordered else 'as a multiset'),
+                'sql.result',
+            )
+
+
+def _complete(report: Report, where: str, observation: dict[str, Any]) -> bool:
+    r"""The runner's record of what ran is there and complete, its counts
+    DuckDB's own; otherwise nothing of it is compared, and that fails."""
+    driver = observation.get('driver')
+    if driver is None or driver.get('capture') is None:
+        report.fail(f'{where}: no record of the statements run', 'sql.count')
+        return False
+    problems = _capture_check().complete(observation)
+    for problem in problems:
+        report.fail(f'{where}: the record of what ran: {problem}', 'sql.count')
+    return not problems
+
+
+def _sql(
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    reference: dict[str, Any],
+    ordered: dict[str, list[int]],
+) -> None:
+    r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
+    with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported."""
+    stages = _stages(case, who)
+    if not stages:
+        return
+    where = f'{case["id"]}: {who} against python-ref'
+    if not _complete(report, f'{case["id"]}: python-ref', reference):
+        return
+    if not _complete(report, where, observation):
+        return
+    mine, theirs = _by_stage(observation), _by_stage(reference)
+    assert mine is not None and theirs is not None
+    for stage in stages:
+        ours, refs = mine.get(stage, []), theirs.get(stage, [])
+        if len(ours) != len(refs):
+            report.fail(
+                f'{where}: {stage}: {len(ours)} statements, the reference '
+                f'{len(refs)}',
+                'sql.count',
+            )
+            continue
+        for position, (a, b) in enumerate(zip(ours, refs, strict=True)):
+            at = f'{where}: {stage} statement {position}'
+            if a['sql'] != b['sql']:
+                report.fail(f'{at}: text differs', 'sql.text')
+            if a['parameters'] != b['parameters']:
+                report.fail(f'{at}: parameters differ', 'sql.parameters')
+            _results(report, at, a, b, position in ordered.get(stage, []))
+    mine_bound = _by_stage(observation, 'bindings') or {}
+    theirs_bound = _by_stage(reference, 'bindings') or {}
+    for stage in stages:
+        ours, refs = mine_bound.get(stage, []), theirs_bound.get(stage, [])
+        if len(ours) != len(refs):
+            report.fail(
+                f'{where}: {stage}: {len(ours)} relations bound, the '
+                f'reference {len(refs)}',
+                'sql.bindings',
+            )
+            continue
+        for position, (a, b) in enumerate(zip(ours, refs, strict=True)):
+            at = f'{where}: {stage} binding {position}'
+            va, vb = a.get('values'), b.get('values')
+            if a.get('rows') != b.get('rows') or (
+                va is None or vb is None or va['unordered'] != vb['unordered']
+            ):
+                report.fail(f'{at}: rows differ', 'sql.bindings')
+
+
+def _sql_core(
+    report: Report,
+    case: dict[str, Any],
+    python: dict[str, Any],
+    rust: dict[str, Any],
+    ordered: dict[str, list[int]],
+) -> None:
+    r"""The two core runners' statement results, public call by public
+    call: ``sql.count`` and ``sql.result``."""
+    stages = _stages(case, 'rust-host')
+    if not stages:
+        return
+    where = f'{case["id"]}: python-core against rust-host'
+    if not (
+        _complete(report, f'{case["id"]}: python-core', python)
+        and _complete(report, f'{case["id"]}: rust-host', rust)
+    ):
+        return
+    mine, theirs = _by_stage(python), _by_stage(rust)
+    assert mine is not None and theirs is not None
+    for stage in stages:
+        ours, refs = mine.get(stage, []), theirs.get(stage, [])
+        if len(ours) != len(refs):
+            report.fail(
+                f'{where}: {stage}: {len(ours)} statements, against '
+                f'{len(refs)}',
+                'sql.count',
+            )
+            continue
+        for position, (a, b) in enumerate(zip(ours, refs, strict=True)):
+            _results(
+                report,
+                f'{where}: {stage} statement {position}',
+                a,
+                b,
+                position in ordered.get(stage, []),
+            )
+
+
 def compare(
-    cases_dir: list[Path], reference_file: Path | None, files: list[Path]
+    cases_dir: list[Path],
+    reference_file: Path | None,
+    files: list[Path],
+    policy_file: Path | None = None,
 ) -> Report:
-    report = Report()
+    check = _capture_check()
+    try:
+        policy = (
+            check.policy() if policy_file is None else check.policy(policy_file)
+        )
+    except check.PolicyError as problem:
+        report = Report()
+        report.fail(f'compare-policy.yaml: {problem}')
+        return report
+    report = Report(policy['rules'])
+    if set(policy['rules']) != set(RULES):
+        report.fail(
+            'compare-policy.yaml: its rules are not the ones this runs: '
+            f'{sorted(set(policy["rules"]) ^ set(RULES))}'
+        )
+        return report
     runner = _runner()
     try:
         loaded = runner.load_cases(cases_dir)
@@ -478,8 +963,18 @@ def compare(
     for who, by_case in [('python-ref', reference), *observed.items()]:
         for name in sorted(set(by_case) - known):
             report.fail(f'{name}: {who} observed a case that does not exist')
+    # A case the policy names must exist, among every case of the
+    # repository, not only those compared now.
+    every = {
+        case['id'] for case, _ in runner.load_cases([runner.CONTRACT / 'cases'])
+    }
+    for name in sorted(set(policy['reach']) | set(policy['ordered'])):
+        if name not in every:
+            report.fail(f'compare-policy.yaml: {name} is not a case')
     for case in cases:
         gating = case['status'] == 'acceptance'
+        reach = policy['reach'].get(case['id'])
+        ordered = policy['ordered'].get(case['id'], {})
         before = len(report.failures)
         ref = reference.get(case['id'])
         if reference_file is not None and ref is None:
@@ -489,11 +984,17 @@ def compare(
             _inputs(report, case, 'python-ref', ref, digests)
             _expectation(report, case, 'python-ref', ref['outcome'])
             _route(report, case, 'python-ref', ref)
+            if reach is not None:
+                _reach(report, case, 'python-ref', ref, reach)
+            found = counts(ref)
+            if found is not None:
+                report.info.append(f'{case["id"]}: python-ref: {found}')
         for who, by_case in observed.items():
             observation = by_case.get(case['id'])
             if observation is None:
                 report.fail(
-                    f'{case["id"]}: {who}: runner failure: no observation'
+                    f'{case["id"]}: {who}: runner failure: no observation',
+                    'reach' if reach is not None else None,
                 )
                 continue
             _shape(report, case, who, observation)
@@ -506,7 +1007,16 @@ def compare(
                 )
             _route(report, case, who, observation)
             _case_inputs(report, case, who, observation)
+            if reach is not None:
+                _reach(report, case, who, observation, reach)
+            found = counts(observation)
+            if found is not None:
+                report.info.append(f'{case["id"]}: {who}: {found}')
+            _core_payload(report, case, who, observation, ref)
             if ref is not None:
+                if who in PYTHON:
+                    _host_fields(report, case, who, observation, ref)
+                _sql(report, case, who, observation, ref, ordered)
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']
                 if mine != theirs:
@@ -516,16 +1026,15 @@ def compare(
                         'identity.versions.duckdb',
                         theirs,
                         mine,
+                        rule='route',
                     )
         python = observed.get('python-core', {}).get(case['id'])
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(report, case, python, rust)
+            _sql_core(report, case, python, rust, ordered)
         if not gating:
-            moved = report.failures[before:]
-            del report.failures[before:]
-            for text in moved:
-                report.note(f'diagnostic: {text}')
+            report.demote(before, keep=('reach',) if reach else ())
     return report
 
 
@@ -533,14 +1042,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--cases', type=Path, action='append', required=True)
     parser.add_argument('--reference', type=Path)
+    parser.add_argument('--policy', type=Path)
     parser.add_argument('observations', type=Path, nargs='+')
     arguments = parser.parse_args(argv)
     report = compare(
-        arguments.cases, arguments.reference, arguments.observations
+        arguments.cases,
+        arguments.reference,
+        arguments.observations,
+        arguments.policy,
     )
+    for text in report.info:
+        print(f'statements per public call: {text}')
     for text in report.notes:
         print(text)
-    for text in report.failures:
+    for text in report.texts:
         print(f'DIFFERS {text}')
     if report.failures:
         print(f'compare: {len(report.failures)} differences')

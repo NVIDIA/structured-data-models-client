@@ -32,6 +32,8 @@ use sdm_contract::ErrorKind;
 use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError, SqlParam};
 use sdm_contract::run::FetchStep;
 
+use crate::driver::DriverLog;
+
 /// The DuckDB version the reference runs, which this host must link.
 pub const DUCKDB_VERSION: &str = "v1.5.6";
 
@@ -136,6 +138,18 @@ pub fn answer_with(
     step: &FetchStep,
     keys: &BTreeMap<AttachmentId, Fetched>,
 ) -> Result<Fetched, ProviderError> {
+    answer_logged(connection, step, keys, &mut DriverLog::default())
+}
+
+/// [`answer_with`], recording in `log` the cursor, each statement run with
+/// its result, and each key set bound (from T1.11e, the observation's
+/// `driver` section).
+pub fn answer_logged(
+    connection: &Connection,
+    step: &FetchStep,
+    keys: &BTreeMap<AttachmentId, Fetched>,
+    log: &mut DriverLog,
+) -> Result<Fetched, ProviderError> {
     let failed = || ProviderError {
         kind: ErrorKind::DataSource,
         retryable: false,
@@ -153,6 +167,7 @@ pub fn answer_with(
     // a connection to the same database, which takes the database's
     // settings and none of the session's.
     let cursor = connection.try_clone().map_err(|_| failed())?;
+    let handle = log.cursor();
     // Each name binds one key set; two under one name are refused, as the
     // Python provider refuses them, never one kept over the other.
     let mut bound = BTreeMap::new();
@@ -171,35 +186,44 @@ pub fn answer_with(
                 None => {}
             }
             let fetched = keys.get(&set.attachment).ok_or_else(failed)?;
-            bind(&cursor, relation, fetched).map_err(|_| failed())?;
+            let sql = bind(&cursor, relation, fetched).map_err(|_| failed())?;
+            log.bound(handle, relation, &sql, &fetched.schema, &fetched.batches);
         }
     }
     for statement in before {
-        cursor
-            .execute_batch(&statement.text)
-            .map_err(|_| failed())?;
+        log.statement(handle, &statement.text);
+        if cursor.execute_batch(&statement.text).is_err() {
+            log.failed();
+            return Err(failed());
+        }
     }
-    run(&cursor, &last.text).map_err(|_| failed())
+    log.statement(handle, &last.text);
+    match run(&cursor, &last.text) {
+        Ok(fetched) => {
+            log.answered(&fetched.schema, &fetched.batches);
+            Ok(fetched)
+        }
+        Err(_) => {
+            log.failed();
+            Err(failed())
+        }
+    }
 }
 
 /// Binds `keys` as the relation `name` on `cursor`: a temporary table of
 /// the key set's rows, read from Arrow by `duckdb-rs`'s Arrow table
 /// function, so every value keeps its type (an unsigned 64-bit integer, a
 /// decimal of any scale) and nothing passes through text or a float.
-fn bind(cursor: &Connection, name: &str, keys: &Fetched) -> Result<()> {
+fn bind(cursor: &Connection, name: &str, keys: &Fetched) -> Result<String> {
     cursor
         .register_table_function::<ArrowVTab>("arrow")
         .map_err(|e| anyhow!("{e}"))?;
     let batch = concat_batches(&keys.schema, &keys.batches).map_err(|e| anyhow!("{e}"))?;
     let params = arrow_recordbatch_to_query_params(batch);
     let quoted = format!("\"{}\"", name.replace('"', "\"\""));
-    cursor
-        .execute(
-            &format!("CREATE TEMPORARY TABLE {quoted} AS SELECT * FROM arrow(?, ?)"),
-            params,
-        )
-        .map_err(|e| anyhow!("{e}"))?;
-    Ok(())
+    let sql = format!("CREATE TEMPORARY TABLE {quoted} AS SELECT * FROM arrow(?, ?)");
+    cursor.execute(&sql, params).map_err(|e| anyhow!("{e}"))?;
+    Ok(sql)
 }
 
 /// Every batch of `sql`'s result, with its schema, empty or not.

@@ -18,8 +18,9 @@ of materialize and what holds it:
   endpoint received, parsed with each number as its text, the result and
   the query-log counts) equals the committed reference observation's, with
   ``capture_check.projection``, whose one exclusion is the value of
-  ``metadata.request_id`` (decision E35, PROPOSED for the owner, not
-  approved; the field must be present alike with a value of the same type).
+  ``metadata.request_id`` (decision E35, approved by the owner on
+  2026-10-10, ``contract/compare-policy.yaml``'s one exclusion; the field
+  must be present alike with a value of the same type).
 - The two core hosts agree: python-core's materialize inputs, step trace
   and request state, payload included, are the ones
   ``contract/pinned/base.regression.core.json`` pins, which

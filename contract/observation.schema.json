@@ -32,7 +32,7 @@
       }
     },
     "driver": {
-      "description": "Python runners only (rust-host writes none): the test-only driver capture (design, Driver capture; decision Q2) and DuckDB's own query log, read after the case. capture is null when the run handed the source the driver connection itself (the conservation control). Setup, everything run before the connection reaches Schema.from_source, is in neither.",
+      "description": "The statements a case ran on DuckDB and DuckDB's own query log, read after the case. On a Python runner, the test-only driver capture (design, Driver capture; decision Q2), null when the run handed the source the driver connection itself (the conservation control); on rust-host (from T1.11e), its DuckDB provider's own record of what it ran, for a case whose core operations read data, and no driver section for a case whose operations read none. Setup, everything run before the connection reaches Schema.from_source (on rust-host, before describe_source starts), is in neither.",
       "type": "object",
       "additionalProperties": false,
       "required": ["capture", "query_log"],
@@ -43,14 +43,15 @@
           "required": ["statements", "bindings", "events", "incomplete", "passed_through", "cursors"],
           "properties": {
             "statements": {
-              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), its SQL text, its typed parameters, every result read from it and the class of any error it raised.",
+              "description": "Each statement the driver ran, in order: the handle it ran on (0 the connection the source was given, then each derived cursor in the order made), the public call it ran in (stage; on rust-host, from_source for describe_source), its SQL text, its typed parameters, every result read from it and the class of any error it raised.",
               "type": "array",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["handle", "sql", "parameters", "results", "error"],
+                "required": ["handle", "stage", "sql", "parameters", "results", "error"],
                 "properties": {
                   "handle": {"type": "integer", "minimum": 0},
+                  "stage": {"enum": ["from_source", "materialize", "predict"]},
                   "sql": {"type": ["string", "null"]},
                   "parameters": {"type": ["array", "null"], "items": {"$ref": "#/$defs/parameter"}},
                   "results": {"type": "array", "items": {"$ref": "#/$defs/result"}},
@@ -59,19 +60,22 @@
               }
             },
             "bindings": {
-              "description": "Each relation the provider bound by name (DuckDB's register), with its Arrow contents.",
+              "description": "Each relation the provider bound by name, with its Arrow contents: DuckDB's register on a Python runner; on rust-host the temporary table it creates from the key set, with the statement it ran to create it (sql), which DuckDB logs as a statement.",
               "type": "array",
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["handle", "name", "type"],
+                "required": ["handle", "stage", "name", "type"],
                 "properties": {
                   "handle": {"type": "integer", "minimum": 0},
+                  "stage": {"enum": ["from_source", "materialize", "predict"]},
                   "name": {"type": "string"},
                   "type": {"type": "string"},
+                  "sql": {"type": "string"},
                   "rows": {"type": "integer", "minimum": 0},
                   "schema": {"$ref": "#/$defs/arrow_schema"},
-                  "digest": {"$ref": "#/$defs/sha256"}
+                  "digest": {"$ref": "#/$defs/sha256"},
+                  "values": {"$ref": "#/$defs/values"}
                 }
               }
             },
@@ -94,7 +98,7 @@
           }
         },
         "query_log": {
-          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound through the API (without). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped.",
+          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped.",
           "type": "object",
           "additionalProperties": false,
           "required": ["statements", "bindings", "compared", "differing"],
@@ -301,15 +305,29 @@
       }
     },
     "result": {
-      "description": "One read of a statement's result: the method, the rows it gave, their Arrow schema when it gave Arrow, and their digest (batch boundaries left out).",
+      "description": "One read of a statement's result: the method, the rows it gave, their Arrow schema when it gave Arrow, their digest as the Python capture computes it (batch boundaries left out; integrity within one runner only, never compared across runners, and rust-host writes none), and their values in the canonical form both languages write (values; decision H9, which the comparator compares).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["method", "rows", "digest"],
+      "required": ["method", "rows", "values"],
       "properties": {
         "method": {"type": "string"},
         "rows": {"type": "integer", "minimum": 0},
         "schema": {"$ref": "#/$defs/arrow_schema"},
-        "digest": {"$ref": "#/$defs/sha256"}
+        "digest": {"$ref": "#/$defs/sha256"},
+        "values": {"$ref": "#/$defs/values"}
+      }
+    },
+    "values": {
+      "description": "A result's columns and rows in canonical form (run_python.py's result_values, sdm-testkit's values, both held to contract/result-vectors.json): the column names, DuckDB's type names where a Python driver gives them (null otherwise), the SHA-256 of the rows in the order read and of the rows sorted by their canonical text, and the kinds of any value the canonical form does not hold.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["columns", "types", "ordered", "unordered", "unencodable"],
+      "properties": {
+        "columns": {"type": "array", "items": {"type": "string"}},
+        "types": {"type": ["array", "null"], "items": {"type": "string"}},
+        "ordered": {"$ref": "#/$defs/sha256"},
+        "unordered": {"$ref": "#/$defs/sha256"},
+        "unencodable": {"type": "array", "items": {"type": "string"}}
       }
     },
     "commit": {
