@@ -59,6 +59,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -302,7 +303,13 @@ class Landing:
             f'Base-SHA: {self.base}',
             f'Checkpoint-SHA: {self.checkpoint}',
         ]
-        return f'{subject}\n\n{self.summary}\n\n' + '\n'.join(trailers) + '\n'
+        # Wrapped as the earlier landing commits are, paragraph by paragraph.
+        summary = '\n\n'.join(
+            textwrap.fill(' '.join(part.split()), 72)
+            for part in self.summary.split('\n\n')
+            if part.strip()
+        )
+        return f'{subject}\n\n{summary}\n\n' + '\n'.join(trailers) + '\n'
 
     def expected_trailers(self) -> dict[str, str]:
         return {

@@ -320,7 +320,7 @@ def _(tmp: Path) -> tuple[bool, str]:
     message = c.fake.committed[0] if c.fake.committed else ''
     expected = (
         r'Land T1\.99: a test package\n\n'
-        r'Both reviews approve the candidate c{7}; [^\n]+\n\n'
+        r'Both reviews approve the candidate c{7}; (?:[^\n]{1,72}\n)+\n'
         r'Reviewed-by: independent reviewer \(fresh agent\) and Codex, T1\.99\n'
         r'Protected-paths: \.github/workflows/ci\.yml \(no gate removed\)\n'
         rf'Base-SHA: {BASE}\n'

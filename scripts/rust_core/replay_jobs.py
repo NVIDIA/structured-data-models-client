@@ -234,6 +234,12 @@ class Replay:
                 'VIRTUAL_ENV': str(venv),
                 'GITHUB_WORKSPACE': str(self.checkout),
                 'RUNNER_TEMP': str(self.tmp),
+                # Files a step may write its outputs and summary to; nothing
+                # here reads them back.
+                'GITHUB_OUTPUT': str(self.tmp / 'github-output'),
+                'GITHUB_ENV': str(self.tmp / 'github-env'),
+                'GITHUB_PATH': str(self.tmp / 'github-path'),
+                'GITHUB_STEP_SUMMARY': str(self.tmp / 'github-summary'),
                 'PIP_DISABLE_PIP_VERSION_CHECK': '1',
             }
         )
@@ -367,7 +373,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         return 0
 
-    root = Path(tempfile.mkdtemp(prefix='sdm-replay-'))
+    # Resolved: on macOS the temporary directory is reached through a symlink,
+    # and a test comparing a module's file with a warning's would see both.
+    root = Path(tempfile.mkdtemp(prefix='sdm-replay-')).resolve()
     replay = Replay(args, root, yaml.safe_load(text).get('env') or {})
     git('worktree', 'add', '--quiet', '--detach', str(replay.checkout), 'HEAD')
     results: list[tuple[str, bool, str]] = []
