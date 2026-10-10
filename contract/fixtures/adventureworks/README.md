@@ -1,6 +1,6 @@
 # The AdventureWorks fixture
 
-The `adventureworks` base of [`contract/bases.yaml`](../../bases.yaml) is a small subset of Microsoft's AdventureWorks sample database, for E27's AdventureWorks baseline case (`contract/cases/s1/adventureworks.demand-30d.json`, T1.21b).
+The `adventureworks` base of [`contract/bases.yaml`](../../bases.yaml) is a small subset of Microsoft's AdventureWorks sample database, for E27's AdventureWorks baseline case (`contract/cases/s1/base.adventureworks.json`, T1.21b).
 It is test data in this repository and ships in no distribution.
 
 ## Source
@@ -48,4 +48,4 @@ Each table is `adventureworks_<name>` with the source file's columns (the order 
 | In all | 1,000 |
 
 Built in `ref-pandas3` (Python 3.12.13, pandas 3.0.6); a second build gave the same bytes.
-`contract/tests/test_adventureworks.py` holds the committed base to at most 2,000 rows, and to this table.
+`contract/tests/test_refusal_map.py::test_the_fixture_holds_its_readme_s_rows_and_at_most_2000` holds the committed base to at most 2,000 rows, and to this table.

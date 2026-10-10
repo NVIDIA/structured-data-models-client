@@ -23,6 +23,7 @@
       "owner": "T1.24",
       "register": "P1B-2",
       "where": "packages/structured-data-models-client/src/sdm_client/_routing.py:283 (FROM_SOURCE_DUCKDB_TABLES), :317 (CORE_ROUTED); schema.py:1182-1184",
+      "holds": "FROM_SOURCE_DUCKDB_TABLES = (",
       "why": "T1.24 routes Schema.from_source with tables named onto the core, once T1.23's describe_source takes them (describe_source/tables_named)",
       "observed": {"python-core": {"stage": "from_source", "error": "RouteError", "code": null, "operation": null, "rule": null}}
     },
@@ -33,6 +34,7 @@
       "owner": "T1.24",
       "register": "P1B-3",
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:100",
+      "holds": "raise RouteError(",
       "why": "Reached only by forcing materialize without Schema.from_source; the journey's schema is described on the core once T1.24 routes Schema.from_source with tables named",
       "observed": {"python-core": {"stage": "materialize", "error": "RouteError", "code": null, "operation": null, "rule": null}}
     },
@@ -53,6 +55,7 @@
       "owner": "T1.24",
       "register": "P1B-2",
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:70-75",
+      "holds": "if relationships is not None:",
       "why": "The ledger's option refusals pass through to the core (T1.24), which takes the links given once T1.23's describe_source checks and keeps them; SourceSpec has no place for them yet",
       "observed": {"python-core": {"stage": "from_source", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": null, "rule": "relationships"}}
     },
@@ -141,6 +144,7 @@
       "owner": "T1.28",
       "register": "P1B-3",
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:233-235",
+      "holds": "raise _not_taken(name)",
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28); the contract's materialize and predict inputs have no place for them yet, and T1.24 passes the option through to the core rather than refuse it in the bridge",
       "observed": {"python-core": {"stage": "materialize", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "inference_config"}}
     },
@@ -176,6 +180,10 @@
       "id": "notebook",
       "removes": "nothing: the case as the notebook makes it",
       "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -226,6 +234,10 @@
         "expect": "route/from-source-tables"
       },
       "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
         "setup": null,
         "core": {
           "describe_source": {
@@ -250,6 +262,10 @@
       "id": "notebook-old-schema",
       "removes": "nothing; Schema.from_source left on the old route, materialize and predict forced onto the core",
       "python-core": {
+        "derive": {
+          "from": "notebook",
+          "steps": []
+        },
         "routes": [
           "query.materialize/indices-binary/duckdb",
           "query.materialize/indices-multiclass/duckdb",
@@ -302,6 +318,10 @@
       "id": "old-schema-no-inference-config",
       "removes": "inference_config, from the probe before",
       "python-core": {
+        "derive": {
+          "from": "notebook-old-schema",
+          "steps": [{"remove": "materialize.inference_config"}]
+        },
         "routes": [
           "query.materialize/indices-binary/duckdb",
           "query.materialize/indices-multiclass/duckdb",
@@ -353,6 +373,10 @@
       "id": "no-table-names",
       "removes": "the tables' names: each table is named as the source names it, and the query, keys, links and edits name them so",
       "python-core": {
+        "derive": {
+          "from": "notebook",
+          "steps": [{"rename_tables": true}]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -397,6 +421,10 @@
         "expect": "from_source/relationships"
       },
       "rust-host": {
+        "derive": {
+          "from": "notebook",
+          "steps": [{"clear": "tables"}]
+        },
         "setup": null,
         "core": {
           "describe_source": {
@@ -421,6 +449,10 @@
       "id": "no-relationships",
       "removes": "the relationships passed in (the contract has no place for them, so rust-host has no probe of its own)",
       "python-core": {
+        "derive": {
+          "from": "no-table-names",
+          "steps": [{"remove": "from_source.relationships"}]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -464,6 +496,10 @@
       "id": "no-keys",
       "removes": "the primary keys given",
       "python-core": {
+        "derive": {
+          "from": "no-relationships",
+          "steps": [{"remove": "from_source.primary_keys"}]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -500,6 +536,10 @@
         "expect": "describe_source/time_columns"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-table-names",
+          "steps": [{"clear": "primary_keys"}]
+        },
         "setup": null,
         "core": {
           "describe_source": {
@@ -520,6 +560,10 @@
       "id": "no-time-columns",
       "removes": "the time columns given; from here Schema.from_source takes no arguments",
       "python-core": {
+        "derive": {
+          "from": "no-keys",
+          "steps": [{"remove": "from_source.time_columns"}]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -555,6 +599,10 @@
         "expect": "describe_source/text_time"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-keys",
+          "steps": [{"clear": "time_columns"}]
+        },
         "setup": null,
         "core": {
           "describe_source": {
@@ -575,6 +623,22 @@
       "id": "no-text-dates",
       "removes": "the text columns whose values could be dates (text_time)",
       "python-core": {
+        "derive": {
+          "from": "no-time-columns",
+          "steps": [
+            {
+              "drop_columns": [
+                ["adventureworks_customers", "AccountNumber"],
+                ["adventureworks_products", "ProductNumber"],
+                ["adventureworks_sales_order_headers", "SalesOrderNumber"],
+                ["adventureworks_sales_order_headers", "PurchaseOrderNumber"],
+                ["adventureworks_sales_order_headers", "AccountNumber"],
+                ["adventureworks_sales_order_headers", "CreditCardApprovalCode"],
+                ["adventureworks_sales_order_details", "CarrierTrackingNumber"]
+              ]
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -619,6 +683,10 @@
         "expect": "describe_source/time_name"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-time-columns",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",
@@ -647,6 +715,19 @@
       "id": "no-edit-stamps",
       "removes": "the four ModifiedDate columns, edit stamps by name (time_name)",
       "python-core": {
+        "derive": {
+          "from": "no-text-dates",
+          "steps": [
+            {
+              "drop_columns": [
+                ["adventureworks_customers", "ModifiedDate"],
+                ["adventureworks_products", "ModifiedDate"],
+                ["adventureworks_sales_order_headers", "ModifiedDate"],
+                ["adventureworks_sales_order_details", "ModifiedDate"]
+              ]
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -695,6 +776,10 @@
         "expect": "describe_source/time_values"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-text-dates",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",
@@ -727,6 +812,17 @@
       "id": "no-sparse-times",
       "removes": "products' SellEndDate and DiscontinuedDate, held in fewer than half the rows (time_values)",
       "python-core": {
+        "derive": {
+          "from": "no-edit-stamps",
+          "steps": [
+            {
+              "drop_columns": [
+                ["adventureworks_products", "SellEndDate"],
+                ["adventureworks_products", "DiscontinuedDate"]
+              ]
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -777,6 +873,10 @@
         "expect": "describe_source/time_several"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-edit-stamps",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",
@@ -811,6 +911,17 @@
       "id": "one-order-time",
       "removes": "the order headers' DueDate and ShipDate, beside OrderDate (time_several)",
       "python-core": {
+        "derive": {
+          "from": "no-sparse-times",
+          "steps": [
+            {
+              "drop_columns": [
+                ["adventureworks_sales_order_headers", "DueDate"],
+                ["adventureworks_sales_order_headers", "ShipDate"]
+              ]
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -863,6 +974,10 @@
         "expect": "success"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-sparse-times",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",
@@ -899,6 +1014,14 @@
       "id": "notebook-schema-by-edits",
       "removes": "nothing more: the notebook's keys, relationships, cleared time column and deleted columns set by editing the schema the core described, then materialize with inference_config (which the contract has no place for, so rust-host has no probe of its own)",
       "python-core": {
+        "derive": {
+          "from": "one-order-time",
+          "steps": [
+            {
+              "edit_in": ["primary_keys", "relationships"]
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -966,6 +1089,10 @@
       "id": "no-inference-config",
       "removes": "inference_config",
       "python-core": {
+        "derive": {
+          "from": "notebook-schema-by-edits",
+          "steps": [{"remove": "materialize.inference_config"}]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -1028,6 +1155,10 @@
         "expect": "materialize/deeper_hop"
       },
       "rust-host": {
+        "derive": {
+          "from": "one-order-time",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",
@@ -1172,6 +1303,14 @@
       "id": "one-hop",
       "removes": "the order lines' link to customers, so the lines refer only to products",
       "python-core": {
+        "derive": {
+          "from": "no-inference-config",
+          "steps": [
+            {
+              "drop_relationship": {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"}
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -1233,6 +1372,10 @@
         "expect": "materialize/text_column"
       },
       "rust-host": {
+        "derive": {
+          "from": "no-inference-config",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",
@@ -1376,6 +1519,14 @@
       "id": "no-text",
       "removes": "products' Name, a text column",
       "python-core": {
+        "derive": {
+          "from": "one-hop",
+          "steps": [
+            {
+              "delete_column": ["adventureworks_products", "Name"]
+            }
+          ]
+        },
         "routes": [
           "schema.from-source/all-tables/duckdb",
           "schema.from-source/catalog-keys/duckdb",
@@ -1438,6 +1589,10 @@
         "expect": "success"
       },
       "rust-host": {
+        "derive": {
+          "from": "one-hop",
+          "steps": []
+        },
         "setup": [
           "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ProductNumber\"",

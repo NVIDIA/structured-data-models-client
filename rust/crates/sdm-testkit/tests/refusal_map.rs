@@ -188,6 +188,13 @@ fn check(map: &Value, observed: &BTreeMap<String, Value>) -> Vec<String> {
 #[test]
 fn the_rust_host_run_is_held_to_the_map() {
     let map = map();
+    // The first probe is the case's own core operations; the Python test
+    // binds every later one to the case (refusal_map.bound).
+    let case: Value = serde_json::from_slice(
+        &std::fs::read(contract().join("cases/s1/base.adventureworks.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(map["probes"][0]["rust-host"]["core"], case["core"]);
     let observed = observed();
     assert!(observed.len() >= 10, "{observed:?}");
     assert_eq!(check(&map, observed), Vec::<String>::new());

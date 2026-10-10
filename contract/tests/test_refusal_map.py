@@ -15,7 +15,10 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
 - The map (``contract/refusal-maps/base.adventureworks.json``): every entry
   names its rule and operation, an owning task among T1.22 to T1.28 and a
   register entry that is proposed, and the line it cites holds the rule;
-  each probe's input is a case input, its own edits aside.
+  each probe's input is a case input, its own edits aside; the line it
+  cites holds the rule (a core refusal) or the text it names (a bridge's or
+  the seam's); and every probe is the case with the removals it names
+  (``refusal_map.bound``), so a change to the case alone fails, seeded.
 - The run: every python-core probe of the map, run in process with its
   routes forced, is the map's (``refusal_map.check``): a refusal the map
   does not list fails, and so does an entry no probe reaches. Where the
@@ -143,11 +146,22 @@ def test_every_entry_names_its_rule_operation_owner_and_proposed_entry() -> (
         assert register[entry['register']]['status'] == 'proposed', entry['id']
         path, _, lines = entry['where'].partition(':')
         assert (ROOT / path).is_file(), entry['id']
+        first, last = re.match(r'(\d+)(?:-(\d+))?', lines).groups()
+        cited = (
+            (ROOT / path)
+            .read_text()
+            .splitlines()[int(first) - 1 : int(last or first)]
+        )
         if path.startswith('rust/'):
             # A core refusal: the line cited names the rule.
-            line = int(re.match(r'\d+', lines).group())
-            text = (ROOT / path).read_text().splitlines()[line - 1]
-            assert f'not_yet("{entry["rule"]}")' in text, entry['id']
+            assert any(
+                f'not_yet("{entry["rule"]}")' in text for text in cited
+            ), entry['id']
+        else:
+            # A refusal of the Python bridge or the seam: the lines cited
+            # hold what the entry says they do.
+            assert entry['holds'], entry['id']
+            assert any(entry['holds'] in text for text in cited), entry['id']
     for gap in document['gaps']:
         assert refusal_map.OWNER.match(gap['owner'])
     # Each probe's python-core input is a case input, but for the edits
@@ -157,6 +171,63 @@ def test_every_entry_names_its_rule_operation_owner_and_proposed_entry() -> (
         if 'python-core' in probe:
             case = refusal_map.probe_input(_case(), probe['python-core'])
             assert run_python._invalid(validate, case) is None, probe['id']
+
+
+def test_the_probes_are_the_case_s_journey_with_the_removals_named() -> None:
+    # The first probe of each runner is the case itself, and every other is
+    # an earlier probe with the removals it names (refusal_map.bound).
+    document = _map()
+    assert refusal_map.bound(_case(), document) == []
+    first = document['probes'][0]
+    assert first['python-core']['input'] == _case()['input']
+    assert first['rust-host']['core'] == _case()['core']
+
+
+def _case_changed(change: Any) -> dict[str, Any]:
+    case = _case()
+    change(case)
+    return case
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        lambda case: case['input']['edits'].pop(),
+        lambda case: case['input'].__setitem__(
+            'pql', case['input']['pql'] + ' '
+        ),
+        lambda case: case['input']['materialize'].pop('inference_config'),
+        lambda case: case['input']['from_source']['relationships'].pop(),
+        lambda case: case['input']['from_source']['primary_keys'].pop(
+            'products'
+        ),
+        lambda case: case['input']['from_source']['tables'].__setitem__(
+            'products', 'other_products'
+        ),
+        lambda case: case.__setitem__('until', 'materialize'),
+        lambda case: case['core']['describe_source']['source'][
+            'time_columns'
+        ].clear(),
+    ],
+)
+def test_a_change_to_the_case_alone_fails_the_map(change: Any) -> None:
+    # Seeded: the case changes and the map does not, so the map would test
+    # another journey than the case's; the binding refuses it.
+    assert refusal_map.bound(_case_changed(change), _map()) != []
+
+
+def test_a_probe_without_its_derivation_fails() -> None:
+    document = _map()
+    del document['probes'][3]['python-core']['derive']
+    failures = refusal_map.bound(_case(), document)
+    # And every probe after it, which derives from it, fails too.
+    assert failures[0] == 'no-table-names/python-core: no derive'
+    assert 'no-relationships/python-core: derives from no probe' in failures
+    document = _map()
+    document['probes'][4]['python-core']['input']['setup'] = ['SELECT 1']
+    assert 'no-relationships/python-core: not its derived input' in (
+        refusal_map.bound(_case(), document)
+    )
 
 
 def test_the_python_core_run_is_held_to_the_map() -> None:

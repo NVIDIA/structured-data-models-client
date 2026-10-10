@@ -27,6 +27,11 @@ of a probe is its first refusal, as the fields it can see, or its success:
 - ``rust-host``: the error's code and its fields ``operation`` and
   ``rule``.
 
+Every probe is bound to the case (:func:`bound`): the first probe of each
+runner is the case itself, and every other names, in ``derive``, the
+earlier probe it starts from and the removals it makes, which must give
+its input exactly, so a change to the case alone fails the map.
+
 :func:`check` holds the observations to the map: every probe the map gives
 the runner is observed, as the entry it names or as success; a refusal the
 map does not list fails, and so does an entry no probe of a runner it
@@ -365,3 +370,183 @@ def probe_input(case: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
     else:
         given.pop('edits', None)
     return {**copy.deepcopy(case), 'input': given}
+
+
+# --- the probes, bound to the case ---------------------------------------------------
+
+
+def _rename(case: dict[str, Any]) -> Any:
+    r"""Each table's name in the case, to the source table it names."""
+    names = case['input'].get('from_source', {}).get('tables', {})
+    names = names if isinstance(names, dict) else {}
+    return lambda table: names.get(table, table)
+
+
+def _renamed_link(link: dict[str, str], rename: Any) -> dict[str, str]:
+    return {
+        **link,
+        'source_table': rename(link['source_table']),
+        'target_table': rename(link['target_table']),
+    }
+
+
+def _python_step(
+    given: dict[str, Any], step: dict[str, Any], case: dict[str, Any]
+) -> dict[str, Any]:
+    r"""``given`` with one removal of a python-core probe's ``derive``."""
+    given = copy.deepcopy(given)
+    rename = _rename(case)
+    [(op, value)] = step.items()
+    if op == 'rename_tables':
+        source = given.get('from_source', {})
+        names = source.pop('tables')
+        local = names.get
+        for key in ('primary_keys', 'time_columns'):
+            if key in source:
+                source[key] = {local(t, t): v for t, v in source[key].items()}
+        if 'relationships' in source:
+            source['relationships'] = [
+                _renamed_link(link, lambda t: local(t, t))
+                for link in source['relationships']
+            ]
+        for edit in given.get('edits', []):
+            edit['table'] = local(edit['table'], edit['table'])
+        for alias, table in names.items():
+            given['pql'] = given['pql'].replace(f'{alias}.', f'{table}.')
+    elif op == 'remove':
+        *parents, last = value.split('.')
+        at = given
+        for key in parents:
+            at = at[key]
+        del at[last]
+        if 'from_source' in given and not given['from_source']:
+            del given['from_source']
+    elif op == 'drop_columns':
+        given['setup'] = [
+            *given.get('setup', []),
+            *(
+                f'ALTER TABLE {table} DROP COLUMN "{column}"'
+                for table, column in value
+            ),
+        ]
+    elif op == 'edit_in':
+        # The case's own keys and relationships, set by editing the schema
+        # rather than passed to Schema.from_source.
+        source = case['input'].get('from_source', {})
+        edits: list[dict[str, Any]] = []
+        if 'primary_keys' in value:
+            edits += [
+                {'op': 'set_primary_key', 'table': rename(t), 'column': k}
+                for t, k in source.get('primary_keys', {}).items()
+            ]
+        if 'relationships' in value:
+            edits.append(
+                {
+                    'op': 'set_relationships',
+                    'relationships': [
+                        _renamed_link(link, rename)
+                        for link in source.get('relationships', [])
+                    ],
+                }
+            )
+        given['edits'] = [*edits, *given.get('edits', [])]
+    elif op == 'drop_relationship':
+        for edit in given['edits']:
+            if edit['op'] == 'set_relationships':
+                edit['relationships'] = [
+                    link for link in edit['relationships'] if link != value
+                ]
+    elif op == 'delete_column':
+        table, column = value
+        given['edits'] = [
+            *given.get('edits', []),
+            {'op': 'delete_column', 'table': table, 'column': column},
+        ]
+    else:
+        raise MapFailure('a probe names a step this deriver does not take')
+    return given
+
+
+def _rust_step(core: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
+    r"""``core`` with one removal of a rust-host probe's ``derive``: a field
+    of describe_source's source emptied."""
+    core = copy.deepcopy(core)
+    [(op, value)] = step.items()
+    if op != 'clear':
+        raise MapFailure('a probe names a step this deriver does not take')
+    source = core['describe_source']['source']
+    source[value] = [] if isinstance(source[value], list) else {}
+    return core
+
+
+def bound(case: dict[str, Any], document: dict[str, Any]) -> list[str]:
+    r"""Each way the map's probes are not the case's journey with the
+    removals each names: empty when every probe's input is what its
+    ``derive`` makes of the case.
+
+    The first probe of each runner derives from the case with no removal,
+    so it is the case itself (python-core: its input and the stage it stops
+    at; rust-host: its core operations); every other probe derives from an
+    earlier one by the removals it names. A rust-host probe's setup is its
+    python-core twin's, and its materialize and predict inputs, which
+    python-core captures, are held to that twin's at run time.
+    """
+    failures: list[str] = []
+    derived: dict[str, dict[str, Any]] = {runner: {} for runner in RUNNERS}
+    for probe in document['probes']:
+        name = probe['id']
+        for runner in RUNNERS:
+            spec = probe.get(runner)
+            if spec is None:
+                continue
+            rule = spec.get('derive')
+            if not isinstance(rule, dict) or not isinstance(
+                rule.get('steps'), list
+            ):
+                failures.append(f'{name}/{runner}: no derive')
+                continue
+            start = rule.get('from')
+            if start == 'case':
+                if rule['steps']:
+                    failures.append(f'{name}/{runner}: the case with steps')
+                    continue
+                base = (
+                    case['input'] if runner == 'python-core' else case['core']
+                )
+                if runner == 'python-core' and spec['until'] != case['until']:
+                    failures.append(f"{name}/{runner}: not the case's until")
+            elif start in derived[runner]:
+                base = derived[runner][start]
+            else:
+                failures.append(f'{name}/{runner}: derives from no probe')
+                continue
+            made = copy.deepcopy(base)
+            try:
+                for step in rule['steps']:
+                    made = (
+                        _python_step(made, step, case)
+                        if runner == 'python-core'
+                        else _rust_step(made, step)
+                    )
+            except (KeyError, ValueError, TypeError, MapFailure):
+                failures.append(f'{name}/{runner}: its steps do not apply')
+                continue
+            derived[runner][name] = made
+            if runner == 'python-core':
+                if spec['input'] != made:
+                    failures.append(f'{name}/{runner}: not its derived input')
+            else:
+                held = spec['core']
+                if set(held) == {'describe_source'}:
+                    if held != made:
+                        failures.append(
+                            f'{name}/{runner}: not its derived core'
+                        )
+                elif held.get('describe_source') != made['describe_source']:
+                    failures.append(f'{name}/{runner}: not its derived core')
+                twin = probe.get('python-core')
+                if twin is None or spec.get('setup') != twin['input'].get(
+                    'setup'
+                ):
+                    failures.append(f"{name}/{runner}: not its twin's setup")
+    return failures
