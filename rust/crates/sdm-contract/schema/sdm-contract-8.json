@@ -2715,7 +2715,7 @@
           "const": "INVALID_CONFIGURATION"
         },
         {
-          "description": "The model endpoint could not be reached.",
+          "description": "The transport to the model endpoint failed: it could not reach the\nendpoint, or could not read its answer.",
           "type": "string",
           "const": "TRANSPORT_ERROR"
         },
