@@ -21,9 +21,13 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels a topic branch's run in progress. On the phase
+# branch and the lane branches it waits instead (E43): a landing's runs
+# there are recorded after the fast-forward, so the next landing or the
+# lane's next package must not cancel them.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !(github.ref_name == 'rust-core-phase-1' || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and pip's downloads.
@@ -103,9 +107,12 @@ jobs:
         run: python3 scripts/rust_core/selftest.py
         working-directory: .
       # land.py's checks, each passing a sound landing and refusing a seeded
-      # fault, against a scripted git and gh (decision E43).
-      - name: land.py self-tests
-        run: python3 scripts/rust_core/land_selftest.py
+      # fault, against a scripted git and gh, and prune_caches.py's
+      # stale-cache rules, with no network (decision E43).
+      - name: land.py and prune_caches.py self-tests
+        run: |
+          python3 scripts/rust_core/land_selftest.py
+          python3 scripts/rust_core/prune_caches.py --selftest
         working-directory: .
       # The contract schema: regenerated from the types and compared with the
       # committed file, locked to the current version; no entry merged into
@@ -147,7 +154,9 @@ jobs:
       # The test host's ICU, DuckDB's signed extension for v1.5.6, which it
       # installs the first time and checks against its recorded digest before
       # every load (decision E37): cached, so a run downloads it once.
-      - uses: actions/cache@v6
+      # Saved, like every cache here, only where SAVE_CACHES says.
+      - id: duckdb-extensions
+        uses: actions/cache/restore@v6
         with:
           path: ~/.duckdb/extensions/v1.5.6
           key: duckdb-extensions-v1.5.6-${{ runner.os }}-${{ runner.arch }}
@@ -171,6 +180,11 @@ jobs:
           pip install jsonschema
           python scripts/rust_core/compare.py --cases contract/cases --reference contract/reference/*.jsonl rust-host.jsonl
         working-directory: .
+      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.duckdb/extensions/v1.5.6
+          key: ${{ steps.duckdb-extensions.outputs.cache-primary-key }}
 
   # The client wheel, which carries the core as sdm_client._native (design,
   # "Packaging"). maturin, at the version native_wheel.py pins, builds it in
