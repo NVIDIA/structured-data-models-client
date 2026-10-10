@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/8",
+  "$id": "sdm-contract/9",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -1002,15 +1002,8 @@
       ]
     },
     "Dialect": {
-      "description": "A built-in SQL dialect.",
-      "type": "string",
-      "enum": [
-        "duckdb",
-        "sqlite",
-        "postgres",
-        "databricks",
-        "snowflake"
-      ]
+      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none (decision E54): which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
+      "type": "string"
     },
     "ProviderCapabilities": {
       "description": "What a host provider declares it answers.",
@@ -1300,7 +1293,7 @@
       "description": "A typed request for data.",
       "oneOf": [
         {
-          "description": "One part of the catalog for the tables named (all when empty), in\nthe shape [`DataRequest::expected`] gives.",
+          "description": "One part of the catalog for the tables named (all when empty): what\nthe provider returns is in the shape its plan expects, which the\ndata layer reads into a [`CatalogAnswer`].",
           "type": "object",
           "properties": {
             "tables": {

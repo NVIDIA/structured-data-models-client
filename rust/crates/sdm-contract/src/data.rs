@@ -13,14 +13,18 @@
 //! The port (decision H14): a [`DataLayer`] plans each request for the
 //! run's provider, as SQL statements in a dialect it renders or as the
 //! typed request passed to a host provider, with the Arrow schema the plan
-//! returns ([`FetchPlan`]). The core holds one data layer, in its
-//! composition root, and names no dialect; `sdm-data` implements it.
+//! returns ([`FetchPlan`]), and reads each `describe` answer the provider
+//! returned into the catalog's answer, in no dialect's shape
+//! ([`crate::catalog`], decision E54). The core holds one data layer, in
+//! its composition root, and names no dialect; `sdm-data` implements it.
 
 use std::collections::BTreeSet;
 
+use arrow_array::RecordBatch;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::CatalogAnswer;
 use crate::error::{CoreError, Detail, ErrorCode, ErrorKind};
 use crate::scalar::Scalar;
 use crate::types::{ColumnType, Field, Unit};
@@ -162,8 +166,9 @@ pub struct TieBreak(pub Vec<TieTerm>);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "request", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DataRequest {
-    /// One part of the catalog for the tables named (all when empty), in
-    /// the shape [`DataRequest::expected`] gives.
+    /// One part of the catalog for the tables named (all when empty): what
+    /// the provider returns is in the shape its plan expects, which the
+    /// data layer reads into a [`CatalogAnswer`].
     Describe {
         tables: Vec<String>,
         part: DescribePart,
@@ -417,17 +422,26 @@ pub struct ProviderCapabilities {
     pub sampling: Determinism,
 }
 
-/// A built-in SQL dialect.
+/// A built-in SQL dialect, by the name the host gives it. The contract
+/// names no dialect and knows none (decision E54): which names a build
+/// serves is the data layer's, which refuses one it does not serve before
+/// the run exists ([`DataLayer::capabilities`]).
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
-#[serde(rename_all = "snake_case")]
-pub enum Dialect {
-    Duckdb,
-    Sqlite,
-    Postgres,
-    Databricks,
-    Snowflake,
+#[serde(transparent)]
+pub struct Dialect(pub String);
+
+impl Dialect {
+    /// The dialect named `name`.
+    pub fn new(name: impl Into<String>) -> Self {
+        Dialect(name.into())
+    }
+
+    /// The dialect's name, as the host gave it.
+    pub fn name(&self) -> &str {
+        &self.0
+    }
 }
 
 /// The composition root's choice: a built-in SQL provider by dialect, which
@@ -486,8 +500,9 @@ impl FetchPlan {
 }
 
 /// The data-layer port (decision H14): what the core plans every data
-/// request through. A host provider's choice carries the capabilities it
-/// declared; for a SQL dialect the layer fills them itself (decision E33).
+/// request through, and reads every catalog answer with. A host provider's
+/// choice carries the capabilities it declared; for a SQL dialect the layer
+/// fills them itself (decision E33).
 pub trait DataLayer: Send + Sync {
     /// What the run's provider answers: the capabilities a host provider
     /// declared, or those this layer fills for its SQL dialect. A dialect
@@ -502,40 +517,34 @@ pub trait DataLayer: Send + Sync {
         request: &DataRequest,
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError>;
+
+    /// The catalog answer the run's provider returned to `request`, a
+    /// `describe`, read into the contract's dialect-neutral shape (decision
+    /// E54). The core calls it after admission: `batches` already hold the
+    /// schema the request's plan expects (decision H16, check (b)). A
+    /// request that is not a `describe` is refused with `INTERNAL_ERROR`.
+    fn read(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError>;
 }
 
 /// The columns of the answers whose shape the contract fixes (decision
-/// E36): every provider, a host provider included, answers these requests
-/// with exactly these columns, in this order, of these types, and check (b)
-/// holds it to them (decision H16). They are the reference's own names, as
-/// the result helper columns of `neighbors` and `lookup` are, so each
-/// answer is the result of the reference statement it stands for (H9).
+/// E36): every provider answers these requests with exactly these columns,
+/// in this order, of these types, and check (b) holds it to them (decision
+/// H16). The counts and bounds are aggregates every rendering names by
+/// alias, the reference's own aliases, as the result helper columns of
+/// `neighbors` and `lookup` are, so each answer is the result of the
+/// reference statement it stands for (H9).
+///
+/// A `describe` answer is a catalog's, whose columns a SQL dialect's own
+/// catalog fixes: a SQL plan expects the shape of the statement its dialect
+/// runs, which `sdm-data` reads ([`DataLayer::read`]), and a host provider
+/// answers in the dialect-neutral shape of [`catalog_columns`] (decision
+/// E54).
 pub mod results {
-    /// `describe` `tables`: one row per table, its name.
-    pub const TABLE_NAME: &str = "table_name";
-    /// `describe` `columns`, for one table: one row per column, in the
-    /// table's order: its position, name, declared type as the catalog
-    /// spells it, whether it is declared `NOT NULL`, its default and whether
-    /// it is part of the primary key.
-    pub const COLUMN_POSITION: &str = "cid";
-    pub const COLUMN_NAME: &str = "name";
-    pub const COLUMN_TYPE: &str = "type";
-    pub const COLUMN_NOT_NULL: &str = "notnull";
-    pub const COLUMN_DEFAULT: &str = "dflt_value";
-    pub const COLUMN_PRIMARY_KEY: &str = "pk";
-    /// `describe` `keys`, for one table: one row per constraint the catalog
-    /// declares on it, its type (`PRIMARY KEY`, `UNIQUE` and others the
-    /// reader leaves alone) and its columns.
-    pub const CONSTRAINT_TYPE: &str = "constraint_type";
-    pub const CONSTRAINT_COLUMNS: &str = "constraint_column_names";
-    /// `describe` `foreign_keys`, for one table: one row per column pair of
-    /// each declared foreign key, the constraint's index naming the key.
-    pub const CONSTRAINT_INDEX: &str = "constraint_index";
-    pub const REFERENCED_TABLE: &str = "referenced_table";
-    pub const REFERENCED_COLUMNS: &str = "referenced_column_names";
-    /// `describe` `indexes`: one row per index, its table and its
-    /// expressions as the catalog spells them (`TABLE_NAME` and this).
-    pub const INDEX_EXPRESSIONS: &str = "expressions";
     /// `key_counts`: one row per key, its position in the request, the
     /// table's rows, the key's distinct values among rows holding all of
     /// it, and the rows missing part of it.
@@ -549,49 +558,80 @@ pub mod results {
     pub const BOUNDS_POSITION: &str = "table_index";
     pub const BOUNDS_MIN: &str = "min_date";
     pub const BOUNDS_MAX: &str = "max_date";
+}
+
+/// The columns a host provider answers a `describe` with (decision E54):
+/// the catalog's answer in no dialect's shape, which the data layer reads
+/// into a [`CatalogAnswer`] as it is.
+pub mod catalog_columns {
+    /// `tables`: one row per table, its name. `indexes`: each index's
+    /// table.
+    pub const TABLE: &str = "table";
+    /// `columns`, for one table: one row per column, in the table's order:
+    /// its name, its declared type as the source spells it, whether it is
+    /// declared `NOT NULL` and whether it is part of the primary key.
+    pub const NAME: &str = "name";
+    pub const TYPE: &str = "type";
+    pub const NOT_NULL: &str = "not_null";
+    pub const PRIMARY_KEY: &str = "primary_key";
+    /// `keys`, for one table: one row per key it declares, its kind
+    /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`] or another the reader leaves
+    /// alone) and its columns. `foreign_keys` and `indexes`: the columns of
+    /// each.
+    pub const KIND: &str = "kind";
+    pub const COLUMNS: &str = "columns";
+    pub const KIND_PRIMARY: &str = "primary";
+    pub const KIND_UNIQUE: &str = "unique";
+    /// `foreign_keys`, for one table: one row per column pair of each
+    /// foreign key it declares, the key's number naming it, the table it
+    /// refers to, and the columns on both sides.
+    pub const KEY: &str = "key";
+    pub const REFERENCED_TABLE: &str = "referenced_table";
+    pub const REFERENCED_COLUMNS: &str = "referenced_columns";
     /// The name of a list's item field in these answers.
-    pub const LIST_ITEM: &str = "l";
+    pub const LIST_ITEM: &str = "item";
 }
 
 impl DataRequest {
-    /// The schema every provider's answer to this request must have: fixed
-    /// for the requests whose answer the contract shapes ([`results`]), a
-    /// discovery marker for those whose columns are the source's own (a
-    /// preview, a scan, a sample, neighbors, a lookup) and for a count no
-    /// provider renders yet.
+    /// The schema a host provider's answer to this request must have:
+    /// fixed for the requests whose answer the contract shapes ([`results`],
+    /// and [`catalog_columns`] for a `describe`), a discovery marker for
+    /// those whose columns are the source's own (a preview, a scan, a
+    /// sample, neighbors, a lookup) and for a count no provider renders
+    /// yet. A SQL dialect's plan expects the same, but for a `describe`,
+    /// whose answer is its own catalog's (decision E54).
     pub fn expected(&self) -> ExpectedSchema {
         use ColumnType::{Bool, Int32, Int64, Utf8};
+        use catalog_columns as c;
         let timestamp = || ColumnType::Timestamp {
             unit: Unit::Us,
             zone: None,
         };
         let names = || ColumnType::List {
-            item: Box::new(field(results::LIST_ITEM, Utf8, true)),
+            item: Box::new(field(c::LIST_ITEM, Utf8, true)),
         };
         let fields = match self {
             DataRequest::Describe { part, .. } => match part {
-                DescribePart::Tables => vec![field(results::TABLE_NAME, Utf8, false)],
+                DescribePart::Tables => vec![field(c::TABLE, Utf8, false)],
                 DescribePart::Columns => vec![
-                    field(results::COLUMN_POSITION, Int32, false),
-                    field(results::COLUMN_NAME, Utf8, false),
-                    field(results::COLUMN_TYPE, Utf8, false),
-                    field(results::COLUMN_NOT_NULL, Bool, false),
-                    field(results::COLUMN_DEFAULT, Utf8, true),
-                    field(results::COLUMN_PRIMARY_KEY, Bool, false),
+                    field(c::NAME, Utf8, false),
+                    field(c::TYPE, Utf8, false),
+                    field(c::NOT_NULL, Bool, false),
+                    field(c::PRIMARY_KEY, Bool, false),
                 ],
                 DescribePart::Keys => vec![
-                    field(results::CONSTRAINT_TYPE, Utf8, false),
-                    field(results::CONSTRAINT_COLUMNS, names(), false),
+                    field(c::KIND, Utf8, false),
+                    field(c::COLUMNS, names(), false),
                 ],
                 DescribePart::ForeignKeys => vec![
-                    field(results::CONSTRAINT_INDEX, Int64, false),
-                    field(results::REFERENCED_TABLE, Utf8, false),
-                    field(results::CONSTRAINT_COLUMNS, names(), false),
-                    field(results::REFERENCED_COLUMNS, names(), false),
+                    field(c::KEY, Int64, false),
+                    field(c::REFERENCED_TABLE, Utf8, false),
+                    field(c::COLUMNS, names(), false),
+                    field(c::REFERENCED_COLUMNS, names(), false),
                 ],
                 DescribePart::Indexes => vec![
-                    field(results::TABLE_NAME, Utf8, false),
-                    field(results::INDEX_EXPRESSIONS, Utf8, true),
+                    field(c::TABLE, Utf8, false),
+                    field(c::COLUMNS, names(), false),
                 ],
             },
             DataRequest::KeyCounts { .. } => vec![
@@ -616,7 +656,8 @@ impl DataRequest {
     }
 }
 
-fn field(name: &str, column_type: ColumnType, nullable: bool) -> Field {
+/// A field of `name`, of `column_type`, with no metadata.
+pub fn field(name: &str, column_type: ColumnType, nullable: bool) -> Field {
     Field {
         name: name.to_owned(),
         column_type,

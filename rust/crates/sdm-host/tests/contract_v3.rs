@@ -246,7 +246,7 @@ fn wide_fetch(pad: usize) -> TestFetch {
         },
         plan: Some(FetchPlan::Sql {
             statements: vec![SqlStatement {
-                dialect: Dialect::Duckdb,
+                dialect: Dialect::new("duckdb"),
                 text: format!("SELECT * FROM orders{}", " ".repeat(pad)),
                 params: vec![],
             }],

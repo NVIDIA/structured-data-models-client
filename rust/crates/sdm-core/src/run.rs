@@ -27,6 +27,7 @@ use std::task::{Context, Poll, Waker};
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
+use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderError};
 use sdm_contract::ops::OperationResult;
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
@@ -162,6 +163,23 @@ impl Asker {
         };
         let plan = data.plan(&request)?;
         Ok(self.ask_planned(request, plan))
+    }
+
+    /// The catalog answer `data` holds, the admitted answer to `request`,
+    /// a `describe`: read by the run's data layer into the contract's
+    /// dialect-neutral shape (decision E54), so the operation reads no
+    /// dialect's catalog.
+    pub fn read(
+        &self,
+        request: &DataRequest,
+        data: &ArrowData,
+    ) -> Result<CatalogAnswer, CoreError> {
+        let Some(access) = &self.data else {
+            return Err(internal(
+                "the operation read a catalog answer and names no provider",
+            ));
+        };
+        access.read(request, &data.batches)
     }
 
     /// The answer to `request`, asked with `plan` in place of the data

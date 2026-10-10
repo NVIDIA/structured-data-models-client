@@ -16,10 +16,10 @@ use arrow_schema::{DataType, Schema};
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::{ColumnType, CoreError};
 
-use crate::catalog::{CatalogColumn, Constraint};
 use crate::names;
 use crate::not_yet;
 use crate::values::{self, Value};
+use sdm_contract::catalog::{CatalogColumn, CatalogKey, KeyKind};
 
 /// The rows a preview reads: a preview that returns this many may have left
 /// rows unread, which the reference then reads the whole table for.
@@ -79,7 +79,7 @@ impl InferredTable {
 pub fn table(
     name: &str,
     catalog: &[CatalogColumn],
-    constraints: &[Constraint],
+    constraints: &[CatalogKey],
     schema: &Schema,
     batches: &[RecordBatch],
 ) -> Result<InferredTable, CoreError> {
@@ -88,18 +88,18 @@ pub fn table(
         // The reference refuses an empty table as a RuntimeError.
         return Err(not_yet("empty_table"));
     }
-    let single = |kinds: &[&str]| -> BTreeSet<String> {
+    let single = |kinds: &[KeyKind]| -> BTreeSet<String> {
         constraints
             .iter()
-            .filter(|c| kinds.contains(&c.kind.as_str()) && c.columns.len() == 1)
+            .filter(|c| kinds.contains(&c.kind) && c.columns.len() == 1)
             .map(|c| c.columns[0].clone())
             .collect()
     };
-    let declared_primary = single(&["PRIMARY KEY"]);
-    let declared_unique = single(&["PRIMARY KEY", "UNIQUE"]);
+    let declared_primary = single(&[KeyKind::Primary]);
+    let declared_unique = single(&[KeyKind::Primary, KeyKind::Unique]);
     let unique = constraints
         .iter()
-        .filter(|c| c.kind == "PRIMARY KEY" || c.kind == "UNIQUE")
+        .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique))
         .map(|c| c.columns.iter().cloned().collect::<BTreeSet<_>>())
         .collect::<Vec<_>>();
 

@@ -13,11 +13,13 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray};
+use arrow_array::{
+    ArrayRef, Int64Array, ListArray, RecordBatch, StringArray, TimestampMicrosecondArray,
+};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::data::{
     AttachmentId, DataRequest, DescribePart, Determinism, Dialect, OptionalRequest,
-    ProviderCapabilities, ProviderChoice,
+    ProviderCapabilities, ProviderChoice, catalog_columns,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -229,13 +231,18 @@ fn catalog(request: &DataRequest) -> Option<FetchResult> {
             part: DescribePart::Indexes,
             ..
         } => Some(data(vec![
+            // A host provider answers in the contract's catalog shape, in
+            // no dialect's (decision E54).
             (
-                "table_name",
+                catalog_columns::TABLE,
                 Arc::new(StringArray::from(Vec::<&str>::new())),
             ),
             (
-                "expressions",
-                Arc::new(StringArray::from(Vec::<&str>::new())),
+                catalog_columns::COLUMNS,
+                Arc::new(ListArray::new_null(
+                    Arc::new(Field::new(catalog_columns::LIST_ITEM, DataType::Utf8, true)),
+                    0,
+                )),
             ),
         ])),
         DataRequest::TimeBounds { .. } => Some(data(vec![
@@ -247,6 +254,27 @@ fn catalog(request: &DataRequest) -> Option<FetchResult> {
             ("max_date", us(1_720_310_400_000_000)),
         ])),
         _ => None,
+    }
+}
+
+/// What [`catalog`] answers, but the indexes in DuckDB's own catalog
+/// shape, which a DuckDB plan expects and `sdm-data` reads (decision E54).
+fn duckdb_catalog(request: &DataRequest) -> Option<FetchResult> {
+    match request {
+        DataRequest::Describe {
+            part: DescribePart::Indexes,
+            ..
+        } => Some(data(vec![
+            (
+                "table_name",
+                Arc::new(StringArray::from(Vec::<&str>::new())),
+            ),
+            (
+                "expressions",
+                Arc::new(StringArray::from(Vec::<&str>::new())),
+            ),
+        ])),
+        _ => catalog(request),
     }
 }
 
@@ -307,7 +335,7 @@ fn a_seed_of_2_to_the_70_reaches_the_sample_as_that_exact_integer() {
 #[test]
 fn duckdb_refuses_a_seed_its_parser_refuses_by_name() {
     let duckdb = ProviderChoice::Sql {
-        dialect: Dialect::Duckdb,
+        dialect: Dialect::new("duckdb"),
     };
     for (seed, refused) in [
         ((1_u128 << 31) - 1, false),
@@ -329,7 +357,7 @@ fn duckdb_refuses_a_seed_its_parser_refuses_by_name() {
                             sample = true;
                             break;
                         }
-                        let answer = catalog(&asked.request).unwrap();
+                        let answer = duckdb_catalog(&asked.request).unwrap();
                         run.submit_fetch(asked.id, answer).unwrap();
                     }
                     if sample {

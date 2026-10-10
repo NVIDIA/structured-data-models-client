@@ -5,7 +5,9 @@
 //! DuckDB's catalog renderings (T1.11b): each is the statement the
 //! reference runs for the same step, as the driver capture recorded it on
 //! `base.regression` (the T1.11a row of the design maps each statement to
-//! its request), with the schema the contract fixes for its answer.
+//! its request), with the schema the contract fixes for its answer, or,
+//! for a `describe`, the reference statement's own columns, which
+//! `sdm-data` reads into the contract's catalog answer (decision E54).
 
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, ProviderChoice,
@@ -34,7 +36,24 @@ const REFERENCE: [&str; 12] = [
 
 fn duckdb() -> ProviderChoice {
     ProviderChoice::Sql {
-        dialect: Dialect::Duckdb,
+        dialect: Dialect::new("duckdb"),
+    }
+}
+
+/// The columns DuckDB's catalog statement for `part` returns, in order:
+/// the reference statement's own.
+fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
+    match part {
+        DescribePart::Tables => &["table_name"],
+        DescribePart::Columns => &["cid", "name", "type", "notnull", "dflt_value", "pk"],
+        DescribePart::Keys => &["constraint_type", "constraint_column_names"],
+        DescribePart::ForeignKeys => &[
+            "constraint_index",
+            "referenced_table",
+            "constraint_column_names",
+            "referenced_column_names",
+        ],
+        DescribePart::Indexes => &["table_name", "expressions"],
     }
 }
 
@@ -42,10 +61,19 @@ fn duckdb() -> ProviderChoice {
 fn rendered(request: &DataRequest) -> String {
     match Data::new().plan(request, &duckdb()).unwrap() {
         FetchPlan::Sql { statements, expect } => {
-            assert_eq!(expect, request.expected());
+            match request {
+                DataRequest::Describe { part, .. } => {
+                    let ExpectedSchema::Schema { fields } = &expect else {
+                        panic!("a catalog answer has a fixed shape");
+                    };
+                    let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+                    assert_eq!(names, catalog_columns(*part));
+                }
+                _ => assert_eq!(expect, request.expected()),
+            }
             assert_eq!(statements.len(), 1);
             assert!(statements[0].params.is_empty());
-            assert_eq!(statements[0].dialect, Dialect::Duckdb);
+            assert_eq!(statements[0].dialect, Dialect::new("duckdb"));
             statements[0].text.clone()
         }
         other => panic!("not SQL: {other:?}"),
@@ -191,7 +219,7 @@ fn the_requests_without_a_rendering_are_refused_by_name() {
 }
 
 #[test]
-fn a_host_provider_is_held_to_the_same_shapes() {
+fn a_host_provider_is_held_to_the_contract_s_shapes() {
     let host = ProviderChoice::Host {
         capabilities: Data::new().capabilities(&duckdb()).unwrap(),
     };

@@ -44,7 +44,7 @@
       "rule": "tables_named",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:46",
+      "where": "rust/crates/sdm-core/src/describe.rs:49",
       "why": "describe_source's overrides, applied between inference and the key count as the reference applies them; the notebook names each table by another name than its source's, which SourceSpec.tables (source names only) cannot carry, so T1.23 adds the name each table is given",
       "observed": {"rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "tables_named"}}
     },
@@ -65,7 +65,7 @@
       "rule": "primary_keys",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:49",
+      "where": "rust/crates/sdm-core/src/describe.rs:52",
       "why": "describe_source's key overrides",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "primary_keys"},
@@ -78,7 +78,7 @@
       "rule": "time_columns",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:52",
+      "where": "rust/crates/sdm-core/src/describe.rs:55",
       "why": "describe_source's time-column overrides",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_columns"},
@@ -154,7 +154,7 @@
       "rule": "deeper_hop",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:654",
+      "where": "rust/crates/sdm-core/src/materialize.rs:637",
       "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
       "observed": {
         "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "deeper_hop"},
@@ -167,7 +167,7 @@
       "rule": "text_column",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:668",
+      "where": "rust/crates/sdm-core/src/materialize.rs:651",
       "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
       "observed": {
         "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "text_column"},

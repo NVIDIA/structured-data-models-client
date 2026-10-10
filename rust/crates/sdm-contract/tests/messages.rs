@@ -27,7 +27,7 @@ fn every_message_round_trips() {
 fn provider_choices_round_trip() {
     for choice in [
         ProviderChoice::Sql {
-            dialect: Dialect::Duckdb,
+            dialect: Dialect::new("duckdb"),
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {

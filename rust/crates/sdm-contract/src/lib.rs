@@ -20,6 +20,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod catalog;
 pub mod data;
 pub mod error;
 pub mod facts;
@@ -39,7 +40,7 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 8;
+pub const CONTRACT_VERSION: u32 = 9;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
 /// a trailing newline.

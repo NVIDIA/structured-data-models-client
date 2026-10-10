@@ -229,12 +229,23 @@ impl DataLayer for Fake {
     fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
         Ok(FetchPlan::Sql {
             statements: vec![SqlStatement {
-                dialect: Dialect::Duckdb,
+                dialect: Dialect::new("duckdb"),
                 text: "SELECT 1".into(),
                 params: vec![],
             }],
             expect: ExpectedSchema::Discover {},
         })
+    }
+
+    fn read(
+        &self,
+        _: &DataRequest,
+        _: &ProviderChoice,
+        _: &[arrow_array::RecordBatch],
+    ) -> Result<sdm_contract::catalog::CatalogAnswer, CoreError> {
+        Ok(sdm_contract::catalog::CatalogAnswer::Tables(vec![
+            "fake".into(),
+        ]))
     }
 }
 
@@ -273,7 +284,7 @@ fn named(err: &CoreError, field: &str) -> String {
 fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     let root = root();
     let duckdb = ProviderChoice::Sql {
-        dialect: Dialect::Duckdb,
+        dialect: Dialect::new("duckdb"),
     };
     let access = root.data_access(&duckdb).unwrap();
     // The dialect declares what sdm-data renders for it; an undeclared
@@ -309,10 +320,13 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
         panic!("DuckDB answers with SQL");
     };
     assert_eq!(statements.len(), 1);
-    assert_eq!(expect, tables.expected());
+    // A catalog answer is in the dialect's own catalog's shape, which the
+    // data layer reads, not the contract's (decision E54).
+    assert!(matches!(expect, ExpectedSchema::Schema { .. }));
+    assert_ne!(expect, tables.expected());
 
     let sqlite = ProviderChoice::Sql {
-        dialect: Dialect::Sqlite,
+        dialect: Dialect::new("sqlite"),
     };
     let err = root.data_access(&sqlite).err().unwrap();
     assert_eq!(
@@ -321,6 +335,17 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     );
     assert_eq!(named(&err, "dialect"), "sqlite");
     assert!(run_of(&root, describe(sqlite)).is_err());
+    // A name the data layer does not know is refused the same way, and
+    // not repeated: the contract names no dialect, so it lets any through.
+    let unknown = ProviderChoice::Sql {
+        dialect: Dialect::new("a dialect\nof no name"),
+    };
+    let err = root.data_access(&unknown).err().unwrap();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+    );
+    assert!(!err.fields.contains_key("dialect"));
 
     // Swapping the data layer replaces the root's one value.
     let swapped = CompositionRoot::new(Arc::new(Fake));

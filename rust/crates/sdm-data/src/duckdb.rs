@@ -29,15 +29,56 @@
 //! table's columns are read from its alias. What each returns is the
 //! reference statement's result, its helper columns under the reference's
 //! names (decision H9 gates on the results, not the text).
+//!
+//! From T1.21c it reads its catalog's answers too ([`read`], decision E54):
+//! the columns of `PRAGMA table_info`, `duckdb_tables()`,
+//! `duckdb_constraints()` and `duckdb_indexes()`, which its plans expect
+//! ([`expected`]), its constraint types and its index expressions, read
+//! into the contract's dialect-neutral catalog answer, so the core reads
+//! no DuckDB.
 
 use std::collections::BTreeSet;
 
+use arrow_array::RecordBatch;
+use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, KeyKind};
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, FetchPlan, Filter,
-    MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, SEED_BATCH, SEED_KEY, SqlParam,
-    SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window,
+    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
+    Filter, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, SEED_BATCH, SEED_KEY, SqlParam,
+    SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window, field,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+
+use crate::read::{self, ColumnNames, ForeignKeyNames};
+
+/// The dialect's name on the wire.
+pub(crate) const NAME: &str = "duckdb";
+
+/// The columns of DuckDB's catalog answers: what the statements [`plan`]
+/// renders for `describe` return, the reference's statements' own.
+mod catalog {
+    /// `duckdb_tables()` and `duckdb_indexes()`: the table's name.
+    pub const TABLE_NAME: &str = "table_name";
+    /// `PRAGMA table_info`: each column's position, name, declared type,
+    /// whether it is declared `NOT NULL`, its default and whether it is
+    /// part of the primary key.
+    pub const CID: &str = "cid";
+    pub const NAME: &str = "name";
+    pub const TYPE: &str = "type";
+    pub const NOTNULL: &str = "notnull";
+    pub const DFLT_VALUE: &str = "dflt_value";
+    pub const PK: &str = "pk";
+    /// `duckdb_constraints()`: each constraint's type and columns, and for
+    /// a foreign key its index, the table referred to and its columns.
+    pub const CONSTRAINT_TYPE: &str = "constraint_type";
+    pub const CONSTRAINT_COLUMN_NAMES: &str = "constraint_column_names";
+    pub const CONSTRAINT_INDEX: &str = "constraint_index";
+    pub const REFERENCED_TABLE: &str = "referenced_table";
+    pub const REFERENCED_COLUMN_NAMES: &str = "referenced_column_names";
+    /// `duckdb_indexes()`: each index's expressions, as one text.
+    pub const EXPRESSIONS: &str = "expressions";
+    /// The item field of DuckDB's lists.
+    pub const LIST_ITEM: &str = "l";
+}
 
 /// The optional requests this dialect renders.
 const RENDERED: &[OptionalRequest] = &[
@@ -156,17 +197,155 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             lookup(request, table, key, columns)?
         }
         DataRequest::Scan { .. } | DataRequest::CountRows { .. } => {
-            return Err(crate::not_rendered(request, Dialect::Duckdb));
+            return Err(crate::not_rendered(request, NAME));
         }
     };
     Ok(FetchPlan::Sql {
         statements: vec![SqlStatement {
-            dialect: Dialect::Duckdb,
+            dialect: Dialect::new(NAME),
             text,
             params,
         }],
-        expect: request.expected(),
+        expect: expected(request),
     })
+}
+
+/// The schema DuckDB's answer to `request` has: its catalog's own for a
+/// `describe`, what the contract fixes for every other request
+/// (`DataRequest::expected`).
+pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
+    use ColumnType::{Bool, Int32, Int64, Utf8};
+    use catalog as c;
+    let DataRequest::Describe { part, .. } = request else {
+        return request.expected();
+    };
+    let names = || ColumnType::List {
+        item: Box::new(field(c::LIST_ITEM, Utf8, true)),
+    };
+    let fields = match part {
+        DescribePart::Tables => vec![field(c::TABLE_NAME, Utf8, false)],
+        DescribePart::Columns => vec![
+            field(c::CID, Int32, false),
+            field(c::NAME, Utf8, false),
+            field(c::TYPE, Utf8, false),
+            field(c::NOTNULL, Bool, false),
+            field(c::DFLT_VALUE, Utf8, true),
+            field(c::PK, Bool, false),
+        ],
+        DescribePart::Keys => vec![
+            field(c::CONSTRAINT_TYPE, Utf8, false),
+            field(c::CONSTRAINT_COLUMN_NAMES, names(), false),
+        ],
+        DescribePart::ForeignKeys => vec![
+            field(c::CONSTRAINT_INDEX, Int64, false),
+            field(c::REFERENCED_TABLE, Utf8, false),
+            field(c::CONSTRAINT_COLUMN_NAMES, names(), false),
+            field(c::REFERENCED_COLUMN_NAMES, names(), false),
+        ],
+        DescribePart::Indexes => vec![
+            field(c::TABLE_NAME, Utf8, false),
+            field(c::EXPRESSIONS, Utf8, true),
+        ],
+    };
+    ExpectedSchema::Schema { fields }
+}
+
+/// DuckDB's answer to a `describe` of `part`, which holds [`expected`]'s
+/// schema, read into the contract's catalog answer.
+pub(crate) fn read(
+    part: DescribePart,
+    batches: &[RecordBatch],
+) -> Result<CatalogAnswer, CoreError> {
+    use catalog as c;
+    match part {
+        DescribePart::Tables => read::tables(batches, c::TABLE_NAME),
+        DescribePart::Columns => read::columns(
+            batches,
+            &ColumnNames {
+                name: c::NAME,
+                declared_type: c::TYPE,
+                not_null: c::NOTNULL,
+                primary_key: c::PK,
+            },
+        ),
+        DescribePart::Keys => read::keys(
+            batches,
+            c::CONSTRAINT_TYPE,
+            c::CONSTRAINT_COLUMN_NAMES,
+            key_kind,
+        ),
+        DescribePart::ForeignKeys => read::foreign_keys(
+            batches,
+            &ForeignKeyNames {
+                key: c::CONSTRAINT_INDEX,
+                referenced_table: c::REFERENCED_TABLE,
+                columns: c::CONSTRAINT_COLUMN_NAMES,
+                referenced_columns: c::REFERENCED_COLUMN_NAMES,
+            },
+        ),
+        DescribePart::Indexes => {
+            let mut found = Vec::new();
+            for batch in batches {
+                let tables = read::strings(batch, c::TABLE_NAME)?;
+                let expressions = read::strings(batch, c::EXPRESSIONS)?;
+                for row in 0..batch.num_rows() {
+                    // An index with no expressions covers no column the
+                    // reference reads (it skips such a row).
+                    if let (Some(table), Some(expressions)) =
+                        (read::text(tables, row), read::text(expressions, row))
+                    {
+                        found.push(CatalogIndex {
+                            table,
+                            columns: indexed_columns(&expressions),
+                        });
+                    }
+                }
+            }
+            Ok(CatalogAnswer::Indexes(found))
+        }
+    }
+}
+
+/// A constraint type as `duckdb_constraints()` spells it.
+fn key_kind(constraint_type: &str) -> KeyKind {
+    match constraint_type {
+        "PRIMARY KEY" => KeyKind::Primary,
+        "UNIQUE" => KeyKind::Unique,
+        _ => KeyKind::Other,
+    }
+}
+
+/// The columns an index's `expressions` name, as the reference reads them
+/// (`_indexed_column` of its DuckDB sampler): a list in brackets of one
+/// expression, quoted or not, is that one column, its quotes taken off; a
+/// list holding a comma is read as its pieces, each so unquoted, so it is
+/// never one column, as the reference reads none from it; text not in
+/// brackets names none.
+pub(crate) fn indexed_columns(expressions: &str) -> Vec<String> {
+    let expression = expressions.trim();
+    let Some(inner) = expression
+        .strip_prefix('[')
+        .and_then(|e| e.strip_suffix(']'))
+    else {
+        return vec![];
+    };
+    inner
+        .trim()
+        .split(',')
+        .map(|piece| unquoted(piece.trim()))
+        .collect()
+}
+
+/// One expression with its single quotes, then its double quotes, taken
+/// off, as the reference's `strip("'")` and slice take them.
+fn unquoted(expression: &str) -> String {
+    let expression = expression.trim_matches('\'');
+    if expression.starts_with('"') && expression.ends_with('"') {
+        // The reference's slice: a lone quote is the empty name.
+        let inner = expression.get(1..expression.len().saturating_sub(1).max(1));
+        return inner.unwrap_or_default().replace("\"\"", "\"");
+    }
+    expression.to_owned()
 }
 
 /// A request field this rendering does not take, refused by name.

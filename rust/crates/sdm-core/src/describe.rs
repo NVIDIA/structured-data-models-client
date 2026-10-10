@@ -9,7 +9,9 @@
 //! statement it runs (design, T1.11a row): the table list; for each table,
 //! its columns and constraints (one step), then its first 1,000 rows; the
 //! declared foreign keys of every table (one step); and, when keys are
-//! checked, one count over every key the source does not enforce. As built
+//! checked, one count over every key the source does not enforce. Each
+//! catalog answer is read by the run's data layer, in no dialect's shape
+//! (decision E54), before anything here reads it. As built
 //! at T1.11b the operation is thin: it describes every table of the source
 //! with no overrides, and refuses by name ([`sdm_schema::not_yet`]) the
 //! inputs whose description takes a rule it does not port yet (register
@@ -19,13 +21,14 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
 use sdm_contract::data::{DataRequest, DescribePart, TableKey};
 use sdm_contract::ops::{
     ColumnRef, DescribedColumn, DescribedSource, DescribedTable, OperationResult,
     SourceDescription, SourceSpec,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
-use sdm_schema::catalog::{self, ForeignKeyPart};
+use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
 use sdm_schema::not_yet;
 
@@ -52,15 +55,16 @@ pub(crate) async fn run(
         return Err(not_yet("time_columns"));
     }
 
-    let listed = ask(
-        &asker,
-        DataRequest::Describe {
-            tables: vec![],
-            part: DescribePart::Tables,
-        },
-    )
-    .await?;
-    let names = catalog::table_names(&listed.batches)?;
+    let names = table_names(
+        describe(
+            &asker,
+            DataRequest::Describe {
+                tables: vec![],
+                part: DescribePart::Tables,
+            },
+        )
+        .await?,
+    )?;
     if names.is_empty() {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
@@ -73,7 +77,7 @@ pub(crate) async fn run(
     let mut tables = Vec::with_capacity(names.len());
     for name in &names {
         let one = || vec![name.clone()];
-        let [columns, keys] = ask_all(
+        let [columns, keys] = describe_all(
             &asker,
             [
                 DataRequest::Describe {
@@ -87,7 +91,7 @@ pub(crate) async fn run(
             ],
         )
         .await?;
-        let declared = catalog::columns(&columns.batches)?;
+        let declared = declared_columns(columns)?;
         if declared.is_empty() {
             return Err(CoreError::new(
                 ErrorKind::InvalidRequest,
@@ -96,7 +100,7 @@ pub(crate) async fn run(
             )
             .with_field("field", Detail::text("tables")));
         }
-        let constraints = catalog::constraints(&keys.batches)?;
+        let constraints = declared_keys(keys)?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
         let preview = ask(
             &asker,
@@ -126,7 +130,7 @@ pub(crate) async fn run(
         )?);
     }
 
-    let foreign = ask_all_vec(
+    let foreign = describe_vec(
         &asker,
         names
             .iter()
@@ -138,12 +142,8 @@ pub(crate) async fn run(
     )
     .await?;
     let mut links = Vec::new();
-    for (table, answer) in tables.iter().zip(&foreign) {
-        links.extend(declared_links(
-            table,
-            &catalog::foreign_keys(&answer.batches)?,
-            &tables,
-        ));
+    for (table, answer) in tables.iter().zip(foreign) {
+        links.extend(declared_links(table, &foreign_keys(answer)?, &tables));
     }
     // The reference keys a keyless table by the one column the declared
     // foreign keys refer to, before the keys are counted; not ported yet.
@@ -205,15 +205,12 @@ pub(crate) async fn run(
 /// constraint, as the reference's mapping by column does.
 fn declared_links(
     table: &InferredTable,
-    parts: &[ForeignKeyPart],
+    parts: &[CatalogForeignKey],
     tables: &[InferredTable],
 ) -> Vec<Vec<ColumnRef>> {
-    let mut keys: Vec<(&String, &ForeignKeyPart)> = Vec::new();
+    let mut keys: Vec<(&String, &CatalogForeignKey)> = Vec::new();
     for part in parts {
-        let pairs = parts
-            .iter()
-            .filter(|p| p.constraint == part.constraint)
-            .count();
+        let pairs = parts.iter().filter(|p| p.key == part.key).count();
         let ([column], [_, ..]) = (part.columns.as_slice(), part.referenced_columns.as_slice())
         else {
             continue;
@@ -301,15 +298,72 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
     data(asker.fetch(request)?.await)
 }
 
-/// The answers to `requests`, asked together in one step, in order.
-async fn ask_all<const N: usize>(
+/// The catalog's answer to `request`, a `describe`: fetched, admitted,
+/// then read by the run's data layer (decision E54).
+pub(crate) async fn describe(
+    asker: &Asker,
+    request: DataRequest,
+) -> Result<CatalogAnswer, CoreError> {
+    let data = ask(asker, request.clone()).await?;
+    asker.read(&request, &data)
+}
+
+/// The catalog's answers to `requests`, asked together in one step, in
+/// order.
+async fn describe_all<const N: usize>(
     asker: &Asker,
     requests: [DataRequest; N],
-) -> Result<[ArrowData; N], CoreError> {
-    let answers = ask_all_vec(asker, requests.into()).await?;
+) -> Result<[CatalogAnswer; N], CoreError> {
+    let answers = describe_vec(asker, requests.into()).await?;
     answers
         .try_into()
         .map_err(|_| internal("a step answered another number of requests"))
+}
+
+async fn describe_vec(
+    asker: &Asker,
+    requests: Vec<DataRequest>,
+) -> Result<Vec<CatalogAnswer>, CoreError> {
+    let answers = ask_all_vec(asker, requests.clone()).await?;
+    requests
+        .iter()
+        .zip(&answers)
+        .map(|(request, data)| asker.read(request, data))
+        .collect()
+}
+
+/// The refusal of a catalog answer the data layer read as another part
+/// than the one asked for.
+fn another_part() -> CoreError {
+    internal("the data layer read another part of the catalog than was asked for")
+}
+
+fn table_names(answer: CatalogAnswer) -> Result<Vec<String>, CoreError> {
+    match answer {
+        CatalogAnswer::Tables(names) => Ok(names),
+        _ => Err(another_part()),
+    }
+}
+
+fn declared_columns(answer: CatalogAnswer) -> Result<Vec<CatalogColumn>, CoreError> {
+    match answer {
+        CatalogAnswer::Columns(columns) => Ok(columns),
+        _ => Err(another_part()),
+    }
+}
+
+fn declared_keys(answer: CatalogAnswer) -> Result<Vec<CatalogKey>, CoreError> {
+    match answer {
+        CatalogAnswer::Keys(keys) => Ok(keys),
+        _ => Err(another_part()),
+    }
+}
+
+fn foreign_keys(answer: CatalogAnswer) -> Result<Vec<CatalogForeignKey>, CoreError> {
+    match answer {
+        CatalogAnswer::ForeignKeys(keys) => Ok(keys),
+        _ => Err(another_part()),
+    }
 }
 
 async fn ask_all_vec(

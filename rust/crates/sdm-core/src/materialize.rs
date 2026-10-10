@@ -37,6 +37,7 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef, RecordBatch, UInt32Array};
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
+use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, KeySet, MATCHES_COLUMN,
     SeedBound, TableColumn, Window,
@@ -57,7 +58,7 @@ use sdm_engine::random::{Entropy, default_rng};
 use sdm_engine::sample::{self, Values};
 use sdm_request::payload::{self, Sampled, SampledLink, SampledTable};
 
-use crate::describe::ask;
+use crate::describe::{ask, describe};
 use crate::profiles::Profile;
 use crate::run::{ArrowData, Asker, Attachment, internal};
 
@@ -429,25 +430,11 @@ async fn time_bounds(asker: &Asker, table: &Table) -> Result<Bounds, CoreError> 
     })
 }
 
-/// The column `expressions` name, as the reference reads an index's
-/// expressions (`_indexed_column`): one column, quoted or not; none for an
-/// index over several.
-fn indexed_column(expressions: &str) -> Option<String> {
-    let expression = expressions.trim();
-    let inner = expression.strip_prefix('[')?.strip_suffix(']')?.trim();
-    if inner.contains(',') {
-        return None;
-    }
-    let inner = inner.trim_matches('\'');
-    match inner.strip_prefix('"').and_then(|e| e.strip_suffix('"')) {
-        Some(quoted) => Some(quoted.replace("\"\"", "\"")),
-        None => Some(inner.to_owned()),
-    }
-}
-
 /// The sampler's check of the indexes its reads would use: every key and
 /// foreign key the source does not enforce as unique, less those an index
-/// covers, warned of as the reference warns of them.
+/// over that one column covers, warned of as the reference warns of them.
+/// The data layer reads the source's indexes (decision E54): which column
+/// an index covers is its dialect's reading, never this module's.
 async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> {
     let mut missing: Vec<(String, Vec<String>)> = Vec::new();
     let mut add = |table: &str, column: &str| match missing.iter_mut().find(|(t, _)| t == table) {
@@ -476,7 +463,7 @@ async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> 
     if missing.is_empty() {
         return Ok(());
     }
-    let answer = ask(
+    let answer = describe(
         asker,
         DataRequest::Describe {
             tables: vec![],
@@ -484,25 +471,21 @@ async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> 
         },
     )
     .await?;
-    use sdm_contract::data::results::{INDEX_EXPRESSIONS, TABLE_NAME};
-    for batch in &answer.batches {
-        let tables = named(batch, TABLE_NAME)?.as_string::<i32>();
-        let expressions = named(batch, INDEX_EXPRESSIONS)?.as_string::<i32>();
-        for row in 0..batch.num_rows() {
-            if tables.is_null(row) || expressions.is_null(row) {
-                continue;
-            }
-            let table = tables.value(row);
-            if graph.table(table).is_none() {
-                continue;
-            }
-            if let Some(column) = indexed_column(expressions.value(row))
-                && let Some(at) = missing.iter().position(|(t, _)| t == table)
-            {
-                missing[at].1.retain(|c| *c != column);
-                if missing[at].1.is_empty() {
-                    missing.remove(at);
-                }
+    let CatalogAnswer::Indexes(indexes) = answer else {
+        return Err(internal(
+            "the data layer read another part of the catalog than was asked for",
+        ));
+    };
+    for index in indexes {
+        if graph.table(&index.table).is_none() {
+            continue;
+        }
+        if let [column] = index.columns.as_slice()
+            && let Some(at) = missing.iter().position(|(t, _)| *t == index.table)
+        {
+            missing[at].1.retain(|c| c != column);
+            if missing[at].1.is_empty() {
+                missing.remove(at);
             }
         }
     }
@@ -1046,17 +1029,4 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             query,
         },
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::indexed_column;
-
-    #[test]
-    fn an_index_names_its_one_column_as_the_reference_reads_it() {
-        assert_eq!(indexed_column("[user_id]").as_deref(), Some("user_id"));
-        assert_eq!(indexed_column(" ['\"a\"\"b\"'] ").as_deref(), Some("a\"b"));
-        assert_eq!(indexed_column("[a, b]"), None);
-        assert_eq!(indexed_column("a"), None);
-    }
 }

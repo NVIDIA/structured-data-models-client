@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The canonical schema and its inference over Arrow (Phase 1b). It holds no
-//! SQL and matches on no provider: it reads the answers of the data
-//! requests in the shapes the contract fixes (`sdm_contract::data::results`)
-//! and the rows a preview returned, as Arrow.
+//! SQL and matches on no provider: it reads the catalog's answers as the
+//! data layer read them, in no dialect's shape (`sdm_contract::catalog`,
+//! decision E54), the key counts in the shape the contract fixes
+//! (`sdm_contract::data::results`) and the rows a preview returned, as
+//! Arrow.
 //!
 //! As built at T1.11b it is thin: it infers what `Schema.from_source` needs
 //! for the plain tables of `base.regression`, by the reference's rules
@@ -18,8 +20,7 @@
 //! refused for its name or values or a time of day, a preview of a whole 1,000 rows, an
 //! empty table. T1.23 and T1.25 complete it.
 //!
-//! - [`catalog`] reads the catalog answers: table names, columns,
-//!   constraints, foreign keys and key counts.
+//! - [`catalog`] reads the key counts.
 //! - [`infer`] infers one table: each column's data and semantic types,
 //!   its primary key and its time column.
 

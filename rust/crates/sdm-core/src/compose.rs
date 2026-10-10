@@ -8,11 +8,15 @@
 //! The root holds one `Arc<dyn DataLayer>`, which `sdm_host::default_root`
 //! builds; swapping the data layer replaces that one value. A run takes the
 //! provider its operation names, with the capabilities the layer gives for
-//! it, and asks for data only through [`DataAccess::plan`]. Nothing in the
-//! core matches on a backend's name.
+//! it, asks for data only through [`DataAccess::plan`], and reads a
+//! catalog answer only through [`DataAccess::read`], into the contract's
+//! dialect-neutral shape (decision E54). Nothing in the core matches on a
+//! backend's name.
 
 use std::sync::Arc;
 
+use arrow_array::RecordBatch;
+use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderCapabilities, ProviderChoice};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -74,6 +78,18 @@ impl DataAccess {
             return Err(undeclared(optional.name()));
         }
         self.layer.plan(request, &self.provider)
+    }
+
+    /// The catalog answer the run's provider returned to `request`, a
+    /// `describe` it planned, read by the data layer into the contract's
+    /// dialect-neutral shape (decision E54). `batches` are the answer as
+    /// the run admitted it (decision H16, check (b)).
+    pub fn read(
+        &self,
+        request: &DataRequest,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        self.layer.read(request, &self.provider, batches)
     }
 }
 

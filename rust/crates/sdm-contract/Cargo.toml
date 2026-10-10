@@ -17,6 +17,7 @@ publish.workspace = true
 test-ops = []
 
 [dependencies]
+arrow-array.workspace = true
 arrow-buffer.workspace = true
 arrow-schema.workspace = true
 base64.workspace = true
