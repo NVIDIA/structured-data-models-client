@@ -4,7 +4,7 @@
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
 # the outputs refusal (T1.24) and the adapter's _preflight (T1.28), are
 # deleted in Phase 1 by those tasks; the transport and the result's objects
-# stay the host's.
+# stay the host's. Frozen meanwhile (E50).
 
 r"""``predict`` on the core: the model call and its answer (T1.11d).
 

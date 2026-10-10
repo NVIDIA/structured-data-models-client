@@ -1,0 +1,5 @@
+{
+  "format": "sdm-bridge-changes/1",
+  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust), allowance (an owner-approved ALLOWANCES row) or refactor (behaviour kept). Entries the merge base already holds are spent and may be pruned.",
+  "changes": {}
+}

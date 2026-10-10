@@ -99,10 +99,13 @@ jobs:
       - run: cargo clippy --workspace --exclude sdm-testkit --all-targets --locked -- -D warnings
       # The binding with its test-only operations, as its tests build it.
       - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
-      # The L0 guards (T1.10c): the crate graph (l0_deps.py), and the
-      # vocabulary, SQL-fragment, skip and ignore, clippy-ban and step-variant
-      # scans (l0_scan.py). The bans themselves are enforced by the clippy
-      # runs above, from rust/clippy.toml.
+      # The L0 guards (T1.10c): the crate graph (l0_deps.py), with the
+      # bridge freeze (bridge_freeze.py, E50), whose baseline ratchets
+      # against the merge base with origin/rust-core-phase-1, which the full
+      # checkout above fetches; and the vocabulary, SQL-fragment, skip and
+      # ignore, clippy-ban and step-variant scans (l0_scan.py). The bans
+      # themselves are enforced by the clippy runs above, from
+      # rust/clippy.toml.
       - name: L0 graph, bans and scans
         run: |
           python3 scripts/rust_core/l0_deps.py

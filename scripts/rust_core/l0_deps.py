@@ -37,7 +37,12 @@ features, every target platform) and checks:
   files), and every ``Bridge code:`` header names a phase; which task owns
   a rule a header names is for review, not this check. The parser
   is not bridge code (E18): nothing is asked of it, and it carries no such
-  header.
+  header;
+- the bridge freeze (decision E50, ``bridge_freeze.py``): no change to the
+  core route's Python bridge is silent: each frozen function's fingerprint
+  against the merge base with ``origin/rust-core-phase-1`` (``--base``
+  names another) changes only as ``bridge_changes.json`` declares, and its
+  rule counts rise only under an owner-approved allowance.
 
 ``selftest.py`` holds each rule to a seeded fixture it must fail on.
 """
@@ -56,6 +61,7 @@ from typing import Any
 import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bridge_freeze  # noqa: E402
 from l0_scan import read_rust  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -479,14 +485,22 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help='read cargo metadata from this file instead',
     )
+    parser.add_argument(
+        '--base',
+        default=bridge_freeze.BASE_REF,
+        help="the branch whose merge base with HEAD holds the bridge freeze's "
+        'baseline to ratchet against',
+    )
     args = parser.parse_args(argv)
     metadata = (
         json.loads(args.metadata.read_text())
         if args.metadata
         else cargo_metadata(args.root)
     )
+    checks = run_checks(metadata, args.root)
+    checks['freeze'] = bridge_freeze.problems(args.root, args.base)
     failed = False
-    for name, problems in run_checks(metadata, args.root).items():
+    for name, problems in checks.items():
         for problem in problems:
             print(f'{name}: {problem}')
         print(f'{name}: {"FAIL" if problems else "ok"}')

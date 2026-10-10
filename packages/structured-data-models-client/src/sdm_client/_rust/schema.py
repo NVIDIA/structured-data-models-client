@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
 # link inference, key marking, edit stamps and the schema's warnings
-# (T1.23) and the option refusals (T1.24), are deleted in Phase 1 by those
-# tasks; building today's Schema from the description stays the host's.
+# (T1.21d) and the option refusals (T1.24), are deleted in Phase 1 by those
+# tasks; building today's Schema stays the host's. Frozen meanwhile (E50).
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 

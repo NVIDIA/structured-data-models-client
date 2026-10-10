@@ -1,0 +1,939 @@
+{
+  "format": "sdm-bridge-freeze/2",
+  "about": "The bridge freeze (decision E50): per covered function of the core route's Python bridge, its fingerprint, its rule sites and what it calls. Regenerate with scripts/rust_core/bridge_freeze.py --write; a change against the merge base is declared in bridge_changes.json.",
+  "files": {
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
+      "<module>": {
+        "fingerprint": "b0ecf2f46a255043ddbd1fd20499e67469e191125e6d5ea7e0cde05db03c99a8",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "build": {
+        "fingerprint": "b87d99b0b42d0622b283737cd7b681f7242255f4c6fd4f6898a3edb55e2fec6a",
+        "raise": 1,
+        "warn": 0,
+        "branch": 12,
+        "calls": [
+          ".__setattr__",
+          "._mark_key_columns",
+          "predictive_query.time_columns.TimeColumnChoice",
+          "sdm_client._rust.codec.decode_scalar",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.materializers.sources.EngineTables",
+          "sdm_client.materializers.sources.wire_dtype",
+          "sdm_client.schema.Column",
+          "sdm_client.schema.Relationship",
+          "sdm_client.schema.SourceTable"
+        ]
+      },
+      "from_source": {
+        "fingerprint": "6ca76cc3330142d650a8b3d485881f114e9c8af08e245cc86428c17841d06180",
+        "raise": 2,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".items",
+          ".take",
+          ".values",
+          "sdm_client._rust.codec.attachment",
+          "sdm_client._rust.providers.duckdb.DuckDBProvider",
+          "sdm_client._rust.run.run",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
+      "<module>": {
+        "fingerprint": "9345e9b0409fe5f23c8751e2777fb0d5762ca3a4a7d8cbb71a341a01e1f97c26",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "_anchor": {
+        "fingerprint": "b95ea89e0d6e5011a18c2a5ada7e73c99814249740530264a53ec3972185ebc6",
+        "raise": 2,
+        "warn": 0,
+        "branch": 5,
+        "calls": [
+          ".as_unit",
+          ".tz_convert",
+          ".tz_localize",
+          "sdm_client._rust.codec.timestamp",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_indices": {
+        "fingerprint": "658f8de413023137a45da2f3af263e11d4f381c78538b7d3583a8929310c5540",
+        "raise": 3,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".get",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_not_taken": {
+        "fingerprint": "598f82876807adb55c4c77a1d0f88c166fd23eae2c884d2841f48922de37575f",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "description": {
+        "fingerprint": "4bb96bac5f2ba7c8d695745e504f7db9eccec12b59dd6008a800415ec00f38db",
+        "raise": 3,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".append",
+          ".get",
+          ".items",
+          "sdm_client._routing.RouteError",
+          "sdm_client.materializers.sources.wire_dtype",
+          "sdm_client.schema._as_key_tuple"
+        ]
+      },
+      "gather": {
+        "fingerprint": "a390bd162f7e3122601957ed017f323720d21c9a92ead145366248b15ef56d4d",
+        "raise": 3,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          "._check_entity_count",
+          "._check_limits",
+          "._check_shape",
+          "._run_mode_for",
+          ".check_consistent",
+          ".get",
+          ".take",
+          ".to_string",
+          "predictive_query.validator.utils.table_name",
+          "sdm_client._rust.codec.attachment",
+          "sdm_client._rust.codec.seed",
+          "sdm_client._rust.providers.duckdb.DuckDBProvider",
+          "sdm_client._rust.run.run"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
+      "<module>": {
+        "fingerprint": "a5356cd661189d335fe96fb4401e9965ba6f8c2a9ee81339c746fa5f1a33805d",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "_copied": {
+        "fingerprint": "58e3fda97077418be3f92af5a1a8e1b816bd21d54d146f4951a4490bd45b8cbb",
+        "raise": 0,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".append",
+          ".items",
+          ".pop"
+        ]
+      },
+      "_encoded": {
+        "fingerprint": "f6bc6bcb2531586a957eb581aeaf812de9a73bc4e0759cb561e8c99ea0dc8cd3",
+        "raise": 0,
+        "warn": 0,
+        "branch": 13,
+        "calls": [
+          ".append",
+          ".encode",
+          ".items",
+          ".join",
+          ".pop"
+        ]
+      },
+      "_not_taken": {
+        "fingerprint": "ae496baff29c3d9a850eb39e3580158a08b781e767ea3fdc540e5209e4a2475b",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_payload": {
+        "fingerprint": "d9061a285f7423ab88ce87416e10788d5cc95ec3f6ff8387d64ace6f55f15016",
+        "raise": 1,
+        "warn": 0,
+        "branch": 1,
+        "calls": [
+          ".encode",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_refusal": {
+        "fingerprint": "e77c413784f97bb64785920923f9bfa9ccf2cf43293f9997ead0fef5bfa46a4d",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "_rows": {
+        "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": [
+          ".__arrow_c_stream__",
+          ".read_all",
+          ".to_pylist"
+        ]
+      },
+      "predict": {
+        "fingerprint": "d853c8f2f15778cdb13b4ec69b87d8311ec91e8a350a1bbd211626396a636465",
+        "raise": 5,
+        "warn": 0,
+        "branch": 9,
+        "calls": [
+          "._payloads",
+          "._preflight",
+          "._send",
+          ".append",
+          ".take",
+          "sdm_api.generated.tfm_api.PredictionItem",
+          "sdm_client._routing.RouteError",
+          "sdm_client._rust.codec.attachment",
+          "sdm_client._rust.run.run",
+          "sdm_client.adapters.relational._request_id",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.result.PredictionResult"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py": {
+      "<module>": {
+        "fingerprint": "84b16dab7e427c21ab62c2bdec1fb87d505dca96bd98b8967e0dc759ad62889c",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": []
+      },
+      "SDMClient._answer_in_parts": {
+        "fingerprint": "3bdd0d4dd9531e91e14272b0d498931c8b990fa16f32f512864a9c2177116cc0",
+        "raise": 2,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".append",
+          "sdm_client.client.SDMClient._candidates_no_context_teaches",
+          "sdm_client.client._by_step",
+          "sdm_client.client._ranked",
+          "sdm_client.client._refuse_outputs_a_ranking_cannot_give",
+          "sdm_client.client._warn_of_steps_that_carry_no_explanation",
+          "sdm_client.decompose.about_the_part",
+          "sdm_client.models.spec_for"
+        ]
+      },
+      "SDMClient._prepare": {
+        "fingerprint": "7445da483034ad0cfce45c8edde75798bddf6e3c8ce1aad2c98082ad91e0bcea",
+        "raise": 2,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          ".default_output",
+          ".get",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "SDMClient._send": {
+        "fingerprint": "f518762d3b8ae98f80aafaa61656fc29577cec4b664d1c09f69d06105ed5130a",
+        "raise": 2,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          ".explain_error",
+          ".predict"
+        ]
+      },
+      "SDMClient._spec": {
+        "fingerprint": "62fe113482328f15994f51ec540612a5ab68502bbb3e81f7eb2c476391a35a75",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": [
+          "sdm_client.models.spec_for"
+        ]
+      },
+      "SDMClient.predict": {
+        "fingerprint": "b262c3595b3f80c298ec300497300c3c7a350c4e7c258a8727e5d778af191bb4",
+        "raise": 1,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          ".normalize",
+          ".predict",
+          ".prediction_plan",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.request.warn_of_rows_scored_from_their_own_answers"
+        ]
+      },
+      "_adapter_for": {
+        "fingerprint": "f3b57aa4d20ec3127f462227dd6e1df818233b7162fce794c1ddf12149f71f08",
+        "raise": 1,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          "sdm_client.adapters.relational.RelationalAdapter",
+          "sdm_client.adapters.tabular.TabularAdapter",
+          "sdm_client.errors.UnknownModelError"
+        ]
+      },
+      "_empty_answer": {
+        "fingerprint": "a4d6ad43fb50873018222d82d3f81ec1cd58eeef249ed77a19d4c5153be28ec0",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": [
+          "sdm_client.result.PredictionResult"
+        ]
+      },
+      "_names_its_rows": {
+        "fingerprint": "f60a6fbd6593842710266ca6f3f0fc2ef5221168fcad6127839be1646da10de4",
+        "raise": 0,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          "sdm_client.schema._as_key_tuple"
+        ]
+      },
+      "_predicts_on_the_core": {
+        "fingerprint": "8caca51104a4bf9350e3c660a90b53a65999d28e2c3240aba7bc4f1e8bfa809a",
+        "raise": 0,
+        "warn": 0,
+        "branch": 3,
+        "calls": [
+          "sdm_client._routing.route"
+        ]
+      },
+      "_report_absent": {
+        "fingerprint": "32743ca4adf52b5a9b0d4fb14a51653ad63afc3c921880713183178f826195a8",
+        "raise": 0,
+        "warn": 1,
+        "branch": 2,
+        "calls": [
+          ".absent",
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      },
+      "_require_a_request": {
+        "fingerprint": "c6e85d5f0f7b97832bce8492aaa1f609b17cc481abcc1798e9b085e2e8078a33",
+        "raise": 1,
+        "warn": 0,
+        "branch": 1,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_require_output_names": {
+        "fingerprint": "5e05ccb451f3e5caf4525bcd1e28ffc383408e848cfdad9394f0f91d30574a7a",
+        "raise": 2,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py": {
+      "<module>": {
+        "fingerprint": "e87611a5c41d4ce6bd1340983c2e2d92f9c572aa527ccafe55a52dc2063df6db",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "PredictiveQuery._in_parts": {
+        "fingerprint": "417ff604e4f7a51b550f2e1926a7ec203409f766cb789ff0f738a72e8384b46d",
+        "raise": 2,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          ".append",
+          ".items",
+          ".materialize",
+          ".pop",
+          "sdm_client.decompose.about_the_part",
+          "sdm_client.query.PredictiveQuery"
+        ]
+      },
+      "PredictiveQuery._refusal": {
+        "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": [
+          ".join",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.query.PredictiveQuery._how_to_resolve_an_ambiguous_link",
+          "sdm_client.query.PredictiveQuery._why_the_target_is_text",
+          "sdm_client.query._without_a_remedy_this_caller_cannot_run",
+          "sdm_client.query._without_the_validator_trace"
+        ]
+      },
+      "PredictiveQuery._resolve": {
+        "fingerprint": "71b3daf900c3cbb024a7f55a3ab125a0593f307fe3c8682be7171f48efcaf574",
+        "raise": 2,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          "predictive_query.validate",
+          "sdm_client._routing.route",
+          "sdm_client._rust.s0.shadow",
+          "sdm_client._rust.s0.validate",
+          "sdm_client.schema.to_schema_definition"
+        ]
+      },
+      "PredictiveQuery._validate_materialize_args": {
+        "fingerprint": "1eb94f742c4b94d4495609e7b4a49cde8f395a307323a33047e125a97d19ccd0",
+        "raise": 12,
+        "warn": 0,
+        "branch": 25,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "PredictiveQuery.materialize": {
+        "fingerprint": "c3e4e4e8cabb5a51d04fb5530b976ce0f7eb204ec90b572349eac3695aaf7a7b",
+        "raise": 4,
+        "warn": 0,
+        "branch": 19,
+        "calls": [
+          ".capitalize",
+          ".indices",
+          ".materialize",
+          ".table",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.models.spec_for"
+        ]
+      },
+      "_is_hashable": {
+        "fingerprint": "6da4282552697131d888acedeef58b444c5e0618d9dfa64aa63505b79497d0d5",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": {
+      "<module>": {
+        "fingerprint": "d4b61e1ec4c801d1f97025513d98e0e7c8ae75745538c07f7a8bb67b3409d9d7",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "RelationalMaterializer.__init__": {
+        "fingerprint": "cd8dfca0163cfd54302c2393ed77745b9be332465c7f0726c3a567ed67ebb74d",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": []
+      },
+      "RelationalMaterializer._check_entity_count": {
+        "fingerprint": "08f520c5b1c9b43542f195ecabb4ef668c7917883379052a7065a5f565a42a49",
+        "raise": 1,
+        "warn": 0,
+        "branch": 3,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "RelationalMaterializer._check_limits": {
+        "fingerprint": "0fb065947f3d0870dfbec78271a01ad1f3e3bd10b26750cc7c51165b35951e5c",
+        "raise": 2,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".get",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "RelationalMaterializer._check_shape": {
+        "fingerprint": "a5f2d5c45e4bf85b07837e00037b54bedc82dc256ebd629cf1df4564c5c322b0",
+        "raise": 6,
+        "warn": 0,
+        "branch": 17,
+        "calls": [
+          ".get",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "RelationalMaterializer._gather": {
+        "fingerprint": "0e20fb7d918698fcfa864d9c099134e081cc3b93712fd299f6ddb50b57b341e8",
+        "raise": 2,
+        "warn": 0,
+        "branch": 7,
+        "calls": [
+          "._get_task_table",
+          ".materialize_task",
+          ".to_string",
+          "sdm_client._routing.route",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.materializers.relational.RelationalMaterializer._engine_errors",
+          "sdm_client.materializers.relational.RelationalMaterializer._get_model",
+          "sdm_client.materializers.relational.RelationalMaterializer._narrow_context",
+          "sdm_client.materializers.relational._candidates_to_rank",
+          "sdm_client.materializers.relational._warn_rows_the_graph_dropped"
+        ]
+      },
+      "RelationalMaterializer._refuse_a_name_the_wire_reserves": {
+        "fingerprint": "1773fc00d7291ca543635ca669ff685a29a86810b9aeae0e5cf27d94cd5f413a",
+        "raise": 1,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".items",
+          ".join",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.schema._and_list"
+        ]
+      },
+      "RelationalMaterializer._run_mode_for": {
+        "fingerprint": "4ec3bf9246f7f8dfe19277873fdf01fd1f99513bbf7b21947f1150af06031995",
+        "raise": 1,
+        "warn": 0,
+        "branch": 3,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "RelationalMaterializer._unreserved": {
+        "fingerprint": "2bbe9f520da12579222c69933e685cfcf585dc2c715d00162ad0455438b39e6b",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": [
+          ".lstrip"
+        ]
+      },
+      "RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities": {
+        "fingerprint": "7a3b675295cec2a304c9ad6877d2c3e27bebd5830012bb67c9c8855054fddf4b",
+        "raise": 0,
+        "warn": 1,
+        "branch": 6,
+        "calls": [
+          ".partition",
+          "sdm_client.core.warnings.caller_stacklevel",
+          "sdm_client.materializers.tabular._holds_two_whole_numbers"
+        ]
+      },
+      "RelationalMaterializer.materialize": {
+        "fingerprint": "da4d7b9c89f7f204227a26246e72ab6a46e0c3e9fecfc143bab89b4d4eedb331",
+        "raise": 3,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".get",
+          ".snapshot",
+          ".to_string",
+          "predictive_query.validator.utils.table_name",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.request.Request.materialized"
+        ]
+      },
+      "_columns_to_leave_out": {
+        "fingerprint": "240620380b764dc9dc6e03d98aa7e2e1097f9579a0a5fb90918818ece008cd94",
+        "raise": 2,
+        "warn": 0,
+        "branch": 7,
+        "calls": [
+          ".extend",
+          ".get",
+          ".get_exclude_cols_dict",
+          ".items",
+          ".setdefault",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_drop_context_that_answers_the_question": {
+        "fingerprint": "a17be6f01a2b2726fb809a2d9671ee57d9919da28af1618891800d62df00a648",
+        "raise": 0,
+        "warn": 1,
+        "branch": 12,
+        "calls": [
+          ".get",
+          ".setdefault",
+          ".update",
+          ".values",
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      },
+      "_entities_at_anchors": {
+        "fingerprint": "d767a401ab44dd253b79124387ed1bd6dad20fdcc4651e1046ad85b97fcc4ebb",
+        "raise": 0,
+        "warn": 0,
+        "branch": 7,
+        "calls": []
+      },
+      "_instances_matching": {
+        "fingerprint": "e85de6299e6797a3b9bbc516c0544706a8bfac16d2c083041936d3f4efad96e4",
+        "raise": 0,
+        "warn": 0,
+        "branch": 9,
+        "calls": [
+          ".index"
+        ]
+      },
+      "_joins_nothing": {
+        "fingerprint": "ae7a06545da2a379ece892f31fe11aa29fb399b604d81f33a949e3a6c249662f",
+        "raise": 0,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".any",
+          ".dropna",
+          ".isin",
+          ".unique"
+        ]
+      },
+      "_positions": {
+        "fingerprint": "50f3431cc872372b1ed9bdf5cc1078f21af1374b9bb6487ffda2e39b939d9adf",
+        "raise": 0,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".get",
+          ".index",
+          ".startswith"
+        ]
+      },
+      "_record_the_statistic": {
+        "fingerprint": "942d28674ef5019f7d60089935146f313a9944bd60ea719dab954dc7170328f4",
+        "raise": 1,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          ".get",
+          ".setdefault",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_remove_instances": {
+        "fingerprint": "02bc1fbe6a18fdc72b303cacabae6211fa616c862604acf5336b46fa6c3f1012",
+        "raise": 0,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".get",
+          ".index"
+        ]
+      },
+      "_statistic_asked_for": {
+        "fingerprint": "a5d7b761e07df4a9b8c5983d583a9bffed1112da846b086ea2496ba217aae8f3",
+        "raise": 1,
+        "warn": 0,
+        "branch": 3,
+        "calls": [
+          ".join",
+          "sdm_client.errors.StructuredDataError"
+        ]
+      },
+      "_tables_linked_to": {
+        "fingerprint": "4fdf1b6b3eaefb88ca07bcd632b617d828cae0118384cff30dccc53429f2b83b",
+        "raise": 0,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          ".add",
+          ".append",
+          ".get",
+          ".pop",
+          ".setdefault"
+        ]
+      },
+      "_tables_sent": {
+        "fingerprint": "cb46b3d89715289e8eb1245495e2929e0873cb9e74c4deb1e299157be09a994e",
+        "raise": 0,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          ".get",
+          ".update"
+        ]
+      },
+      "_warn_of_a_context_the_default_mode_capped": {
+        "fingerprint": "568fad028a4875f5bcc21160c4f0125ea8eb56e14ef0c21b02405bd6f4ed2069",
+        "raise": 0,
+        "warn": 1,
+        "branch": 2,
+        "calls": [
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      },
+      "_warn_of_columns_the_model_does_not_read": {
+        "fingerprint": "44d6920aaffb41293e6ac57436f83ad856efb51c526645b97cd9521d142901b3",
+        "raise": 0,
+        "warn": 1,
+        "branch": 8,
+        "calls": [
+          ".get",
+          ".items",
+          ".join",
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      },
+      "_warn_of_relationships_that_join_nothing": {
+        "fingerprint": "6c7464105f6992b09ee65fcd6cd39a47a2de79ecac3b936a85ea4931a1eb5f07",
+        "raise": 0,
+        "warn": 1,
+        "branch": 4,
+        "calls": [
+          ".join",
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      },
+      "_warn_of_tables_left_out": {
+        "fingerprint": "d3c71e8c365f99e29f71e2787ffb4a7d3a136ad0aae10c0f87b5165bcb30eca2",
+        "raise": 0,
+        "warn": 2,
+        "branch": 16,
+        "calls": [
+          ".join",
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      },
+      "_warn_the_filter_chose_only_the_examples": {
+        "fingerprint": "4ffa637a0a74da15e5dea45b96d10fced8b493e91384f446994c4bcaddc3c9ed",
+        "raise": 0,
+        "warn": 1,
+        "branch": 2,
+        "calls": [
+          "sdm_client.core.warnings.caller_stacklevel"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py": {
+      "<module>": {
+        "fingerprint": "69349744ed8209b23def6400ccda999bea3fcf34fee3aa2d4fd3afbbcb13ccc7",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "Schema._mark_key_columns": {
+        "fingerprint": "5886e0ee34af1ac5354e334c9684726d1aa8a56096abcbfec3e24601409bd4af",
+        "raise": 0,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".__setattr__",
+          "._mark_as_key",
+          "._release_as_key",
+          ".add",
+          ".get",
+          ".items",
+          "sdm_client.schema.Schema._own_tables",
+          "sdm_client.schema._as_key_tuple"
+        ]
+      },
+      "Schema.check_consistent": {
+        "fingerprint": "9f85ce317e6a058bb8b9cafc843533a09da7c62cab927f1aa88edb39682232cd",
+        "raise": 0,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          ".check_consistent",
+          ".values",
+          "sdm_client.schema.Schema._check_relationships"
+        ]
+      },
+      "Schema.from_source": {
+        "fingerprint": "120549457b3d9a01d47d23528438ec5f1006cf49d11820011ca4ee30f63b18e1",
+        "raise": 1,
+        "warn": 0,
+        "branch": 15,
+        "calls": [
+          ".__setattr__",
+          "._mark_key_columns",
+          ".items",
+          ".keep",
+          ".values",
+          "sdm_client._routing.route",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.materializers.sources.EngineTables",
+          "sdm_client.materializers.sources.engine_graph",
+          "sdm_client.materializers.sources.is_semantic_model",
+          "sdm_client.materializers.sources.semantic_model_graph",
+          "sdm_client.schema._apply_keys_and_times",
+          "sdm_client.schema._as_key_tuple",
+          "sdm_client.schema._check_source_keys",
+          "sdm_client.schema._checked_links",
+          "sdm_client.schema._declared_links",
+          "sdm_client.schema._describe_source_table",
+          "sdm_client.schema._model_links",
+          "sdm_client.schema._require_a_source",
+          "sdm_client.schema._require_table_names"
+        ]
+      },
+      "_infer_relationships": {
+        "fingerprint": "c95158942c676807980a031c4408e5c745d027210bd975f6caa6b39c3dcd2cfa",
+        "raise": 0,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".add",
+          ".append",
+          ".get",
+          ".items",
+          "sdm_client.schema.Relationship"
+        ]
+      },
+      "_joinable_inferred_links": {
+        "fingerprint": "9fa622a0f18f3acb9cdbb3dd0d5fb53b5c14392395be3130a2270750804967d0",
+        "raise": 0,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          "sdm_client.schema._is_joinable",
+          "sdm_client.schema._warn_of_a_link_that_cannot_join"
+        ]
+      },
+      "_key_by_the_referenced_column": {
+        "fingerprint": "bbefd36a97a6ee328750175e4bd1a93fde2b17562a803dc7e36f9bb0939697d6",
+        "raise": 0,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          ".add",
+          ".items",
+          ".setdefault"
+        ]
+      },
+      "_settle_edit_stamps": {
+        "fingerprint": "1b632f880af2845e3d883c8c5099636a95625fd22180cc48e42b234d25b77b54",
+        "raise": 0,
+        "warn": 0,
+        "branch": 5,
+        "calls": [
+          ".for_links",
+          ".items"
+        ]
+      },
+      "_warn_how_time_columns_were_inferred": {
+        "fingerprint": "8d0ae7d902c5bdd3fa6e9e27eca4f4e3fead8f3f0bd32ca856c0a40789c6bf48",
+        "raise": 0,
+        "warn": 1,
+        "branch": 15,
+        "calls": [
+          ".append",
+          ".extend",
+          ".get",
+          ".items",
+          ".join",
+          "predictive_query.time_columns.taken_unchecked",
+          "sdm_client.core.warnings.caller_stacklevel",
+          "sdm_client.schema._and_list"
+        ]
+      },
+      "_warn_two_ways_to_reach_one_table": {
+        "fingerprint": "5237086a63f221d1d83369f1b52ae31c360ae45e3bbf723c106bf4d2e2ded0ae",
+        "raise": 0,
+        "warn": 1,
+        "branch": 4,
+        "calls": [
+          ".append",
+          ".items",
+          ".setdefault",
+          "sdm_client.core.warnings.caller_stacklevel",
+          "sdm_client.schema._and_list",
+          "sdm_client.schema._warn_of_a_pair_joined_both_ways"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/adapters/relational.py": {
+      "<module>": {
+        "fingerprint": "dc504b4b8a6a91c5bb6f2e8f2fcdcf3374a08888101fec4d6925ede7b9f71237",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": []
+      },
+      "RelationalAdapter._preflight": {
+        "fingerprint": "a36203c27758b2b4499af351313b464a0c586e8cc6c1ca1d50f667f554003bb8",
+        "raise": 2,
+        "warn": 0,
+        "branch": 6,
+        "calls": [
+          ".get",
+          "sdm_client.adapters.relational.RelationalAdapter._check_class_count",
+          "sdm_client.adapters.relational.RelationalAdapter._check_context_is_not_empty",
+          "sdm_client.adapters.relational.RelationalAdapter._check_target_varies",
+          "sdm_client.adapters.relational._asks_for_the_larger_context",
+          "sdm_client.errors.UnsupportedRequestError"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/base.py": {
+      "<module>": {
+        "fingerprint": "c73feacf4cc27d01d68d0776c247be83550ba7c3543011d911d9ac24584686de",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "check_request_against_model": {
+        "fingerprint": "f7940600a6623e618a5b81dc88dda09585165fb8a4e7b54d461ca809e086e37e",
+        "raise": 4,
+        "warn": 0,
+        "branch": 9,
+        "calls": [
+          ".get",
+          ".join",
+          "sdm_client.base.required_capabilities",
+          "sdm_client.errors.UnsupportedRequestError"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/result.py": {
+      "<module>": {
+        "fingerprint": "810247d5a8f70e812eca792e76e0e9add67ece914c8e33f21075351225f1f0ca",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": []
+      },
+      "PredictionResult.merge": {
+        "fingerprint": "c4071c48eb024087824a1a826f17940b245b4402bdffc30df4c9b39fba175166",
+        "raise": 3,
+        "warn": 0,
+        "branch": 7,
+        "calls": [
+          "sdm_client.errors.StructuredDataError"
+        ]
+      }
+    },
+    "packages/structured-data-models-client/src/sdm_client/decompose.py": {
+      "<module>": {
+        "fingerprint": "defe22995c3136976936683c784fb4c5388881a3bf44d19000a25065ea488a70",
+        "raise": 0,
+        "warn": 0,
+        "branch": 1,
+        "calls": []
+      },
+      "parts_of": {
+        "fingerprint": "ef9830a6433b6ec0f59a39cd7c831d796596d5b69c28aeee195b6956b66d98c4",
+        "raise": 3,
+        "warn": 0,
+        "branch": 5,
+        "calls": [
+          ".endswith",
+          "sdm_client.decompose.Decomposition",
+          "sdm_client.decompose._per_candidate",
+          "sdm_client.decompose._per_step",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.materializers.relational._candidates_to_rank"
+        ]
+      }
+    }
+  }
+}

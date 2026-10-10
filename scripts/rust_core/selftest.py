@@ -23,6 +23,18 @@ to a function or its statement widened) must silence clippy there and
 fail the bans check. That run needs the pinned toolchain and the
 workspace's dependencies already fetched; ``--no-clippy`` leaves it out.
 
+The bridge freeze (``bridge_freeze.py``, decision E50) is held the same
+way, against its committed baseline and declarations taken as the merge
+base's: every evasion the T1.10e reviews found (decorators, dispatch
+tables, bound methods, getattr, aliases, a zero-count helper, swallowing,
+early returns, module code, ledgered bodies) fails as an undeclared change;
+a declared refactor, a rename declared, a rule moved out declared, a
+widened coverage declared, a frozen file added or removed, and an approved
+allowance pass; a declared refactor raising a count, a stale or spent
+declaration, the allowances' faults, and missing, empty, retyped, too deep
+or too wide evidence fail; and the merge base is read through git on a
+temporary repository.
+
 Phase 1 design, task T1.10c (formerly T1.16); the rest of ``selftest.py``,
 the seeded faults of the runners and the gate, arrives with T1.19.
 """
@@ -30,6 +42,7 @@ the seeded faults of the runners and the gate, arrives with T1.19.
 from __future__ import annotations
 
 import argparse
+import ast
 import copy
 import json
 import os
@@ -47,6 +60,7 @@ from typing import Any
 import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import bridge_freeze  # noqa: E402
 import l0_deps  # noqa: E402
 import l0_scan  # noqa: E402
 
@@ -555,6 +569,1162 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         ),
         'the parser is permanent, not bridge code (E18)',
     )
+
+
+# --- bridge_freeze.py (E50) ----------------------------------------------------
+
+
+FREEZE_TREE = (
+    'packages/structured-data-models-client/src',
+    str(bridge_freeze.BASELINE),
+    str(bridge_freeze.CHANGES),
+)
+
+# A first-party module of new rules, the seed of the dispatch cases.
+FREEZE_RULES = """
+def refuse(indices):
+    if len(indices) > 5:
+        raise ValueError('too many')
+    return indices
+
+
+def accept(indices):
+    return indices
+
+
+def strict(fn):
+    def wrapped(*args, **kwargs):
+        if len(args) > 2 and len(args[2]) > 5:
+            raise ValueError('too many')
+        return fn(*args, **kwargs)
+
+    return wrapped
+
+
+STRICT = strict
+RULES = {True: refuse, False: accept}
+
+
+def CHECK(indices):
+    if len(indices) > 5:
+        raise ValueError('too many')
+"""
+
+
+def freeze_cases(results: list[Result]) -> None:
+    """The bridge freeze: the tripwire refuses every change to frozen code
+    it is not told of, each declaration is held to its rules, the counts
+    catch growth under a declared refactor, and the controls pass. The
+    base is the committed baseline, declarations, decisions.md and script,
+    with the tree's own sources as the base's. The review's evasions of
+    rounds 1 and 2 are seeds, each checked as written (exactness) and
+    after ``--write`` (the tripwire)."""
+    committed = (REPO_ROOT / bridge_freeze.BASELINE).read_text()
+    changes = (REPO_ROOT / bridge_freeze.CHANGES).read_text()
+    decisions = (REPO_ROOT / bridge_freeze.DECISIONS).read_text()
+    script = (REPO_ROOT / bridge_freeze.SCRIPT).read_text()
+
+    def source(rel: Path) -> str | None:
+        path = REPO_ROOT / rel
+        return path.read_text() if path.is_file() else None
+
+    def based(
+        rows: str = '',
+        *,
+        held: str | None = None,
+        spent: dict[str, Any] | None = None,
+    ) -> bridge_freeze.Base:
+        text = script
+        if held is not None:
+            text = text.replace(
+                'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {}',
+                f'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {held}',
+            )
+            assert text != script
+        declared = changes
+        if spent is not None:
+            data = json.loads(changes)
+            data['changes'] = spent
+            declared = json.dumps(data)
+        return bridge_freeze.Base(
+            'the fixture base',
+            committed,
+            decisions + rows,
+            text,
+            declared,
+            source,
+        )
+
+    base = based()
+    client = Path('packages/structured-data-models-client/src/sdm_client')
+    schema = client / '_rust/schema.py'
+    materialize = client / '_rust/materialize.py'
+    predict = client / '_rust/predict.py'
+    relational = client / 'materializers/relational.py'
+    schema_py = client / 'schema.py'
+    rules = client / '_rules.py'
+    key_of = {
+        'schema': str(schema),
+        'client': str(client / 'client.py'),
+        'relational': str(relational),
+    }
+    gather = f'{materialize}::gather'
+    from_source = f'{schema}::from_source'
+    gather_at = '    schema = materializer.schema\n'
+    method_at = (
+        '    def check_consistent(self) -> None:\n        r"""Refuse any column'
+    )
+
+    def case(
+        name: str,
+        change: Callable[[Path], object],
+        fails_with: str | None,
+        *,
+        on: bridge_freeze.Base | str = base,
+        allowances: bridge_freeze.Allowances | None = None,
+        rewrite: bool = False,
+        declare: dict[str, dict[str, str]] | None = None,
+    ) -> None:
+        with tree(*FREEZE_TREE) as root:
+            change(root)
+            if rewrite:
+                bridge_freeze.write(root)
+            if declare is not None:
+                path = root / bridge_freeze.CHANGES
+                data = json.loads(path.read_text())
+                data['changes'] = declare
+                path.write_text(json.dumps(data))
+            problems = bridge_freeze.check(
+                root, on, allowances={} if allowances is None else allowances
+            )
+            expect(
+                results,
+                f'bridge_freeze: {name}',
+                problems,
+                fails_with=fails_with,
+            )
+
+    def undeclared(
+        name: str, change: Callable[[Path], object], key: str
+    ) -> None:
+        """A seed refused as written, by exactness, and after --write, as a
+        change nobody declared."""
+        case(name, change, 'differs from the baseline')
+        case(
+            f'{name}, written into the baseline',
+            change,
+            f'{key}: changed against the base',
+            rewrite=True,
+        )
+
+    def baseline(
+        root: Path, change: Callable[[dict[str, Any]], object]
+    ) -> None:
+        path = root / bridge_freeze.BASELINE
+        data = json.loads(path.read_text())
+        change(data)
+        path.write_text(json.dumps(data))
+
+    def at_gather(code: str) -> Callable[[Path], None]:
+        return lambda r: edit(r / materialize, gather_at, code + gather_at)
+
+    def with_rules(code: str) -> Callable[[Path], None]:
+        def change(root: Path) -> None:
+            (root / rules).write_text(FREEZE_RULES)
+            edit(root / materialize, gather_at, code + gather_at)
+
+        return change
+
+    def new_schema_methods(body: str) -> Callable[[Path], None]:
+        return lambda r: edit(r / schema_py, method_at, body + method_at)
+
+    too_many = (
+        '    def too_many(self, indices):\n'
+        '        if len(indices) > 5:\n'
+        "            raise ValueError('x')\n\n"
+        '    def fine(self, indices):\n'
+        '        return indices\n\n'
+    )
+
+    def added_raise(root: Path) -> None:
+        edit(
+            root / schema,
+            '    return build(cls, source, described)\n',
+            '    if described is None:\n'
+            "        raise StructuredDataError('none', code='INTERNAL_ERROR')\n"
+            '    return build(cls, source, described)\n',
+        )
+
+    # The tree, through git, and its copy against itself.
+    expect(
+        results,
+        'bridge_freeze: the tree, against the merge base',
+        bridge_freeze.problems(REPO_ROOT),
+        fails_with=None,
+    )
+    case('the tree, copied, itself as the base', lambda r: None, None)
+    # Each frozen file is a bridge file (F7 header, l0_deps) or holds the
+    # body of a rule the design's ledger names.
+    design = (REPO_ROOT / 'docs/design/rust-core/phase-1/design.md').read_text()
+    ledger = design[
+        design.index('### Host-held semantics') : design.index('### PQL parser')
+    ]
+    expect(
+        results,
+        'bridge_freeze: each frozen file is a bridge file or holds a ledgered rule',
+        [
+            f'{rel}: neither a bridge file nor the home of a ledgered rule'
+            for rel in bridge_freeze.FROZEN
+            if rel not in l0_deps.BRIDGE_FILES
+            and not any(
+                f'`{name.split(".")[-1]}`' in ledger or f'`{name}`' in ledger
+                for name in bridge_freeze.COVERED.get(rel, ())
+            )
+        ],
+        fails_with=None,
+    )
+
+    # The tripwire: every evasion of review rounds 1 and 2 is a change to a
+    # covered function or module block that nobody declared.
+    shared_helper = (
+        '\n\ndef _refuse_big(indices):\n'
+        '    if len(indices) > 5:\n'
+        "        raise ValueError('x')\n"
+    )
+    for name, change, key in (
+        ('an added raise', added_raise, from_source),
+        (
+            'an added warning',
+            at_gather(
+                "    import warnings\n\n    warnings.warn('extra', stacklevel=2)\n"
+            ),
+            gather,
+        ),
+        (
+            'an added branch (a shared file)',
+            lambda r: edit(
+                r / client / 'client.py',
+                '        if not fields:\n',
+                '        fields = fields if fields else ()\n        if not fields:\n',
+            ),
+            f'{client}/client.py::SDMClient._prepare',
+        ),
+        (
+            'a new helper in a shared file, called',
+            lambda r: (
+                append(r / relational, shared_helper),
+                edit(
+                    r / relational,
+                    '        statistic = _statistic_asked_for(options)\n',
+                    '        _refuse_big(indices)\n'
+                    '        statistic = _statistic_asked_for(options)\n',
+                ),
+            ),
+            f'{relational}::RelationalMaterializer.materialize',
+        ),
+        (
+            'a new module, called',
+            with_rules(
+                '    from sdm_client import _rules\n\n    _rules.refuse(indices)\n'
+            ),
+            gather,
+        ),
+        (
+            'a rule inside a ledgered body (Schema.check_consistent)',
+            lambda r: edit(
+                r / schema_py,
+                '        self._mark_key_columns()\n        for table in self.tables.values():\n',
+                '        if len(self.tables) > 100:\n'
+                "            raise ValueError('too many tables')\n"
+                '        self._mark_key_columns()\n        for table in self.tables.values():\n',
+            ),
+            f'{schema_py}::Schema.check_consistent',
+        ),
+        (
+            'a lambda',
+            at_gather('    big = lambda n: n > 5 and 1 if n else 0\n'),
+            gather,
+        ),
+        (
+            'a nested def',
+            at_gather(
+                '    def _big(n):\n        if n > 5:\n            raise ValueError()\n\n'
+                '    _big(len(indices))\n'
+            ),
+            gather,
+        ),
+        (
+            'a bare decorator from a new module',
+            lambda r: (
+                (r / rules).write_text(FREEZE_RULES),
+                edit(
+                    r / materialize,
+                    'from sdm_client.errors import StructuredDataError\n',
+                    'from sdm_client.errors import StructuredDataError\n'
+                    'from sdm_client._rules import strict\n',
+                ),
+                edit(
+                    r / materialize,
+                    '\ndef gather(\n',
+                    '\n@strict\ndef gather(\n',
+                ),
+            ),
+            gather,
+        ),
+        (
+            'an upper-case alias as a decorator',
+            lambda r: (
+                (r / rules).write_text(FREEZE_RULES),
+                edit(
+                    r / materialize,
+                    '\ndef gather(\n',
+                    '\n@STRICT\ndef gather(\n',
+                ),
+            ),
+            gather,
+        ),
+        (
+            "a shared file's module code wrapping a covered method",
+            lambda r: append(
+                r / relational,
+                '\n\ndef _strict(fn):\n    return fn\n\n\n'
+                'RelationalMaterializer._check_entity_count = _strict(\n'
+                '    RelationalMaterializer._check_entity_count\n)\n',
+            ),
+            f'{relational}::<module>',
+        ),
+        (
+            "a _rust/ bridge's module code",
+            lambda r: append(r / materialize, '\nif TAKEN:\n    pass\n'),
+            f'{materialize}::<module>',
+        ),
+        (
+            'dict dispatch to new helpers',
+            with_rules(
+                '    from sdm_client import _rules\n\n'
+                '    {True: _rules.refuse, False: _rules.accept}[len(indices) > 5](indices)\n'
+            ),
+            gather,
+        ),
+        (
+            'an upper-case dispatch table',
+            with_rules(
+                '    from sdm_client._rules import RULES\n\n'
+                '    RULES[len(indices) > 5](indices)\n'
+            ),
+            gather,
+        ),
+        (
+            'an upper-case function passed to map',
+            with_rules(
+                '    from sdm_client import _rules\n\n'
+                '    list(map(_rules.CHECK, [indices]))\n'
+            ),
+            gather,
+        ),
+        (
+            'bound methods in a dispatch dict',
+            lambda r: (
+                new_schema_methods(too_many)(r),
+                at_gather(
+                    '    {True: materializer.schema.too_many, False: '
+                    'materializer.schema.fine}[len(indices) > 5](indices)\n'
+                )(r),
+            ),
+            gather,
+        ),
+        (
+            'a bound method passed to map',
+            lambda r: (
+                new_schema_methods(too_many)(r),
+                at_gather(
+                    '    list(map(materializer.schema.too_many, [indices]))\n'
+                )(r),
+            ),
+            gather,
+        ),
+        (
+            'getattr dispatch',
+            lambda r: (
+                new_schema_methods(too_many)(r),
+                at_gather(
+                    "    getattr(materializer.schema, 'too_many')(indices)\n"
+                )(r),
+            ),
+            gather,
+        ),
+        (
+            'a tuple of lambdas indexed by a condition',
+            at_gather(
+                "    (lambda: None, lambda: _indices([], None, ''))[len(indices) > 5]()\n"
+            ),
+            gather,
+        ),
+        (
+            'a new first-party method named like one already called',
+            lambda r: (
+                new_schema_methods(
+                    '    def get(self, indices):\n'
+                    '        if len(indices) > 5:\n'
+                    "            raise ValueError('x')\n\n"
+                )(r),
+                at_gather('    materializer.schema.get(indices)\n')(r),
+            ),
+            gather,
+        ),
+        (
+            'a method with a builtin-type name',
+            lambda r: (
+                new_schema_methods(too_many.replace('too_many', 'update'))(r),
+                at_gather('    materializer.schema.update(indices)\n')(r),
+            ),
+            gather,
+        ),
+        (
+            'a swallowing try',
+            lambda r: edit(
+                r / materialize,
+                '    materializer._check_entity_count(indices)\n',
+                '    try:\n        materializer._check_entity_count(indices)\n'
+                '    except StructuredDataError:\n        pass\n',
+            ),
+            gather,
+        ),
+        (
+            'an aliased contextlib.suppress',
+            lambda r: edit(
+                r / materialize,
+                '    materializer._check_entity_count(indices)\n',
+                '    import contextlib\n\n    quiet = contextlib.suppress\n'
+                '    with quiet(ValueError):\n'
+                '        materializer._check_entity_count(indices)\n',
+            ),
+            gather,
+        ),
+        (
+            'an early return under if',
+            at_gather('    if len(indices) > 5:\n        return (), {}\n'),
+            gather,
+        ),
+        (
+            'a for-guarded early return',
+            at_gather(
+                '    for _ in range(len(indices) > 5):\n        return (), {}\n'
+            ),
+            gather,
+        ),
+        (
+            "a default by 'or'",
+            lambda r: edit(
+                r / materialize,
+                "    seed = options.get('random_seed')\n",
+                "    seed = options.get('random_seed') or 0\n",
+            ),
+            gather,
+        ),
+    ):
+        undeclared(name, change, key)
+    # Codex round 2: a zero-count helper that caps the entities.
+    cap = '\n\ndef _cap_indices(indices):\n    return indices[:10]\n'
+    case(
+        'a zero-count helper capping the entities, written in',
+        lambda r: (
+            append(r / materialize, cap),
+            at_gather('    indices = _cap_indices(indices)\n')(r),
+        ),
+        f'{materialize}::_cap_indices: new against the base',
+        rewrite=True,
+    )
+    case(
+        'a new function in a _rust/ bridge, as written',
+        lambda r: append(r / predict, '\n\ndef _extra(x):\n    return x\n'),
+        '_rust/predict.py::_extra: covered code the baseline does not hold',
+    )
+    case(
+        'a stale (too high) baseline',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']]['from_source'].update(
+                {'raise': 9}
+            ),
+        ),
+        'from_source: differs from the baseline',
+    )
+
+    # Declarations.
+    def renamed_local(root: Path) -> None:
+        edit(root / schema, '    spec = {\n', '    wanted = {\n')
+        edit(
+            root / schema, 'codec.attachment(spec)', 'codec.attachment(wanted)'
+        )
+
+    refactor = {'refactor': 'a local renamed'}
+    case(
+        'control: a declared refactor',
+        renamed_local,
+        None,
+        rewrite=True,
+        declare={from_source: refactor},
+    )
+
+    # The review's false positives of round 2, each a declared refactor.
+    def shadowed(root: Path) -> None:
+        path = root / relational
+        text = path.read_text()
+        start = text.index('def _tables_linked_to(')
+        stop = text.index('return frozenset(seen)', start) + len(
+            'return frozenset(seen)'
+        )
+        path.write_text(
+            text[:start]
+            + text[start:stop].replace('seen', 'dates')
+            + text[stop:]
+        )
+
+    for name, change, declared_key in (
+        (
+            'typing.cast to a first-party class',
+            at_gather(
+                '    from typing import cast\n\n'
+                '    materializer = cast(RelationalMaterializer, materializer)\n'
+            ),
+            gather,
+        ),
+        (
+            'a local shadowing an import',
+            shadowed,
+            f'{relational}::_tables_linked_to',
+        ),
+        (
+            'a copy on a value',
+            lambda r: edit(
+                r / schema,
+                '    return build(cls, source, described)\n',
+                '    return build(cls, source, described.copy())\n',
+            ),
+            from_source,
+        ),
+    ):
+        case(
+            f'control: {name}, declared as a refactor',
+            change,
+            None,
+            rewrite=True,
+            declare={declared_key: {'refactor': name}},
+        )
+    case(
+        'a declared refactor that raises a count',
+        added_raise,
+        '_rust/schema.py: the covered code raises raise from',
+        rewrite=True,
+        declare={from_source: {'refactor': 'a check added'}},
+    )
+    case(
+        'a stale declaration',
+        lambda r: None,
+        f'{from_source}: declared in',
+        declare={from_source: refactor},
+    )
+    case(
+        'a spent declaration reused',
+        renamed_local,
+        'already holds, which is spent',
+        on=based(spent={from_source: refactor}),
+        rewrite=True,
+        declare={from_source: refactor},
+    )
+    case(
+        'control: a spent declaration of an unchanged entry, as on the phase head',
+        lambda r: None,
+        None,
+        on=based(spent={from_source: refactor}),
+        declare={from_source: refactor},
+    )
+    case(
+        'control: a declaration with a new reason after a spent one',
+        renamed_local,
+        None,
+        on=based(spent={from_source: refactor}),
+        rewrite=True,
+        declare={from_source: {'refactor': 'the local renamed again'}},
+    )
+    statistic = (
+        '        if statistic is not None:\n'
+        '            _record_the_statistic(payloads, statistic)\n'
+    )
+    case(
+        'control: a rule moved into Rust, declared moved',
+        lambda r: edit(r / relational, statistic, ''),
+        None,
+        rewrite=True,
+        declare={
+            f'{relational}::RelationalMaterializer.materialize': {
+                'moved': 'the statistic (T1.28)'
+            }
+        },
+    )
+    case(
+        'a rule moved out, the baseline not lowered',
+        lambda r: edit(r / relational, statistic, ''),
+        'RelationalMaterializer.materialize: differs from the baseline',
+    )
+    case(
+        'a declaration with no reason',
+        lambda r: None,
+        'a declaration holds one reason',
+        declare={from_source: {'because': 'x'}},
+    )
+    case(
+        'declarations missing',
+        lambda r: (r / bridge_freeze.CHANGES).unlink(),
+        'the declarations are missing',
+    )
+    case(
+        'declarations in another format',
+        lambda r: (r / bridge_freeze.CHANGES).write_text('{"changes": {}}'),
+        'not declarations in format',
+    )
+
+    # Renames and coverage.
+    def renamed_anchor(root: Path) -> None:
+        edit(root / materialize, 'def _anchor(', 'def _anchor_of(')
+        edit(
+            root / materialize,
+            "_anchor(options.get('anchor_time'))",
+            "_anchor_of(options.get('anchor_time'))",
+        )
+
+    rename = {
+        f'{materialize}::_anchor': {'refactor': 'renamed _anchor_of'},
+        f'{materialize}::_anchor_of': {'refactor': 'renamed from _anchor'},
+        gather: {'refactor': 'calls _anchor_of'},
+    }
+    case(
+        'control: a rename declared as a refactor',
+        renamed_anchor,
+        None,
+        rewrite=True,
+        declare=rename,
+    )
+    case(
+        'a rename not declared',
+        renamed_anchor,
+        f'{materialize}::_anchor_of: new against the base',
+        rewrite=True,
+    )
+    case(
+        'a covered function dropped from the baseline',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['relational']].pop('_tables_linked_to'),
+        ),
+        '_tables_linked_to: covered code the baseline does not hold',
+    )
+    case(
+        'a covered function renamed away',
+        lambda r: edit(
+            r / relational,
+            'def _tables_linked_to(',
+            'def _tables_reached_from(',
+        ),
+        '_tables_linked_to: COVERED names it, but the file defines no such',
+        rewrite=True,
+    )
+
+    @contextmanager
+    def covering(changed: dict[Path, tuple[str, ...] | None]) -> Iterator[None]:
+        saved = dict(bridge_freeze.COVERED)
+        try:
+            for rel, names in changed.items():
+                if names is None:
+                    del bridge_freeze.COVERED[rel]
+                else:
+                    bridge_freeze.COVERED[rel] = names
+            bridge_freeze.LISTED = tuple(bridge_freeze.COVERED)
+            bridge_freeze.FROZEN = bridge_freeze.WHOLE + bridge_freeze.LISTED
+            yield
+        finally:
+            bridge_freeze.COVERED.clear()
+            bridge_freeze.COVERED.update(saved)
+            bridge_freeze.LISTED = tuple(bridge_freeze.COVERED)
+            bridge_freeze.FROZEN = bridge_freeze.WHOLE + bridge_freeze.LISTED
+
+    widened = {schema_py: (*bridge_freeze.COVERED[schema_py], '_and_list')}
+    and_list = f'{schema_py}::_and_list'
+    with covering(widened):
+        case(
+            'coverage widened over a function, not declared',
+            lambda r: None,
+            f'{and_list}: new against the base',
+            rewrite=True,
+        )
+        case(
+            'control: coverage widened over a function, declared',
+            lambda r: None,
+            None,
+            rewrite=True,
+            declare={and_list: {'refactor': 'coverage widened'}},
+        )
+        case(
+            'coverage widened over a function given a rule in the same change',
+            lambda r: edit(
+                r / schema_py,
+                'def _and_list(names: Sequence[str]) -> str:\n',
+                'def _and_list(names: Sequence[str]) -> str:\n'
+                '    if len(names) > 10**6:\n'
+                "        raise ValueError('big')\n",
+            ),
+            'schema.py: the covered code raises raise from',
+            rewrite=True,
+            declare={and_list: {'refactor': 'coverage widened'}},
+        )
+    dates = client / 'core/dates.py'
+    first = next(
+        n.name
+        for n in ast.parse((REPO_ROOT / dates).read_text()).body
+        if isinstance(n, ast.FunctionDef)
+    )
+    with covering({dates: (first,)}):
+        case(
+            'a file added to the freeze, not declared',
+            lambda r: None,
+            f'{dates}::{first}: new against the base',
+            rewrite=True,
+        )
+        case(
+            'control: a file added to the freeze, declared',
+            lambda r: None,
+            None,
+            rewrite=True,
+            declare={
+                f'{dates}::{first}': {'refactor': 'frozen'},
+                f'{dates}::<module>': {'refactor': 'frozen'},
+            },
+        )
+    with covering({client / 'adapters/relational.py': None}):
+        case(
+            'control: a file taken out of the freeze',
+            lambda r: None,
+            None,
+            rewrite=True,
+        )
+    with covering({client / 'decompose.py': None}):
+        case(
+            'a file taken out of the freeze while covered code still calls it',
+            lambda r: None,
+            'adds a call of sdm_client.decompose.parts_of',
+            rewrite=True,
+        )
+
+    # Allowances: the row is read at the merge base, the change declared.
+    key = from_source
+    held_entry = json.loads(committed)['files'][key_of['schema']]['from_source']
+    grown = {
+        'raise': held_entry['raise'] + 1,
+        'warn': held_entry['warn'],
+        'branch': held_entry['branch'] + 1,
+        'calls': held_entry['calls'],
+    }
+    by_allowance = {key: {'allowance': 'E99'}}
+
+    def row(status: str, names: str = f'`{key}`') -> str:
+        return f'| E99 | A fixture: {names} may raise once more | the self-test | {status} |\n'
+
+    approved = row('approved by owner 2026-10-10')
+    case(
+        'control: growth under an owner-approved allowance, declared',
+        added_raise,
+        None,
+        on=based(approved),
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        'growth under an allowance, declared as a refactor',
+        added_raise,
+        'the covered code raises raise from',
+        on=based(approved),
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare={key: {'refactor': 'a check added'}},
+    )
+    case(
+        'an allowance declared with no ALLOWANCES entry',
+        added_raise,
+        'which grants it nothing',
+        on=based(approved),
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        'an allowance whose row lands in the same change',
+        lambda r: added_raise(r),
+        "ALLOWANCES[E99]: not a row of the merge base's decisions.md",
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        'an allowance under a row the owner did not approve',
+        added_raise,
+        'ALLOWANCES[E99]: the row is not approved by the owner',
+        on=based(row('orchestrator, owner to confirm')),
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        'an allowance under a row naming the function only by its bare name',
+        added_raise,
+        f'E99 does not name `{key}`',
+        on=based(row('approved by owner 2026-10-10', names='`from_source`')),
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        'an allowance below the growth',
+        added_raise,
+        'the covered code raises raise from',
+        on=based(approved),
+        allowances={'E99': {key: {**grown, 'raise': held_entry['raise']}}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        'an allowance the base already holds, reused after a shrink',
+        added_raise,
+        'the covered code raises raise from',
+        on=based(approved, held=repr({'E99': {key: grown}})),
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    new_key = f'{materialize}::_brand_new'
+    brand_new = (
+        '\n\ndef _brand_new(indices):\n'
+        '    if len(indices) > 5:\n'
+        '        raise ValueError()\n'
+        '    return indices\n'
+    )
+    new_row = row('approved by owner 2026-10-10', names=f'`{new_key}`')
+    new_declared = {new_key: {'allowance': 'E99'}}
+    case(
+        'control: a new function within its allowance',
+        lambda r: append(r / materialize, brand_new),
+        None,
+        on=based(new_row),
+        allowances={
+            'E99': {new_key: {'raise': 1, 'warn': 0, 'branch': 1, 'calls': []}}
+        },
+        rewrite=True,
+        declare=new_declared,
+    )
+    case(
+        'a new function past its allowance (counts)',
+        lambda r: append(r / materialize, brand_new),
+        '_rust/materialize.py: the covered code raises raise from',
+        on=based(new_row),
+        allowances={
+            'E99': {new_key: {'raise': 0, 'warn': 0, 'branch': 1, 'calls': []}}
+        },
+        rewrite=True,
+        declare=new_declared,
+    )
+    case(
+        'a new function calling a helper its allowance does not name',
+        lambda r: (
+            (r / rules).write_text(FREEZE_RULES),
+            append(
+                r / materialize,
+                brand_new.replace(
+                    '    return indices\n',
+                    '    from sdm_client import _rules\n\n'
+                    '    return _rules.accept(indices)\n',
+                ),
+            ),
+        ),
+        '_brand_new: the baseline adds a call of sdm_client._rules.accept',
+        on=based(new_row),
+        allowances={
+            'E99': {new_key: {'raise': 1, 'warn': 0, 'branch': 1, 'calls': []}}
+        },
+        rewrite=True,
+        declare=new_declared,
+    )
+    case(
+        "the base's ALLOWANCES not a literal",
+        lambda r: None,
+        'ALLOWANCES is not a literal dict',
+        on=bridge_freeze.Base(
+            'the fixture base',
+            committed,
+            decisions,
+            script.replace(
+                'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {}',
+                'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = dict()',
+            ),
+            changes,
+            source,
+        ),
+    )
+
+    # Missing, empty and retyped evidence.
+    def write_baseline(text: str) -> Callable[[Path], None]:
+        return lambda r: (r / bridge_freeze.BASELINE).write_text(text)
+
+    case(
+        'the baseline missing',
+        lambda r: (r / bridge_freeze.BASELINE).unlink(),
+        'the baseline is missing',
+    )
+    case('an empty baseline', write_baseline('{}'), 'not a baseline in format')
+    case('a baseline that is not JSON', write_baseline('{'), 'not JSON')
+    # Thousands of levels: refused by name, whether the reader recurses
+    # (Python 3.12's, which then refuses it as too deep) or not (as not a
+    # baseline); never a crash.
+    deep = '[' * 100_000 + ']' * 100_000
+    for reader in (bridge_freeze.load, bridge_freeze.load_changes):
+        try:
+            _, refused = reader(deep, 'deep')
+        except RecursionError as error:  # the case's failure, not a crash
+            refused = []
+            print(f'{reader.__name__} raised {error!r}')
+        expect(
+            results,
+            f'bridge_freeze: {reader.__name__} of input nested thousands deep',
+            [
+                p
+                for p in refused
+                if 'nested too deeply to read' in p
+                or 'not a baseline' in p
+                or 'not declarations' in p
+            ],
+            fails_with='deep: n',
+        )
+    case(
+        'a very wide baseline',
+        write_baseline(
+            json.dumps(
+                {
+                    'format': bridge_freeze.FORMAT,
+                    'about': '',
+                    'files': {f'f{i}': {} for i in range(50_000)},
+                }
+            )
+        ),
+        'f49999 is not a frozen bridge file',
+    )
+    case(
+        'a count retyped',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']]['from_source'].update(
+                {'raise': '2'}
+            ),
+        ),
+        'raise is not a count',
+    )
+    case(
+        'a fingerprint retyped',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']]['from_source'].update(
+                {'fingerprint': 'abc'}
+            ),
+        ),
+        'fingerprint is not a SHA-256',
+    )
+    case(
+        'a fingerprint missing',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']]['from_source'].pop(
+                'fingerprint'
+            ),
+        ),
+        'an entry holds exactly branch, calls, fingerprint, raise, warn',
+    )
+    case(
+        'calls retyped',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']]['from_source'].update(
+                {'calls': 'sdm_client.errors.StructuredDataError'}
+            ),
+        ),
+        'calls is not a sorted list',
+    )
+    case(
+        "a frozen file's entry missing",
+        lambda r: baseline(r, lambda d: d['files'].pop(key_of['schema'])),
+        f'no entry for the frozen file {schema}',
+    )
+    case(
+        'a frozen file listing no function',
+        lambda r: baseline(
+            r, lambda d: d['files'].update({key_of['schema']: {}})
+        ),
+        f'{schema} lists no function',
+    )
+    case(
+        'a frozen file missing',
+        lambda r: (r / predict).unlink(),
+        '_rust/predict.py: a frozen bridge file that does not exist',
+    )
+    case(
+        'a frozen file that does not parse',
+        lambda r: append(r / predict, '\ndef (\n'),
+        'does not parse',
+    )
+    case(
+        'the base baseline unreadable',
+        lambda r: None,
+        'at the base (the fixture base): not JSON',
+        on=bridge_freeze.Base(
+            'the fixture base', '{', decisions, script, changes, source
+        ),
+    )
+    case(
+        'the base declarations unreadable',
+        lambda r: None,
+        'at the base (the fixture base): not JSON',
+        on=bridge_freeze.Base(
+            'the fixture base', committed, decisions, script, '{', source
+        ),
+    )
+    case(
+        'no merge base',
+        lambda r: None,
+        'no base to ratchet against',
+        on='no merge base of HEAD and origin/rust-core-phase-1',
+    )
+    case(
+        'control: a base that predates the baseline',
+        lambda r: None,
+        None,
+        on=bridge_freeze.Base('the fixture base', None, decisions, None),
+    )
+    case(
+        'declarations against a base that predates the baseline',
+        lambda r: None,
+        'predates the baseline: nothing to declare',
+        on=bridge_freeze.Base('the fixture base', None, decisions, None),
+        declare={from_source: refactor},
+    )
+
+    # The fingerprint ignores what is not code, and reads alike on every
+    # Python version (positions, docstrings and empty fields left out).
+    plain = 'def f(x):\n    """Doc."""\n    return x\n'
+    spaced = (
+        '\n\ndef f(x):  # a comment\n    """Other doc."""\n\n    return (x)\n'
+    )
+    expect(
+        results,
+        'bridge_freeze: fingerprints ignore positions, comments and docstrings',
+        []
+        if bridge_freeze.fingerprint(ast.parse(plain).body)
+        == bridge_freeze.fingerprint(ast.parse(spaced).body)
+        else ['the two differ'],
+        fails_with=None,
+    )
+    expect(
+        results,
+        'bridge_freeze: fingerprints see a changed constant',
+        []
+        if bridge_freeze.fingerprint(ast.parse(plain).body)
+        != bridge_freeze.fingerprint(
+            ast.parse(plain.replace('x\n', 'x[:10]\n')).body
+        )
+        else ['the two match'],
+        fails_with=None,
+    )
+
+    # The merge base, read through git.
+    with tempfile.TemporaryDirectory(prefix='sdm-freeze-git-') as tmp:
+        repo = Path(tmp)
+
+        def git(*args: str) -> None:
+            subprocess.run(
+                [
+                    'git',
+                    '-C',
+                    str(repo),
+                    '-c',
+                    'commit.gpgsign=false',
+                    '-c',
+                    'core.hooksPath=/dev/null',
+                    *args,
+                ],
+                check=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    'GIT_AUTHOR_NAME': 'selftest',
+                    'GIT_AUTHOR_EMAIL': 'selftest@example.com',
+                    'GIT_COMMITTER_NAME': 'selftest',
+                    'GIT_COMMITTER_EMAIL': 'selftest@example.com',
+                },
+            )
+
+        git('init', '-q', '-b', 'phase')
+        (repo / 'README').write_text('before\n')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'no baseline')
+        git('branch', 'old')
+        at_base = {
+            bridge_freeze.BASELINE: 'at the base\n',
+            bridge_freeze.DECISIONS: 'rows at the base\n',
+            bridge_freeze.SCRIPT: 'script at the base\n',
+            bridge_freeze.CHANGES: 'declarations at the base\n',
+            schema: 'source at the base\n',
+        }
+        for rel, text in at_base.items():
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (repo / rel).write_text(text)
+        git('add', '-A')
+        git('commit', '-q', '-m', 'the baseline')
+        git('checkout', '-q', '-b', 'lane')
+        for rel in at_base:
+            (repo / rel).write_text('on the lane\n')
+        git('commit', '-q', '-am', 'the lane')
+        found = bridge_freeze.base_baseline(repo, 'phase')
+        expect(
+            results,
+            'bridge_freeze: the baseline, rows, script, declarations and sources read at the merge base',
+            []
+            if isinstance(found, bridge_freeze.Base)
+            and (
+                found.baseline,
+                found.decisions,
+                found.script,
+                found.changes,
+                found.source(schema),
+            )
+            == tuple(at_base.values())
+            else [f'read {found!r}'],
+            fails_with=None,
+        )
+        found = bridge_freeze.base_baseline(repo, 'old')
+        expect(
+            results,
+            'bridge_freeze: a merge base that predates the baseline',
+            []
+            if isinstance(found, bridge_freeze.Base)
+            and found.baseline is None
+            and found.script is None
+            and found.source(schema) is None
+            else [f'read {found!r}'],
+            fails_with=None,
+        )
+        found = bridge_freeze.base_baseline(repo, 'no-such-branch')
+        expect(
+            results,
+            'bridge_freeze: no merge base',
+            [found] if isinstance(found, str) else [],
+            fails_with='no merge base of HEAD and no-such-branch',
+        )
 
 
 # --- l0_scan.py ---------------------------------------------------------------
@@ -1875,6 +3045,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     results: list[Result] = []
     deps_cases(results, l0_deps.cargo_metadata(REPO_ROOT))
+    freeze_cases(results)
     scan_cases(results)
     if not args.no_clippy:
         clippy_case(results)

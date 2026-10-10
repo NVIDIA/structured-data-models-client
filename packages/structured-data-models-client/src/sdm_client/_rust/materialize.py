@@ -2,12 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the schema's consistency check (T1.23), the option refusals (T1.24), the
+# the schema's consistency check (T1.21d), the option refusals (T1.24), the
 # zoned anchor's conversion (T1.25), the run mode, entity count, shape,
 # limits and capped-context notice (T1.28) and the index warning's
-# once-flag (T1.26, after the owner's answer on state lifetime), are
-# deleted in Phase 1 by those tasks; casting the entities to the key's type
-# stays the host's.
+# once-flag (T1.26, by E52), are deleted in Phase 1 by those tasks;
+# casting the entities to the key's type stays the host's. Frozen
+# meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request's gathering (T1.11c).
 
