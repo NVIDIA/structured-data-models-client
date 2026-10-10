@@ -22,6 +22,7 @@ use std::sync::OnceLock;
 
 use sdm_testkit::bases::{self, Bases};
 use sdm_testkit::case::{self, Case, CoreInputs};
+use sdm_testkit::edits::SchemaEdit;
 use sdm_testkit::host::{self, Answer};
 use serde_json::{Value, json};
 
@@ -64,11 +65,42 @@ fn observation(answer: &Answer) -> Value {
     }
 }
 
-/// Each probe the map gives this host, run, by its id.
-fn run(map: &Value) -> BTreeMap<String, Value> {
+/// What one run gave of its core operations where it reached
+/// `describe_source`: the digests of the description and of the schema
+/// materialize sampled (the pin's `AGREE`, `contract/runners/refusal_map.py`).
+type Digests = BTreeMap<String, BTreeMap<String, String>>;
+
+/// `value` as canonical JSON, as `refusal_map.digest` writes it: keys
+/// sorted at every depth, no whitespace, UTF-8.
+fn canonical(value: &Value) -> Value {
+    match value {
+        Value::Object(members) => {
+            let mut sorted: Vec<(&String, &Value)> = members.iter().collect();
+            sorted.sort_by(|a, b| a.0.cmp(b.0));
+            Value::Object(
+                sorted
+                    .into_iter()
+                    .map(|(k, v)| (k.clone(), canonical(v)))
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.iter().map(canonical).collect()),
+        other => other.clone(),
+    }
+}
+
+fn digest(value: &Value) -> String {
+    case::sha256(serde_json::to_string(&canonical(value)).unwrap().as_bytes())
+}
+
+/// Each probe the map gives this host, run: what it observed, by the
+/// probe's id, and the digests of its core operations where it reached
+/// `describe_source`.
+fn run_with_digests(map: &Value) -> (BTreeMap<String, Value>, Digests) {
     let case = the_case(map);
     let bases: Bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let mut observed = BTreeMap::new();
+    let mut digests = Digests::new();
     for probe in map["probes"].as_array().unwrap() {
         let Some(spec) = probe.get(RUNNER) else {
             continue;
@@ -82,18 +114,90 @@ fn run(map: &Value) -> BTreeMap<String, Value> {
         }
         let core: CoreInputs = serde_json::from_value(spec["core"].clone()).unwrap();
         given.core = Some(core);
-        let ran = host::run(&given, &bases).unwrap();
-        observed.insert(
-            probe["id"].as_str().unwrap().to_owned(),
-            observation(&ran.answer),
-        );
+        // The probe's edits, made to this host's own description: the
+        // probe names no schema for materialize (T1.21d).
+        let edits: Vec<SchemaEdit> = match spec.get("edits") {
+            Some(edits) => serde_json::from_value(edits.clone()).unwrap(),
+            None => vec![],
+        };
+        let ran = host::run_edited(&given, &bases, &edits).unwrap();
+        let name = probe["id"].as_str().unwrap().to_owned();
+        if let Some(described) = &ran.described {
+            let mut agreed = BTreeMap::from([("described".to_owned(), digest(described))]);
+            for input in &ran.inputs {
+                if input["op"] == "materialize" {
+                    agreed.insert("materialize_schema".into(), digest(&input["schema"]));
+                }
+            }
+            digests.insert(name.clone(), agreed);
+        }
+        observed.insert(name, observation(&ran.answer));
     }
-    observed
+    (observed, digests)
 }
 
 fn observed() -> &'static BTreeMap<String, Value> {
-    static OBSERVED: OnceLock<BTreeMap<String, Value>> = OnceLock::new();
-    OBSERVED.get_or_init(|| run(&map()))
+    &ran().0
+}
+
+fn ran() -> &'static (BTreeMap<String, Value>, Digests) {
+    static RAN: OnceLock<(BTreeMap<String, Value>, Digests)> = OnceLock::new();
+    RAN.get_or_init(|| run_with_digests(&map()))
+}
+
+fn pin() -> Value {
+    let bytes = std::fs::read(contract().join("pinned/base.adventureworks.probes.json")).unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+/// Each way `observed`'s digests depart from `pin`'s, as
+/// `refusal_map.agree` reads them; empty when they are the pin's. Missing,
+/// empty or retyped evidence fails.
+fn agree(pin: &Value, observed: &Digests) -> Vec<String> {
+    const AGREE: [&str; 2] = ["described", "materialize_schema"];
+    let Some(probes) = pin
+        .get("probes")
+        .and_then(Value::as_object)
+        .filter(|p| !p.is_empty())
+    else {
+        return vec!["the pin lists no probe".into()];
+    };
+    let hex = |v: &Value| {
+        v.as_str()
+            .is_some_and(|t| t.len() == 64 && t.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')))
+    };
+    let names: std::collections::BTreeSet<&String> = probes.keys().chain(observed.keys()).collect();
+    let mut failures = Vec::new();
+    for name in names {
+        let Some(wanted) = probes
+            .get(name)
+            .and_then(Value::as_object)
+            .filter(|w| !w.is_empty())
+        else {
+            failures.push(format!("{name}: reached describe_source, not pinned"));
+            continue;
+        };
+        if !wanted.contains_key("described")
+            || wanted
+                .iter()
+                .any(|(k, v)| !AGREE.contains(&k.as_str()) || !hex(v))
+        {
+            failures.push(format!("{name}: the pin is not digests"));
+            continue;
+        }
+        let Some(seen) = observed.get(name) else {
+            failures.push(format!("{name}: pinned, and describe_source not reached"));
+            continue;
+        };
+        let differing: Vec<&str> = AGREE
+            .into_iter()
+            .filter(|k| seen.get(*k).map(String::as_str) != wanted.get(*k).and_then(Value::as_str))
+            .collect();
+        if !differing.is_empty() {
+            failures.push(format!("{name}: {} not the pin's", differing.join(", ")));
+        }
+    }
+    failures
 }
 
 /// Whether `seen` is a refusal as this host observes it: exactly its
@@ -204,6 +308,66 @@ fn the_rust_host_run_is_held_to_the_map() {
             .values()
             .any(|seen| *seen == success(&json!("predict")))
     );
+    // Where both hosts reach describe_source, this host's description and
+    // the schema its materialize samples, its own description with the
+    // probe's edits made, are the pin python-core is held to (T1.21d).
+    let digests = &ran().1;
+    assert_eq!(agree(&pin(), digests), Vec::<String>::new());
+    assert!(digests.len() >= 4);
+    assert!(
+        digests
+            .values()
+            .any(|d| d.contains_key("materialize_schema"))
+    );
+}
+
+#[test]
+fn the_descriptions_are_held_to_the_pin_fail_closed() {
+    let pin = pin();
+    let seen: Digests = serde_json::from_value(pin["probes"].clone()).unwrap();
+    assert_eq!(agree(&pin, &seen), Vec::<String>::new());
+    assert!(!agree(&pin, &Digests::new()).is_empty());
+    assert_eq!(agree(&json!({}), &seen), ["the pin lists no probe"]);
+    assert_eq!(
+        agree(&json!({"probes": {}}), &seen),
+        ["the pin lists no probe"]
+    );
+    let name = seen.keys().next().unwrap().clone();
+    let mut other = seen.clone();
+    other
+        .get_mut(&name)
+        .unwrap()
+        .insert("described".into(), "0".repeat(64));
+    assert_eq!(
+        agree(&pin, &other),
+        [format!("{name}: described not the pin's")]
+    );
+    let mut missing = seen.clone();
+    missing.remove(&name);
+    assert_eq!(
+        agree(&pin, &missing),
+        [format!("{name}: pinned, and describe_source not reached")]
+    );
+    let mut extra = seen.clone();
+    extra.insert("not-a-probe".into(), seen[&name].clone());
+    assert_eq!(
+        agree(&pin, &extra),
+        ["not-a-probe: reached describe_source, not pinned"]
+    );
+    for retyped in [json!(7), Value::Null, json!(""), json!("abc"), json!(["x"])] {
+        let mut broken = pin.clone();
+        broken["probes"][&name]["described"] = retyped.clone();
+        assert_eq!(
+            agree(&broken, &seen),
+            [format!("{name}: the pin is not digests")],
+            "{retyped}"
+        );
+    }
+    // The digest is of canonical JSON, the one refusal_map.digest writes.
+    assert_eq!(
+        digest(&json!({"b": 1, "a": [1, "é"]})),
+        digest(&serde_json::from_str::<Value>(r#"{ "a" : [1, "\u00e9"], "b": 1 }"#).unwrap())
+    );
 }
 
 #[test]
@@ -212,7 +376,7 @@ fn a_refusal_the_map_does_not_list_fails() {
     map["entries"]
         .as_array_mut()
         .unwrap()
-        .retain(|entry| entry["id"] != "describe_source/time_name");
+        .retain(|entry| entry["id"] != "describe_source/time_values");
     let failures = check(&map, observed());
     assert!(
         failures

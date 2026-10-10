@@ -419,12 +419,16 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
             inputs = [
                 {'op': 'describe_source', **case['core']['describe_source']}
             ]
+            described: dict[str, Any] = {'tables': [], 'links': []}
             materialized = None
             if 'materialize' in case['core']:
+                # From T1.21d the schema materialize samples is the host's
+                # own description; the case names none.
                 inputs.append(
                     {
                         'op': 'materialize',
                         'query': case['input']['pql'],
+                        'schema': described,
                         **case['core']['materialize'],
                     }
                 )
@@ -460,7 +464,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 'inputs': inputs,
                 'fetches': [],
                 'accepted': None,
-                'described': {'tables': [], 'links': []},
+                'described': described,
                 'materialized': materialized,
                 'predicted': predicted,
                 'error': None,
@@ -503,6 +507,36 @@ def test_python_cores_answer_is_held_to_its_own_outcome(
         's0.refuse.unknown-column: python-core: outcome against core: '
         "expected ('success', None), observed ('refusal', 'INVALID_REQUEST')"
     ) in run.stdout
+
+
+def test_materialize_samples_the_runner_s_own_description(
+    tmp_path: Path,
+) -> None:
+    # From T1.21d no case names the schema materialize samples: a core
+    # runner's is its own description, where the case makes no edit. The
+    # seeded fault: a schema with a link the description does not hold.
+    def other_schema(observation: dict[str, Any]) -> None:
+        _as_core(None)(observation)
+        for each in observation['core']['inputs']:
+            if each['op'] == 'materialize':
+                each['schema'] = {
+                    'tables': [],
+                    'links': [[{'table': 'a', 'column': 'b'}] * 2],
+                }
+
+    run = _seeded(tmp_path, _as_core(None))
+    assert 'core.inputs.materialize.schema' not in run.stdout, run.stdout
+
+    def no_description(observation: dict[str, Any]) -> None:
+        _as_core(None)(observation)
+        observation['core']['described'] = None
+
+    for seeded in (other_schema, no_description):
+        run = _seeded(tmp_path, seeded)
+        assert (
+            'inputs: base.regression: python-core: '
+            'core.inputs.materialize.schema'
+        ) in run.stdout, run.stdout
 
 
 def test_an_index_is_an_integer_literal_of_any_size_or_text(

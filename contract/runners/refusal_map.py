@@ -41,6 +41,7 @@ lists reaches.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import re
@@ -249,6 +250,63 @@ def check(
 
 def _said(seen: dict[str, Any]) -> str:
     return ', '.join(f'{key} {seen[key]!r}' for key in sorted(seen))
+
+
+# --- the hosts' descriptions agree -------------------------------------------------
+
+#: What each probe both core hosts reach ``describe_source`` on records of
+#: their core operations (``contract/pinned/base.adventureworks.probes.json``).
+AGREE = ('described', 'materialize_schema')
+_SHA256 = re.compile(r'^[0-9a-f]{64}$')
+
+
+def digest(value: Any) -> str:
+    r"""The SHA-256 of ``value`` as canonical JSON: keys sorted, no
+    whitespace, UTF-8; ``sdm-testkit``'s ``tests/refusal_map.rs`` writes
+    the same."""
+    text = json.dumps(
+        value, sort_keys=True, separators=(',', ':'), ensure_ascii=False
+    )
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def agree(pin: Any, observed: dict[str, dict[str, str]]) -> list[str]:
+    r"""Each way ``observed`` (a runner's digests, by probe, of what
+    :data:`AGREE` names) departs from ``pin``'s; empty when they are the
+    pin's. Missing, empty or retyped evidence fails: a pin that is not one,
+    a probe the pin lists and the run did not reach, one the run reached
+    and the pin does not list, and a digest that is not one."""
+    probes = pin.get('probes') if isinstance(pin, dict) else None
+    if not isinstance(probes, dict) or not probes:
+        return ['the pin lists no probe']
+    failures = []
+    for name in sorted(set(probes) | set(observed)):
+        wanted, seen = probes.get(name), observed.get(name)
+        if not isinstance(wanted, dict) or not wanted:
+            failures.append(f'{name}: reached describe_source, not pinned')
+            continue
+        if (
+            any(
+                key not in AGREE
+                or not isinstance(v, str)
+                or not _SHA256.match(v)
+                for key, v in wanted.items()
+            )
+            or 'described' not in wanted
+        ):
+            failures.append(f'{name}: the pin is not digests')
+            continue
+        if seen is None:
+            failures.append(f'{name}: pinned, and describe_source not reached')
+        elif seen != wanted:
+            failures.append(
+                f'{name}: '
+                + ', '.join(
+                    key for key in AGREE if seen.get(key) != wanted.get(key)
+                )
+                + " not the pin's"
+            )
+    return failures
 
 
 # --- python-core ------------------------------------------------------------------
@@ -489,8 +547,10 @@ def bound(case: dict[str, Any], document: dict[str, Any]) -> list[str]:
     so it is the case itself (python-core: its input and the stage it stops
     at; rust-host: its core operations); every other probe derives from an
     earlier one by the removals it names. A rust-host probe's setup is its
-    python-core twin's, and its materialize and predict inputs, which
-    python-core captures, are held to that twin's at run time.
+    python-core twin's, and so are the edits it makes to its own
+    description before materialize samples it, the probe naming no schema
+    (T1.21d); its other materialize and predict inputs, which python-core
+    captures, are held to that twin's at run time.
     """
     failures: list[str] = []
     derived: dict[str, dict[str, Any]] = {runner: {} for runner in RUNNERS}
@@ -550,4 +610,15 @@ def bound(case: dict[str, Any], document: dict[str, Any]) -> list[str]:
                     'setup'
                 ):
                     failures.append(f"{name}/{runner}: not its twin's setup")
+                # materialize samples rust-host's own description with its
+                # twin's edits made; the probe names no schema (T1.21d).
+                if 'materialize' in held and (
+                    twin is None
+                    or spec.get('edits', []) != twin['input'].get('edits', [])
+                ):
+                    failures.append(f"{name}/{runner}: not its twin's edits")
+                if 'schema' in held.get('materialize', {}):
+                    failures.append(
+                        f'{name}/{runner}: names the schema materialize samples'
+                    )
     return failures

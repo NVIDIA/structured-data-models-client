@@ -551,7 +551,11 @@ def _core_agree(
 def _case_inputs(
     report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
 ) -> None:
-    r"""A core runner's recorded inputs are the case's ``core`` inputs."""
+    r"""A core runner's recorded inputs are the case's ``core`` inputs, and
+    the schema ``materialize`` sampled is the runner's own: the description
+    its ``describe_source`` answered, where the case makes no edit to it
+    (T1.21d; the case names no schema, and with edits the hosts' agreement
+    is the ``core`` rule's)."""
     core = observation['core']
     if core is None:
         return
@@ -570,15 +574,36 @@ def _case_inputs(
         wanted.append(
             {'op': 'describe_source', **case['core']['describe_source']}
         )
-    if 'materialize' in case.get('core', {}):
-        wanted.append(
-            {
-                'op': 'materialize',
-                'query': case['input']['pql'],
-                **case['core']['materialize'],
-            }
-        )
     missing = any(each not in core['inputs'] for each in wanted)
+    if 'materialize' in case.get('core', {}):
+        # The schema it samples is the host's own; the case names the rest.
+        wanted_materialize = {
+            'op': 'materialize',
+            'query': case['input']['pql'],
+            **case['core']['materialize'],
+        }
+        started = [
+            each for each in core['inputs'] if each.get('op') == 'materialize'
+        ]
+        missing = missing or not any(
+            all(
+                each.get(key) == value
+                for key, value in wanted_materialize.items()
+            )
+            for each in started
+        )
+        if not case['input'].get('edits') and any(
+            each.get('schema') != core['described'] for each in started
+        ):
+            _differ(
+                report,
+                f'{case["id"]}: {who}',
+                'core.inputs.materialize.schema',
+                None,
+                None,
+                show=False,
+                rule='inputs',
+            )
     if 'predict' in case.get('core', {}):
         # predict's state is materialize's answer and its request id the
         # host's to draw, so the case names only its model.

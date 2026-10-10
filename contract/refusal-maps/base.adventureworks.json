@@ -33,7 +33,7 @@
       "rule": "no_core_route: a schema Schema.from_source did not describe on the core",
       "owner": "T1.24",
       "register": "P1B-3",
-      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:100",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:103",
       "holds": "raise RouteError(",
       "why": "Reached only by forcing materialize without Schema.from_source; the journey's schema is described on the core once T1.24 routes Schema.from_source with tables named",
       "observed": {"python-core": {"stage": "materialize", "error": "RouteError", "code": null, "operation": null, "rule": null}}
@@ -44,7 +44,7 @@
       "rule": "tables_named",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:49",
+      "where": "rust/crates/sdm-core/src/describe.rs:51",
       "why": "describe_source's overrides, applied between inference and the key count as the reference applies them; the notebook names each table by another name than its source's, which SourceSpec.tables (source names only) cannot carry, so T1.23 adds the name each table is given",
       "observed": {"rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "tables_named"}}
     },
@@ -54,7 +54,7 @@
       "rule": "relationships",
       "owner": "T1.24",
       "register": "P1B-2",
-      "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:70-75",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:71-76",
       "holds": "if relationships is not None:",
       "why": "The ledger's option refusals pass through to the core (T1.24), which takes the links given once T1.23's describe_source checks and keeps them; SourceSpec has no place for them yet",
       "observed": {"python-core": {"stage": "from_source", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": null, "rule": "relationships"}}
@@ -65,7 +65,7 @@
       "rule": "primary_keys",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:52",
+      "where": "rust/crates/sdm-core/src/describe.rs:54",
       "why": "describe_source's key overrides",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "primary_keys"},
@@ -78,7 +78,7 @@
       "rule": "time_columns",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:55",
+      "where": "rust/crates/sdm-core/src/describe.rs:57",
       "why": "describe_source's time-column overrides",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_columns"},
@@ -91,24 +91,11 @@
       "rule": "text_time",
       "owner": "T1.25",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:334",
+      "where": "rust/crates/sdm-schema/src/infer.rs:411",
       "why": "Text whose values could be dates (seven AdventureWorks columns of codes with digits, such as AccountNumber), which reading dates (DT-7, text_shapes) decides",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "text_time"},
         "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "text_time"}
-      }
-    },
-    {
-      "id": "describe_source/time_name",
-      "operation": "describe_source",
-      "rule": "time_name",
-      "owner": "T1.21d",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:548",
-      "why": "A timestamp named as an edit stamp (ModifiedDate, in every table), which the time-column choice and the edit stamps the ledger gives T1.21d decide (E50, moved from T1.23 at T1.10e)",
-      "observed": {
-        "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_name"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_name"}
       }
     },
     {
@@ -117,8 +104,8 @@
       "rule": "time_values",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:554",
-      "why": "A timestamp held in fewer than half the rows (products' SellEndDate and DiscontinuedDate)",
+      "where": "rust/crates/sdm-schema/src/infer.rs:647",
+      "why": "A timestamp held in fewer than half the rows (products' SellEndDate and DiscontinuedDate), or one value in every row (customers' and products' ModifiedDate: edit stamps by name, which the core passes over from T1.21d, refused for their values first, as the reference refuses them before their name)",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_values"},
         "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_values"}
@@ -130,7 +117,7 @@
       "rule": "time_several",
       "owner": "T1.23",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:559",
+      "where": "rust/crates/sdm-schema/src/infer.rs:674",
       "why": "Several timestamps in one table (the order headers' OrderDate, DueDate and ShipDate)",
       "observed": {
         "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_several"},
@@ -143,7 +130,7 @@
       "rule": "inference_config",
       "owner": "T1.28",
       "register": "P1B-3",
-      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:233-235",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:242-244",
       "holds": "raise _not_taken(name)",
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28); the contract's materialize and predict inputs have no place for them yet, and T1.24 passes the option through to the core rather than refuse it in the bridge",
       "observed": {"python-core": {"stage": "materialize", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "inference_config"}}
@@ -154,7 +141,7 @@
       "rule": "deeper_hop",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:637",
+      "where": "rust/crates/sdm-core/src/materialize.rs:663",
       "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
       "observed": {
         "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "deeper_hop"},
@@ -167,7 +154,7 @@
       "rule": "text_column",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:651",
+      "where": "rust/crates/sdm-core/src/materialize.rs:677",
       "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
       "observed": {
         "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "text_column"},
@@ -680,7 +667,7 @@
           ]
         },
         "until": "from_source",
-        "expect": "describe_source/time_name"
+        "expect": "describe_source/time_values"
       },
       "rust-host": {
         "derive": {
@@ -708,12 +695,12 @@
           }
         },
         "until": "from_source",
-        "expect": "describe_source/time_name"
+        "expect": "describe_source/time_values"
       }
     },
     {
       "id": "no-edit-stamps",
-      "removes": "the four ModifiedDate columns, edit stamps by name (time_name)",
+      "removes": "customers' and products' ModifiedDate, each one value in every row (time_values): edit stamps by name, which the core passes over from T1.21d, refused for their values first, as the reference refuses them; the order headers' and lines' ModifiedDate stay, passed over by name",
       "python-core": {
         "derive": {
           "from": "no-text-dates",
@@ -721,9 +708,7 @@
             {
               "drop_columns": [
                 ["adventureworks_customers", "ModifiedDate"],
-                ["adventureworks_products", "ModifiedDate"],
-                ["adventureworks_sales_order_headers", "ModifiedDate"],
-                ["adventureworks_sales_order_details", "ModifiedDate"]
+                ["adventureworks_products", "ModifiedDate"]
               ]
             }
           ]
@@ -767,9 +752,7 @@
             "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"CreditCardApprovalCode\"",
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\""
+            "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\""
           ]
         },
         "until": "from_source",
@@ -789,9 +772,7 @@
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"CreditCardApprovalCode\"",
           "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
           "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\""
+          "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\""
         ],
         "core": {
           "describe_source": {
@@ -863,8 +844,6 @@
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\""
           ]
@@ -887,8 +866,6 @@
           "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
           "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\""
         ],
@@ -962,8 +939,6 @@
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
             "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
@@ -988,8 +963,6 @@
           "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
           "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
@@ -1073,8 +1046,6 @@
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
             "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
@@ -1143,8 +1114,6 @@
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
             "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
@@ -1169,14 +1138,30 @@
           "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
           "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ShipDate\""
         ],
         "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
+        "edits": [
+          {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
+          {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
+          {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+          {
+            "op": "set_relationships",
+            "relationships": [
+              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
+              {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
+              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+            ]
+          },
+          {"op": "clear_time_column", "table": "adventureworks_products"},
+          {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+        ],
         "core": {
           "describe_source": {
             "provider": {"provider": "sql", "dialect": "duckdb"},
@@ -1189,106 +1174,6 @@
           },
           "materialize": {
             "provider": {"provider": "sql", "dialect": "duckdb"},
-            "schema": {
-              "tables": [
-                {
-                  "name": "adventureworks_customers",
-                  "columns": [
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "PersonID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "StoreID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "TerritoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": ["CustomerID"],
-                  "time_column": null,
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_products",
-                  "columns": [
-                    {"name": "ProductID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "Name", "received": {"type": "utf8"}, "dtype": "string", "stype": "text", "nullable": true, "unique": false},
-                    {"name": "MakeFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "FinishedGoodsFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Color", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "SafetyStockLevel", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ReorderPoint", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "StandardCost", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "ListPrice", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Size", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "SizeUnitMeasureCode", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "WeightUnitMeasureCode", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Weight", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "DaysToManufacture", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductLine", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Class", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Style", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductSubcategoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ProductModelID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {
-                      "name": "SellStartDate",
-                      "received": {"type": "timestamp", "unit": "us", "zone": null},
-                      "dtype": "date",
-                      "stype": "timestamp",
-                      "nullable": true,
-                      "unique": false
-                    }
-                  ],
-                  "primary_key": ["ProductID"],
-                  "time_column": null,
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_sales_order_details",
-                  "columns": [
-                    {"name": "SalesOrderID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SalesOrderDetailID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "OrderQty", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SpecialOfferID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "UnitPrice", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "UnitPriceDiscount", "received": {"type": "float64"}, "dtype": "float", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "LineTotal", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "OrderDate", "received": {"type": "timestamp", "unit": "us", "zone": null}, "dtype": "date", "stype": "timestamp", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": ["SalesOrderDetailID"],
-                  "time_column": "OrderDate",
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_sales_order_headers",
-                  "columns": [
-                    {"name": "SalesOrderID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "RevisionNumber", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "OrderDate", "received": {"type": "timestamp", "unit": "us", "zone": null}, "dtype": "date", "stype": "timestamp", "nullable": true, "unique": false},
-                    {"name": "Status", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "OnlineOrderFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SalesPersonID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "TerritoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "BillToAddressID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ShipToAddressID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ShipMethodID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "CreditCardID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "CurrencyRateID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SubTotal", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "TaxAmt", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Freight", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "TotalDue", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Comment", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": [],
-                  "time_column": "OrderDate",
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                }
-              ],
-              "links": [
-                [{"table": "adventureworks_sales_order_headers", "column": "CustomerID"}, {"table": "adventureworks_customers", "column": "CustomerID"}],
-                [{"table": "adventureworks_sales_order_details", "column": "CustomerID"}, {"table": "adventureworks_customers", "column": "CustomerID"}],
-                [{"table": "adventureworks_sales_order_details", "column": "ProductID"}, {"table": "adventureworks_products", "column": "ProductID"}]
-              ]
-            },
             "indices": [{"t": "i64", "v": "709"}],
             "anchor_time": null,
             "seed": null
@@ -1360,8 +1245,6 @@
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
             "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
@@ -1386,14 +1269,29 @@
           "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
           "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ShipDate\""
         ],
         "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
+        "edits": [
+          {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
+          {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
+          {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+          {
+            "op": "set_relationships",
+            "relationships": [
+              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
+              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+            ]
+          },
+          {"op": "clear_time_column", "table": "adventureworks_products"},
+          {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+        ],
         "core": {
           "describe_source": {
             "provider": {"provider": "sql", "dialect": "duckdb"},
@@ -1406,105 +1304,6 @@
           },
           "materialize": {
             "provider": {"provider": "sql", "dialect": "duckdb"},
-            "schema": {
-              "tables": [
-                {
-                  "name": "adventureworks_customers",
-                  "columns": [
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "PersonID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "StoreID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "TerritoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": ["CustomerID"],
-                  "time_column": null,
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_products",
-                  "columns": [
-                    {"name": "ProductID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "Name", "received": {"type": "utf8"}, "dtype": "string", "stype": "text", "nullable": true, "unique": false},
-                    {"name": "MakeFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "FinishedGoodsFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Color", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "SafetyStockLevel", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ReorderPoint", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "StandardCost", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "ListPrice", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Size", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "SizeUnitMeasureCode", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "WeightUnitMeasureCode", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Weight", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "DaysToManufacture", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductLine", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Class", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Style", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductSubcategoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ProductModelID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {
-                      "name": "SellStartDate",
-                      "received": {"type": "timestamp", "unit": "us", "zone": null},
-                      "dtype": "date",
-                      "stype": "timestamp",
-                      "nullable": true,
-                      "unique": false
-                    }
-                  ],
-                  "primary_key": ["ProductID"],
-                  "time_column": null,
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_sales_order_details",
-                  "columns": [
-                    {"name": "SalesOrderID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SalesOrderDetailID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "OrderQty", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SpecialOfferID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "UnitPrice", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "UnitPriceDiscount", "received": {"type": "float64"}, "dtype": "float", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "LineTotal", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "OrderDate", "received": {"type": "timestamp", "unit": "us", "zone": null}, "dtype": "date", "stype": "timestamp", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": ["SalesOrderDetailID"],
-                  "time_column": "OrderDate",
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_sales_order_headers",
-                  "columns": [
-                    {"name": "SalesOrderID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "RevisionNumber", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "OrderDate", "received": {"type": "timestamp", "unit": "us", "zone": null}, "dtype": "date", "stype": "timestamp", "nullable": true, "unique": false},
-                    {"name": "Status", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "OnlineOrderFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SalesPersonID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "TerritoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "BillToAddressID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ShipToAddressID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ShipMethodID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "CreditCardID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "CurrencyRateID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SubTotal", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "TaxAmt", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Freight", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "TotalDue", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Comment", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": [],
-                  "time_column": "OrderDate",
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                }
-              ],
-              "links": [
-                [{"table": "adventureworks_sales_order_headers", "column": "CustomerID"}, {"table": "adventureworks_customers", "column": "CustomerID"}],
-                [{"table": "adventureworks_sales_order_details", "column": "ProductID"}, {"table": "adventureworks_products", "column": "ProductID"}]
-              ]
-            },
             "indices": [{"t": "i64", "v": "709"}],
             "anchor_time": null,
             "seed": null
@@ -1577,8 +1376,6 @@
             "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
             "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-            "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
             "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
             "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
@@ -1603,14 +1400,30 @@
           "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"CarrierTrackingNumber\"",
           "ALTER TABLE adventureworks_customers DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ModifiedDate\"",
-          "ALTER TABLE adventureworks_sales_order_details DROP COLUMN \"ModifiedDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"SellEndDate\"",
           "ALTER TABLE adventureworks_products DROP COLUMN \"DiscontinuedDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"DueDate\"",
           "ALTER TABLE adventureworks_sales_order_headers DROP COLUMN \"ShipDate\""
         ],
         "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
+        "edits": [
+          {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
+          {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
+          {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+          {
+            "op": "set_relationships",
+            "relationships": [
+              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
+              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+            ]
+          },
+          {"op": "clear_time_column", "table": "adventureworks_products"},
+          {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"},
+          {"op": "delete_column", "table": "adventureworks_products", "column": "Name"}
+        ],
         "core": {
           "describe_source": {
             "provider": {"provider": "sql", "dialect": "duckdb"},
@@ -1623,104 +1436,6 @@
           },
           "materialize": {
             "provider": {"provider": "sql", "dialect": "duckdb"},
-            "schema": {
-              "tables": [
-                {
-                  "name": "adventureworks_customers",
-                  "columns": [
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "PersonID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "StoreID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "TerritoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": ["CustomerID"],
-                  "time_column": null,
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_products",
-                  "columns": [
-                    {"name": "ProductID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "MakeFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "FinishedGoodsFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Color", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "SafetyStockLevel", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ReorderPoint", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "StandardCost", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "ListPrice", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Size", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "SizeUnitMeasureCode", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "WeightUnitMeasureCode", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Weight", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "DaysToManufacture", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductLine", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Class", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "Style", "received": {"type": "utf8"}, "dtype": "string", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductSubcategoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ProductModelID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {
-                      "name": "SellStartDate",
-                      "received": {"type": "timestamp", "unit": "us", "zone": null},
-                      "dtype": "date",
-                      "stype": "timestamp",
-                      "nullable": true,
-                      "unique": false
-                    }
-                  ],
-                  "primary_key": ["ProductID"],
-                  "time_column": null,
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_sales_order_details",
-                  "columns": [
-                    {"name": "SalesOrderID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SalesOrderDetailID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "OrderQty", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "ProductID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SpecialOfferID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "UnitPrice", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "UnitPriceDiscount", "received": {"type": "float64"}, "dtype": "float", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "LineTotal", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "OrderDate", "received": {"type": "timestamp", "unit": "us", "zone": null}, "dtype": "date", "stype": "timestamp", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": ["SalesOrderDetailID"],
-                  "time_column": "OrderDate",
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                },
-                {
-                  "name": "adventureworks_sales_order_headers",
-                  "columns": [
-                    {"name": "SalesOrderID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "RevisionNumber", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "OrderDate", "received": {"type": "timestamp", "unit": "us", "zone": null}, "dtype": "date", "stype": "timestamp", "nullable": true, "unique": false},
-                    {"name": "Status", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "OnlineOrderFlag", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false},
-                    {"name": "CustomerID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SalesPersonID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "TerritoryID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "BillToAddressID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ShipToAddressID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "ShipMethodID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "CreditCardID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "CurrencyRateID", "received": {"type": "int64"}, "dtype": "int", "stype": "ID", "nullable": true, "unique": false},
-                    {"name": "SubTotal", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "TaxAmt", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Freight", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "TotalDue", "received": {"type": "float64"}, "dtype": "float", "stype": "numerical", "nullable": true, "unique": false},
-                    {"name": "Comment", "received": {"type": "int64"}, "dtype": "int", "stype": "categorical", "nullable": true, "unique": false}
-                  ],
-                  "primary_key": [],
-                  "time_column": "OrderDate",
-                  "duplicate_keys": {"t": "u64", "v": "0"}
-                }
-              ],
-              "links": [
-                [{"table": "adventureworks_sales_order_headers", "column": "CustomerID"}, {"table": "adventureworks_customers", "column": "CustomerID"}],
-                [{"table": "adventureworks_sales_order_details", "column": "ProductID"}, {"table": "adventureworks_products", "column": "ProductID"}]
-              ]
-            },
             "indices": [{"t": "i64", "v": "709"}],
             "anchor_time": null,
             "seed": null

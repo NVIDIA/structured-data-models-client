@@ -385,16 +385,17 @@ pub struct PredictInput {
 }
 
 /// `materialize`'s inputs beside the query text, which is `input.pql`,
-/// kept as written: the provider, the schema it samples (the contract's
-/// `SourceDescription`, as the schema the call holds describes it), the
-/// entities to predict for (each a contract scalar, one Arrow column), the
-/// anchor time (a contract `ts` scalar or null) and the seed (the
-/// contract's signed hexadecimal text, or null for the default).
+/// kept as written: the provider, the entities to predict for (each a
+/// contract scalar, one Arrow column), the anchor time (a contract `ts`
+/// scalar or null) and the seed (the contract's signed hexadecimal text, or
+/// null for the default). Not the schema it samples: that is the
+/// description `describe_source` answered, with `input.edits` made, and a
+/// case naming one is refused (`deny_unknown_fields`; decision E50, the
+/// rust-host journey guard).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializeInput {
     pub provider: Value,
-    pub schema: Value,
     #[serde(deserialize_with = "some_indices")]
     pub indices: Vec<Value>,
     pub anchor_time: Value,

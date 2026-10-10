@@ -51,6 +51,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNERS = ROOT / 'contract/runners'
 CASE = ROOT / 'contract/cases/s1/base.adventureworks.json'
 MAP = ROOT / 'contract/refusal-maps/base.adventureworks.json'
+PIN = ROOT / 'contract/pinned/base.adventureworks.probes.json'
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 README = ROOT / 'contract/fixtures/adventureworks/README.md'
 
@@ -184,6 +185,43 @@ def test_the_probes_are_the_case_s_journey_with_the_removals_named() -> None:
     assert first['rust-host']['core'] == _case()['core']
 
 
+def test_a_rust_host_probe_names_no_schema_and_its_twin_s_edits() -> None:
+    # The rust-host journey guard (T1.21d): materialize samples rust-host's
+    # own description with its twin's edits made, so a probe naming the
+    # schema, or edits other than its twin's, fails the binding, seeded.
+    document = _map()
+    probe = next(
+        p
+        for p in document['probes']
+        if 'materialize' in p.get('rust-host', {}).get('core', {})
+    )
+    name = probe['id']
+    probe['rust-host']['core']['materialize']['schema'] = {
+        'tables': [],
+        'links': [],
+    }
+    assert f'{name}/rust-host: names the schema materialize samples' in (
+        refusal_map.bound(_case(), document)
+    )
+    for change in (
+        lambda edits: edits.pop(),
+        lambda edits: edits.clear(),
+        lambda edits: edits.append({'op': 'clear_time_column', 'table': 't'}),
+    ):
+        document = _map()
+        probe = next(p for p in document['probes'] if p['id'] == name)
+        change(probe['rust-host']['edits'])
+        assert f"{name}/rust-host: not its twin's edits" in (
+            refusal_map.bound(_case(), document)
+        )
+    document = _map()
+    probe = next(p for p in document['probes'] if p['id'] == name)
+    del probe['rust-host']['edits']
+    assert f"{name}/rust-host: not its twin's edits" in (
+        refusal_map.bound(_case(), document)
+    )
+
+
 def _case_changed(change: Any) -> dict[str, Any]:
     case = _case()
     change(case)
@@ -235,6 +273,7 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
     document = _map()
     bases = run_python.load_bases()
     observed = {}
+    digests: dict[str, dict[str, str]] = {}
     for probe in document['probes']:
         spec = probe.get('python-core')
         if spec is None:
@@ -244,6 +283,17 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
         rust = probe.get('rust-host')
         if rust is None or not capture.inputs:
             continue
+        # Where both hosts reach describe_source, python-core's description
+        # and the schema its materialize samples are the pin's, which
+        # rust-host is held to (T1.21d).
+        if capture.described is not None:
+            agreed = {'described': refusal_map.digest(capture.described)}
+            for each in capture.inputs:
+                if each['op'] == 'materialize':
+                    agreed['materialize_schema'] = refusal_map.digest(
+                        each['schema']
+                    )
+            digests[probe['id']] = agreed
         # Where python-core reached the core, it started the operations the
         # rust-host probe starts, with the same inputs.
         started = {each['op']: each for each in capture.inputs}
@@ -256,6 +306,54 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
     assert refusal_map.check(document, 'python-core', observed) == []
     # The ladder ends at predict's result.
     assert refusal_map.success('predict') in observed.values()
+    assert refusal_map.agree(_pin(), digests) == []
+    assert len(digests) >= 4 and any(
+        'materialize_schema' in each for each in digests.values()
+    )
+
+
+def _pin() -> dict[str, Any]:
+    pinned: dict[str, Any] = json.loads(PIN.read_text(encoding='utf-8'))
+    return pinned
+
+
+def test_the_hosts_descriptions_are_held_to_the_pin_fail_closed() -> None:
+    # The pin python-core and rust-host are both held to: seeded, each way
+    # the evidence can be missing, empty, retyped or other than the pin.
+    pin = _pin()
+    seen = copy.deepcopy(pin['probes'])
+    assert refusal_map.agree(pin, seen) == []
+    assert refusal_map.agree(pin, {}) != []
+    assert refusal_map.agree({}, seen) == ['the pin lists no probe']
+    assert refusal_map.agree({'probes': {}}, seen) == ['the pin lists no probe']
+    name = sorted(seen)[0]
+    other = copy.deepcopy(seen)
+    other[name]['described'] = '0' * 64
+    assert refusal_map.agree(pin, other) == [f"{name}: described not the pin's"]
+    missing = copy.deepcopy(seen)
+    del missing[name]
+    assert refusal_map.agree(pin, missing) == [
+        f'{name}: pinned, and describe_source not reached'
+    ]
+    extra = {**copy.deepcopy(seen), 'not-a-probe': seen[name]}
+    assert refusal_map.agree(pin, extra) == [
+        'not-a-probe: reached describe_source, not pinned'
+    ]
+    for retyped in (7, None, '', 'abc', ['x'] * 64):
+        broken = copy.deepcopy(pin)
+        broken['probes'][name]['described'] = retyped
+        assert refusal_map.agree(broken, seen) == [
+            f'{name}: the pin is not digests'
+        ], retyped
+    dropped = copy.deepcopy(pin)
+    del dropped['probes'][name]['described']
+    assert refusal_map.agree(dropped, seen) == [
+        f'{name}: the pin is not digests'
+    ]
+    # The digest is of canonical JSON: key order and spacing do not move it.
+    assert refusal_map.digest({'b': 1, 'a': [1, 'é']}) == refusal_map.digest(
+        json.loads('{ "a" : [1, "\\u00e9"], "b": 1 }')
+    )
 
 
 # --- the check fails closed --------------------------------------------------------

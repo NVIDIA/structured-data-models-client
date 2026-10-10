@@ -14,7 +14,10 @@
 //! `duckdb-rs`, answering each fetch with the DuckDB provider
 //! ([`crate::duck`]); its answer is the source's description, or the core's
 //! error. Either way it records the operation's inputs and every fetch the
-//! core asked for, the step trace its fields come from.
+//! core asked for, the step trace its fields come from. From T1.21d its
+//! `materialize` samples the description its own `describe_source`
+//! answered, with the case's edits made ([`crate::edits`]): the case names
+//! no schema for it, and its loader refuses one (decision E50).
 
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -40,6 +43,7 @@ use serde_json::{Value, json};
 use crate::bases::Bases;
 use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput};
 use crate::driver::{self, DriverLog};
+use crate::edits::{self, SchemaEdit};
 use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
@@ -163,11 +167,26 @@ fn error_of(out: &Outgoing) -> Result<Answer> {
 }
 
 /// Runs `case`'s core operation, building its data from `bases`; an `Err`
-/// is this host's failure, never the case's outcome.
+/// is this host's failure, never the case's outcome. The case's edits are
+/// made to the description before `materialize` samples it.
 pub fn run(case: &Case, bases: &Bases) -> Result<Observed> {
+    let edits: Vec<SchemaEdit> = case
+        .input
+        .edits
+        .iter()
+        .flatten()
+        .map(SchemaEdit::from)
+        .collect();
+    run_edited(case, bases, &edits)
+}
+
+/// Runs `case`'s core operation as [`run`] does, with `edits` made to the
+/// description in place of the case's own (a refusal map's probe, whose
+/// edits may also name a key or the relationships).
+pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Observed> {
     let core = case.core.as_ref();
     if let Some(spec) = core.and_then(|core| core.describe_source.as_ref()) {
-        return describe(case, spec, bases);
+        return describe(case, spec, bases, edits);
     }
     let Some(spec) = core.and_then(|core| core.validate_query.as_ref()) else {
         bail!(
@@ -325,25 +344,33 @@ fn drive(
 /// `describe_source` over the case's DuckDB base, each fetch answered by
 /// the DuckDB provider; then, when the case names it, `materialize` over
 /// the same base.
-fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Observed> {
+fn describe(
+    case: &Case,
+    spec: &DescribeSourceInput,
+    bases: &Bases,
+    edits: &[SchemaEdit],
+) -> Result<Observed> {
     let connection = database(case, bases)?;
     // After the setup, as the Python runner turns it on (design, "Driver
     // capture"), so the log holds what the case's operations ran.
     driver::enable_query_log(&connection)?;
     let mut log = DriverLog::default();
-    let mut observed = describe_on(case, spec, &connection, &mut log)?;
+    let mut observed = describe_on(case, spec, &connection, &mut log, edits)?;
     let logged = driver::query_log(&connection)?;
     observed.driver = Some(log.record(&logged));
     Ok(observed)
 }
 
 /// `describe_source`, then `materialize` and `predict` when the case names
-/// them, on `connection`, recording what the provider ran in `log`.
+/// them, on `connection`, recording what the provider ran in `log`;
+/// `materialize` samples the description `describe_source` answered, with
+/// `edits` made.
 fn describe_on(
     case: &Case,
     spec: &DescribeSourceInput,
     connection: &duckdb::Connection,
     log: &mut DriverLog,
+    edits: &[SchemaEdit],
 ) -> Result<Observed> {
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
@@ -408,11 +435,16 @@ fn describe_on(
         Ok(_) => bail!("{}: describe_source answered another operation", case.id),
     };
     observed.described = Some(described.clone());
-    observed.answer = Answer::Described(described);
+    observed.answer = Answer::Described(described.clone());
     let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
         return Ok(observed);
     };
-    let Some(state) = materialize(case, spec, connection, &mut observed, log)? else {
+    // The schema materialize samples is this host's own description, with
+    // the user's edits made: never one the case carries (decision E50).
+    let described: SourceDescription = serde_json::from_value(described)
+        .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
+    let schema = edits::edited(&described, edits).with_context(|| case.id.clone())?;
+    let Some(state) = materialize(case, spec, &schema, connection, &mut observed, log)? else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
@@ -498,12 +530,13 @@ pub struct HeldState {
     pub query: Vec<u8>,
 }
 
-/// `materialize` over the case's DuckDB base, after its `describe_source`:
-/// the request state it answered, held for `predict`, or none when it
-/// answered an error.
+/// `materialize` over the case's DuckDB base, after its `describe_source`,
+/// sampling `schema`: the request state it answered, held for `predict`,
+/// or none when it answered an error.
 fn materialize(
     case: &Case,
     spec: &MaterializeInput,
+    schema: &SourceDescription,
     connection: &duckdb::Connection,
     observed: &mut Observed,
     log: &mut DriverLog,
@@ -512,12 +545,6 @@ fn materialize(
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
             "{}: core.materialize.provider is not a ProviderChoice",
-            case.id
-        )
-    })?;
-    let schema: SourceDescription = serde_json::from_value(spec.schema.clone()).map_err(|_| {
-        anyhow!(
-            "{}: core.materialize.schema is not a SourceDescription",
             case.id
         )
     })?;
@@ -536,7 +563,7 @@ fn materialize(
     let field = Field::new("indices", column.data_type().clone(), false);
     let batch = RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![column])?;
     // What this host sends, as it encodes it, is what it records.
-    let schema_bytes = serde_json::to_vec(&schema)?;
+    let schema_bytes = serde_json::to_vec(schema)?;
     let query_bytes = serde_json::to_vec(&case.input.pql)?;
     observed.operations.push("materialize".into());
     observed.inputs.push(json!({

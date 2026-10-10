@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -446,7 +446,6 @@
           "provider": "sql",
           "dialect": "duckdb"
         },
-        "schema": {},
         "indices": [
           {}
         ],
@@ -464,8 +463,29 @@
           "provider": "sql",
           "dialect": "duckdb"
         },
-        "schema": {},
         "indices": [],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "core.materialize naming the schema it samples, which each host builds from its own description and the case's edits (the rust-host journey guard, T1.21d)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "schema": {
+          "tables": [],
+          "links": []
+        },
+        "indices": [
+          {}
+        ],
         "anchor_time": null,
         "seed": null
       }
@@ -596,7 +616,6 @@
           "provider": "sql",
           "dialect": "duckdb"
         },
-        "schema": {},
         "indices": [
           {}
         ],

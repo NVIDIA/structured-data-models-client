@@ -73,12 +73,12 @@
           }
         },
         "materialize": {
+          "description": "materialize's inputs beside the query text, which is input.pql. Not the schema it samples: that is the description describe_source answered, with input.edits made, which each host builds itself; a case naming one is refused (decision E50, the rust-host journey guard).",
           "type": "object",
           "additionalProperties": false,
-          "required": ["provider", "schema", "indices", "anchor_time", "seed"],
+          "required": ["provider", "indices", "anchor_time", "seed"],
           "properties": {
             "provider": {"description": "The contract's ProviderChoice.", "type": "object"},
-            "schema": {"description": "The contract's SourceDescription of the schema the call holds, which materialize samples: the core's description of the source, with the schema's relationships as its links; the query text is input.pql.", "type": "object"},
             "indices": {"description": "The entities to predict for, one Arrow column: each a contract scalar of one integer or text type.", "type": "array", "minItems": 1, "items": {"type": "object"}},
             "anchor_time": {"description": "The anchor time, a contract ts scalar, or null for the default.", "type": ["object", "null"]},
             "seed": {"description": "The sampling seed as the contract's signed hexadecimal text, or null for the default.", "type": ["string", "null"], "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"}
