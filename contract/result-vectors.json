@@ -4,6 +4,7 @@
     {
       "name": "integers",
       "sql": "SELECT (-128)::TINYINT AS a, (-2)::SMALLINT AS b, 2147483647::INTEGER AS c, (-9223372036854775807 - 1)::BIGINT AS d, 255::UTINYINT AS e, 18446744073709551615::UBIGINT AS f",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -83,6 +84,7 @@
     {
       "name": "floats",
       "sql": "SELECT 1.5::DOUBLE AS a, 0.1::FLOAT AS b, 'NaN'::DOUBLE AS c, '-0.0'::DOUBLE AS d, 'inf'::DOUBLE AS e, 0.1::DOUBLE AS f",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -162,6 +164,7 @@
     {
       "name": "text, booleans and nulls",
       "sql": "SELECT 'plain' AS a, 'caf' || chr(233) || ' ' || chr(9731) || ' ' || chr(128512) AS b, chr(1) || chr(10) || '\"' || chr(92) || chr(127) AS c, NULL::VARCHAR AS d, true AS e, false AS f, NULL::INTEGER AS g",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -239,6 +242,7 @@
     {
       "name": "decimals",
       "sql": "SELECT 1.50::DECIMAL(10,2) AS a, (-0.000000000000000001)::DECIMAL(38,18) AS b, 12345678901234567890123456789012345678::DECIMAL(38,0) AS c, 0::DECIMAL(4,2) AS d, (-1.5)::DECIMAL(4,1) AS e",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -313,6 +317,7 @@
     {
       "name": "dates and times",
       "sql": "SELECT DATE '2020-02-29' AS a, DATE '1960-01-01' AS b, TIMESTAMP '2020-01-01 01:02:03.123456' AS c, TIMESTAMP '1960-12-31 23:59:59.999999' AS d, TIME '01:02:03.5' AS e, CAST(TIMESTAMP '2024-03-10 02:30:00' AS TIMESTAMP) AS f",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -392,6 +397,7 @@
     {
       "name": "nested",
       "sql": "SELECT [1, 2, NULL] AS a, ['x', 'y'] AS b, {'k': 1, 'v': 'w'} AS c, []::INTEGER[] AS d, [[1], []] AS e",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -509,6 +515,7 @@
     {
       "name": "binary",
       "sql": "SELECT '\\xAA\\x00\\xBB'::BLOB AS a",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -538,6 +545,7 @@
     {
       "name": "rows in an order, with a duplicate",
       "sql": "SELECT x, y FROM (VALUES (2, 'b'), (1, 'a'), (2, 'b'), (3, NULL)) AS t(x, y) ORDER BY x DESC NULLS LAST, y",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "x",
@@ -604,6 +612,7 @@
     {
       "name": "no rows",
       "sql": "SELECT 1 AS a WHERE false",
+      "fetchall": "same",
       "arrow": [
         {
           "name": "a",
@@ -622,6 +631,164 @@
         "unencodable": []
       },
       "rows": []
+    },
+    {
+      "name": "nanosecond times and timestamps, a microsecond apart from none",
+      "sql": "SELECT TIME_NS '00:00:00.000000001' AS a, TIME_NS '00:00:00.000000002' AS b, TIMESTAMP_NS '2020-01-01 00:00:00.000000001' AS c, [TIME_NS '23:59:59.999999999'] AS d",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "time64[ns]"
+        },
+        {
+          "name": "b",
+          "type": "time64[ns]"
+        },
+        {
+          "name": "c",
+          "type": "timestamp[ns]"
+        },
+        {
+          "name": "d",
+          "type": "list<l: time64[ns]>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "types": [
+          "TIME_NS",
+          "TIME_NS",
+          "TIMESTAMP_NS",
+          "TIME_NS[]"
+        ],
+        "ordered": "896b2f0211138e25454fa09a5be5e54087125d9bf7887dadea1d19704db44864",
+        "unordered": "896b2f0211138e25454fa09a5be5e54087125d9bf7887dadea1d19704db44864",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "time",
+            "1"
+          ],
+          [
+            "time",
+            "2"
+          ],
+          [
+            "ts",
+            "1577836800000000001"
+          ],
+          [
+            "list",
+            [
+              [
+                "time",
+                "86399999999999"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "an interval",
+      "sql": "SELECT INTERVAL 1 MONTH AS a, INTERVAL 30 DAY AS b",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "month_day_nano_interval"
+        },
+        {
+          "name": "b",
+          "type": "month_day_nano_interval"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "INTERVAL",
+          "INTERVAL"
+        ],
+        "ordered": "e3d9e8ce4514368d1ff50d5337742bacc9314ab27296e0159648b47a8ef51a72",
+        "unordered": "e3d9e8ce4514368d1ff50d5337742bacc9314ab27296e0159648b47a8ef51a72",
+        "unencodable": [
+          "arrow:month_day_nano_interval"
+        ]
+      },
+      "rows": [
+        [
+          [
+            "?",
+            "arrow:month_day_nano_interval"
+          ],
+          [
+            "?",
+            "arrow:month_day_nano_interval"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a timestamp with a zone",
+      "setup": "SET GLOBAL TimeZone = 'UTC'",
+      "sql": "SELECT TIMESTAMPTZ '2020-01-01 00:00:00.000001+00' AS a, TIMESTAMP_MS '2020-01-01 00:00:00.001' AS b, TIMESTAMP_S '2020-01-01 00:00:01' AS c",
+      "fetchall": "not read",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "timestamp[us, tz=UTC]"
+        },
+        {
+          "name": "b",
+          "type": "timestamp[ms]"
+        },
+        {
+          "name": "c",
+          "type": "timestamp[s]"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c"
+        ],
+        "types": [
+          "TIMESTAMP WITH TIME ZONE",
+          "TIMESTAMP_MS",
+          "TIMESTAMP_S"
+        ],
+        "ordered": "8fcf845a4f79a805c81690f7c1527f0a883cc1cdf46e1f0fe9bea7325d5ebd85",
+        "unordered": "8fcf845a4f79a805c81690f7c1527f0a883cc1cdf46e1f0fe9bea7325d5ebd85",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "tstz",
+            "1577836800000001000"
+          ],
+          [
+            "ts",
+            "1577836800001000000"
+          ],
+          [
+            "ts",
+            "1577836801000000000"
+          ]
+        ]
+      ]
     }
   ]
 }

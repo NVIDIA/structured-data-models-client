@@ -22,16 +22,22 @@ fn vectors() -> Vec<Value> {
     let file: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     assert_eq!(file["format"], "sdm-result-vectors/1");
     let vectors = file["vectors"].as_array().unwrap().clone();
-    // Not vacuous: every kind the canonical form names, and an empty result.
-    assert!(vectors.len() >= 9);
+    // Not vacuous: every kind the canonical form names, an empty result,
+    // nanosecond times, an interval and a zoned timestamp.
+    assert!(vectors.len() >= 12);
     vectors
 }
 
 #[test]
 fn each_vector_reads_as_the_python_runner_reads_it() {
-    let connection = duck::open().unwrap();
     for vector in vectors() {
         let name = vector["name"].as_str().unwrap();
+        // A fresh database per vector, with its setup (the zone a zoned
+        // timestamp is read in), as the Python test makes one.
+        let connection = duck::open().unwrap();
+        if let Some(setup) = vector.get("setup").and_then(Value::as_str) {
+            connection.execute_batch(setup).unwrap();
+        }
         let fetched = duck::run(&connection, vector["sql"].as_str().unwrap()).unwrap();
         let schema: Vec<Value> = fetched
             .schema

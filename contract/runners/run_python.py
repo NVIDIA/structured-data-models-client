@@ -835,7 +835,11 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     epoch]``, ``["time", nanoseconds since midnight]``, ``["dur",
     nanoseconds]``, ``["list", cells]`` and ``["struct", [[name, cell],
     ...]]``. A value of any other kind is ``["?", its type's name]`` and is
-    listed as unencodable, which the comparator never takes as equal."""
+    listed as unencodable, which the comparator never takes as equal. This
+    reads Python values, which hold a time only to the microsecond: an
+    Arrow result is read from Arrow instead (:func:`arrow_values`), and a
+    row read of a column a driver reads with less than its precision is
+    unencodable (:func:`result_values`)."""
     import datetime as dt
     from decimal import Decimal
 
@@ -907,22 +911,24 @@ def _canonical_text(value: Any) -> str:
     )
 
 
-def result_values(
-    columns: list[str], types: list[str] | None, rows: Iterable[Any]
+#: DuckDB types a Python driver reads into Python values with less than
+#: their precision: ``TIME_NS`` and ``TIMESTAMP_NS`` to microseconds, and an
+#: ``INTERVAL`` to a ``timedelta`` that folds its months into days. Values
+#: of such a column, nested ones included, read as rows (``fetchall``) are
+#: unencodable, never compared as if exact.
+_LOSSY_AS_ROWS = ('TIME_NS', 'TIMESTAMP_NS', 'INTERVAL')
+
+
+def _texts(rows: Iterable[list[Any]]) -> list[str]:
+    return [_canonical_text(row) for row in rows]
+
+
+def _values(
+    columns: list[str],
+    types: list[str] | None,
+    texts: list[str],
+    odd: list[str],
 ) -> dict[str, Any]:
-    r"""A result's columns and its rows in canonical form
-    (:func:`canonical_cell`):
-    the SHA-256 of the rows in the order read (``ordered``) and of the same
-    rows sorted by their canonical text (``unordered``, so two results
-    holding the same rows in another order agree, duplicates counted);
-    ``types`` are DuckDB's own names of the columns' types where a Python
-    driver gives them (``description``), and ``unencodable`` names every
-    value of a kind the canonical form does not hold."""
-    odd: list[str] = []
-    texts = [
-        _canonical_text([canonical_cell(value, odd) for value in row])
-        for row in rows
-    ]
     return {
         'columns': list(columns),
         'types': types,
@@ -932,12 +938,146 @@ def result_values(
     }
 
 
+def result_values(
+    columns: list[str], types: list[str] | None, rows: Iterable[Any]
+) -> dict[str, Any]:
+    r"""A result read as Python rows (``fetchall``), its columns and rows in
+    canonical form (:func:`canonical_cell`): the SHA-256 of the rows in the
+    order read (``ordered``) and of the same rows sorted by their canonical
+    text (``unordered``, so two results holding the same rows in another
+    order agree, duplicates counted); ``types`` are DuckDB's own names of
+    the columns' types where the driver gives them (``description``), and
+    ``unencodable`` names every value of a kind the canonical form does not
+    hold, and every value of a column whose type the driver reads with less
+    than its precision (:data:`_LOSSY_AS_ROWS`)."""
+    odd: list[str] = []
+    lossy = [
+        any(name in kind for name in _LOSSY_AS_ROWS) for kind in types or []
+    ]
+    cells = []
+    for row in rows:
+        cells.append(
+            [
+                None
+                if value is None
+                else (
+                    _unencodable(f'duckdb:{types[i]} read as rows', odd)
+                    if types is not None and i < len(lossy) and lossy[i]
+                    else canonical_cell(value, odd)
+                )
+                for i, value in enumerate(row)
+            ]
+        )
+    return _values(list(columns), types, _texts(cells), odd)
+
+
+def _unencodable(name: str, odd: list[str]) -> list[str]:
+    odd.append(name)
+    return ['?', name]
+
+
+#: Nanoseconds per unit of an Arrow temporal type.
+_UNIT_NANOS = {'s': 10**9, 'ms': 10**6, 'us': 10**3, 'ns': 1}
+
+
+def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
+    r"""The canonical cells of one Arrow array, read from Arrow itself, as
+    ``sdm-testkit``'s ``values`` reads them: temporal values from their
+    integer storage at their unit (so a ``time64[ns]`` keeps its
+    nanoseconds), lists and structs element by element, a dictionary as its
+    values; a type outside that set (an interval, a map, a union) is
+    unencodable, its non-null values ``["?", "arrow:<type>"]``."""
+    import pyarrow as pa
+    import pyarrow.types as is_
+
+    kind = array.type
+    valid = [not null for null in array.is_null().to_pylist()]
+    if is_.is_dictionary(kind):
+        return _arrow_cells(array.dictionary_decode(), odd)
+    if is_.is_time(kind) or is_.is_timestamp(kind) or is_.is_duration(kind):
+        width = pa.int32() if is_.is_time32(kind) else pa.int64()
+        factor = _UNIT_NANOS[kind.unit]
+        if is_.is_time(kind):
+            tag = 'time'
+        elif is_.is_duration(kind):
+            tag = 'dur'
+        else:
+            tag = 'tstz' if kind.tz else 'ts'
+        counts = array.view(width).to_pylist()
+        return [
+            [tag, str(count * factor)] if ok else None
+            for count, ok in zip(counts, valid, strict=True)
+        ]
+    if is_.is_date32(kind):
+        days = array.view(pa.int32()).to_pylist()
+        return [
+            ['date', day] if ok else None
+            for day, ok in zip(days, valid, strict=True)
+        ]
+    if (
+        is_.is_list(kind)
+        or is_.is_large_list(kind)
+        or is_.is_fixed_size_list(kind)
+    ):
+        return [
+            ['list', _arrow_cells(array[i].values, odd)] if ok else None
+            for i, ok in enumerate(valid)
+        ]
+    if is_.is_struct(kind):
+        names = [kind.field(j).name for j in range(kind.num_fields)]
+        children = [_arrow_cells(child, odd) for child in array.flatten()]
+        return [
+            ['struct', [[name, children[j][i]] for j, name in enumerate(names)]]
+            if ok
+            else None
+            for i, ok in enumerate(valid)
+        ]
+    if is_.is_float16(kind):
+        array = array.cast(pa.float32())
+        kind = array.type
+    string_view = getattr(is_, 'is_string_view', lambda _: False)
+    binary_view = getattr(is_, 'is_binary_view', lambda _: False)
+    if (
+        is_.is_null(kind)
+        or is_.is_boolean(kind)
+        or is_.is_integer(kind)
+        or is_.is_floating(kind)
+        or is_.is_string(kind)
+        or is_.is_large_string(kind)
+        or string_view(kind)
+        or is_.is_binary(kind)
+        or is_.is_large_binary(kind)
+        or is_.is_fixed_size_binary(kind)
+        or binary_view(kind)
+        or is_.is_decimal(kind)
+    ):
+        return [canonical_cell(value, odd) for value in array.to_pylist()]
+    name = f'arrow:{kind}'
+    return [_unencodable(name, odd) if ok else None for ok in valid]
+
+
 def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
-    r"""An Arrow table's :func:`result_values`, read column by column, so
-    two columns of one name stay two."""
-    columns = [column.to_pylist() for column in table.columns]
-    rows = zip(*columns, strict=True) if columns else [()] * table.num_rows
-    return result_values(table.schema.names, types, rows)
+    r"""An Arrow table's columns and rows in canonical form, read from
+    Arrow (:func:`_arrow_cells`) column by column, so two columns of one
+    name stay two; digests as :func:`result_values`'."""
+    import pyarrow as pa
+
+    odd: list[str] = []
+    columns = [
+        _arrow_cells(
+            column.combine_chunks()
+            if column.num_chunks
+            else pa.array([], type=column.type),
+            odd,
+        )
+        for column in table.columns
+    ]
+    rows = (
+        [list(row) for row in zip(*columns, strict=True)]
+        if columns
+        else [[] for _ in range(table.num_rows)]
+    )
+    return _values(table.schema.names, types, _texts(rows), odd)
 
 
 def _description(driver: Any) -> tuple[list[str], list[str]] | None:
@@ -1071,6 +1211,10 @@ class _Captured:
                 self._log.incomplete.append(f'{method}:no_description')
             result['values'] = result_values(names, types, rows)
         else:
+            # The DuckDB types are recorded for an Arrow read too, and the
+            # comparator requires them from every Python driver's read.
+            if described is None:
+                self._log.incomplete.append(f'{method}:no_description')
             result = {
                 'method': method,
                 'rows': answer.num_rows,

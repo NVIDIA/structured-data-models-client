@@ -17,8 +17,10 @@
 //! 1970-01-01]`, `["ts", nanoseconds since 1970-01-01 on the wall clock]`
 //! (a timestamp without a zone), `["tstz", nanoseconds since the UTC
 //! epoch]`, `["time", nanoseconds since midnight]`, `["dur",
-//! nanoseconds]`, `["list", cells]` and `["struct", [[name, cell], ...]]`;
-//! a dictionary is read as its values. A value of any other type is `["?",
+//! nanoseconds]`, each temporal count read from the array's integer storage
+//! at its unit, `["list", cells]` and `["struct", [[name, cell], ...]]`;
+//! a dictionary is read as its values. A value of any other type (an
+//! interval, a map, a union among them) is `["?",
 //! its type's name]` and is listed as unencodable, which the comparator
 //! never takes as equal. A row is the compact JSON of its cells, ASCII only
 //! (Python's `json.dumps` with `ensure_ascii`), so its order as text is its
@@ -37,8 +39,8 @@ use duckdb::arrow::array::{
 use duckdb::arrow::compute::cast;
 use duckdb::arrow::datatypes::{
     DataType, DurationMicrosecondType, DurationMillisecondType, DurationNanosecondType,
-    DurationSecondType, Field, Int8Type, Int16Type, Int32Type, Int64Type, Time32MillisecondType,
-    Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimeUnit,
+    DurationSecondType, Field, Int8Type, Int16Type, Int32Type, Int64Type, IntervalUnit,
+    Time32MillisecondType, Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimeUnit,
     TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
     TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
@@ -123,9 +125,13 @@ fn cell(array: &ArrayRef, row: usize, odd: &mut BTreeSet<String>) -> Value {
     }
     let any = array.as_any();
     match array.data_type() {
-        DataType::Boolean => {
-            Value::Bool(any.downcast_ref::<BooleanArray>().map(|a| a.value(row)) == Some(true))
-        }
+        DataType::Null => Value::Null,
+        // Fails closed: a Boolean array that does not read as one is
+        // unencodable, never false.
+        DataType::Boolean => match any.downcast_ref::<BooleanArray>() {
+            Some(a) => Value::Bool(a.value(row)),
+            None => unencodable(array.data_type(), odd),
+        },
         DataType::Int8 => tagged("i", array.as_primitive::<Int8Type>().value(row).to_string()),
         DataType::Int16 => tagged(
             "i",
@@ -360,6 +366,9 @@ pub fn arrow_type(data_type: &DataType) -> String {
         DataType::Duration(u) => format!("duration[{}]", unit(u)),
         DataType::Decimal128(p, s) => format!("decimal128({p}, {s})"),
         DataType::Decimal256(p, s) => format!("decimal256({p}, {s})"),
+        DataType::Interval(IntervalUnit::MonthDayNano) => "month_day_nano_interval".into(),
+        DataType::Interval(IntervalUnit::YearMonth) => "month_interval".into(),
+        DataType::Interval(IntervalUnit::DayTime) => "day_time_interval".into(),
         DataType::List(field) => format!("list<{}>", child(field)),
         DataType::LargeList(field) => format!("large_list<{}>", child(field)),
         DataType::FixedSizeList(field, size) => {

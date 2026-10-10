@@ -57,9 +57,9 @@ def _vectors() -> list[dict[str, Any]]:
 
 def test_the_vector_file() -> None:
     vectors = _vectors()
-    # Not vacuous: every kind of cell the form names but the zoned and
-    # duration ones (which need pytz to read through fetchall) appears,
-    # and one vector has no rows.
+    # Not vacuous: every kind of cell the form names but a duration (which
+    # DuckDB's SQL cannot make) appears, an interval stands as unencodable,
+    # nanosecond times differ from each other, and one vector has no rows.
     kinds = set()
 
     def walk(cell: Any) -> None:
@@ -75,36 +75,93 @@ def test_the_vector_file() -> None:
             kinds.add(type(cell).__name__)
 
     for vector in vectors:
+        assert vector['fetchall'] in ('same', 'unencodable', 'not read')
         for row in vector['rows']:
             for cell in row:
                 walk(cell)
     assert kinds >= {
-        'i', 'f', 's', 'b', 'd', 'date', 'ts', 'time', 'list', 'struct',
-        'bool', 'NoneType',
+        'i', 'f', 's', 'b', 'd', 'date', 'ts', 'tstz', 'time', 'list',
+        'struct', '?', 'bool', 'NoneType',
     }  # fmt: skip
     assert any(vector['rows'] == [] for vector in vectors)
     assert len({vector['name'] for vector in vectors}) == len(vectors)
+    [nanos] = [v for v in vectors if v['name'].startswith('nanosecond')]
+    assert nanos['rows'][0][:2] == [['time', '1'], ['time', '2']]
+
+
+def _cursor(vector: dict[str, Any]) -> Any:
+    connection = duckdb.connect()
+    if 'setup' in vector:
+        connection.execute(vector['setup'])
+    return connection.cursor()
 
 
 @pytest.mark.parametrize('vector', _vectors(), ids=lambda v: v['name'])
-def test_rows_and_arrow_read_alike(vector: dict[str, Any]) -> None:
-    cursor = duckdb.connect().cursor()
+def test_arrow_reads_as_the_vector_says(vector: dict[str, Any]) -> None:
+    cursor = _cursor(vector)
     cursor.execute(vector['sql'])
-    names = [column[0] for column in cursor.description]
     types = [str(column[1]) for column in cursor.description]
-    rows = cursor.fetchall()
-    odd: list[str] = []
-    assert [
-        [run_python.canonical_cell(value, odd) for value in row] for row in rows
-    ] == vector['rows']
-    assert odd == []
-    assert run_python.result_values(names, types, rows) == vector['values']
-    cursor.execute(vector['sql'])
     table = cursor.to_arrow_table()
     assert [
         {'name': field.name, 'type': str(field.type)} for field in table.schema
     ] == vector['arrow']
     assert run_python.arrow_values(table, types) == vector['values']
+
+
+@pytest.mark.parametrize(
+    'vector',
+    [v for v in _vectors() if v['fetchall'] != 'not read'],
+    ids=lambda v: v['name'],
+)
+def test_rows_read_as_arrow_or_are_unencodable(vector: dict[str, Any]) -> None:
+    r"""A row read gives the Arrow read's cells and digests, or, for a
+    type the driver reads with less than its precision (``TIME_NS``,
+    ``TIMESTAMP_NS``, ``INTERVAL``), unencodable cells, so a value the
+    driver truncated is never compared as equal."""
+    cursor = _cursor(vector)
+    cursor.execute(vector['sql'])
+    names = [column[0] for column in cursor.description]
+    types = [str(column[1]) for column in cursor.description]
+    rows = cursor.fetchall()
+    read = run_python.result_values(names, types, rows)
+    if vector['fetchall'] == 'same':
+        odd: list[str] = []
+        assert [
+            [run_python.canonical_cell(value, odd) for value in row]
+            for row in rows
+        ] == vector['rows']
+        assert odd == []
+        assert read == vector['values']
+    else:
+        assert read['unencodable']
+        assert all('read as rows' in name or name.startswith('arrow:')
+                   for name in read['unencodable'])  # fmt: skip
+        assert read['unordered'] != vector['values']['unordered']
+
+
+def test_nanoseconds_a_microsecond_read_would_lose_are_kept() -> None:
+    r"""Two ``TIME_NS`` values a nanosecond apart differ as Arrow, nested
+    or not (Codex's repro); read as rows they are unencodable."""
+
+    def read(clock: str) -> Any:
+        cursor = duckdb.connect().cursor()
+        query = f"SELECT TIME_NS '{clock}' AS c, [TIME_NS '{clock}'] AS l"
+        cursor.execute(query)
+        arrow = run_python.arrow_values(cursor.to_arrow_table())
+        cursor.execute(query)
+        rows = run_python.result_values(
+            ['c', 'l'], ['TIME_NS', 'TIME_NS[]'], cursor.fetchall()
+        )
+        return arrow, rows
+
+    one, one_rows = read('00:00:00.000000001')
+    two, _ = read('00:00:00.000000002')
+    assert one['unordered'] != two['unordered']
+    assert one['unencodable'] == []
+    assert one_rows['unencodable'] == [
+        'duckdb:TIME_NS read as rows',
+        'duckdb:TIME_NS[] read as rows',
+    ]
 
 
 def test_order_counts_only_in_ordered() -> None:
