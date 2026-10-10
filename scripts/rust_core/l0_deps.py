@@ -24,9 +24,10 @@ features, every target platform) and checks:
 - nothing shipped (domain, host or binding) reaches ``sdm-testkit`` over
   normal or build edges;
 - no domain crate, and not ``sdm-host``, reaches ``pyo3``, ``jni``,
-  ``arrow-pyarrow``, ``numpy`` or ``duckdb`` over normal or build edges; a
-  binding reaches no database driver and no other language's runtime
-  (``sdm-py`` no ``jni``; the planned ``sdm-jni`` no ``pyo3``);
+  ``arrow-pyarrow``, ``numpy`` or a database driver (``DRIVERS``: DuckDB's
+  and those of the dialects that may follow it) over normal or build
+  edges; a binding reaches no database driver and no other language's
+  runtime (``sdm-py`` no ``jni``; the planned ``sdm-jni`` no ``pyo3``);
 - unsafe code: each domain crate and ``sdm-host`` takes the workspace lints,
   which forbid it, and forbids it at its root; the binding and the test
   host deny it;
@@ -117,23 +118,43 @@ ALLOWED: dict[str, frozenset[str]] = {
 REQUIRED: dict[str, frozenset[str]] = {
     'sdm-py': frozenset({'sdm-host', 'sdm-contract'}),
 }
-# Third-party crates no domain crate and not the host may reach.
-LANGUAGE_CRATES = frozenset(
+# The Rust database drivers, of DuckDB and of the dialects that may follow
+# it (T1.21c): SQLite, Postgres, ODBC (which Databricks and others are
+# reached through) and Snowflake. No shipped crate links one, whatever its
+# dialect: the host runs the statements sdm-data renders through its own
+# language's driver.
+DRIVERS = frozenset(
     {
-        'pyo3',
-        'pyo3-ffi',
-        'jni',
-        'jni-sys',
-        'arrow-pyarrow',
-        'numpy',
         'duckdb',
         'libduckdb-sys',
+        'rusqlite',
+        'libsqlite3-sys',
+        'postgres',
+        'tokio-postgres',
+        'odbc-api',
+        'odbc-sys',
+        'snowflake-api',
+        'snowflake-connector-rs',
     }
+)
+# Third-party crates no domain crate and not the host may reach: a
+# language runtime or a database driver.
+LANGUAGE_CRATES = (
+    frozenset(
+        {
+            'pyo3',
+            'pyo3-ffi',
+            'jni',
+            'jni-sys',
+            'arrow-pyarrow',
+            'numpy',
+        }
+    )
+    | DRIVERS
 )
 # What each binding may not reach: a binding links its own language's
 # runtime and no other, and no database driver. A binding not named here
 # (none yet) may link no database driver.
-DRIVERS = frozenset({'duckdb', 'libduckdb-sys'})
 BINDING_FORBIDDEN: dict[str, frozenset[str]] = {
     'sdm-py': DRIVERS | {'jni', 'jni-sys'},
     'sdm-jni': DRIVERS | {'pyo3', 'pyo3-ffi', 'arrow-pyarrow', 'numpy'},

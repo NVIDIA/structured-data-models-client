@@ -309,6 +309,10 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         ('sdm-data', 'numpy'),
         ('sdm-core', 'duckdb'),
         ('sdm-host', 'pyo3'),
+        # The drivers of the dialects after DuckDB (T1.21c).
+        ('sdm-data', 'rusqlite'),
+        ('sdm-host', 'tokio-postgres'),
+        ('sdm-contract', 'odbc-api'),
     ):
 
         def seed(m: Metadata, crate: str = crate, dep: str = dep) -> None:
@@ -335,6 +339,11 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm-py on duckdb',
         lambda m: m.edge('sdm-py', 'duckdb'),
         'sdm-py reaches duckdb',
+    )
+    case(
+        "sdm-py on a later dialect's driver",
+        lambda m: m.edge('sdm-py', 'snowflake-connector-rs'),
+        'sdm-py reaches snowflake-connector-rs',
     )
 
     # A future Java binding (sdm-jni) links jni, and no Python.
@@ -711,6 +720,131 @@ def scan_cases(results: list[Result]) -> None:
         )
 
     sql('control: SQL in a test module of its own file', test_module_file, None)
+    sql(
+        'a SELECT in sdm-core (T1.21c)',
+        lambda r: append(
+            r / crates / 'sdm-core/src/materialize.rs',
+            '\nconst Q: &str = "SELECT expressions FROM duckdb_indexes()";\n',
+        ),
+        'hold `SELECT expressions FROM duckdb_indexes()`',
+    )
+
+    # The dialect guard (T1.21c, E54): one seeded fault per rule, and a
+    # control of what it lets through.
+    shared = ('rust/crates', 'rust/bindings')
+
+    def dialects(
+        name: str, change: Callable[[Path], object], fails_with: str | None
+    ) -> None:
+        scan_case(results, 'dialects', name, shared, change, fails_with)
+
+    dialects(
+        "an identifier naming DuckDB's catalog in sdm-core",
+        lambda r: append(
+            r / crates / 'sdm-core/src/materialize.rs',
+            '\nfn duckdb_index_column(e: &str) -> &str { e }\n',
+        ),
+        '`duckdb_index_column` names a dialect (duckdb)',
+    )
+    dialects(
+        "a string holding DuckDB's catalog statement in sdm-contract",
+        lambda r: append(
+            r / crates / 'sdm-contract/src/data.rs',
+            '\npub const COLUMNS: &str = "PRAGMA table_info";\n',
+        ),
+        '`PRAGMA` names a dialect (pragma)',
+    )
+    dialects(
+        'a catalog column name, as a whole word, in sdm-host',
+        lambda r: append(
+            r / crates / 'sdm-host/src/runs.rs',
+            '\nconst POSITION: &str = "cid";\n',
+        ),
+        '`cid` names a dialect (cid)',
+    )
+    dialects(
+        "another dialect's name in the binding, sdm-py",
+        lambda r: append(
+            r / 'rust/bindings/sdm-py/src/lib.rs',
+            '\nconst DIALECT: &str = "Snowflake";\n',
+        ),
+        '`Snowflake` names a dialect (snowflake)',
+    )
+    dialects(
+        'a dialect in camel case in sdm-schema',
+        lambda r: append(
+            r / crates / 'sdm-schema/src/lib.rs',
+            '\npub struct DuckDbColumns;\n',
+        ),
+        '`DuckDbColumns` names a dialect (duckdb)',
+    )
+    dialects(
+        'a guarded crate missing',
+        lambda r: shutil.rmtree(r / crates / 'sdm-wire/src'),
+        'rust/crates/sdm-wire/src: missing',
+    )
+
+    def dialect_where_allowed(root: Path) -> None:
+        append(
+            root / crates / 'sdm-data/src/lib.rs',
+            '\nconst Q: &str = "PRAGMA table_info";\n',
+        )
+        append(
+            root / crates / 'sdm-core/src/run.rs',
+            '\n// DuckDB answers PRAGMA table_info with notnull and dflt_value\n'
+            'pub fn not_null_filter(decided: bool) -> bool { decided }\n'
+            '#[cfg(test)]\nmod dialect_tests {\n'
+            '    const D: &str = "duckdb";\n}\n',
+        )
+
+    dialects(
+        'control: sdm-data, comments, test modules, NotNull and decided',
+        dialect_where_allowed,
+        None,
+    )
+
+    def provider_sql(
+        name: str, change: Callable[[Path], object], fails_with: str | None
+    ) -> None:
+        scan_case(
+            results,
+            'provider-sql',
+            name,
+            (str(l0_scan.PROVIDERS),),
+            change,
+            fails_with,
+        )
+
+    providers = l0_scan.PROVIDERS
+    provider_sql(
+        'a statement written in the DuckDB provider',
+        lambda r: append(
+            r / providers / 'duckdb.py',
+            "\nINDEXES = 'SELECT table_name, expressions FROM duckdb_indexes()'\n",
+        ),
+        'a string holds `SELECT`',
+    )
+    provider_sql(
+        'lowercase SQL in a new provider',
+        lambda r: (r / providers / 'sqlite.py').write_text(
+            "def tables(c):\n    return c.execute(f'select name from {c}')\n"
+        ),
+        'sqlite.py:2: a string holds `select name from`',
+    )
+    provider_sql(
+        'no provider to read',
+        lambda r: shutil.rmtree(r / providers),
+        'no provider to read',
+    )
+    provider_sql(
+        'control: SQL named in a docstring, and the word "select" alone',
+        lambda r: append(
+            r / providers / 'duckdb.py',
+            '\ndef f():\n    """Runs the SELECT sdm-data rendered."""\n'
+            "    return 'select a provider'\n",
+        ),
+        None,
+    )
 
     # SQL's unambiguous shapes outside diagnostic text (decision E28):
     # `bare` is a message built outside any diagnostic, `error` the same

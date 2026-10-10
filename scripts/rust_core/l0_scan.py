@@ -19,7 +19,8 @@ graph; these check the text:
   is emulation vocabulary. The public names the allowlisted modules define
   may be used anywhere in their crate.
 - ``sql``: no SQL fragment and no provider match in ``sdm-schema``,
-  ``sdm-engine`` or ``sdm-request`` (migration plan, "Ownership"). It is a
+  ``sdm-engine``, ``sdm-request`` or ``sdm-core`` (migration plan,
+  "Ownership"; ``sdm-core`` from T1.21c). It is a
   lexical scan over what the literals stand for (escapes such as ``\\n``,
   ``\\t``, ``\\x..`` and ``\\u{..}`` decoded, line continuations
   joined): the string literals of each statement are read together, so
@@ -37,6 +38,22 @@ graph; these check the text:
   hold; review covers those. The structural guard beside it is
   ``sdm-contract``'s ``tests/data_vocabulary.rs``: no field of the
   data-request vocabulary holds an expression or a SQL string.
+- ``dialects``: no dialect knowledge in the shared crates other than
+  ``sdm-data``, whose dialects they are, and the dev-only ``sdm-testkit``
+  (decisions E50 and E54): no identifier and no word of a string literal in
+  their non-test source names a term of a short, reviewed deny-list
+  (``DIALECT_NAMES``, matched in any case inside the identifier or word,
+  and ``DIALECT_WORDS``, matched as a whole word, since neutral names hold
+  them: ``Filter::NotNull`` is not DuckDB's ``notnull``). Comments,
+  ``#[cfg(test)]`` modules and test-module files are not read. It is a
+  deny-list, not a grammar: a dialect's knowledge spelled with none of its
+  terms is review's (decision E28).
+- ``provider-sql``: the client's Python providers
+  (``sdm_client/_rust/providers/``) write no SQL: no string literal other
+  than a docstring holds an upper-case SQL keyword or a ``select … from``
+  in any case; the statements they run are ``sdm-data``'s. It reads string
+  literals only, so SQL assembled from names, or a keyword in lower case
+  outside a ``select … from``, is review's (decision E28).
 - ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
   no test dropped by a deselect or ignore option or a conftest's ignore
   list, and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
@@ -78,6 +95,7 @@ graph; these check the text:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import subprocess
@@ -106,7 +124,7 @@ CORE_CRATES = (
     'sdm-host',
 )
 PARSER_CRATE = 'sdm-pql-interim'
-SQL_FREE_CRATES = ('sdm-schema', 'sdm-engine', 'sdm-request')
+SQL_FREE_CRATES = ('sdm-schema', 'sdm-engine', 'sdm-request', 'sdm-core')
 DEV_CRATES = ('sdm-testkit',)
 ALLOWLIST = Path('scripts/rust_core/emulation-allowlist.txt')
 
@@ -925,6 +943,151 @@ def check_sql(root: Path) -> list[str]:
     return problems
 
 
+# --- dialects ---------------------------------------------------------------
+
+# The shared crates that hold no dialect knowledge (decision E54): every
+# shipped crate but sdm-data, whose dialects they are, and the parser,
+# which reads no data. sdm-testkit is dev-only.
+DIALECT_FREE_CRATES = (
+    'sdm-contract',
+    'sdm-core',
+    'sdm-request',
+    'sdm-schema',
+    'sdm-engine',
+    'sdm-wire',
+    'sdm-host',
+    'sdm-py',
+)
+# The reviewed deny-list. A dialect's name, or its catalog's own: matched in
+# any case anywhere in an identifier or a literal's word, as no neutral name
+# holds one.
+DIALECT_NAMES = (
+    'duckdb',
+    'duckdb_indexes',
+    'sqlite',
+    'postgres',
+    'databricks',
+    'snowflake',
+    'pragma',
+    'table_info',
+    'information_schema',
+    'dflt_value',
+)
+# DuckDB's catalog column names that neutral names hold as parts: matched
+# as a whole word (``words``) only.
+DIALECT_WORDS = ('notnull', 'cid')
+_WORD = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+
+
+def dialect_terms(name: str) -> list[str]:
+    """The deny-list's terms ``name`` holds."""
+    lowered = name.lower()
+    found = [term for term in DIALECT_NAMES if term in lowered]
+    parts = words(name)
+    found += [term for term in DIALECT_WORDS if term in parts]
+    return found
+
+
+def check_dialects(root: Path) -> list[str]:
+    problems: list[str] = []
+    for crate in DIALECT_FREE_CRATES:
+        src = crate_dir(root, crate) / 'src'
+        if not src.is_dir():
+            problems.append(f'{src.relative_to(root)}: missing')
+            continue
+        tests = test_module_files(src)
+        for path in rust_files(src):
+            if path in tests:
+                continue
+            source = without_test_modules(read_rust(path.read_text()))
+            rel = path.relative_to(root)
+            found = [(offset, name) for offset, name in identifiers(source)]
+            for offset, literal in string_literals(source):
+                found += [
+                    (offset, word)
+                    for word in _WORD.findall(literal_text(literal))
+                ]
+            for offset, name in found:
+                hit = dialect_terms(name)
+                if hit:
+                    problems.append(
+                        f'{rel}:{source.line(offset)}: `{name}` names a '
+                        f'dialect ({", ".join(hit)}); a dialect is '
+                        f"sdm-data's alone, and {crate} holds none"
+                    )
+    return problems
+
+
+# --- the Python providers write no SQL ---------------------------------------
+
+PROVIDERS = Path(
+    'packages/structured-data-models-client/src/sdm_client/_rust/providers'
+)
+# Upper-case SQL keywords, as SQL is written; a `select … from` in any case.
+_PROVIDER_SQL = re.compile(
+    r'\b(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|ATTACH'
+    r'|COPY|FROM|WHERE|JOIN|UNION|QUALIFY|VALUES)\b'
+    r'|(?i:\bselect\b.*\bfrom\b)',
+    re.S,
+)
+
+
+def _docstrings(tree: ast.AST) -> set[int]:
+    """The ids of the docstring nodes of a module, class or function."""
+    found: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(
+                node,
+                (
+                    ast.Module,
+                    ast.ClassDef,
+                    ast.FunctionDef,
+                    ast.AsyncFunctionDef,
+                ),
+            )
+            and node.body
+        ):
+            first = node.body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                found.add(id(first.value))
+    return found
+
+
+def check_provider_sql(root: Path) -> list[str]:
+    directory = root / PROVIDERS
+    files = sorted(directory.rglob('*.py')) if directory.is_dir() else []
+    if not files:
+        return [f'{PROVIDERS}: no provider to read']
+    problems: list[str] = []
+    for path in files:
+        rel = path.relative_to(root)
+        try:
+            tree = ast.parse(path.read_text(), filename=str(rel))
+        except SyntaxError as error:
+            problems.append(f'{rel}:{error.lineno}: does not parse')
+            continue
+        docstrings = _docstrings(tree)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in docstrings
+            ):
+                match = _PROVIDER_SQL.search(node.value)
+                if match:
+                    problems.append(
+                        f'{rel}:{node.lineno}: a string holds '
+                        f'`{" ".join(match.group(0).split())[:40]}`, SQL; '
+                        "the statements a provider runs are sdm-data's"
+                    )
+    return problems
+
+
 # --- the skip and ignore ban ------------------------------------------------
 
 # Exact tokens (decision E24). Written in pieces, so this file and
@@ -1581,6 +1744,8 @@ def check_steps(root: Path) -> list[str]:
 CHECKS: dict[str, Callable[[Path], list[str]]] = {
     'vocabulary': check_vocabulary,
     'sql': check_sql,
+    'dialects': check_dialects,
+    'provider-sql': check_provider_sql,
     'skips': check_skips,
     'bans': check_bans,
     'steps': check_steps,
