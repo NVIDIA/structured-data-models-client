@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Static analysis, in its own workflow rather than in `ci.yml`.
+#
+# `ci.yml` is the set of gates a change has to pass, and `publish.yml` refuses
+# to build a tag whose CI run did not succeed. What would land in that contract
+# is not the findings, which GitHub reports as a separate `Code scanning
+# results` check, but this job's own failures: an extraction, build, query or
+# upload error. Some of those are the commit's fault, since this job compiles
+# the engine from the checkout, and some are upstream's or the upload's. Mixing
+# the second kind into the release gate is what this avoids.
+#
+# The weekly run does not bring new queries. Pinning the action by digest pins
+# the CodeQL bundle with it, so the query set changes when dependabot raises
+# that digest, and merging it scans on push anyway. What the schedule is for is
+# narrower: a default branch that has not been touched in a month still carries
+# a recent scan, and a workflow that has quietly stopped working says so
+# without waiting for the next pull request.
+#
+# Results need GitHub code scanning, which needs Advanced Security while this
+# repository is internal and is included once it is public.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Monday, off the hour: scheduled runs queue behind everyone else's at the
+    # boundary, and GitHub drops them under load.
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write   # the only reason this job exists: to upload
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The four pure-Python distributions and the engine's Python half.
+          - language: python
+            build-mode: none
+          # The engine's compiled sampler. Small, but it is the only memory
+          # unsafe code shipped, so it is the part worth a compiled analysis.
+          - language: c-cpp
+            build-mode: manual
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # security-extended over the default pack: it adds queries of lower
+          # precision and lower severity, so it finds more and is wrong more
+          # often. This is a library other people install, and that trade buys
+          # coverage with our triage rather than with their incident.
+          queries: security-extended
+
+      # CodeQL observes a real compilation rather than guessing at one, so the
+      # engine is actually built here. Only this matrix leg compiles anything;
+      # the Python leg reads the tree.
+      #
+      # `--no-deps` because the engine pins three siblings by exact version
+      # and those versions are not on PyPI until the release publishes, so
+      # resolving them fails outright. `ci.yml` works around that by installing
+      # the siblings from the tree first, which this job has no use for: the
+      # dependencies are never imported, and what CodeQL needs is the compiler
+      # running over `csrc/`. Build requirements still install, because those
+      # come from `[build-system] requires` and pip's build isolation, which
+      # `--no-deps` does not touch.
+      - name: Build the engine for CodeQL
+        if: matrix.build-mode == 'manual'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake
+          python -m pip install --upgrade pip
+          python -m pip install --no-deps ./packages/structured-data-models-relational-engine
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}
