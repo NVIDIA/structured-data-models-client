@@ -14,8 +14,8 @@
 //! naming the rule ([`not_yet`]), whatever those rules decide by a path it
 //! does not port yet, rather than guess (register entry P1B-2): a column
 //! type outside the plain set, text that may hold dates or several values,
-//! a tie between key candidates, a time column chosen among several or
-//! refused for its name or values, a preview of a whole 1,000 rows, an
+//! a tie between key candidates, a time column chosen among several,
+//! refused for its name or values or a time of day, a preview of a whole 1,000 rows, an
 //! empty table. T1.23 and T1.25 complete it.
 //!
 //! - [`catalog`] reads the catalog answers: table names, columns,

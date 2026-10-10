@@ -530,6 +530,11 @@ fn choose_time_column(
     if candidates.is_empty() {
         return Ok(None);
     }
+    // A time of day: the reference reads none of its values as a time, so
+    // it refuses the column for its values and warns; not ported.
+    if candidates.iter().any(|&i| columns[i].dtype == Dtype::Time) {
+        return Err(not_yet("time_of_day"));
+    }
     if rows as u64 >= PREVIEW_ROWS {
         return Err(not_yet("time_whole_table"));
     }
