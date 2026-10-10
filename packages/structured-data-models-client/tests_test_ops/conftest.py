@@ -4,7 +4,7 @@
 """The Python host's tests that need the core's test-only operations.
 
 Only a ``test-ops`` build of ``sdm_client._native`` has them, and the wheel
-that ships has not, so these run in ``native-wheel``'s test-ops environment
+that ships has not, so these run in ``native-test-ops``'s environment
 and the ``test`` job does not collect them (decision E23). On any other
 build they fail, never skip.
 """

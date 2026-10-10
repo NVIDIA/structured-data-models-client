@@ -25,6 +25,16 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Whether this run saves its caches: the Rust builds and pip's downloads.
+  # Every run restores what its own branch saved.
+  SAVE_CACHES: 'true'
+  # The manylinux2014 image both wheel builds run in, pinned by digest.
+  MANYLINUX: quay.io/pypa/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
+  # The binding's tests run at the E16 floor; DuckDB, at the reference's
+  # version, is for the DuckDB provider's tests there (T1.11b).
+  BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -63,6 +73,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
       - run: cargo fmt --all --check
       # sdm-testkit builds the bundled DuckDB, so its clippy runs in rust-test,
       # which builds it anyway (H3); the L0 self-tests' clippy fixture needs
@@ -121,6 +132,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
       # The test host's ICU, DuckDB's signed extension for v1.5.6, which it
       # installs the first time and checks against its recorded digest before
       # every load (decision E37): cached, so a run downloads it once.
@@ -152,16 +164,16 @@ jobs:
   # The client wheel, which carries the core as sdm_client._native (design,
   # "Packaging"). maturin, at the version native_wheel.py pins, builds it in
   # a manylinux2014 container run with docker rather than through an
-  # action: the x86_64 cp310-abi3 wheel that ships, and a second with the
-  # test-only operations for the binding's tests, which never leaves this
-  # job. native_wheel.py records each build's target flags and fails on
-  # target-cpu, and reads each with auditwheel show. The binding's tests
-  # then run on the host, at the E16 floor. Every job that installs the
-  # client takes it from this job's artifact.
+  # action: the x86_64 cp310-abi3 wheel that ships. native_wheel.py records
+  # the build's target flags and fails on target-cpu, and reads the wheel
+  # with auditwheel show. Every job that installs the client takes it from
+  # this job's artifact, and this job builds and uploads nothing else, so
+  # those jobs wait for the shipped wheel only (CI1): the test-only build
+  # and the binding's tests run beside it, in native-test-ops and binding.
   native-wheel:
     runs-on: ubuntu-latest
     env:
-      MANYLINUX: quay.io/pypa/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
+      NATIVE_ARGS: --out native
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install
@@ -169,15 +181,19 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
       # As the runner's user, so the cache can read rust/target afterwards,
       # in a home the runner made, so that user can write it, holding the
-      # runner's crate registry, which the cache restores.
-      - name: Build the wheels in manylinux2014
+      # runner's crate registry, which the cache restores. NATIVE_ARGS says
+      # which build: native-test-ops runs this same step for its own.
+      - &manylinux-build
+        name: Build the wheel in manylinux2014
         run: |
           home="$RUNNER_TEMP/manylinux-home"
           mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$home/.cargo/registry" "$home/.cargo/git"
           docker run --rm --user "$(id -u):$(id -g)" \
             -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
+            -e NATIVE_ARGS \
             -v "$home:/tmp/home" -v "$PWD:/io" -w /io \
             -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
             -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
@@ -194,42 +210,71 @@ jobs:
               /opt/python/cp312-cp312/bin/python -m venv /tmp/home/maturin
               /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
               export PATH="/tmp/home/maturin/bin:$PATH"
-              python scripts/rust_core/native_wheel.py --out native --manylinux
-              python scripts/rust_core/native_wheel.py --out native-test-ops --test-ops --manylinux
+              python scripts/rust_core/native_wheel.py $NATIVE_ARGS --manylinux
             '
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.10'
-      # The binding's tests, at the E16 floor: every file on the test-ops
-      # build, and the file any build passes on the wheel that ships. The
-      # Python host's tests that need the test-only operations run in the
-      # test-ops environment too; the test job does not collect them (E23).
-      # DuckDB, at the reference's version, is for the DuckDB provider's
-      # tests there (T1.11b).
-      - name: The binding's tests
-        run: |
-          floor="pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6"
-          for build in test-ops production; do
-            python -m venv "/tmp/$build"
-            wheel=$([ "$build" = test-ops ] && ls native-test-ops/*.whl || ls native/*.whl)
-            "/tmp/$build/bin/pip" install --quiet pytest $floor \
-              ./packages/structured-data-models-api ./packages/structured-data-models-pql "$wheel"
-          done
-          /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
-            -p no:cacheprovider --native-build test-ops
-          /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
-            -p no:cacheprovider --native-build production
-          /tmp/test-ops/bin/python -m pytest packages/structured-data-models-client/tests_test_ops -q \
-            -p no:cacheprovider
       - uses: actions/upload-artifact@v7
         with:
           name: native-wheel
           path: native/
-      # Its own artifact, which no job that builds or ships takes (E23).
+
+  # The binding with its test-only operations, built beside native-wheel by
+  # the same step and tested at the E16 floor: every file of the binding's
+  # tests, and the Python host's tests that need those operations, which
+  # the test job does not collect (E23). Nothing waits for it, and its wheel
+  # is its own artifact, which no job that builds or ships takes (E23).
+  native-test-ops:
+    runs-on: ubuntu-latest
+    env:
+      NATIVE_ARGS: --out native-test-ops --test-ops
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - *manylinux-build
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - name: The binding's tests on the test-ops build
+        run: |
+          python -m venv /tmp/test-ops
+          /tmp/test-ops/bin/pip install --quiet pytest $BINDING_FLOOR \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            "$(ls native-test-ops/*.whl)"
+          /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
+            -p no:cacheprovider --native-build test-ops
+          /tmp/test-ops/bin/python -m pytest packages/structured-data-models-client/tests_test_ops -q \
+            -p no:cacheprovider
       - uses: actions/upload-artifact@v7
         with:
           name: native-wheel-test-ops
           path: native-test-ops/
+
+  # The binding's tests on the wheel that ships, at the E16 floor: the file
+  # any build passes.
+  binding:
+    runs-on: ubuntu-latest
+    needs: native-wheel
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      - name: The binding's tests on the shipped build
+        run: |
+          python -m venv /tmp/production
+          /tmp/production/bin/pip install --quiet pytest $BINDING_FLOOR \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            "$(ls native/*.whl)"
+          /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
+            -p no:cacheprovider --native-build production
 
   typecheck:
     runs-on: ubuntu-latest
@@ -246,7 +291,9 @@ jobs:
       # The engine needs its runtime dependencies present to be checked at all,
       # and a toolchain to install. It ships py.typed exactly like the other
       # four, so leaving it out would make the gate narrower than the promise.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # The image's compilers and CMake are that toolchain; the runner image
+      # carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       - run: pip install --upgrade pip mypy
       # The client from the native wheel; its stub, _native.pyi, ships in it.
       - run: |
@@ -302,6 +349,18 @@ jobs:
         with:
           name: native-wheel
           path: native
+      # pip's downloads and built wheels, keyed on the week and on every
+      # distribution's manifest and restored from the newest of this job's
+      # otherwise. pip still resolves each requirement against the index, so
+      # the cache only saves downloads and changes no version (CI1).
+      - id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: pip-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ github.job }}-${{ matrix.python-version }}-${{ steps.week.outputs.week }}-${{ hashFiles('packages/*/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-${{ github.job }}-${{ matrix.python-version }}-
       # databricks is here for its driver, not for a server: those tests mock
       # the connection. Without the driver, importing the backend raises and
       # every test covering it skips. The client is the native wheel's, the
@@ -315,6 +374,11 @@ jobs:
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
             -m 'not live_nim and not live_warehouse'
+      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ steps.pip-cache.outputs.cache-primary-key }}
 
   engine:
     runs-on: ubuntu-latest
@@ -348,7 +412,21 @@ jobs:
         with:
           name: native-wheel
           path: native
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # The image's compilers and CMake, which a source build uses; the
+      # runner image carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
+      # pip's downloads and built wheels, keyed on the week and on every
+      # distribution's manifest and restored from the newest of this job's
+      # otherwise. pip still resolves each requirement against the index, so
+      # the cache only saves downloads and changes no version (CI1).
+      - id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: pip-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ github.job }}-3.12-${{ steps.week.outputs.week }}-${{ hashFiles('packages/*/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-${{ github.job }}-3.12-
       # ruff is here for the root suite, not for linting: the test that
       # checks the engine ignore-list note shells out to it and skips
       # without it, which would make that check vacuous here.
@@ -388,6 +466,11 @@ jobs:
       - run: |
           pip install duckdb==1.5.6
           python -m pytest contract/tests -q
+      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ steps.pip-cache.outputs.cache-primary-key }}
 
   build:
     runs-on: ubuntu-latest
@@ -397,7 +480,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # The image's compilers and CMake, which a source build uses; the
+      # runner image carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       - run: pip install --upgrade pip build
       # Each distribution builds in an isolated environment holding only the
       # build backend. That catches what no test can, because it fails before a
