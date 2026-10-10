@@ -91,34 +91,44 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
     })
 }
 
-/// One part of the catalog. The table list and the indexes take any
-/// number of tables, all when none is named; the columns, keys and foreign
-/// keys are read one table at a time, one statement each, as the reference
-/// reads them, so a request naming none or several is refused.
+/// One part of the catalog. The table list and the indexes are read whole,
+/// as the reference reads them, so a request naming tables is refused
+/// (tables named arrive with the overrides, T1.24); the columns, keys and
+/// foreign keys are read one table at a time, one statement each, as the
+/// reference reads them, so a request naming none or several is refused.
 fn describe(
     request: &DataRequest,
     tables: &[String],
     part: DescribePart,
 ) -> Result<String, CoreError> {
-    let one = || match tables {
-        [table] => Ok(table),
-        _ => Err(CoreError::new(
+    let refused = |message: &str| {
+        CoreError::new(
             ErrorKind::Unsupported,
             ErrorCode::UnsupportedRequest,
-            "this part of the catalog is read for one table at a time",
+            message,
         )
         .with_field("request", Detail::text(request.name()))
-        .with_field("field", Detail::text("tables"))),
+        .with_field("field", Detail::text("tables"))
+    };
+    let one = || match tables {
+        [table] => Ok(table),
+        _ => Err(refused(
+            "this part of the catalog is read for one table at a time",
+        )),
+    };
+    let whole = || {
+        if tables.is_empty() {
+            Ok(())
+        } else {
+            Err(refused("this part of the catalog is read whole"))
+        }
     };
     Ok(match part {
         DescribePart::Tables => {
-            let mut text = format!(
+            whole()?;
+            format!(
                 "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
-            );
-            if !tables.is_empty() {
-                text.push_str(&format!(" AND table_name IN ({})", texts(tables)));
-            }
-            text
+            )
         }
         DescribePart::Columns => format!("PRAGMA table_info({})", identifier(one()?)),
         DescribePart::Keys => format!(
@@ -130,11 +140,8 @@ fn describe(
             text(one()?)
         ),
         DescribePart::Indexes => {
-            let mut text = "SELECT table_name, expressions FROM duckdb_indexes()".to_owned();
-            if !tables.is_empty() {
-                text.push_str(&format!(" WHERE table_name IN ({})", texts(tables)));
-            }
-            text
+            whole()?;
+            "SELECT table_name, expressions FROM duckdb_indexes()".to_owned()
         }
     })
 }
@@ -208,8 +215,4 @@ fn identifiers(names: &[String]) -> String {
 /// `name` as text: in single quotes, each one in it doubled.
 fn text(name: &str) -> String {
     format!("'{}'", name.replace('\'', "''"))
-}
-
-fn texts(names: &[String]) -> String {
-    names.iter().map(|n| text(n)).collect::<Vec<_>>().join(", ")
 }

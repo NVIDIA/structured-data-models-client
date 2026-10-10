@@ -121,6 +121,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
+      # The test host's ICU, DuckDB's signed extension for v1.5.6, which it
+      # installs the first time and checks against its recorded digest before
+      # every load (decision E37): cached, so a run downloads it once.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.duckdb/extensions/v1.5.6
+          key: duckdb-extensions-v1.5.6-${{ runner.os }}-${{ runner.arch }}
       # The test kit's clippy, here on the DuckDB build this job makes (H3).
       - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
@@ -128,7 +135,8 @@ jobs:
       # with the cases' expectations and reference observations (T1.10;
       # T1.18 moves this to the checkpoint's comparator). The test host links
       # no Python. Its DuckDB loads ICU explicitly, installing DuckDB's signed
-      # extension for its version the first time (decision E37).
+      # extension for its version the first time, from the cache above when
+      # it holds it (decision E37).
       - run: cargo run -p sdm-testkit --bin sdm-contract-run --locked -- --out ../rust-host.jsonl ../contract/cases
       - run: |
           cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt

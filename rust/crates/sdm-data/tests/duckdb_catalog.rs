@@ -115,14 +115,6 @@ fn names_are_quoted_with_their_quotes_doubled() {
         rendered(&preview("t\"", &["c\"1", "c'2"])),
         "SELECT \"c\"\"1\", \"c'2\" FROM \"t\"\"\" LIMIT 1000"
     );
-    assert!(
-        rendered(&describe(&["a", "it's"], DescribePart::Tables))
-            .ends_with(" AND table_name IN ('a', 'it''s')")
-    );
-    assert!(
-        rendered(&describe(&["a"], DescribePart::Indexes))
-            .ends_with(" FROM duckdb_indexes() WHERE table_name IN ('a')")
-    );
 }
 
 #[test]
@@ -158,7 +150,7 @@ fn several_time_columns_are_one_union() {
 }
 
 #[test]
-fn a_part_read_per_table_is_refused_for_none_or_several() {
+fn a_part_read_per_table_or_whole_is_refused_otherwise() {
     for part in [
         DescribePart::Columns,
         DescribePart::Keys,
@@ -173,6 +165,14 @@ fn a_part_read_per_table_is_refused_for_none_or_several() {
                 (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
             );
         }
+    }
+    // The table list and the indexes are read whole, as the reference
+    // reads them; tables named arrive with the overrides (T1.24).
+    for part in [DescribePart::Tables, DescribePart::Indexes] {
+        let err = Data::new()
+            .plan(&describe(&["a"], part), &duckdb())
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnsupportedRequest);
     }
     let err = Data::new().plan(&preview("t", &[]), &duckdb()).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
