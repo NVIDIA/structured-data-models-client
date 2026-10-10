@@ -70,7 +70,11 @@ def test_base_regression_s_schema_on_the_core_is_the_reference_s(
     old = _run('python-old', tmp_path / 'python-old.jsonl')
     # From T1.11c the call's materialize runs on the core too
     # (test_materialize_route.py).
-    assert core['identity']['operations'] == ['describe_source', 'materialize']
+    assert core['identity']['operations'] == [
+        'describe_source',
+        'materialize',
+        'predict',
+    ]
     assert core['core']['error'] is None
     assert core['core']['described'] is not None
     assert old['identity']['native_loaded'] is False

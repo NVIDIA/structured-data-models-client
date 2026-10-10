@@ -298,8 +298,25 @@ MATERIALIZE_DUCKDB = (
     'query.materialize/indices-forecast/duckdb',
 )
 
+#: ``SDMClient.predict`` of a request materialized over a DuckDB source: one
+#: call ends on the path of its task kind, so its six paths are routed
+#: together (T1.11d). On the core route a request materialize built on the
+#: core is sent and its answer read there; the core predicts a regression
+#: and refuses the other kinds by name (register entry P1B-4), and a
+#: request not materialized on the core has no core route.
+PREDICT_DUCKDB = (
+    'client.predict/binary/duckdb',
+    'client.predict/multiclass/duckdb',
+    'client.predict/regression/duckdb',
+    'client.predict/link-prediction/duckdb',
+    'client.predict/ranking/duckdb',
+    'client.predict/forecast/duckdb',
+)
+
 #: The paths this build can run on the core.
-CORE_ROUTED = frozenset(S0 + FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB)
+CORE_ROUTED = frozenset(
+    S0 + FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB + PREDICT_DUCKDB
+)
 
 
 class RouteError(RuntimeError):

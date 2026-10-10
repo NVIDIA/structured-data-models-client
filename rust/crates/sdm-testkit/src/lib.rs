@@ -12,10 +12,12 @@
 //! `contract/observation.schema.json`, which `sdm-contract-run` puts out for
 //! `scripts/rust_core/compare.py`. [`duck`] is its DuckDB: the connection,
 //! with ICU loaded, and the provider that answers a fetch; [`bases`] reads
-//! `contract/bases.yaml`. The scripted endpoint arrives with T1.11d.
+//! `contract/bases.yaml`. [`endpoint`] is the scripted model endpoint's
+//! rule (T1.11d), which the host answers each model call with.
 
 pub mod bases;
 pub mod case;
 pub mod duck;
+pub mod endpoint;
 pub mod host;
 pub mod observation;

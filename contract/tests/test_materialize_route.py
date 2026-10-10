@@ -8,9 +8,10 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
 
     python -m pytest contract/tests -q
 
-On ``python-core`` the call's ``materialize`` runs on the core, and its
-predict, still on the old route, sends the core's payload to the scripted
-endpoint. Each claim and what holds it:
+On ``python-core`` the call's ``materialize`` runs on the core, and from
+T1.11d its predict too, which sends the core's call to the scripted
+endpoint (``test_predict_route.py`` holds what predict does). Each claim
+of materialize and what holds it:
 
 - The payload reaches the endpoint as the reference's: python-core's
   public projection (outcome, warning classes, schema, every request the
@@ -109,7 +110,11 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
 ) -> None:
     reference = _reference()
     core = _core(tmp_path)
-    assert core['identity']['operations'] == ['describe_source', 'materialize']
+    assert core['identity']['operations'] == [
+        'describe_source',
+        'materialize',
+        'predict',
+    ]
     assert core['core']['error'] is None
     materialized = core['core']['materialized']
     assert materialized['version'] == 1
@@ -125,8 +130,8 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
     )
     assert capture_check.projection(core) == capture_check.projection(reference)
     # The request the endpoint received is the core's payload, with what
-    # the client's predict adds: the model, the outputs, a request id, and
-    # only the inference options the model reads.
+    # predict adds: the model, the outputs, a request id, and only the
+    # inference options the model reads.
     sent = json.loads(json.dumps(payload['parsed']))
     built = materialized['payload']
     for section in ('task', 'schema', 'context', 'predict'):

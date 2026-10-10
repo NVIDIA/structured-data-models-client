@@ -9,10 +9,13 @@
 //! request from what the sampler gathered ([`payload`]), as the reference's
 //! engine lays it out, in JSON whose objects keep their order and whose
 //! numbers are exact ([`json`]); a column type or value the layout does not
-//! port yet is refused by name. T1.28 completes it with the wire types,
-//! the response and the result layout.
+//! port yet is refused by name. From T1.11d it also sends a regression's
+//! payload to the model and lays out the answer ([`predict`]), thin in the
+//! same way. T1.28 completes it with the generated wire types, the
+//! response and the result layout.
 
 #![forbid(unsafe_code)]
 
 pub mod json;
 pub mod payload;
+pub mod predict;

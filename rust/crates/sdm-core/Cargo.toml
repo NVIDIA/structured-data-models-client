@@ -26,6 +26,7 @@ sdm-engine = { path = "../sdm-engine" }
 sdm-pql-interim = { path = "../sdm-pql-interim" }
 sdm-request = { path = "../sdm-request" }
 sdm-schema = { path = "../sdm-schema" }
+sdm-wire = { path = "../sdm-wire" }
 serde.workspace = true
 serde_json.workspace = true
 stacker.workspace = true

@@ -157,6 +157,17 @@ pub struct CoreInputs {
     pub describe_source: Option<DescribeSourceInput>,
     #[serde(default)]
     pub materialize: Option<MaterializeInput>,
+    #[serde(default)]
+    pub predict: Option<PredictInput>,
+}
+
+/// `predict`'s input beside the request state, which is `materialize`'s
+/// answer, handed back as the host held it: the model the call goes to.
+/// The request id is the host's to draw (decision E35 for its value).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PredictInput {
+    pub model: String,
 }
 
 /// `materialize`'s inputs beside the query text, which is `input.pql`,

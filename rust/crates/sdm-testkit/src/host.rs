@@ -27,17 +27,17 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Materialize, Operation, OperationResult, ProfileSpec, QuerySchema, Seed,
-    SourceDescription, SourceSpec, ValidateQuery,
+    DescribeSource, Materialize, Operation, OperationResult, Predict, ProfileSpec, QuerySchema,
+    RequestState, Seed, SourceDescription, SourceSpec, ValidateQuery,
 };
-use sdm_contract::run::{FetchOutcome, FetchReply, StartRun};
+use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, CoreError, HostFacts, Scalar, Step, Unit};
 use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, read};
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
-use crate::case::{Case, DescribeSourceInput, MaterializeInput};
-use crate::duck;
+use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput};
+use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
 /// inputs, each fetch the core asked for (its request and plan, in order),
@@ -49,6 +49,9 @@ pub struct Observed {
     pub inputs: Vec<Value>,
     pub fetches: Vec<Value>,
     pub described: Option<Value>,
+    /// `materialize`'s request state, when it gave one: kept apart from
+    /// the answer, which a later `predict` replaces.
+    pub materialized: Option<Value>,
     pub answer: Answer,
 }
 
@@ -62,6 +65,10 @@ pub enum Answer {
     /// `materialize`'s request state: its version, the query and the
     /// payload as the JSON it attached, each number as its text.
     Materialized(Value),
+    /// `predict`'s answer: the call's body as the endpoint received it,
+    /// each number as its text, the model and call id the endpoint named,
+    /// its metadata, and the result's columns and rows.
+    Predicted(Value),
     /// A core error's kind and code, as the contract spells them.
     Error { kind: String, code: String },
 }
@@ -71,9 +78,10 @@ impl Answer {
     /// `refusal`, with the code a refusal carries.
     pub fn outcome(&self) -> (&'static str, Option<String>) {
         match self {
-            Answer::Validated(true) | Answer::Described(_) | Answer::Materialized(_) => {
-                ("success", None)
-            }
+            Answer::Validated(true)
+            | Answer::Described(_)
+            | Answer::Materialized(_)
+            | Answer::Predicted(_) => ("success", None),
             Answer::Validated(false) => ("refusal", Some("INVALID_REQUEST".into())),
             Answer::Error { code, .. } => ("refusal", Some(code.clone())),
         }
@@ -197,6 +205,7 @@ pub fn run(case: &Case, bases: &Bases) -> Result<Observed> {
         inputs: vec![input],
         fetches: vec![],
         described: None,
+        materialized: None,
         answer,
     })
 }
@@ -326,6 +335,7 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
         inputs: vec![input],
         fetches: Vec::new(),
         described: None,
+        materialized: None,
         answer: Answer::Validated(false),
     };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
@@ -351,8 +361,14 @@ fn describe(case: &Case, spec: &DescribeSourceInput, bases: &Bases) -> Result<Ob
     };
     observed.described = Some(described.clone());
     observed.answer = Answer::Described(described);
-    if let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) {
-        materialize(case, spec, &connection, &mut observed)?;
+    let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
+        return Ok(observed);
+    };
+    let Some(state) = materialize(case, spec, &connection, &mut observed)? else {
+        return Ok(observed);
+    };
+    if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
+        predict(case, spec, state, &mut observed)?;
     }
     Ok(observed)
 }
@@ -424,13 +440,24 @@ pub fn numbers_as_text(value: Value) -> Value {
     }
 }
 
-/// `materialize` over the case's DuckDB base, after its `describe_source`.
+/// What a `materialize` run answered, as this host holds it until the
+/// `predict` run it starts: the state's version, and its payload and query
+/// as the bytes the run attached.
+pub struct HeldState {
+    pub version: u32,
+    pub payload: Vec<u8>,
+    pub query: Vec<u8>,
+}
+
+/// `materialize` over the case's DuckDB base, after its `describe_source`:
+/// the request state it answered, held for `predict`, or none when it
+/// answered an error.
 fn materialize(
     case: &Case,
     spec: &MaterializeInput,
     connection: &duckdb::Connection,
     observed: &mut Observed,
-) -> Result<()> {
+) -> Result<Option<HeldState>> {
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
             "{}: core.materialize.provider is not a ProviderChoice",
@@ -495,11 +522,14 @@ fn materialize(
         Ok(handle) => handle,
         Err(refused) => {
             observed.answer = error_of(&refused)?;
-            return Ok(());
+            return Ok(None);
         }
     };
-    observed.answer = match drive(case, handle, connection, &mut observed.fetches)? {
-        Err(answer) => answer,
+    match drive(case, handle, connection, &mut observed.fetches)? {
+        Err(answer) => {
+            observed.answer = answer;
+            Ok(None)
+        }
         Ok((OperationResult::Materialize(materialized), handle)) => {
             let state = materialized.state;
             let bytes = |id| -> Result<Vec<u8>> {
@@ -508,15 +538,183 @@ fn materialize(
                     _ => bail!("{}: the request state is not attached", case.id),
                 }
             };
-            let payload: Value = serde_json::from_slice(&bytes(state.payload)?)?;
-            let query: Value = serde_json::from_slice(&bytes(state.query)?)?;
-            Answer::Materialized(json!({
-                "version": state.version,
-                "query": query,
-                "payload": numbers_as_text(payload),
-            }))
+            let held = HeldState {
+                version: state.version,
+                payload: bytes(state.payload)?,
+                query: bytes(state.query)?,
+            };
+            let recorded = json!({
+                "version": held.version,
+                "query": serde_json::from_slice::<Value>(&held.query)?,
+                "payload": numbers_as_text(serde_json::from_slice(&held.payload)?),
+            });
+            observed.materialized = Some(recorded.clone());
+            observed.answer = Answer::Materialized(recorded);
+            Ok(Some(held))
         }
         Ok(_) => bail!("{}: materialize answered another operation", case.id),
+    }
+}
+
+/// The id this host's `predict` requests carry. The reference's client
+/// draws one at random for every request; this host draws none, and the
+/// comparison leaves its value out under decision E35 (PROPOSED).
+pub const REQUEST_ID: &str = "sdm-000000000000";
+
+/// One Arrow result as rows of tagged cells, the same for both core
+/// runners: an integer as `{"i64": digits}`, a float as its IEEE-754 bits
+/// `{"f64_bits": 16 hex digits}`, so no text form of a float is compared,
+/// and text as `{"utf8": text}`.
+pub fn result_rows(data: &ArrowData) -> Result<Value> {
+    use duckdb::arrow::array::{Array, Float64Array, Int64Array, StringArray};
+    use duckdb::arrow::datatypes::DataType;
+    let columns: Vec<Value> = data
+        .schema
+        .fields()
+        .iter()
+        .map(|f| {
+            let kind = match f.data_type() {
+                DataType::Int64 => "int64",
+                DataType::Float64 => "float64",
+                DataType::Utf8 => "utf8",
+                _ => "other",
+            };
+            json!({"name": f.name(), "type": kind})
+        })
+        .collect();
+    let mut rows = Vec::new();
+    for batch in &data.batches {
+        for row in 0..batch.num_rows() {
+            let mut cells = Vec::new();
+            for column in batch.columns() {
+                if column.is_null(row) {
+                    cells.push(Value::Null);
+                } else if let Some(a) = column.as_any().downcast_ref::<Int64Array>() {
+                    cells.push(json!({"i64": a.value(row).to_string()}));
+                } else if let Some(a) = column.as_any().downcast_ref::<Float64Array>() {
+                    cells.push(json!({"f64_bits": format!("{:016x}", a.value(row).to_bits())}));
+                } else if let Some(a) = column.as_any().downcast_ref::<StringArray>() {
+                    cells.push(json!({"utf8": a.value(row)}));
+                } else {
+                    bail!("a result column of a type this host does not record");
+                }
+            }
+            rows.push(Value::Array(cells));
+        }
+    }
+    Ok(json!({"columns": columns, "rows": rows}))
+}
+
+/// `predict` of the state `materialize` answered, handed back as this host
+/// held it: its model call answered by the scripted endpoint, in process.
+fn predict(
+    case: &Case,
+    spec: &PredictInput,
+    state: HeldState,
+    observed: &mut Observed,
+) -> Result<()> {
+    observed.operations.push("predict".into());
+    observed.inputs.push(json!({
+        "op": "predict",
+        "model": spec.model,
+        "state": {
+            "version": state.version,
+            "query": serde_json::from_slice::<Value>(&state.query)?,
+            "payload": numbers_as_text(serde_json::from_slice(&state.payload)?),
+        },
+    }));
+    let start = ControlMessage::Start(Box::new(StartRun {
+        contract: CONTRACT_VERSION,
+        facts: facts()?,
+        operation: Operation::Predict(Predict {
+            state: RequestState {
+                version: state.version,
+                payload: AttachmentId(1),
+                query: AttachmentId(2),
+            },
+            model: spec.model.clone(),
+            request_id: REQUEST_ID.into(),
+        }),
+    }));
+    let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
+    let attachments = BTreeMap::from([
+        (AttachmentId(1), Attachment::Bytes(state.payload)),
+        (AttachmentId(2), Attachment::Bytes(state.query)),
+    ]);
+    let handle = match HostRun::start(&default_root(), &message, attachments) {
+        Ok(handle) => handle,
+        Err(refused) => {
+            observed.answer = error_of(&refused)?;
+            return Ok(());
+        }
+    };
+    let call = match handle.next() {
+        Err(failed) => {
+            observed.answer = error_of(&failed)?;
+            return Ok(());
+        }
+        Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
+            ControlMessage::Step(Step::CallModel(call)) => call,
+            _ => bail!(
+                "{}: predict asked for a step other than a model call",
+                case.id
+            ),
+        },
+    };
+    let Ok(Some(Attachment::Bytes(body))) = handle.take_attachment(call.body) else {
+        bail!("{}: the model call's body is not attached", case.id);
+    };
+    let sent = numbers_as_text(serde_json::from_slice(&body)?);
+    // The id this host started predict with is the one the call carries.
+    if sent["metadata"]["request_id"] != REQUEST_ID {
+        bail!(
+            "{}: the call does not carry the request id it was given",
+            case.id
+        );
+    }
+    let (status, answered) = endpoint::answer("POST", endpoint::PREDICTIONS, &body);
+    let reply = encode(&ControlMessage::ModelReply(ModelReply {
+        id: call.id,
+        outcome: ModelOutcome::Response {
+            status,
+            content_type: "application/json".into(),
+            body: AttachmentId(1),
+        },
+    }))
+    .map_err(|_| anyhow!("a reply does not encode"))?;
+    let answer = BTreeMap::from([(
+        AttachmentId(1),
+        Attachment::Bytes(serde_json::to_vec(&answered)?),
+    )]);
+    if let Err(failed) = handle.reply(&reply, answer) {
+        observed.answer = error_of(&failed)?;
+        return Ok(());
+    }
+    observed.answer = match handle.next() {
+        Err(failed) => error_of(&failed)?,
+        Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
+            ControlMessage::Step(Step::Done {
+                result: OperationResult::Predict(predicted),
+            }) => {
+                let Ok(Some(Attachment::Arrow(result))) = handle.take_attachment(predicted.result)
+                else {
+                    bail!("{}: the result is not attached", case.id);
+                };
+                let Ok(Some(Attachment::Bytes(metadata))) =
+                    handle.take_attachment(predicted.metadata)
+                else {
+                    bail!("{}: the metadata is not attached", case.id);
+                };
+                Answer::Predicted(json!({
+                    "body": sent,
+                    "model": predicted.model,
+                    "request_id": predicted.request_id,
+                    "metadata": serde_json::from_slice::<Value>(&metadata)?,
+                    "result": result_rows(&result)?,
+                }))
+            }
+            _ => bail!("{}: predict answered another step", case.id),
+        },
     };
     Ok(())
 }

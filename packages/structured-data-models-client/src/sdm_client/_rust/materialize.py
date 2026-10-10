@@ -207,8 +207,9 @@ def gather(
     indices: Sequence[Any],
     num_context_samples: int | None,
     options: dict[str, Any],
-) -> tuple[dict[str, Any], ...]:
-    r"""The payloads of the request, gathered on the core.
+) -> tuple[tuple[dict[str, Any], ...], dict[str, Any]]:
+    r"""The payloads of the request, gathered on the core, and the request
+    state's version, which the request keeps for predict on the core.
 
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
@@ -285,4 +286,4 @@ def gather(
     _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
     part: Any = SimpleNamespace(payload=payload)
     materializer._check_limits(part, RELATIONAL_LIMITS)
-    return (payload,)
+    return (payload,), {'version': state['version']}

@@ -82,6 +82,15 @@
             "anchor_time": {"description": "The anchor time, a contract ts scalar, or null for the default.", "type": ["object", "null"]},
             "seed": {"description": "The sampling seed as the contract's signed hexadecimal text, or null for the default.", "type": ["string", "null"], "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"}
           }
+        },
+        "predict": {
+          "description": "predict's input beside its request state, which is materialize's answer handed back as the host held it, and its request id, which the host draws.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model"],
+          "properties": {
+            "model": {"description": "The model id the request is sent to.", "type": "string"}
+          }
         }
       }
     },

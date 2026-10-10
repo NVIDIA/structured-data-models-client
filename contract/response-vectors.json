@@ -1,0 +1,137 @@
+{
+  "format": "sdm-response-vectors/1",
+  "description": "Prediction responses as the client's bindings (sdm_api.generated.tfm_api's PredictionResponse.from_dict) read them, which sdm-wire's reader reads alike (tests/response_vectors.rs): each body read, or refused naming the field the reader refuses first.",
+  "vectors": [
+    {
+      "name": "a regression's answer",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": 0, \"prediction\": 1.0}]}"
+    },
+    {
+      "name": "several answers, out of order",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"9\", \"row_index\": 1, \"prediction\": 2.5}, {\"id\": \"7\", \"row_index\": 0, \"prediction\": 1.0}]}"
+    },
+    {
+      "name": "no answers",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": []}"
+    },
+    {
+      "name": "a whole float row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": 0.0, \"prediction\": 1.0}]}"
+    },
+    {
+      "name": "a null id",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": null, \"row_index\": 0, \"prediction\": 1.0}]}"
+    },
+    {
+      "name": "no id",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"row_index\": 0, \"prediction\": 1.0}]}"
+    },
+    {
+      "name": "members the bindings do not read",
+      "body": "{\"object\": \"prediction.response\", \"id\": \"r1\", \"model\": \"m\", \"metadata\": {\"a\": 1}, \"predictions\": [{\"id\": \"7\", \"row_index\": 0, \"prediction\": 1.0, \"other\": [1]}], \"extra\": true}"
+    },
+    {
+      "name": "predictions as an empty object",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"metadata\": {}, \"predictions\": {}}"
+    },
+    {
+      "name": "an answer carrying scores",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": 0, \"prediction\": 1.0, \"scores\": [0.5]}]}"
+    },
+    {
+      "name": "not an object",
+      "body": "[1]",
+      "refused": "response"
+    },
+    {
+      "name": "no id at all",
+      "body": "{\"model\": \"m\", \"metadata\": {}, \"predictions\": []}",
+      "refused": "id"
+    },
+    {
+      "name": "a numeric response id",
+      "body": "{\"id\": 1, \"model\": \"m\", \"metadata\": {}, \"predictions\": []}",
+      "refused": "id"
+    },
+    {
+      "name": "no model",
+      "body": "{\"id\": \"r1\", \"metadata\": {}, \"predictions\": []}",
+      "refused": "model"
+    },
+    {
+      "name": "no predictions",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"metadata\": {}}",
+      "refused": "predictions"
+    },
+    {
+      "name": "predictions as text",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"metadata\": {}, \"predictions\": \"ab\"}",
+      "refused": "predictions"
+    },
+    {
+      "name": "predictions as a number",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"metadata\": {}, \"predictions\": 1}",
+      "refused": "predictions"
+    },
+    {
+      "name": "predictions as an object with members",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"metadata\": {}, \"predictions\": {\"a\": 1}}",
+      "refused": "prediction"
+    },
+    {
+      "name": "an answer that is not an object",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [1]}",
+      "refused": "prediction"
+    },
+    {
+      "name": "a numeric item id",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": 7, \"row_index\": 0, \"prediction\": 1.0}]}",
+      "refused": "prediction.id"
+    },
+    {
+      "name": "no row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"prediction\": 1.0}]}",
+      "refused": "prediction.row_index"
+    },
+    {
+      "name": "a null row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": null, \"prediction\": 1.0}]}",
+      "refused": "prediction.row_index"
+    },
+    {
+      "name": "a fractional row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": 1.5, \"prediction\": 1.0}]}",
+      "refused": "prediction.row_index"
+    },
+    {
+      "name": "a boolean row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": true, \"prediction\": 1.0}]}",
+      "refused": "prediction.row_index"
+    },
+    {
+      "name": "a text row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": \"0\", \"prediction\": 1.0}]}",
+      "refused": "prediction.row_index"
+    },
+    {
+      "name": "an overflowing row_index",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": 1e400, \"prediction\": 1.0}]}",
+      "refused": "prediction.row_index"
+    },
+    {
+      "name": "a fractional forecast_step",
+      "body": "{\"id\": \"r1\", \"model\": \"kumo-relational\", \"metadata\": {}, \"predictions\": [{\"id\": \"7\", \"row_index\": 0, \"forecast_step\": 0.5, \"prediction\": 1.0}]}",
+      "refused": "prediction.forecast_step"
+    },
+    {
+      "name": "no metadata",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"predictions\": []}",
+      "refused": "metadata"
+    },
+    {
+      "name": "metadata as a list",
+      "body": "{\"id\": \"r1\", \"model\": \"m\", \"metadata\": [], \"predictions\": []}",
+      "refused": "metadata"
+    }
+  ]
+}

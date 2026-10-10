@@ -85,8 +85,9 @@ const SEED_TIME: &str = "time";
 const TIME_MAX: i64 = i64::MAX;
 const TIME_MIN: i64 = -i64::MAX;
 const DAY_NS: i128 = 86_400_000_000_000;
-/// The version of [`RequestState`]'s format this build writes.
-pub const REQUEST_STATE_VERSION: u32 = 1;
+/// The version of [`RequestState`]'s format this build writes: the
+/// contract's, which `predict` reads (decision H23).
+pub use sdm_contract::ops::REQUEST_STATE_VERSION;
 
 /// What a `materialize` start gives its body.
 pub(crate) struct Inputs {

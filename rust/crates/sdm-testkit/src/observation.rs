@@ -94,12 +94,13 @@ pub fn write(
     bases: Option<&str>,
 ) -> Value {
     let (result, code) = observed.answer.outcome();
-    let (accepted, materialized, error) = match &observed.answer {
+    let (accepted, predicted, error) = match &observed.answer {
         Answer::Validated(accepted) => (Some(*accepted), Value::Null, Value::Null),
-        Answer::Described(_) => (None, Value::Null, Value::Null),
-        Answer::Materialized(state) => (None, state.clone(), Value::Null),
+        Answer::Described(_) | Answer::Materialized(_) => (None, Value::Null, Value::Null),
+        Answer::Predicted(answer) => (None, answer.clone(), Value::Null),
         Answer::Error { kind, code } => (None, Value::Null, json!({"kind": kind, "code": code})),
     };
+    let materialized = observed.materialized.clone().unwrap_or(Value::Null);
     let described = observed.described.clone().unwrap_or(Value::Null);
     json!({
         "format": FORMAT,
@@ -125,6 +126,7 @@ pub fn write(
             "accepted": accepted,
             "described": described,
             "materialized": materialized,
+            "predicted": predicted,
             "error": error,
         },
     })

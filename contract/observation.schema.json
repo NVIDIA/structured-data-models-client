@@ -149,10 +149,10 @@
       }
     },
     "core": {
-      "description": "python-core and rust-host only: the inputs each core operation was started with, every fetch the core asked for (its request and the plan its data layer made, in order: the step trace), and its answers: validate_query's acceptance, describe_source's description, materialize's request state, or the core error's kind and code.",
+      "description": "python-core and rust-host only: the inputs each core operation was started with, every fetch the core asked for (its request and the plan its data layer made, in order: the step trace), and its answers: validate_query's acceptance, describe_source's description, materialize's request state, predict's call and result, or the core error's kind and code.",
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["inputs", "fetches", "accepted", "described", "materialized", "error"],
+      "required": ["inputs", "fetches", "accepted", "described", "materialized", "predicted", "error"],
       "properties": {
         "inputs": {
           "type": "array",
@@ -193,6 +193,26 @@
                   "anchor_time": {"type": ["object", "null"]},
                   "seed": {"type": ["string", "null"]}
                 }
+              },
+              {
+                "description": "predict's start: the model, and the request state the host handed back, its payload with each number as {\"number\": text}. The request id the host drew is recorded where it reaches the endpoint, in predicted.body's metadata.request_id, which the host checks is the one it started with.",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "model", "state"],
+                "properties": {
+                  "op": {"const": "predict"},
+                  "model": {"type": "string"},
+                  "state": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["version", "query", "payload"],
+                    "properties": {
+                      "version": {"type": "integer"},
+                      "query": {"type": "string"},
+                      "payload": {"type": "object"}
+                    }
+                  }
+                }
               }
             ]
           }
@@ -220,6 +240,27 @@
             "version": {"type": "integer"},
             "query": {"type": "string"},
             "payload": {"type": "object"}
+          }
+        },
+        "predicted": {
+          "description": "predict's answer: the model call's body as the core wrote it, each number as {\"number\": text}; the model and call id the endpoint named and its metadata; and the result, its columns and its rows in the endpoint's order, each cell {\"i64\": digits}, {\"f64_bits\": the float's IEEE-754 bits as 16 hex digits} or {\"utf8\": text}.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["body", "model", "request_id", "metadata", "result"],
+          "properties": {
+            "body": {"type": "object"},
+            "model": {"type": "string"},
+            "request_id": {"type": "string"},
+            "metadata": {"type": "object"},
+            "result": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["columns", "rows"],
+              "properties": {
+                "columns": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "type"], "properties": {"name": {"type": "string"}, "type": {"type": "string"}}}},
+                "rows": {"type": "array", "items": {"type": "array"}}
+              }
+            }
           }
         },
         "error": {

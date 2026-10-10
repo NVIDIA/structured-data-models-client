@@ -29,7 +29,10 @@ each acceptance case, the rules of Phase 1a so far (T1.10):
   operations with the same inputs, the core asked both for the same
   fetches with the same plans (the step trace), and answered both the
   same: the same acceptance, description or request state (from T1.11c,
-  its payload included), or an error of the same kind and code;
+  its payload included), the same call and result of ``predict`` (from
+  T1.11d; the call's ``metadata.request_id`` compared by presence and type
+  only, the one value ``capture_check.masked`` leaves out under decision
+  E35, PROPOSED), or an error of the same kind and code;
 - route proof: ``python-core`` ran the case's core operations with
   ``sdm_client._native`` loaded; ``python-old`` and ``python-ref`` never
   loaded it; ``python-ref``'s guard passed; every runner ran DuckDB at the
@@ -54,6 +57,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 RUNNER = REPO / 'contract/runners/run_python.py'
+CAPTURE_CHECK = REPO / 'contract/runners/capture_check.py'
 #: The outcome fields, compared wherever both sides observe them.
 OUTCOME = ('result', 'stage', 'error', 'code')
 #: The outcome fields the pure-Rust host cannot observe: it makes no public
@@ -70,6 +74,25 @@ def _runner() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _capture_check() -> ModuleType:
+    r"""``capture_check.py``, whose E35 mask of a prediction payload this
+    shares, so the rule is written once."""
+    spec = importlib.util.spec_from_file_location('capture_check', CAPTURE_CHECK)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _predicted(core: dict[str, Any]) -> Any:
+    r"""``core.predicted``, its call's request id compared by presence and
+    type only (decision E35, PROPOSED)."""
+    predicted = core.get('predicted')
+    if not isinstance(predicted, dict) or 'body' not in predicted:
+        return predicted
+    return {**predicted, 'body': _capture_check().masked(predicted['body'])}
 
 
 class Report:
@@ -265,6 +288,22 @@ def _core_consistent(
     core = observation['core']
     if core is None:
         return
+    if 'predict' in case.get('core', {}) and core['materialized'] is not None:
+        # Materialized, the call goes on to predict, which answers its call
+        # and result or an error, never both (T1.11d); its error ends the
+        # call there, as a refusal with its code.
+        where = f'{case["id"]}: {who}'
+        if (core['predicted'] is None) == (core['error'] is None):
+            report.fail(f'{where}: core: not one prediction or one error')
+        elif core['error'] is not None:
+            seen = (
+                observation['outcome']['result'],
+                observation['outcome']['code'],
+            )
+            wanted = ('refusal', core['error']['code'])
+            if seen != wanted:
+                _differ(report, where, 'outcome against core', wanted, seen)
+        return
     if 'materialize' in case.get('core', {}) and core['described'] is not None:
         # Described, the call goes on to materialize, which answers its
         # request state or an error, never both (T1.11c); its error ends
@@ -339,6 +378,8 @@ def _core_agree(
     for field in ('inputs', 'fetches', 'described', 'materialized'):
         if mine[field] != theirs[field]:
             _differ(report, where, f'core.{field}', None, None, show=False)
+    if _predicted(mine) != _predicted(theirs):
+        _differ(report, where, 'core.predicted', None, None, show=False)
     for field in ('accepted', 'error'):
         if mine[field] != theirs[field]:
             _differ(report, where, f'core.{field}', mine[field], theirs[field])
@@ -383,7 +424,17 @@ def _case_inputs(
                 **case['core']['materialize'],
             }
         )
-    if any(each not in core['inputs'] for each in wanted):
+    missing = any(each not in core['inputs'] for each in wanted)
+    if 'predict' in case.get('core', {}):
+        # predict's state is materialize's answer and its request id the
+        # host's to draw, so the case names only its model.
+        wanted_predict = {'op': 'predict', **case['core']['predict']}
+        missing = missing or not any(
+            all(each.get(key) == value for key, value in wanted_predict.items())
+            for each in core['inputs']
+            if each.get('op') == 'predict'
+        )
+    if missing:
         _differ(
             report,
             f'{case["id"]}: {who}',

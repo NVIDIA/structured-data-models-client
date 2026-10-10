@@ -13,6 +13,7 @@ mod describe;
 pub mod dispatch;
 pub mod materialize;
 pub mod pql;
+mod predict;
 pub mod profiles;
 pub mod run;
 #[cfg(feature = "test-ops")]

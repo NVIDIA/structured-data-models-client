@@ -12,5 +12,11 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[dependencies]
+serde.workspace = true
+# raw_value: a value's text as written, so a number is kept as the token
+# the sender wrote; it only adds `RawValue`, changing no other reading.
+serde_json = { workspace = true, features = ["raw_value"] }
+
 [lints]
 workspace = true

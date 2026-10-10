@@ -488,13 +488,23 @@ pub struct Materialized {
     pub state: RequestState,
 }
 
-/// What `predict` needs of a materialized request; the payload bytes travel
-/// as an attachment.
+/// The version of [`RequestState`]'s format this build writes and reads
+/// (decision H23); it is independent of the contract's.
+pub const REQUEST_STATE_VERSION: u32 = 1;
+
+/// What `predict` needs of a materialized request: state that outlives the
+/// run that made it. `materialize` answers it; the host takes its
+/// attachments when that run finishes, holds them, and attaches them again
+/// to the `start` of the `predict` run, under ids it picks for that
+/// message. A version other than [`REQUEST_STATE_VERSION`] is refused by
+/// name before anything of the state is read.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RequestState {
     /// The version of this state's format, independent of the contract's.
     pub version: u32,
+    /// A bytes attachment of the request's payload as JSON, as
+    /// `materialize` wrote it or as the host holds it since.
     pub payload: AttachmentId,
     /// The query text: a bytes attachment of a JSON string.
     pub query: AttachmentId,
@@ -505,13 +515,26 @@ pub struct RequestState {
 #[serde(deny_unknown_fields)]
 pub struct Predict {
     pub state: RequestState,
+    /// The model id the request is sent to, as the wire names it.
     pub model: String,
+    /// The id the request carries in its `metadata.request_id`. The host
+    /// draws it, as the reference's client draws one for every request; the
+    /// core draws nothing at random but under a seed.
+    pub request_id: String,
 }
 
-/// The prediction: an Arrow attachment, whose schema names its columns in
-/// order; nothing inline grows with the result's width (decision H5).
+/// The prediction. Nothing inline grows with the result's width or the
+/// endpoint's answer (decision H5).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predicted {
+    /// An Arrow attachment, one row per answer in the order the endpoint
+    /// gave them, whose schema names its columns in order.
     pub result: AttachmentId,
+    /// The model that answered, as the endpoint names it.
+    pub model: String,
+    /// The endpoint's id for the call.
+    pub request_id: String,
+    /// A bytes attachment of the endpoint's `metadata` object as JSON.
+    pub metadata: AttachmentId,
 }

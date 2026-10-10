@@ -15,6 +15,14 @@ A provider's failure reaches the core as the contract's ``ProviderError``:
 kind, ``retryable``, SQLSTATE and vendor code, never the driver's text; the
 exception the run then ends with names the driver's class and is raised
 ``from None`` (decision H17).
+
+A model call (from T1.11d, ``predict``'s) is answered by the caller's
+``model``: given the body's bytes, it returns the answer's bytes, which the
+core reads as the endpoint's 200; it raises :class:`Unreached` when the
+endpoint could not be reached, which the core is told as the contract's
+transport error (kind and ``retryable`` only, never the transport's text);
+anything else it raises (the endpoint's own refusal, as the client's
+transport reports it) cancels the run and is raised as it is.
 """
 
 from __future__ import annotations
@@ -32,6 +40,15 @@ from sdm_client.errors import StructuredDataError
 #: key sets its plan names are handed over with it, by attachment id, each
 #: an object exporting Arrow the same way.
 Provider = Callable[[dict[str, Any], Mapping[int, Any]], Any]
+
+#: A model: answers one call, given its body's bytes, with the bytes of the
+#: endpoint's answer.
+Model = Callable[[bytes], bytes]
+
+
+class Unreached(Exception):
+    r"""The model endpoint could not be reached: raised by a :data:`Model`,
+    and told to the core as a transport error. It carries no text."""
 
 
 def native() -> ModuleType:
@@ -100,6 +117,7 @@ def run(
     attachments: Mapping[int, Any],
     *,
     provider: Provider | None = None,
+    model: Model | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
 ) -> Finished:
@@ -145,6 +163,9 @@ def run(
             )
         if step['step'] == 'done':
             return Finished(step['result'], handle)
+        if step['step'] == 'call_model' and model is not None:
+            _call(core, handle, step, model)
+            continue
         if step['step'] != 'fetch' or provider is None:
             handle.cancel()
             raise StructuredDataError(
@@ -180,6 +201,42 @@ def run(
                     refused.attachments,
                     driver_class=driver_class,
                 )
+
+
+def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
+    r"""Answers one model call with ``model``: its answer as a 200, or, when
+    it could not reach the endpoint, the contract's transport error."""
+    body = handle.take_attachment(step['body'])
+    attached: dict[int, Any] = {}
+    try:
+        answer = model(body)
+    except Unreached:
+        outcome: dict[str, Any] = {
+            'outcome': 'transport_error',
+            'kind': 'model_endpoint',
+            # The client's transport has already retried what it retries.
+            'retryable': False,
+        }
+    except BaseException:
+        # The endpoint's own refusal, as the client's transport reports it,
+        # or an interrupt: the run ends here, and the caller sees it as is.
+        handle.cancel()
+        raise
+    else:
+        attached[1] = answer
+        outcome = {
+            'outcome': 'response',
+            'status': 200,
+            'content_type': 'application/json',
+            'body': 1,
+        }
+    reply = codec.encode(
+        {'message': 'model_reply', 'id': step['id'], 'outcome': outcome}
+    )
+    try:
+        handle.reply(reply, attached)
+    except core.CoreError as refused:
+        errors.raise_from_core(refused.control, refused.attachments)
 
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:

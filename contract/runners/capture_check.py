@@ -64,22 +64,31 @@ def _json_type(value: Any) -> str:
     return 'string'
 
 
+def masked(parsed: Any) -> Any:
+    r"""A parsed prediction payload with the value at each of
+    :data:`RANDOM_PATHS` replaced by its JSON type, as conservation compares
+    it. The same rule holds the core's call (the payload it writes for the
+    endpoint, ``core.predicted.body``) across the core runners and to its
+    pin (T1.11d): one value, ``metadata.request_id``, under E35, PROPOSED."""
+    parsed = copy.deepcopy(parsed)
+    for path in RANDOM_PATHS:
+        node = parsed
+        for part in path[:-1]:
+            node = node.get(part) if isinstance(node, dict) else None
+        # Only the value: an absent field stays absent, and a present
+        # one keeps its type, so a deleted or retyped field differs.
+        if isinstance(node, dict) and path[-1] in node:
+            node[path[-1]] = {
+                'excluded value of type': _json_type(node[path[-1]])
+            }
+    return parsed
+
+
 def _payloads(public: dict[str, Any]) -> list[Any]:
-    found = []
-    for payload in public['payloads']:
-        parsed = copy.deepcopy(payload['parsed'])
-        for path in RANDOM_PATHS:
-            node = parsed
-            for part in path[:-1]:
-                node = node.get(part) if isinstance(node, dict) else None
-            # Only the value: an absent field stays absent, and a present
-            # one keeps its type, so a deleted or retyped field differs.
-            if isinstance(node, dict) and path[-1] in node:
-                node[path[-1]] = {
-                    'excluded value of type': _json_type(node[path[-1]])
-                }
-        found.append((payload['method'], payload['path'], parsed))
-    return found
+    return [
+        (payload['method'], payload['path'], masked(payload['parsed']))
+        for payload in public['payloads']
+    ]
 
 
 def projection(observation: dict[str, Any]) -> dict[str, Any]:

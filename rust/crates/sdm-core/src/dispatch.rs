@@ -6,7 +6,9 @@
 
 use std::sync::Arc;
 
-use sdm_contract::ops::{Operation, OperationResult, QuerySchema, SourceDescription, SourceSpec};
+use sdm_contract::ops::{
+    Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION, SourceDescription, SourceSpec,
+};
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_engine::time::Zones;
@@ -114,22 +116,38 @@ pub fn start(
             Run::with_data(access, move |asker| crate::materialize::run(asker, inputs))
         }
         Operation::Predict(request) => {
+            // The state's version first, by name, before anything of the
+            // state is read (decision H23).
+            if request.state.version != REQUEST_STATE_VERSION {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidRequest,
+                    ErrorCode::InvalidRequest,
+                    "the request state is of a version this core does not read",
+                )
+                .with_field("field", Detail::text("state.version"))
+                .with_field(
+                    "version",
+                    Detail::Scalar(Scalar::UInt32(request.state.version)),
+                ));
+            }
+            let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
+            else {
+                return Err(internal("the payload is not the bytes named"));
+            };
+            // The query rides with the state; the checks that name it (an
+            // empty context, a constant target) stay in the host's client
+            // at T1.11d (decision E45), so it is read and not used.
             let _query: String = take_json(&mut attachments, request.state.query)?;
-            Run::new(|_| async { Err(not_yet("predict")) })
+            let inputs = crate::predict::Inputs {
+                payload,
+                model: request.model,
+                request_id: request.request_id,
+            };
+            Run::new(move |asker| crate::predict::run(asker, inputs))
         }
         #[cfg(feature = "test-ops")]
         Operation::Test(operation) => {
             crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
         }
     })
-}
-
-/// The Phase 1b operations, until their routes are built.
-fn not_yet(operation: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        format!("{operation} is not built into this core yet"),
-    )
-    .with_field("operation", Detail::text(operation))
 }

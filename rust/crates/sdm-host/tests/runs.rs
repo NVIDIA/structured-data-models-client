@@ -642,7 +642,8 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     let predict = start_message(
         Operation::Predict(Predict {
             state,
-            model: "relational".into(),
+            model: "kumo-relational".into(),
+            request_id: "sdm-000000000000".into(),
         }),
         vec![],
     );
@@ -659,7 +660,8 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     .err()
     .unwrap();
     assert_eq!(err.code, ErrorCode::InvalidMessage);
-    // Named and attached, the run starts; predict itself comes with T1.11d.
+    // Named and attached, the run starts, and reads the payload it was
+    // handed back, which here is not JSON: refused by name, never quoted.
     let run = HostRun::start(
         &root,
         &predict,
@@ -673,8 +675,9 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     let err = run.next().core().unwrap_err();
     assert_eq!(
         (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+        (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest)
     );
+    assert_eq!(err.fields["field"], Detail::text("state.payload"));
     // An index set a materialize names is checked the same way.
     let materialize = start_message(
         Operation::Materialize(Materialize {

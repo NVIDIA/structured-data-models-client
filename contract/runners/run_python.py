@@ -62,6 +62,7 @@ import importlib.util
 import json
 import os
 import platform
+import struct
 import subprocess
 import sys
 import warnings
@@ -398,7 +399,15 @@ class _Capture:
     plan, the step trace), and the core's answers: ``validate_query``'s
     acceptance, ``describe_source``'s description, ``materialize``'s
     request state (its version, the query and the payload, each number as
-    the text the core wrote), or an error."""
+    the text the core wrote), ``predict``'s call (its body, each number as
+    its text) and answer (the endpoint's model, call id and metadata, and
+    the result's rows), or an error.
+
+    Attachment ids are a run's own, so what this remembers of one run's ids
+    is forgotten when the next run starts. The request id the host starts
+    ``predict`` with is recorded where it reaches the endpoint, in the
+    call's ``metadata.request_id``, and a call that does not carry it is a
+    runner failure."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
@@ -407,13 +416,40 @@ class _Capture:
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
         self.materialized: dict[str, Any] | None = None
+        self.predicted: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
         self._description: int | None = None
         self._state: dict[str, Any] | None = None
+        self._request_id: str | None = None
+        self._call: int | None = None
+        self._body: dict[str, Any] | None = None
+        self._answer: dict[str, Any] | None = None
 
     def started(self, message: bytes, attachments: Any) -> None:
         operation = json.loads(message)['operation']
         self.operations.append(operation['op'])
+        self._description = None
+        self._state = None
+        self._call = None
+        self._answer = None
+        if operation['op'] == 'predict':
+            state = operation['state']
+            self._request_id = operation['request_id']
+            self.inputs.append(
+                {
+                    'op': 'predict',
+                    'model': operation['model'],
+                    'state': {
+                        'version': state['version'],
+                        'query': json.loads(attachments[state['query']]),
+                        'payload': json.loads(
+                            attachments[state['payload']],
+                            parse_int=_number,
+                            parse_float=_number,
+                        ),
+                    },
+                }
+            )
         if operation['op'] == 'validate_query':
             self.inputs.append(
                 {
@@ -456,6 +492,8 @@ class _Capture:
                 {'request': asked['request'], 'plan': asked['plan']}
                 for asked in step['requests']
             )
+        if step.get('step') == 'call_model':
+            self._call = step['body']
 
     def failed(self, error: Any) -> None:
         self.error = {'kind': str(error.kind), 'code': str(error.code)}
@@ -468,8 +506,34 @@ class _Capture:
         if result.get('op') == 'materialize':
             self._state = result['state']
             self.materialized = {'version': result['state']['version']}
+        if result.get('op') == 'predict':
+            self._answer = result
+            self.predicted = {
+                'body': self._body,
+                'model': result['model'],
+                'request_id': result['request_id'],
+                'metadata': None,
+                'result': None,
+            }
 
     def taken(self, attachment: int, value: Any) -> None:
+        if attachment == self._call and isinstance(value, bytes):
+            self._body = json.loads(
+                value, parse_int=_number, parse_float=_number
+            )
+            if self._body.get('metadata', {}).get('request_id') != (
+                self._request_id
+            ):
+                raise RunnerFailure(
+                    'the model call does not carry the request id predict '
+                    'was started with'
+                )
+        answer = self._answer
+        if answer is not None and self.predicted is not None:
+            if attachment == answer['metadata'] and isinstance(value, bytes):
+                self.predicted['metadata'] = json.loads(value)
+            if attachment == answer['result'] and not isinstance(value, bytes):
+                self.predicted['result'] = _result_rows(value)
         if attachment == self._description and isinstance(value, bytes):
             self.described = json.loads(value)
         state = self._state
@@ -489,8 +553,44 @@ class _Capture:
             'accepted': self.accepted,
             'described': self.described,
             'materialized': self.materialized,
+            'predicted': self.predicted,
             'error': self.error,
         }
+
+
+def _result_rows(stream: Any) -> dict[str, Any]:
+    r"""An Arrow result the core gave, as the pure-Rust host records one:
+    its columns' names and types, and its rows in order, each cell an
+    integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
+    hex digits, so no text form of a float is compared) or text
+    (``utf8``)."""
+    import pyarrow as pa
+
+    table = pa.RecordBatchReader._import_from_c_capsule(
+        stream.__arrow_c_stream__()
+    ).read_all()
+    kinds = {pa.int64(): 'int64', pa.float64(): 'float64', pa.utf8(): 'utf8'}
+    columns = [
+        {'name': field.name, 'type': kinds.get(field.type, 'other')}
+        for field in table.schema
+    ]
+
+    def cell(kind: str, value: Any) -> Any:
+        if value is None:
+            return None
+        if kind == 'int64':
+            return {'i64': str(value)}
+        if kind == 'float64':
+            return {'f64_bits': struct.pack('>d', value).hex()}
+        if kind == 'utf8':
+            return {'utf8': value}
+        raise RunnerFailure('a result column of a type this runner does not record')
+
+    rows = [
+        [cell(column['type'], value) for column, value in zip(columns, row, strict=True)]
+        for row in zip(*(table.column(i).to_pylist() for i in range(table.num_columns)), strict=True)
+    ]
+    return {'columns': columns, 'rows': rows}
 
 
 #: A pyarrow integer type's contract scalar tag.

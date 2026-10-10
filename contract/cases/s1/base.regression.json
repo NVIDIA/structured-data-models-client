@@ -16,7 +16,13 @@
     "query.materialize/indices-regression/duckdb",
     "query.materialize/indices-link-prediction/duckdb",
     "query.materialize/indices-ranking/duckdb",
-    "query.materialize/indices-forecast/duckdb"
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
   ],
   "seam": "baseline",
   "cells": [
@@ -187,6 +193,9 @@
         "zone": null
       },
       "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
     }
   },
   "expect": {
@@ -194,6 +203,6 @@
     "stage": "predict",
     "today": "users.user_id and orders.order_id inferred as keys; orders.ts the time column; result columns row_index int64, id int64, prediction float64"
   },
-  "why": "The plain journey every other case varies one thing of; also probe#1 (a ts[us] time column). From T1.11b its schema is described on the core (describe_source), and from T1.11c it is materialized on the core to its payload (materialize); predict stays on the old route until T1.11d. Diagnostic until T1.29",
+  "why": "The plain journey every other case varies one thing of; also probe#1 (a ts[us] time column). From T1.11b its schema is described on the core (describe_source), from T1.11c it is materialized on the core to its payload (materialize), and from T1.11d its request is sent to the model and the answer laid out on the core (predict). Diagnostic until T1.29",
   "source": "phase-1b-inventory.yaml base.regression, with the core operation its schema route starts"
 }

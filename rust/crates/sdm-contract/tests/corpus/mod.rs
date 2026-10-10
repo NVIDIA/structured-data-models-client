@@ -133,7 +133,8 @@ pub fn messages() -> Vec<ControlMessage> {
         })),
         start(Operation::Predict(Predict {
             state: state.clone(),
-            model: "rfm".into(),
+            model: "kumo-relational".into(),
+            request_id: "sdm-000000000000".into(),
         })),
         ControlMessage::Step(Step::Fetch {
             requests: vec![FetchStep {
@@ -345,6 +346,9 @@ pub fn messages() -> Vec<ControlMessage> {
         ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {
                 result: AttachmentId(10),
+                model: "kumo-relational".into(),
+                request_id: "r1".into(),
+                metadata: AttachmentId(12),
             }),
         }),
         ControlMessage::Attached {

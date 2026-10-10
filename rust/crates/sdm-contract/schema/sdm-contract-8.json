@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/7",
+  "$id": "sdm-contract/8",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -866,6 +866,11 @@
               "$ref": "#/$defs/RequestState"
             },
             "model": {
+              "description": "The model id the request is sent to, as the wire names it.",
+              "type": "string"
+            },
+            "request_id": {
+              "description": "The id the request carries in its `metadata.request_id`. The host\ndraws it, as the reference's client draws one for every request; the\ncore draws nothing at random but under a seed.",
               "type": "string"
             },
             "op": {
@@ -877,7 +882,8 @@
           "required": [
             "op",
             "state",
-            "model"
+            "model",
+            "request_id"
           ]
         }
       ]
@@ -1070,7 +1076,7 @@
       "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"
     },
     "RequestState": {
-      "description": "What `predict` needs of a materialized request; the payload bytes travel\nas an attachment.",
+      "description": "What `predict` needs of a materialized request: state that outlives the\nrun that made it. `materialize` answers it; the host takes its\nattachments when that run finishes, holds them, and attaches them again\nto the `start` of the `predict` run, under ids it picks for that\nmessage. A version other than [`REQUEST_STATE_VERSION`] is refused by\nname before anything of the state is read.",
       "type": "object",
       "properties": {
         "version": {
@@ -1080,6 +1086,7 @@
           "minimum": 0
         },
         "payload": {
+          "description": "A bytes attachment of the request's payload as JSON, as\n`materialize` wrote it or as the host holds it since.",
           "$ref": "#/$defs/AttachmentId"
         },
         "query": {
@@ -2532,10 +2539,23 @@
           ]
         },
         {
-          "description": "The prediction: an Arrow attachment, whose schema names its columns in\norder; nothing inline grows with the result's width (decision H5).",
+          "description": "The prediction. Nothing inline grows with the result's width or the\nendpoint's answer (decision H5).",
           "type": "object",
           "properties": {
             "result": {
+              "description": "An Arrow attachment, one row per answer in the order the endpoint\ngave them, whose schema names its columns in order.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "model": {
+              "description": "The model that answered, as the endpoint names it.",
+              "type": "string"
+            },
+            "request_id": {
+              "description": "The endpoint's id for the call.",
+              "type": "string"
+            },
+            "metadata": {
+              "description": "A bytes attachment of the endpoint's `metadata` object as JSON.",
               "$ref": "#/$defs/AttachmentId"
             },
             "op": {
@@ -2546,7 +2566,10 @@
           "additionalProperties": false,
           "required": [
             "op",
-            "result"
+            "result",
+            "model",
+            "request_id",
+            "metadata"
           ]
         }
       ]

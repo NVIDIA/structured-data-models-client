@@ -437,10 +437,14 @@ class SDMClient:
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
-        parts = [
-            adapter.normalize(self._send(adapter, payload), fields, payload)
-            for payload in adapter.prediction_plan(request, fields)
-        ]
+        on_the_core = _predicts_on_the_core(request)
+        if on_the_core is not None:
+            parts = on_the_core.predict(self, adapter, request, fields)
+        else:
+            parts = [
+                adapter.normalize(self._send(adapter, payload), fields, payload)
+                for payload in adapter.prediction_plan(request, fields)
+            ]
         if not parts:
             raise StructuredDataError(
                 'the adapter produced no call for this request',
@@ -770,6 +774,27 @@ class SDMClient:
 
     def __repr__(self) -> str:
         return f'SDMClient(url={redact_url(self._transport.url)!r})'
+
+
+def _predicts_on_the_core(request: Request) -> Any | None:
+    r"""The core's ``predict`` bridge, when this call runs on the core.
+
+    A request materialized over a DuckDB source predicts on the core when
+    ``SDM_CORE_ROUTES`` forces its paths there (T1.11d); every other call,
+    and every call by default, takes the old route. The bridge refuses, as
+    the seam's own failure, a request the core did not materialize.
+    """
+    schema = getattr(request, 'schema', None)
+    source = getattr(schema, 'source', None)
+    if getattr(source, 'backend', None) != 'duckdb' or not request.payloads:
+        return None
+    from sdm_client import _routing
+
+    if _routing.route(_routing.PREDICT_DUCKDB) != 'core':
+        return None
+    from sdm_client._rust import predict as on_the_core
+
+    return on_the_core
 
 
 def _report_absent(

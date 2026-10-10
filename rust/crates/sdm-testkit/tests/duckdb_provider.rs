@@ -136,12 +136,18 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let observed = host::run(&loaded[0].case, &bases).unwrap();
-    assert_eq!(observed.operations, ["describe_source", "materialize"]);
+    assert_eq!(
+        observed.operations,
+        ["describe_source", "materialize", "predict"]
+    );
     let Some(described) = observed.described.clone() else {
         panic!("not described: {:?}", observed.answer);
     };
-    let Answer::Materialized(materialized) = observed.answer.clone() else {
+    let Some(materialized) = observed.materialized.clone() else {
         panic!("not materialized: {:?}", observed.answer);
+    };
+    let Answer::Predicted(predicted) = observed.answer.clone() else {
+        panic!("not predicted: {:?}", observed.answer);
     };
     // The reference's schema of base.regression: keys and the time column
     // inferred, each column's type and meaning.
@@ -210,7 +216,34 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     assert_eq!(described, pinned["described"]);
     assert_eq!(materialized, pinned["materialized"]);
     assert_eq!(Value::from(observed.fetches), pinned["fetches"]);
-    assert_eq!(Value::from(observed.inputs), pinned["inputs"]);
+    assert_eq!(Value::from(observed.inputs.clone()), pinned["inputs"]);
+    // predict's call and result (T1.11d): the call's request id compared by
+    // presence and type only, as capture_check.masked compares it (decision
+    // E35, PROPOSED), since each host draws its own; everything else exactly.
+    let mut masked = predicted.clone();
+    let id = &mut masked["body"]["metadata"]["request_id"];
+    assert!(id.is_string(), "{id}");
+    *id = serde_json::json!({"excluded value of type": "string"});
+    assert_eq!(masked, pinned["predicted"]);
+    // The state predict started with is the one materialize answered, as
+    // this host held it between the runs.
+    assert_eq!(observed.inputs[2]["state"], materialized);
+    // Not vacuous: two rows, each its entity and a prediction of 1.0.
+    let rows = pinned["predicted"]["result"]["rows"].as_array().unwrap();
+    assert_eq!(
+        rows,
+        &[
+            serde_json::json!([{"i64": "0"}, {"i64": "0"}, {"f64_bits": "3ff0000000000000"}]),
+            serde_json::json!([{"i64": "1"}, {"i64": "1"}, {"f64_bits": "3ff0000000000000"}]),
+        ]
+    );
+    assert_eq!(
+        pinned["predicted"]["body"]["context"]["instance_table"]["rows"]
+            .as_array()
+            .unwrap()
+            .len(),
+        112
+    );
     // The pin is not vacuous: it holds the payload of 112 context examples
     // and 2 to predict, over both tables.
     let payload = &pinned["materialized"]["payload"];

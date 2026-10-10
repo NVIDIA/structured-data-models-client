@@ -1,0 +1,98 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! `predict`: a materialized request sent to the model, and its answer.
+//!
+//! The run reads the request state a `materialize` run answered and the
+//! host held since (decision H23), makes the call the reference's client
+//! makes of it ([`sdm_request::predict::body`]), asks the host to send it
+//! (one `CallModel` step), reads the answer as the client's bindings read
+//! it ([`sdm_wire::response`]) and lays it out
+//! ([`sdm_request::predict::layout`]): an Arrow table of one row per answer,
+//! the endpoint's `metadata` as JSON, and the model and call id the
+//! endpoint named.
+//!
+//! An answer with a status other than 2xx is the endpoint's refusal, which
+//! the host's transport reports as the reference's does; a host that hands
+//! one over gets `INVALID_RESPONSE` naming the status. A transport that
+//! failed before an answer is `TRANSPORT_ERROR` with the kind and
+//! retryability the host gave. No error carries a value of the request or
+//! the answer (decision H17).
+
+use sdm_contract::ops::{OperationResult, Predicted};
+use sdm_contract::run::Endpoint;
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_request::predict::{bad_response, body, layout, refused};
+use sdm_wire::json::{self, Value};
+use sdm_wire::response::PredictionResponse;
+
+use crate::run::{ArrowData, Asker, Attachment, ModelResult, Reply, internal};
+
+/// What a `predict` start gives its body.
+pub(crate) struct Inputs {
+    /// The request state's payload, as the host attached it.
+    pub payload: Vec<u8>,
+    pub model: String,
+    pub request_id: String,
+}
+
+/// The JSON a request state's payload holds, or a refusal naming where in
+/// it and what kind of fault, never the text.
+fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
+    json::read(bytes).map_err(|e| {
+        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
+        CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "the request state's payload is not JSON",
+        )
+        .with_field("field", Detail::text("state.payload"))
+        .with_field("category", Detail::text(e.category))
+        .with_field("line", count(e.line))
+        .with_field("column", count(e.column))
+    })
+}
+
+pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
+    let payload = payload(&inputs.payload)?;
+    let call = body(&payload, &inputs.model, &inputs.request_id)?;
+    let reply = asker
+        .call_model(
+            Endpoint::Predict,
+            "application/json".to_owned(),
+            call.to_bytes(),
+        )
+        .await;
+    let answer = match reply {
+        Reply::Model(ModelResult::Response { status, body, .. }) => {
+            if !(200..300).contains(&status) {
+                return Err(bad_response("status", "not_a_success")
+                    .with_field("status", Detail::Scalar(Scalar::UInt16(status))));
+            }
+            body
+        }
+        Reply::Model(ModelResult::TransportError { kind, retryable }) => {
+            return Err(CoreError::transport(kind, retryable));
+        }
+        Reply::Fetch(_) => return Err(internal("a model call was answered as a fetch")),
+    };
+    // The answer is read whatever content type it names, as the client's
+    // transport decodes every answer's body as JSON.
+    let read = json::read(&answer).map_err(|e| {
+        bad_response("response", "not_json").with_field("category", Detail::text(e.category))
+    })?;
+    let response = PredictionResponse::read(&read).map_err(refused)?;
+    let table = layout(&payload, &response)?;
+    let result = asker.attach(Attachment::Arrow(ArrowData::new(
+        table.schema(),
+        vec![table],
+    )))?;
+    let metadata = asker.attach(Attachment::Bytes(response.metadata.to_bytes()))?;
+    Ok(OperationResult::Predict(Predicted {
+        result,
+        model: response.model,
+        request_id: response.id,
+        metadata,
+    }))
+}

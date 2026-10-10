@@ -144,7 +144,9 @@ class RelationalMaterializer:
         self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
         _warn_the_filter_chose_only_the_examples(query, indices)
         _warn_of_relationships_that_join_nothing(self.schema)
-        payloads = self._gather(query, indices, num_context_samples, options)
+        payloads, core_state = self._gather(
+            query, indices, num_context_samples, options
+        )
         if statistic is not None:
             _record_the_statistic(payloads, statistic)
         sent = _tables_sent(payloads, self.schema)
@@ -158,7 +160,7 @@ class RelationalMaterializer:
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
         _drop_context_that_answers_the_question(payloads, windowed=windowed)
-        return Request.materialized(
+        request = Request.materialized(
             payloads=payloads,
             windowed=windowed,
             schema=self.schema.snapshot(),
@@ -169,6 +171,11 @@ class RelationalMaterializer:
                 'inference_config': options.get('inference_config') or {}
             },
         )
+        if core_state is not None:
+            # Gathered on the core (T1.11d): the request state's version,
+            # which predict on the core hands back with the payload.
+            request._core_state = core_state
+        return request
 
     def _gather(
         self,
@@ -176,9 +183,11 @@ class RelationalMaterializer:
         indices: Sequence[Any],
         num_context_samples: int | None,
         options: dict[str, Any],
-    ) -> tuple[dict[str, Any], ...]:
+    ) -> tuple[tuple[dict[str, Any], ...], dict[str, Any] | None]:
         r"""Sample and encode using the engine's own materializer, or, over
-        a DuckDB source on the core route (T1.11c), the core's."""
+        a DuckDB source on the core route (T1.11c), the core's: the
+        payloads, and on the core route the request state's version, which
+        the request keeps for predict on the core (T1.11d)."""
         source = self.schema.source
         if getattr(source, 'backend', None) == 'duckdb':
             from sdm_client import _routing
@@ -251,7 +260,7 @@ class RelationalMaterializer:
             )
         for part in parts:
             self._check_limits(part, RELATIONAL_LIMITS)
-        return tuple(part.payload for part in parts)
+        return tuple(part.payload for part in parts), None
 
     def _get_model(self) -> KumoRelational:
         if self._model is None:
