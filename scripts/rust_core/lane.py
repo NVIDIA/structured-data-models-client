@@ -64,6 +64,11 @@ recorded package is refused. On any other branch it does nothing. With
 hook passes on) it checks what is pushed instead: every lane ref pushed,
 from whichever branch or detached HEAD, must be this worktree's lane,
 hold only commits its recorded package owns, and not be a deletion.
+The hook runs only in the worktrees ``prepush.sh --install-hook``
+registered, which ``start`` does for each lane worktree; a push to a lane
+from anywhere else, or with ``--no-verify``, is not checked here, and
+``land.py`` is the backstop: it lands a lane only from the lane's own
+worktree, on the lane's branch, with every commit owned by its package.
 
 It never force-pushes, never deletes a branch or tag, and pushes nothing
 but the lane: ``main``, ``rust-core`` and the phase branch are only read.
@@ -82,12 +87,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from land import (  # noqa: E402
+    LANDING_SUBJECT,
     LANE_NAME,
     LANE_PREFIX,
     PACKAGE_ID,
     PACKAGE_KEY,
     PHASE_BRANCH,
     WORKFLOW,
+    Completed,
     Refusal,
     Tools,
     commits_not_owned,
@@ -169,10 +176,18 @@ def commits(tools: Tools, base: str, head: str) -> list[tuple[str, str]]:
     return found
 
 
+def subject_package(subject: str) -> str | None:
+    """The package a subject names first: its owner, or the package an
+    earlier landing commit (``Land <ID>: ...``) lands."""
+    landing = LANDING_SUBJECT.match(subject)
+    return landing.group(1) if landing else owner_of(subject)
+
+
 def owners(found: Sequence[tuple[str, str]]) -> Counter[str]:
     """How many of the commits each package owns, by their subjects."""
     return Counter(
-        owner_of(body.split('\n', 1)[0]) or '(no package)' for _, body in found
+        subject_package(body.split('\n', 1)[0]) or '(no package)'
+        for _, body in found
     )
 
 
@@ -620,10 +635,20 @@ def execute(
             f'{recorded}, not {plan.branch} at {plan.phase[:12]} recording '
             f'{plan.package}'
         )
-    hook = tools.attempt(
-        'bash', '-c', 'cd "$1" && exec bash "$2" --install-hook', 'lane.py',
-        plan.path, str(PREPUSH),
-    )  # fmt: skip
+    hooks_path = tools.attempt(
+        'git', '-C', plan.path, 'config', '--get', 'core.hooksPath'
+    ).stdout.strip()
+    if hooks_path:
+        # prepush.sh installs into the clone's hooks directory, which git
+        # does not read while core.hooksPath points elsewhere.
+        hook = Completed(
+            1, '', f'core.hooksPath is {hooks_path}, so git would not run it'
+        )
+    else:
+        hook = tools.attempt(
+            'bash', '-c', 'cd "$1" && exec bash "$2" --install-hook',
+            'lane.py', plan.path, str(PREPUSH),
+        )  # fmt: skip
     if hook.returncode == 0:
         out(f"ok   prepush.sh's pre-push hook checks pushes from {plan.path}")
     else:
@@ -647,7 +672,8 @@ def next_steps(plan: Plan, remote: str) -> list[str]:
         f'next: cd {plan.path}',
         f'  start every commit subject with {plan.package}: '
         f"'{plan.package}: ...' or '{plan.package} tracker: ...' "
-        '(prepush.sh and land.py refuse any other)',
+        '(prepush.sh and land.py refuse any other); squash fixup! and '
+        'squash! commits (git rebase --autosquash) before pushing',
         '  scripts/rust_core/prepush.sh before each push, --full before the '
         'last',
         f'  git push {remote} HEAD:{plan.branch}',

@@ -26,14 +26,21 @@ Before it changes anything it refuses, naming the reason, unless:
   or anything else; a name under ``rust-core-phase-1-lane-`` must be a
   lane, ``<x>`` lower-case letters and digits, and an archive branch
   (``rust-core-phase-1-archive-...``) is refused;
-- on a lane, the package ``--title`` names (``Land <ID>: ...``) is the one
-  ``lane.py start`` recorded for this worktree (``git config --worktree
-  sdm.package``), and every commit the candidate adds to the phase head is
-  owned by that package: its subject starts with the ID followed by a colon
-  or a space (``T1.11e: ...``, ``T1.11e tracker: ...``) and names no other
-  package ID. A mention in the body or a trailer (``Refs: T1.11e``) is not
-  ownership, so a commit whose subject is another package's, or names no
-  package, never lands under this title;
+- on a lane, the lane is the branch checked out (not another branch, not
+  a detached HEAD), the package ``--title`` names (``Land <ID>: ...``) is
+  the one ``lane.py start`` recorded for this worktree (``git config
+  --worktree sdm.package``), and every commit the candidate adds to the
+  phase head is owned by that package: its subject starts with the ID
+  followed by a colon or a space (``T1.11e: ...``, ``T1.11e tracker:
+  ...``) and names no other package ID. A mention in the body or a trailer
+  (``Refs: T1.11e``) is not ownership, so a commit whose subject is another
+  package's, or names no package, never lands under this title. The one
+  other commit owned is an earlier landing commit of the same package, left
+  on the lane by a red ``--wait-for-landing-run``: subject ``Land <ID>:
+  ...``, one parent, no file changed, and a ``Base-SHA`` in the phase
+  branch. A fix builds on it, and the new landing commit's parent is that
+  fix and its ``Base-SHA`` the current phase head, so the phase branch
+  still fast-forwards;
 - the worktree is clean, HEAD is the candidate, and the candidate descends
   from the phase branch's head on the remote without being it;
 - the checkpoint is a commit the candidate descends from;
@@ -104,15 +111,17 @@ LANE_NAME = re.compile(r'[a-z0-9]{1,16}')
 ARCHIVE_PREFIX = PHASE_BRANCH + '-archive-'
 #: A package: a task (``T1.11e``) or a process package (``CI3``).
 PACKAGE_ID = re.compile(r'T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+')
-#: A package ID standing as a word of its own: ``T1.11`` is not a word in
-#: ``T1.11e``, nor ``CI3`` in ``CI30``.
-PACKAGE_WORD = re.compile(
-    rf'(?<![A-Za-z0-9.])({PACKAGE_ID.pattern})(?![A-Za-z0-9])'
-)
 #: The package that owns a commit: its subject starts with the ID, then a
 #: colon or a space (``T1.11e: ...``, ``T1.11e fix 1: ...``,
 #: ``T1.11e tracker: ...``).
 SUBJECT_OWNER = re.compile(rf'({PACKAGE_ID.pattern})(?=[: ])')
+#: Any package ID in a subject, even glued to letters before it
+#: (``xT1.11f``), so a subject naming a second package is refused.
+SUBJECT_ID = re.compile(rf'(?<![0-9.])({PACKAGE_ID.pattern})(?![A-Za-z0-9])')
+#: An earlier landing commit's subject, left on the lane when its landing
+#: run was red (``--wait-for-landing-run``); owned only when it is what
+#: land.py makes (see ``landing_problem``).
+LANDING_SUBJECT = re.compile(rf'Land ({PACKAGE_ID.pattern}): ')
 #: Where ``lane.py start`` records a lane worktree's package.
 PACKAGE_KEY = 'sdm.package'
 WORKFLOW = 'ci.yml'
@@ -289,7 +298,7 @@ def ownership_problem(subject: str, package: str) -> str | None:
         )
     if owner != package:
         return f"the subject is {owner}'s"
-    others = sorted({m for m in PACKAGE_WORD.findall(subject) if m != package})
+    others = sorted({m for m in SUBJECT_ID.findall(subject) if m != package})
     if others:
         return (
             f'the subject also names {", ".join(others)}; cite another '
@@ -316,20 +325,74 @@ def recorded_package(tools: Tools, path: str | None = None) -> str | None:
     return value if done.returncode == 0 and value else None
 
 
+def landing_problem(
+    tools: Tools, sha: str, package: str, base: str, *where: str
+) -> str | None:
+    """None when ``sha`` is a landing commit of ``package`` as land.py
+    makes one: subject ``Land <package>: ...``, one parent, the parent's
+    tree (it changes no file), and a ``Base-SHA`` trailer naming a commit
+    of the phase branch (an ancestor of ``base``, the phase head checked
+    against). Such a commit stays on the lane when its landing run was
+    red; the package's fixes build on it and land again."""
+    match = LANDING_SUBJECT.match(
+        tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
+    )
+    if not match or match.group(1) != package:
+        return f"the subject is not 'Land {package}: ...'"
+    second = tools.attempt(
+        'git', *where, 'rev-parse', '--verify', '--quiet', f'{sha}^2'
+    )
+    if second.returncode == 0:
+        return 'a landing commit has one parent'
+    tree = tools.git(*where, 'rev-parse', f'{sha}^{{tree}}').strip()
+    parent = tools.git(*where, 'rev-parse', f'{sha}^^{{tree}}').strip()
+    if tree != parent:
+        return 'a landing commit changes no file, and this one does'
+    base_sha = trailers_of(tools, sha, *where).get('Base-SHA', '')
+    if not re.fullmatch(r'[0-9a-f]{40}', base_sha):
+        return 'a landing commit has a Base-SHA trailer, and this one has none'
+    if not tools.git_ok(*where, 'merge-base', '--is-ancestor', base_sha, base):
+        return (
+            f'its Base-SHA {base_sha[:12]} is not in the phase branch, so it '
+            'was not landed from this lane onto the phase head'
+        )
+    return None
+
+
 def commits_not_owned(
     tools: Tools, base: str, head: str, package: str, *where: str
 ) -> list[tuple[str, str, str]]:
     """The commits in ``base..head`` that ``package`` does not own, each as
-    (SHA, subject, why)."""
+    (SHA, subject, why). An earlier landing commit of ``package`` that
+    ``landing_problem`` accepts is owned."""
     out = tools.git(*where, 'log', '--format=%H%x00%s%x1e', f'{base}..{head}')
     found: list[tuple[str, str, str]] = []
     for entry in out.split('\x1e'):
         sha, sep, text = entry.strip('\n').partition('\x00')
         subject = text.split('\n', 1)[0]
-        why = ownership_problem(subject, package) if sep else None
+        if not sep:
+            continue
+        if LANDING_SUBJECT.match(subject):
+            why = landing_problem(tools, sha, package, base, *where)
+        else:
+            why = ownership_problem(subject, package)
         if why:
             found.append((sha, subject, why))
     return found
+
+
+def check_lane_branch(tools: Tools, topic: str) -> None:
+    """On a lane, the branch checked out is the lane itself: land.py pushes
+    with --no-verify, so it makes the pre-push hook's branch check here,
+    and the package it compares is the lane worktree's own."""
+    done = tools.attempt('git', 'symbolic-ref', '--quiet', '--short', 'HEAD')
+    current = done.stdout.strip() if done.returncode == 0 else ''
+    if current != topic:
+        raise Refusal(
+            f'{topic} is a lane, and this worktree has '
+            f'{current or "a detached HEAD"} checked out; land a lane from '
+            'its own worktree, on its own branch'
+        )
 
 
 def check_lane_package(tools: Tools, topic: str, package: str) -> None:
@@ -567,9 +630,11 @@ def package_of(title: str) -> str:
     return title.removeprefix('Land ').split(':', 1)[0].strip()
 
 
-def trailers_of(tools: Tools, sha: str) -> dict[str, str]:
+def trailers_of(tools: Tools, sha: str, *where: str) -> dict[str, str]:
     """The commit's trailers, as git reads them; the last value of a key."""
-    text = tools.git('log', '-1', '--format=%(trailers:only,unfold)', sha)
+    text = tools.git(
+        *where, 'log', '-1', '--format=%(trailers:only,unfold)', sha
+    )
     trailers: dict[str, str] = {}
     for line in text.splitlines():
         key, sep, value = line.partition(': ')
@@ -654,6 +719,7 @@ def land(
     package = package_of(title)
     on_lane = lane_of(args.topic_branch) is not None
     if on_lane:
+        check_lane_branch(tools, args.topic_branch)
         check_lane_package(tools, args.topic_branch, package)
     candidate = resolve(tools, args.candidate, 'the candidate')
     check_worktree(tools, candidate)
@@ -667,8 +733,8 @@ def land(
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
     if on_lane:
         out(
-            f'ok   the lane carries {package}, the package this worktree '
-            'records, and every commit names it'
+            f'ok   the lane is checked out here and carries {package}, the '
+            'package this worktree records, which owns every commit'
         )
     out(f'ok   {len(args.review)} reviews approve {candidate[:12]}')
     if args.wait_for_landing_run:
@@ -780,9 +846,14 @@ def land(
 
 
 def push(tools: Tools, undo: str, *args: str) -> None:
-    # --no-verify: the pre-push hook (prepush.sh) would refuse the landing
-    # commit, whose subject is 'Land <ID>: ...', and land.py has made every
-    # check it stands for and more.
+    # --no-verify: the pre-push hook would run prepush.sh's whole cheap tier
+    # again. On a lane, land.py has made the hook's lane checks itself
+    # before this push: the lane is the branch checked out
+    # (check_lane_branch), the worktree records the title's package
+    # (check_lane_package), and that package owns every commit since the
+    # phase head (check_lane_commits). The hook's other checks (cargo,
+    # clippy, the scans) are the candidate's own CI run, which land.py
+    # requires green or waits for.
     try:
         tools.git('push', '--quiet', '--no-verify', *args)
     except Refusal as why:

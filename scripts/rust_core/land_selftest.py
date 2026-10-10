@@ -108,6 +108,8 @@ class Fake:
     #: package recorded there (``lane.py start``).
     worktree_config: bool = True
     package: str | None = 'T1.99'
+    #: The branch checked out; None is a detached HEAD.
+    branch: str | None = TOPIC
     #: The branches on the remote, as pushes leave them; a seeded value
     #: stands for a push by someone else after the landing.
     remote_refs: dict[str, str] = field(default_factory=dict)
@@ -175,6 +177,13 @@ class Fake:
             self.head = LAND
             self.committed.append(message)
             return ok
+        if args[0] == 'symbolic-ref':
+            if self.branch is None:
+                return land.Completed(1)
+            return land.Completed(0, self.branch + '\n')
+        if args[0] == 'log' and '--format=%s' in args:
+            message = self.commits[self.sha(args[-1]) or '']['message']
+            return land.Completed(0, message.split('\n', 1)[0] + '\n')
         if args[0] == 'config':
             if args[-1] == 'extensions.worktreeConfig':
                 return land.Completed(
@@ -978,6 +987,80 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'confirmed' if ok else c.text
 
 
+@case('refused: a lane landed from another branch checked out')
+def _(tmp: Path) -> tuple[bool, str]:
+    return refused(
+        Case(tmp, Fake(branch='scratch')).land(), 'scratch checked out'
+    )
+
+
+@case('refused: a lane landed from a detached HEAD')
+def _(tmp: Path) -> tuple[bool, str]:
+    return refused(Case(tmp, Fake(branch=None)).land(), 'a detached HEAD')
+
+
+@case("refused: a lane landed from another lane's worktree")
+def _(tmp: Path) -> tuple[bool, str]:
+    fake = Fake(branch=f'{PHASE}-lane-b')
+    return refused(Case(tmp, fake).land(), f'{PHASE}-lane-b checked out')
+
+
+#: An earlier landing of T1.99 whose run was red: the work (WORK), its
+#: empty landing commit (EARLIER), and the fix on top, the new candidate.
+WORK = '1' * 8 + '7' * 32
+EARLIER = '2' * 8 + '8' * 32
+
+
+def relanding(
+    subject: str = 'Land T1.99: a test package',
+    tree: str = 'tree-work',
+    base: str | None = BASE,
+) -> Fake:
+    fake = Fake()
+    trailers = f'Base-SHA: {base}\n' if base else ''
+    fake.commits[WORK] = {
+        'parent': BASE, 'tree': 'tree-work',
+        'message': 'T1.99: a test package\n',
+    }  # fmt: skip
+    fake.commits[EARLIER] = {
+        'parent': WORK, 'tree': tree,
+        'message': f'{subject}\n\nThe landing run was red.\n\n'
+        f'Reviewed-by: r\n{trailers}{SIGNOFF}\n',
+    }  # fmt: skip
+    fake.commits[CAND] = {
+        'parent': EARLIER, 'tree': 'tree-cand',
+        'message': 'T1.99 fix 1: what the red run found\n',
+    }  # fmt: skip
+    return fake
+
+
+@case('lands: a fix on an earlier landing commit whose run was red')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp, relanding()).land()
+    landing = c.fake.commits.get(LAND, {})
+    ok = (
+        c.code == 0
+        and landing.get('parent') == CAND
+        and f'Base-SHA: {BASE}' in landing.get('message', '')
+        and c.fake.remote_phase == LAND
+    )
+    return ok, 'landed on the fix, Base-SHA the phase head' if ok else c.text
+
+
+for label, fake_of, why in (
+    ('changes a file', lambda: relanding(tree='tree-changed'), 'changes no file'),
+    ('has no Base-SHA', lambda: relanding(base=None), 'has none'),
+    ('has a Base-SHA outside the phase', lambda: relanding(base=OTHER), 'not in the phase branch'),
+    ("is another package's", lambda: relanding(subject='Land T1.98: other'), "is not 'Land T1.99"),
+):  # fmt: skip
+
+    @case(f'refused: an earlier landing commit on the lane that {label}')
+    def _(
+        tmp: Path, fake_of: Callable[[], Fake] = fake_of, why: str = why
+    ) -> tuple[bool, str]:
+        return refused(Case(tmp, fake_of()).land(), why)
+
+
 @case('ownership_problem: only the subject owns, and names no other ID')
 def _(tmp: Path) -> tuple[bool, str]:
     checks = {
@@ -994,6 +1077,8 @@ def _(tmp: Path) -> tuple[bool, str]:
         'T1.11ee: a longer ID': False,
         't1.11e: lower case': False,
         'T1.11e-ish: no separator': False,
+        'T1.11e: xT1.11f glued to a letter': False,
+        'T1.11e: the T1.11f work': False,
     }
     wrong = {
         subject: expect

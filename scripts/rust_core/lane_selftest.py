@@ -66,13 +66,18 @@ elif args[:2] == ['run', 'list'] and '--commit' in args:
     sha = value('--commit')
     found = [r for r in runs if r['headSha'] == sha]
     if not found:
+        # Runs appear on each branch in green_on, concluding as the state
+        # says at the time, and are kept, as GitHub keeps them.
         found = [
-            {'databaseId': 900 + i, 'headSha': sha, 'headBranch': branch,
-             'status': 'completed', 'conclusion': 'success', 'event': 'push',
-             'url': 'https://example.invalid/runs/%d' % (900 + i),
+            {'databaseId': 900 + len(runs) + i, 'headSha': sha,
+             'headBranch': branch, 'status': 'completed',
+             'conclusion': state.get('conclusion', 'success'),
+             'event': 'push',
+             'url': 'https://example.invalid/runs/%d' % (900 + len(runs) + i),
              'createdAt': '2026-10-09T00:00:0%dZ' % i}
             for i, branch in enumerate(state['green_on'])
         ]
+        runs.extend(found)
     out = json.dumps(found)
 elif args[:2] == ['run', 'watch'] and state.get('watch_fails'):
     code = 1
@@ -81,8 +86,10 @@ elif args[:2] in (['run', 'watch'], ['run', 'view']):
     found = [r for r in runs if str(r['databaseId']) == args[2]]
     if not found:
         code = 1
-    elif args[1] == 'watch':
+    elif args[1] == 'watch' and found[0]['status'] != 'completed':
         found[0].update(status='completed', conclusion='success')
+    elif args[1] == 'watch':
+        code = 0 if found[0]['conclusion'] == 'success' else 1
     else:
         out = json.dumps(found[0])
 else:
@@ -191,9 +198,11 @@ class World:
             '--worktree', str(self.worktree), *extra,
         )  # fmt: skip
 
-    def land(self, *args: str) -> Ran:
+    def land(self, *args: str, cwd: Path | None = None) -> Ran:
         return run(
-            [sys.executable, str(LAND_PY), *args], self.worktree, self.env
+            [sys.executable, str(LAND_PY), *args],
+            cwd or self.worktree,
+            self.env,
         )
 
     # --- the remote, from someone else's clone ---
@@ -902,6 +911,168 @@ def _(w: World) -> tuple[bool, str]:
     landing = w.git('rev-parse', 'HEAD', cwd=w.worktree).strip()
     ok = ran.code == 0 and w.tip(PHASE) == landing
     return verdict(ok, "landed; land.py's checks stand in", ran)
+
+
+def snapshot(w: World, *trees: Path) -> str:
+    """The local and remote state a refused landing must leave as it was."""
+    heads = [
+        w.git_ok('rev-parse', 'HEAD', cwd=tree).text
+        + w.git_ok('symbolic-ref', '--quiet', 'HEAD', cwd=tree).text
+        for tree in trees
+    ]
+    return json.dumps(
+        [w.git('for-each-ref', '--format=%(refname) %(objectname)'),
+         w.refs(), heads]
+    )  # fmt: skip
+
+
+for how in ('another branch', 'a detached HEAD'):
+
+    @case(f'land.py: refuses a lane landed from {how}')
+    def _(w: World, how: str = how) -> tuple[bool, str]:
+        sha = candidate(w)
+        if how == 'another branch':
+            w.git('checkout', '--quiet', '-b', 'scratch', cwd=w.worktree)
+        else:
+            w.git('checkout', '--quiet', '--detach', cwd=w.worktree)
+        before = snapshot(w, w.worktree)
+        ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
+        expect = 'scratch checked out' if how == 'another branch' else how
+        ok = (
+            ran.code == 2
+            and expect in ran.text
+            and snapshot(w, w.worktree) == before
+        )
+        return verdict(ok, 'refused, nothing changed', ran)
+
+
+@case("land.py: refuses a lane landed from another lane's worktree")
+def _(w: World) -> tuple[bool, str]:
+    w.start('T1.11g')
+    other = w.tmp / 'lane-1c'
+    started = w.lane(
+        'start', '--lane', '1c', '--package', 'T1.11e',
+        '--worktree', str(other),
+    )  # fmt: skip
+    sha = w.commit(other, 'T1.11e: the work')
+    w.git('push', '--quiet', 'origin', f'HEAD:{PHASE}-lane-1c', cwd=other)
+    w.set_runs(green_on=[BRANCH, f'{PHASE}-lane-1c', PHASE])
+    before = snapshot(w, w.worktree, other)
+    # The title's package is 1c's, so only the branch check stands
+    # between this and lane 1b, whose worktree records T1.11g.
+    ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'), cwd=other)
+    ok = (
+        started.code == 0
+        and ran.code == 2
+        and f'{PHASE}-lane-1c checked out' in ran.text
+        and snapshot(w, w.worktree, other) == before
+    )
+    return verdict(ok, 'refused, nothing changed', ran)
+
+
+@case('land.py: a red landing run, a fix, a second landing, the next start')
+def _(w: World) -> tuple[bool, str]:
+    sha = candidate(w)
+    state = w.gh_state()
+    state['conclusion'] = 'failure'
+    w.gh_state(state)
+    red = w.land(
+        *land_args(w, sha, 'Land T1.11e: the work'), '--wait-for-landing-run'
+    )
+    earlier = w.git('rev-parse', 'HEAD', cwd=w.worktree).strip()
+    stuck = (
+        red.code == 2
+        and 'not green' in red.text
+        and w.tip(BRANCH) == earlier != sha
+        and w.tip(PHASE) == w.phase
+    )
+    fix = w.commit(w.worktree, 'T1.11e fix 1: what the red run found')
+    checked = w.lane('check', cwd=w.worktree)
+    w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+    state = w.gh_state()
+    state['conclusion'] = 'success'
+    w.gh_state(state)
+    again = w.land(*land_args(w, fix, 'Land T1.11e: the work'))
+    landing = w.git('rev-parse', 'HEAD', cwd=w.worktree).strip()
+    parent = w.git('rev-parse', 'HEAD^', cwd=w.worktree).strip()
+    base = w.git(
+        'log', '-1', '--format=%(trailers:key=Base-SHA,valueonly)',
+        cwd=w.worktree,
+    ).strip()  # fmt: skip
+    nxt = w.start('T1.11f')
+    ok = (
+        stuck
+        and checked.code == 0
+        and 'carries T1.11e: 3 commit(s)' in checked.text
+        and again.code == 0
+        and parent == fix
+        and base == w.phase
+        and w.tip(BRANCH) == w.tip(PHASE) == landing
+        and nxt.code == 0
+        and w.package(w.worktree) == 'T1.11f'
+    )
+    return verdict(
+        ok,
+        'stuck, fixed, landed again on the fix, the next package started',
+        f'{red.text}\n{checked.text}\n{again.text}\n{nxt.text}',
+    )
+
+
+def landing_commit(
+    w: World, subject: str, base: str, change: bool = False
+) -> str:
+    if change:
+        (w.worktree / 'changed.txt').write_text('a change\n')
+        w.git('add', 'changed.txt', cwd=w.worktree)
+    w.git(
+        'commit', '--quiet', '--allow-empty', '-m',
+        f'{subject}\n\nReviewed-by: r\nBase-SHA: {base}', cwd=w.worktree,
+    )  # fmt: skip
+    return w.git('rev-parse', 'HEAD', cwd=w.worktree).strip()
+
+
+for label, why in (
+    ('changes a file', 'changes no file'),
+    ('has a Base-SHA outside the phase', 'not in the phase branch'),
+    ('lands another package', "is not 'Land T1.11e"),
+):
+
+    @case(f'check and land.py: refuse a landing commit that {label}')
+    def _(w: World, label: str = label, why: str = why) -> tuple[bool, str]:
+        work = candidate(w)
+        sha = landing_commit(
+            w,
+            'Land T1.11f: other' if 'another' in label else 'Land T1.11e: x',
+            work if 'outside' in label else w.phase,
+            change='changes' in label,
+        )
+        checked = w.lane('check', cwd=w.worktree)
+        w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+        before = w.refs()
+        ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
+        ok = (
+            checked.code == 2
+            and why in checked.text
+            and ran.code == 2
+            and why in ran.text
+            and w.refs() == before
+        )
+        return verdict(ok, 'refused by both', f'{checked.text}\n{ran.text}')
+
+
+@case('start: with core.hooksPath set, says the hook would not run')
+def _(w: World) -> tuple[bool, str]:
+    w.git('config', 'core.hooksPath', str(w.tmp / 'elsewhere'))
+    ran = w.start()
+    hooks = w.clone / '.git' / 'hooks'
+    ok = (
+        ran.code == 0
+        and 'core.hooksPath is' in ran.text
+        and 'pre-push hook was not installed' in ran.text
+        and not (hooks / 'pre-push').exists()
+        and not (hooks / 'prepush-worktrees').exists()
+    )
+    return verdict(ok, 'reported, nothing installed', ran)
 
 
 # --- status -------------------------------------------------------------------
