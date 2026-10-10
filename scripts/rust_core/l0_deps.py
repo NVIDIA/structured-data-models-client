@@ -427,7 +427,8 @@ def check_bridges(root: Path, parser_root: Path) -> list[str]:
             and rel not in ROUTE_READERS
         ):
             problems.append(
-                f'{rel}: reads SDM_CORE_ROUTES but is not a seam file allowed to'
+                f"{rel}: reads SDM_CORE_ROUTES but is not one of the seam's "
+                'ROUTE_READERS'
             )
     return problems
 
