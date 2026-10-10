@@ -100,6 +100,9 @@ class RelationalMaterializer:
     def __init__(self, schema: Schema) -> None:
         self.schema = schema
         self._model: KumoRelational | None = None
+        # On the core route (T1.11c): whether a run has checked the source's
+        # indexes, as building the model does once on the old route.
+        self._core_indexes_checked = False
 
     _RESERVED = ('instance_id', '__kumo_anchor_time')
 

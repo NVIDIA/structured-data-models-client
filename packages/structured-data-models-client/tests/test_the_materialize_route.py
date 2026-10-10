@@ -67,20 +67,59 @@ def _shop() -> list[str]:
     return statements
 
 
-def _connection() -> Any:
+def _connection(*setup: str) -> Any:
     connection = duckdb.connect()
-    for statement in _shop():
+    for statement in [*_shop(), *setup]:
         connection.execute(statement)
     return connection
 
 
-def _materialize(**options: Any) -> Request:
+def _materialize(
+    *setup: str,
+    query: str = QUERY,
+    indices: list[Any] | None = None,
+    after: tuple[str, ...] = (),
+    **options: Any,
+) -> Request:
+    r"""``query`` materialized over the ``shop`` base and ``setup``; the
+    statements ``after`` run once the schema is described."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        schema = Schema.from_source(DuckDBSource(_connection()))
-        return PredictiveQuery(QUERY, schema).materialize(
-            indices=[0, 1], anchor_time=ANCHOR, **options
+        connection = _connection(*setup)
+        schema = Schema.from_source(DuckDBSource(connection))
+        for statement in after:
+            connection.execute(statement)
+        return PredictiveQuery(query, schema).materialize(
+            indices=[0, 1] if indices is None else indices,
+            anchor_time=ANCHOR,
+            **options,
         )
+
+
+def _both_routes(
+    monkeypatch: pytest.MonkeyPatch, *setup: str, **arguments: Any
+) -> dict[str, Any]:
+    r"""The core's payload for the call, held equal to the old route's in
+    the same process where the engine is installed (CI's ``engine`` job);
+    where it is not, the old route's refusal is held instead."""
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _materialize(*setup, **arguments)._payloads[0]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        with pytest.raises(MissingExtraError):
+            _materialize(*setup, **arguments)
+    else:
+        old = _materialize(*setup, **arguments)._payloads[0]
+        assert json.loads(json.dumps(core)) == json.loads(
+            json.dumps(old, default=str)
+        )
+    return core
+
+
+def _context_row(payload: dict[str, Any], instance: int) -> list[Any]:
+    rows = payload['context']['instance_table']['rows']
+    [row] = [row for row in rows if row[0] == instance]
+    return row
 
 
 def test_the_route_takes_a_duckdb_source_s_materialize_paths_together(
@@ -153,6 +192,8 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
         ({'context_anchor_time': ANCHOR}, 'context_anchor_time'),
         ({'num_context_samples': 50}, 'num_context_samples'),
         ({'anchor_time': 'entity'}, 'anchor_entity'),
+        # A seed given as None, which the reference reads as unseeded.
+        ({'random_seed': None}, 'unseeded'),
     ],
 )
 def test_what_the_core_does_not_take_yet_is_refused_by_name(
@@ -382,3 +423,137 @@ def test_the_route_imports_nothing_of_the_engine(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ['False', '1']
+
+
+# --- review round 1 (T1.11c) --------------------------------------------------
+
+#: Order 50 is user 2's one order in instance 22's window (anchor
+#: 2023-12-02): its price made NaN, the window holds only NaN.
+NAN = "UPDATE orders SET price = 'NaN'::DOUBLE WHERE order_id = 50"
+#: Beside it, a finite price at the same time: the window holds both.
+FINITE = (
+    'INSERT INTO orders SELECT 1000, 2, 5.0, ts FROM orders WHERE order_id = 50'
+)
+
+
+def test_a_nan_in_a_label_s_window_is_skipped_as_the_reference_skips_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The data change once the schema is described, which reads no NaN.
+    only = _both_routes(monkeypatch, after=(NAN,))
+    row = _context_row(only, 22)
+    assert row[1:3] == [2, '2023-12-02T00:00:00.000000Z']
+    assert row[3] == 0.0
+    mixed = _both_routes(monkeypatch, after=(NAN, FINITE))
+    assert _context_row(mixed, 22)[3] == 5.0
+
+
+def test_a_table_mapped_to_another_source_table_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        connection = _connection()
+        schema = Schema.from_source(DuckDBSource(connection))
+        connection.execute(
+            'CREATE TABLE other_orders AS SELECT order_id, user_id, '
+            'price * 2 AS price, ts FROM orders'
+        )
+        schema.tables['orders'].source_name = 'other_orders'
+        with pytest.raises(StructuredDataError) as refused:
+            PredictiveQuery(QUERY, schema).materialize(
+                indices=[0, 1], anchor_time=ANCHOR
+            )
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['rule'] == 'schema_edited'
+
+
+def test_a_table_named_as_the_core_s_seeds_is_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Its key declared, as its name tells the inference nothing.
+    payload = _both_routes(
+        monkeypatch,
+        'CREATE TABLE __sdm_seeds__ (order_id BIGINT PRIMARY KEY, '
+        'user_id BIGINT, price DOUBLE, ts TIMESTAMP)',
+        'INSERT INTO __sdm_seeds__ SELECT * FROM orders',
+        'DROP TABLE orders',
+        query=QUERY.replace('orders.', '__sdm_seeds__.'),
+    )
+    assert len(payload['context']['instance_table']['rows']) == 112
+    assert '__sdm_seeds__' in payload['context']['related_tables']
+
+
+@pytest.mark.parametrize(
+    ('setup', 'indices', 'cast'),
+    [
+        ((), ['0', '1'], [0, 1]),
+        ((), [True, False], [1, 0]),
+        (
+            (
+                'ALTER TABLE orders ALTER user_id TYPE VARCHAR',
+                'ALTER TABLE users ALTER user_id TYPE VARCHAR',
+            ),
+            [0, 1],
+            ['0', '1'],
+        ),
+    ],
+)
+def test_entities_are_cast_to_the_key_s_type_as_the_reference_casts_them(
+    monkeypatch: pytest.MonkeyPatch,
+    setup: tuple[str, ...],
+    indices: list[Any],
+    cast: list[Any],
+) -> None:
+    payload = _both_routes(monkeypatch, *setup, indices=indices)
+    predicted = payload['predict']['instance_table']['rows']
+    assert [row[1] for row in predicted] == cast
+
+
+def test_missing_indices_are_warned_of_once_per_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+    query = PredictiveQuery(QUERY, schema)
+    shown = []
+    for _ in range(3):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            query.materialize(indices=[0, 1], anchor_time=ANCHOR)
+        shown.append(
+            sum('MISSING_INDICES' in str(warning.message) for warning in caught)
+        )
+    assert shown == [1, 0, 0]
+
+
+def test_the_provider_refuses_two_key_sets_bound_to_one_name() -> None:
+    import pyarrow as pa
+
+    from sdm_client._rust.providers.duckdb import DuckDBProvider, PlanNotRun
+
+    def key_set(attachment: int) -> dict[str, Any]:
+        return {
+            'param': 'key_set',
+            'keys': {'attachment': attachment, 'columns': []},
+            'relation': 'seeds',
+        }
+
+    step = {
+        'plan': {
+            'plan': 'sql',
+            'statements': [
+                {
+                    'dialect': 'duckdb',
+                    'text': 'SELECT 1',
+                    'params': [key_set(1), key_set(2)],
+                }
+            ],
+        }
+    }
+    keys = {1: pa.table({'key': [1]}), 2: pa.table({'key': [2]})}
+    with pytest.raises(PlanNotRun):
+        DuckDBProvider(duckdb.connect())(step, keys)

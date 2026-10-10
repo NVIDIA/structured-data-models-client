@@ -98,7 +98,9 @@ def description(schema: Schema) -> dict[str, Any]:
     tables = []
     for name, table in schema.tables.items():
         source = by_name.get(name)
-        if source is None:
+        # The description names each table by the source table it read; a
+        # table mapped to another source table since is not followed yet.
+        if source is None or getattr(table, 'source_name', name) != name:
             raise _not_taken('schema_edited')
         columns = {column['name']: column for column in source['columns']}
         shaped = []
@@ -150,8 +152,13 @@ def _anchor(value: Any) -> dict[str, Any] | None:
 
 def _indices(indices: Sequence[Any], schema: Schema, entity: str) -> Any:
     r"""The entities to predict for, as one Arrow column of the entity key's
-    own type, as the engine casts them to the key's dtype; an entity that
-    does not cast is the engine's refusal."""
+    own type, cast as the engine casts them: by pandas, to the dtype its
+    sampled key has (``pd.Series(indices, dtype=train_pkey.dtype)``, the
+    key's Arrow type as a ``pd.ArrowDtype``), so text digits, booleans and
+    integral floats cast as they do there; an entity that does not cast is
+    the engine's refusal (``INVALID_REQUEST``). A host's conversion of its
+    own values, which the core never sees."""
+    import pandas as pd
     import pyarrow as pa
 
     described = schema._core_description
@@ -170,8 +177,11 @@ def _indices(indices: Sequence[Any], schema: Schema, entity: str) -> Any:
     if arrow is None:
         raise _not_taken('key_type')
     try:
-        column = pa.array(list(indices), type=arrow)
-    except (pa.ArrowInvalid, pa.ArrowTypeError, OverflowError, TypeError):
+        cast = pd.Series(
+            list(indices), dtype=pd.ArrowDtype(pa.type_for_alias(arrow))
+        )
+        column = pa.array(cast)
+    except (TypeError, ValueError):
         raise StructuredDataError(
             f"'indices' must hold values matching the primary key of "
             f"'{entity}', which is {arrow}",
@@ -204,6 +214,11 @@ def gather(
     for name in sorted(options):
         if name not in TAKEN:
             raise _not_taken(name)
+    # A seed given as None asks the reference for an unseeded sample, a new
+    # one each call; the core samples under a seed, so it is refused, never
+    # taken for the default.
+    if 'random_seed' in options and options['random_seed'] is None:
+        raise _not_taken('unseeded')
     if num_context_samples is not None:
         raise _not_taken('num_context_samples')
     schema = materializer.schema
@@ -228,11 +243,20 @@ def gather(
         3: _indices(indices, schema, entity),
     }
     source: Any = schema.source
-    finished = run(
-        operation,
-        attachments,
-        provider=DuckDBProvider(source.connection),
-    )
+    # The reference checks the source's indexes once per materializer, when
+    # it builds its sampler, and warns of missing ones then; the core reads
+    # them on every run, so the warning is shown once per materializer here
+    # (decision E41(j)).
+    checked = materializer._core_indexes_checked
+    try:
+        finished = run(
+            operation,
+            attachments,
+            provider=DuckDBProvider(source.connection),
+            quiet=frozenset({'MISSING_INDICES'}) if checked else frozenset(),
+        )
+    finally:
+        materializer._core_indexes_checked = True
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
     finished.take(state['query'])

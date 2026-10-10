@@ -58,7 +58,7 @@ class DuckDBProvider:
             statement['dialect'] != 'duckdb' for statement in statements
         ):
             raise PlanNotRun('a plan with no statement or another dialect')
-        relations: dict[str, Any] = {}
+        relations: dict[str, int] = {}
         for statement in statements:
             for param in statement['params']:
                 if param['param'] != 'key_set':
@@ -66,10 +66,14 @@ class DuckDBProvider:
                 attachment = param['keys']['attachment']
                 if keys is None or attachment not in keys:
                     raise PlanNotRun('a plan naming a key set not handed over')
-                relations.setdefault(param['relation'], keys[attachment])
+                bound = relations.setdefault(param['relation'], attachment)
+                if bound != attachment:
+                    raise PlanNotRun('a plan binding two key sets to one name')
         with self._connection.cursor() as cursor:
-            for relation, stream in relations.items():
-                cursor.register(relation, _arrow_table(stream))
+            for relation, attachment in relations.items():
+                cursor.register(
+                    relation, _arrow_table((keys or {})[attachment])
+                )
             for statement in statements:
                 cursor.execute(statement['text'])
             return cursor.to_arrow_table(self._batch_rows)
@@ -81,6 +85,8 @@ def _arrow_table(stream: Any) -> Any:
     reads (decision E16)."""
     import pyarrow as pa
 
+    # The private importer, because pyarrow 14.0.1, the floor, has no public
+    # reader of a stream capsule (RecordBatchReader.from_stream is 15's).
     return pa.RecordBatchReader._import_from_c_capsule(
         stream.__arrow_c_stream__()
     ).read_all()
