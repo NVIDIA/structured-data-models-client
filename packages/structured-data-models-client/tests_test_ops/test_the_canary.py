@@ -43,7 +43,10 @@ route shows it. A sentinel only the endpoint writes is asserted to reach
 to hiding; and an endpoint that echoes our data has that echo shown
 verbatim, as on the old route, which is the case the owner accepted. Our
 own sentinels still reach nothing through our code: the credential in the
-URL is never chained or added.
+URL is never chained or added, and, by E47's orchestrator reading, an
+endpoint echoing it (or the Authorization header made of it) has the echo
+replaced by ``<redacted>``. The client adds only its own explanations,
+which name our schema's tables and columns, never a value.
 """
 
 from __future__ import annotations
