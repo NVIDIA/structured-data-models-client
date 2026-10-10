@@ -141,6 +141,16 @@ DRIVERS = frozenset(
         'odbc-sys',
         'snowflake-api',
         'snowflake-connector-rs',
+        # SQL toolkits and Arrow's database connectors, each a driver by
+        # another road (T1.21d, from T1.21c's review).
+        'sqlx',
+        'sqlx-postgres',
+        'sqlx-sqlite',
+        'adbc_core',
+        'adbc_driver_manager',
+        'arrow-odbc',
+        'pq-sys',
+        'connectorx',
     }
 )
 # Third-party crates no domain crate and not the host may reach: a

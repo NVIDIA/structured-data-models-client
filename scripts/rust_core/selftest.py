@@ -334,6 +334,15 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         ('sdm-data', 'rusqlite'),
         ('sdm-host', 'tokio-postgres'),
         ('sdm-contract', 'odbc-api'),
+        # SQL toolkits and Arrow's database connectors (T1.21d).
+        ('sdm-core', 'sqlx'),
+        ('sdm-data', 'sqlx-postgres'),
+        ('sdm-schema', 'sqlx-sqlite'),
+        ('sdm-engine', 'adbc_core'),
+        ('sdm-host', 'adbc_driver_manager'),
+        ('sdm-request', 'arrow-odbc'),
+        ('sdm-wire', 'pq-sys'),
+        ('sdm-contract', 'connectorx'),
     ):
 
         def seed(m: Metadata, crate: str = crate, dep: str = dep) -> None:
@@ -2335,6 +2344,51 @@ def scan_cases(results: list[Result]) -> None:
         ),
         '`DuckDbColumns` names a dialect (duckdb)',
     )
+    # From T1.21d (T1.21c's review): DuckDB's constraint columns and
+    # PostgreSQL's catalog by name, PRAGMA as a word, and a key's kind as
+    # SQL writes it.
+    for where, text, term in (
+        ('sdm-core/src/describe.rs', 'constraint_type', 'constraint_type'),
+        (
+            'sdm-schema/src/infer.rs',
+            'constraint_column_names',
+            'constraint_column_names',
+        ),
+        (
+            'sdm-engine/src/graph.rs',
+            'referenced_column_names',
+            'referenced_column_names',
+        ),
+        ('sdm-request/src/lib.rs', 'pg_catalog', 'pg_catalog'),
+        ('sdm-wire/src/lib.rs', 'pragma', 'pragma'),
+        ('sdm-host/src/lib.rs', 'table_info', 'table_info'),
+    ):
+        dialects(
+            f'{term} in a string literal in {where.split("/")[0]}',
+            lambda r, where=where, text=text: append(
+                r / crates / where,
+                f'\nconst SEEDED: &str = "{text}";\n',
+            ),
+            f'`{text}` names a dialect ({term})',
+        )
+    dialects(
+        "a key's kind as SQL writes it, in sdm-core",
+        lambda r: append(
+            r / crates / 'sdm-core/src/describe.rs',
+            '\nconst KIND: &str = "PRIMARY  KEY";\n',
+        ),
+        '`PRIMARY KEY` names a dialect (PRIMARY KEY)',
+    )
+    dialects(
+        'control: pragmatic, printable_info and a primary key in prose',
+        lambda r: append(
+            r / crates / 'sdm-schema/src/assemble.rs',
+            '\nfn pragmatic(printable_info: &str) -> &str { printable_info }\n'
+            'const SAID: &str = "a relationship joins to a primary key";\n'
+            'pub struct PrintableInfoPragmatic;\n',
+        ),
+        None,
+    )
     dialects(
         'a guarded crate missing',
         lambda r: shutil.rmtree(r / crates / 'sdm-wire/src'),
@@ -2387,6 +2441,22 @@ def scan_cases(results: list[Result]) -> None:
             "def tables(c):\n    return c.execute(f'select name from {c}')\n"
         ),
         'sqlite.py:2: a string holds `select name from`',
+    )
+    provider_sql(
+        'a lowercase pragma in the DuckDB provider (T1.21d)',
+        lambda r: append(
+            r / providers / 'duckdb.py',
+            "\nTABLES = 'pragma show_tables'\n",
+        ),
+        'a string holds `pragma`',
+    )
+    provider_sql(
+        'a lowercase insert in the DuckDB provider (T1.21d)',
+        lambda r: append(
+            r / providers / 'duckdb.py',
+            "\nKEYS = 'insert into keys values (1)'\n",
+        ),
+        'a string holds `insert`',
     )
     provider_sql(
         'no provider to read',

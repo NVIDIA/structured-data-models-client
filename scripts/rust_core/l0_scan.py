@@ -42,18 +42,22 @@ graph; these check the text:
   ``sdm-data``, whose dialects they are, and the dev-only ``sdm-testkit``
   (decisions E50 and E54): no identifier and no word of a string literal in
   their non-test source names a term of a short, reviewed deny-list
-  (``DIALECT_NAMES``, matched in any case inside the identifier or word,
-  and ``DIALECT_WORDS``, matched as a whole word, since neutral names hold
-  them: ``Filter::NotNull`` is not DuckDB's ``notnull``). Comments,
-  ``#[cfg(test)]`` modules and test-module files are not read. It is a
-  deny-list, not a grammar: a dialect's knowledge spelled with none of its
-  terms is review's (decision E28).
+  (``DIALECT_NAMES``, matched in any case inside the identifier or word;
+  ``DIALECT_WORDS``, matched as whole words, a term of two words as the
+  two in a row, since neutral names hold them: ``Filter::NotNull`` is not
+  DuckDB's ``notnull``, nor ``pragmatic`` its ``pragma``; and
+  ``DIALECT_PHRASES``, ``PRIMARY KEY`` in capitals in a string literal, as
+  SQL writes a key's kind, prose saying primary key in lower case).
+  Comments, ``#[cfg(test)]`` modules and test-module files are not read.
+  It is a deny-list, not a grammar: a dialect's knowledge spelled with none
+  of its terms is review's (decision E28).
 - ``provider-sql``: the client's Python providers
   (``sdm_client/_rust/providers/``) write no SQL: no string literal other
-  than a docstring holds an upper-case SQL keyword or a ``select … from``
-  in any case; the statements they run are ``sdm-data``'s. It reads string
-  literals only, so SQL assembled from names, or a keyword in lower case
-  outside a ``select … from``, is review's (decision E28).
+  than a docstring holds an upper-case SQL keyword, a ``select … from`` in
+  any case, or ``pragma`` or ``insert`` in any case; the statements they
+  run are ``sdm-data``'s. It reads string literals only, so SQL assembled
+  from names, or another keyword in lower case outside a ``select …
+  from``, is review's (decision E28).
 - ``skips``: no ignored Rust test, pytest skip or expected-failure marker,
   no test dropped by a deselect or ignore option or a conftest's ignore
   list, and no CI step allowed to fail, under ``rust/``, ``scripts/rust_core/``,
@@ -968,14 +972,23 @@ DIALECT_NAMES = (
     'postgres',
     'databricks',
     'snowflake',
-    'pragma',
-    'table_info',
     'information_schema',
     'dflt_value',
+    # The catalog columns DuckDB's constraints answer with, and
+    # PostgreSQL's catalog (T1.21d, from T1.21c's review).
+    'constraint_type',
+    'constraint_column_names',
+    'referenced_column_names',
+    'pg_catalog',
 )
-# DuckDB's catalog column names that neutral names hold as parts: matched
-# as a whole word (``words``) only.
-DIALECT_WORDS = ('notnull', 'cid')
+# Catalog terms that neutral names hold as parts or as longer words:
+# matched as whole words (``words``) only, a term of two words as the two
+# in a row, so ``pragmatic`` and ``printable_info`` pass (T1.21d).
+DIALECT_WORDS = ('notnull', 'cid', 'pragma', 'table_info')
+# A key's kind as SQL and DuckDB's ``constraint_type`` write it, in
+# capitals: in a string literal only, since prose says primary key in
+# lower case, as the reference's own messages do (T1.21d).
+DIALECT_PHRASES = ('PRIMARY KEY',)
 _WORD = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
 
 
@@ -984,8 +997,24 @@ def dialect_terms(name: str) -> list[str]:
     lowered = name.lower()
     found = [term for term in DIALECT_NAMES if term in lowered]
     parts = words(name)
-    found += [term for term in DIALECT_WORDS if term in parts]
+    for term in DIALECT_WORDS:
+        wanted = term.split('_')
+        if any(
+            parts[at : at + len(wanted)] == wanted
+            for at in range(len(parts) - len(wanted) + 1)
+        ):
+            found.append(term)
     return found
+
+
+def dialect_phrases(text: str) -> list[str]:
+    """The deny-list's phrases a string literal's text holds, its words
+    separated by any run of white space."""
+    return [
+        phrase
+        for phrase in DIALECT_PHRASES
+        if re.search(r'\b' + r'\s+'.join(phrase.split()) + r'\b', text)
+    ]
 
 
 def check_dialects(root: Path) -> list[str]:
@@ -1003,12 +1032,11 @@ def check_dialects(root: Path) -> list[str]:
             rel = path.relative_to(root)
             found = [(offset, name) for offset, name in identifiers(source)]
             for offset, literal in string_literals(source):
-                found += [
-                    (offset, word)
-                    for word in _WORD.findall(literal_text(literal))
-                ]
+                text = literal_text(literal)
+                found += [(offset, word) for word in _WORD.findall(text)]
+                found += [(offset, phrase) for phrase in dialect_phrases(text)]
             for offset, name in found:
-                hit = dialect_terms(name)
+                hit = [name] if name in DIALECT_PHRASES else dialect_terms(name)
                 if hit:
                     problems.append(
                         f'{rel}:{source.line(offset)}: `{name}` names a '
@@ -1027,7 +1055,10 @@ PROVIDERS = Path(
 _PROVIDER_SQL = re.compile(
     r'\b(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|ATTACH'
     r'|COPY|FROM|WHERE|JOIN|UNION|QUALIFY|VALUES)\b'
-    r'|(?i:\bselect\b.*\bfrom\b)',
+    r'|(?i:\bselect\b.*\bfrom\b)'
+    # And, in lower case too, the two a statement opens with that no
+    # message of a provider needs (T1.21d, from T1.21c's review).
+    r'|(?i:\b(?:pragma|insert)\b)',
     re.S,
 )
 
