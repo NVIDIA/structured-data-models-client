@@ -149,6 +149,11 @@ def run(
             try:
                 attached[1] = provider(request)
                 outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
+            except RouteError:
+                # The route itself failed (an import of the old engine on
+                # it, say), which is no provider's error to hand the core.
+                handle.cancel()
+                raise
             except Exception as failure:  # noqa: BLE001 - the provider's
                 provided, driver_class = _driver(failure)
                 outcome = {'outcome': 'error', 'error': provided}

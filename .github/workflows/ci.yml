@@ -127,7 +127,8 @@ jobs:
       # The pure-Rust host over the contract cases, its observations compared
       # with the cases' expectations and reference observations (T1.10;
       # T1.18 moves this to the checkpoint's comparator). The test host links
-      # no Python.
+      # no Python. Its DuckDB loads ICU explicitly, installing DuckDB's signed
+      # extension for its version the first time (decision E37).
       - run: cargo run -p sdm-testkit --bin sdm-contract-run --locked -- --out ../rust-host.jsonl ../contract/cases
       - run: |
           cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt
@@ -195,9 +196,11 @@ jobs:
       # build, and the file any build passes on the wheel that ships. The
       # Python host's tests that need the test-only operations run in the
       # test-ops environment too; the test job does not collect them (E23).
+      # DuckDB, at the reference's version, is for the DuckDB provider's
+      # tests there (T1.11b).
       - name: The binding's tests
         run: |
-          floor="pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4"
+          floor="pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6"
           for build in test-ops production; do
             python -m venv "/tmp/$build"
             wheel=$([ "$build" = test-ops ] && ls native-test-ops/*.whl || ls native/*.whl)

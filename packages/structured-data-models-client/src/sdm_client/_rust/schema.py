@@ -1,0 +1,220 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
+
+``Schema.from_source`` comes here on the core route, for a DuckDB source
+and no tables named. The core's ``describe_source`` reads the source through
+the DuckDB provider (:mod:`.providers.duckdb`) and infers each table, its
+columns' data and semantic types, its key and its time column, by the
+reference's rules, and the source's declared foreign keys; this module
+builds today's :class:`~sdm_client.schema.Schema` from that description,
+with the client's own assembly as ``Schema.from_source`` does it after the
+engine has read the source: the relationships inferred by name, the edit
+stamps settled by them, the key columns marked, and the same warnings.
+
+The relational engine is not imported: an import hook refuses it for the
+length of the route, and the route fails if it was imported anyway
+(design, "Routing seam"). The old materializer, which a query still takes
+until T1.11c, reads the source itself later; the schema hands it an empty
+store of engine tables (``EngineTables``), which it fills then.
+
+As built at T1.11b the core describes every table of the source with no
+overrides, and refuses with ``UNSUPPORTED_REQUEST`` an input whose
+description takes a rule it does not hold yet (register entry P1B-2);
+relationships passed in are refused here, before the core runs, for the
+same reason.
+"""
+
+from __future__ import annotations
+
+import importlib.abc
+import json
+import sys
+import warnings
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
+
+from sdm_client._routing import RouteError
+from sdm_client._rust import codec
+from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.run import run
+from sdm_client.errors import StructuredDataError
+
+if TYPE_CHECKING:
+    from sdm_client.schema import Relationship, Schema
+
+#: The old engine, which no core route imports.
+ENGINE = 'sdm_relational_engine'
+
+
+class _NoEngine(importlib.abc.MetaPathFinder):
+    r"""Refuses an import of the relational engine, or any module in it."""
+
+    def find_spec(
+        self, name: str, path: Any = None, target: Any = None
+    ) -> None:
+        if name == ENGINE or name.startswith(ENGINE + '.'):
+            raise RouteError(
+                f'{name} was imported on a core route, which imports nothing '
+                'from the old engine'
+            )
+
+
+@contextmanager
+def no_engine() -> Iterator[None]:
+    r"""The length of a core route: an import of the relational engine
+    raises :class:`~sdm_client._routing.RouteError`, and so does the route
+    if the engine was imported in it some other way."""
+    before = ENGINE in sys.modules
+    hook = _NoEngine()
+    sys.meta_path.insert(0, hook)
+    try:
+        yield
+    finally:
+        sys.meta_path.remove(hook)
+    if not before and ENGINE in sys.modules:
+        raise RouteError(f'{ENGINE} was imported on a core route')
+
+
+def from_source(
+    cls: type[Schema],
+    source: Any,
+    *,
+    primary_keys: Mapping[str, str | Sequence[str]] | None,
+    time_columns: Mapping[str, str | None] | None,
+    relationships: Sequence[Relationship] | None,
+    check_keys: bool,
+) -> Schema:
+    r"""The schema of every table of the DuckDB ``source``, described on the
+    core.
+
+    Raises:
+        StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
+            ``UNSUPPORTED_REQUEST`` for an input it does not describe yet.
+        RouteError: The relational engine was imported on the route.
+    """
+    if relationships is not None:
+        raise StructuredDataError(
+            'Schema.from_source on the core does not take relationships yet',
+            code='UNSUPPORTED_REQUEST',
+            details={'field': 'relationships'},
+        )
+    if any(column is None for column in (time_columns or {}).values()):
+        raise StructuredDataError(
+            'Schema.from_source on the core does not take a time column '
+            'cleared yet',
+            code='UNSUPPORTED_REQUEST',
+            details={'field': 'time_columns'},
+        )
+    spec = {
+        'tables': [],
+        'primary_keys': {
+            table: [key] if isinstance(key, str) else list(key)
+            for table, key in (primary_keys or {}).items()
+        },
+        'time_columns': dict(time_columns or {}),
+    }
+    operation = {
+        'op': 'describe_source',
+        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'source': 1,
+        'check_keys': bool(check_keys),
+    }
+    with no_engine():
+        finished = run(
+            operation,
+            {1: codec.attachment(spec)},
+            provider=DuckDBProvider(source.connection),
+        )
+        described = json.loads(finished.take(finished.result['description']))
+        return build(cls, source, described)
+
+
+def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
+    r"""Today's ``Schema`` of a ``SourceDescription``, assembled as
+    ``Schema.from_source`` assembles the engine's reading of a source."""
+    from predictive_query.time_columns import TimeColumnChoice
+
+    from sdm_client.core.warnings import SDMWarning
+    from sdm_client.materializers.sources import EngineTables, wire_dtype
+    from sdm_client.schema import (
+        Column,
+        Relationship,
+        SourceTable,
+        _infer_relationships,
+        _joinable_inferred_links,
+        _key_by_the_referenced_column,
+        _settle_edit_stamps,
+        _warn_how_time_columns_were_inferred,
+        _warn_two_ways_to_reach_one_table,
+    )
+
+    built: dict[str, SourceTable] = {}
+    chose: dict[str, TimeColumnChoice | None] = {}
+    for table in described['tables']:
+        name = table['name']
+        columns = {}
+        for column in table['columns']:
+            dtype = wire_dtype(column['dtype'])
+            if dtype is None:
+                raise StructuredDataError(
+                    'the core described a column with no wire dtype',
+                    code='INTERNAL_ERROR',
+                )
+            columns[column['name']] = Column(
+                column['name'], dtype, column['stype']
+            )
+        shaped = SourceTable(name=name, source_name=name, columns=columns)
+        keys = tuple(table['primary_key'])
+        if keys and all(key in columns for key in keys):
+            shaped.primary_key = keys[0] if len(keys) == 1 else keys
+        time = table['time_column']
+        if time is not None and time in columns and time not in keys:
+            shaped.time_column = time
+        duplicates = table['duplicate_keys']
+        object.__setattr__(
+            shaped,
+            'duplicate_keys',
+            None
+            if duplicates is None
+            else int(codec.decode_scalar(duplicates)),
+        )
+        built[name] = shaped
+        # The core takes a time column only as the one timestamp left, and
+        # refuses every other choice, so the choice is that or none.
+        chose[name] = (
+            TimeColumnChoice(time, 'only', (time,), ())
+            if time is not None
+            else TimeColumnChoice(None, None, (), ())
+        )
+    declared = [
+        Relationship(
+            source_table=foreign['table'],
+            source_column=foreign['column'],
+            target_table=referenced['table'],
+            target_column=referenced['column'],
+        )
+        for foreign, referenced in described['links']
+    ]
+    # The core refuses a keyless table the declared keys would key, so this
+    # keys nothing; it runs where the reference runs it.
+    _key_by_the_referenced_column(built, declared)
+    covered = {(link.source_table, link.source_column) for link in declared}
+    by_name = [
+        link
+        for link in _infer_relationships(built)
+        if (link.source_table, link.source_column) not in covered
+    ]
+    links = _joinable_inferred_links(built, declared + by_name)
+    _settle_edit_stamps(built, chose, None, links)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', SDMWarning)
+        schema = cls(built, links, source=source)
+    schema._engine_tables = EngineTables()
+    schema._mark_key_columns()
+    _warn_how_time_columns_were_inferred(schema, chose, None)
+    _warn_two_ways_to_reach_one_table(built, schema.relationships)
+    return schema

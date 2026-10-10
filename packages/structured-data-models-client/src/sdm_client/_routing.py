@@ -271,8 +271,22 @@ ROUTES: dict[str, str] = dict.fromkeys(PATHS, 'old')
 #: S0: validation in ``PredictiveQuery.materialize``, accepting or refusing.
 S0 = ('query.validate/accept/any', 'query.validate/refuse/any')
 
+#: ``Schema.from_source`` over a DuckDB source with no tables named: every
+#: table, and the keys its catalog declares, routed together (T1.11b).
+FROM_SOURCE_DUCKDB = (
+    'schema.from-source/all-tables/duckdb',
+    'schema.from-source/catalog-keys/duckdb',
+)
+
+#: ``Schema.from_source`` over a DuckDB source with tables named, which has
+#: no core route yet: forcing the keys path alone fails such a call.
+FROM_SOURCE_DUCKDB_TABLES = (
+    'schema.from-source/tables/duckdb',
+    'schema.from-source/catalog-keys/duckdb',
+)
+
 #: The paths this build can run on the core.
-CORE_ROUTED = frozenset(S0)
+CORE_ROUTED = frozenset(S0 + FROM_SOURCE_DUCKDB)
 
 
 class RouteError(RuntimeError):
