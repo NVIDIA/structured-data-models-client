@@ -13,12 +13,14 @@
 #
 #   cargo fmt --check; the three clippy runs CI makes; l0_deps.py and
 #   l0_scan.py; contract_lock.py; rust_notices.py --check; the hygiene
-#   check; ruff check and ruff format --check; land.py's self-tests.
+#   check; ruff check and ruff format --check; the self-tests of land.py,
+#   replay_jobs.py (on temporary git repositories) and prune_caches.py.
 #
 # --full adds the L0 self-tests (selftest.py), the contract schema lock test,
 # and replay_jobs.py: a clean virtual environment per CI job the change
 # touches, replaying that job's install list and tests, which catches a
-# test importing something the job does not install.
+# test importing something the job does not install. The replay runs HEAD,
+# so it refuses a worktree with uncommitted or untracked changes.
 #
 # --install-hook makes this the pre-push hook of the current worktree only:
 # the hook, in the clone's shared hooks directory, runs the cheap tier for
@@ -129,6 +131,10 @@ check 'hygiene' . "${py[@]}" scripts/check_repo_hygiene.py all
 check 'ruff check' . "${ruff[@]}" check .
 check 'ruff format --check' . "${ruff[@]}" format --check .
 check 'land.py self-tests' . "${py[@]}" scripts/rust_core/land_selftest.py
+check 'replay_jobs.py self-tests' . \
+  uv run --quiet --no-project --python 3.12 --with pyyaml \
+  python3 scripts/rust_core/replay_selftest.py
+check 'prune_caches.py self-tests' . "${py[@]}" scripts/rust_core/prune_caches.py --selftest
 
 if [ "$full" = 1 ]; then
   check 'L0 self-tests' . "${py[@]}" scripts/rust_core/selftest.py

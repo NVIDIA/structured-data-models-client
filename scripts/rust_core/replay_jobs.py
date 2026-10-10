@@ -6,18 +6,23 @@
 """Replays CI's Python jobs locally, each in a clean virtual environment.
 
 ``prepush.sh --full`` runs this (decision E43). It reads
-``.github/workflows/ci.yml`` and, for each job it can replay, makes a fresh
-virtual environment at the job's Python, checks HEAD out into a temporary
-worktree, and runs the job's ``run`` steps there in order, with the job's
+``.github/workflows/ci.yml`` as HEAD has it and, for each job it can
+replay, makes a fresh virtual environment at the job's Python, checks HEAD
+out into a temporary worktree, and runs the job's ``run`` steps there in order, with the job's
 and the step's environment: its install list exactly as CI has it, then its
 tests. A test that imports something the install list lacks fails here as
 it would in CI (T1.9's ``yaml`` in the installed-wheel job, T1.10's
 ``jsonschema`` in the engine job), which a developer's own environment,
 holding everything, never shows.
 
+It replays HEAD and nothing else, so it refuses a worktree with uncommitted
+changes or untracked files: a replay of HEAD would not have tested them.
+Commit (or stash) first.
+
 Which jobs: by default those whose block in ci.yml differs from the base,
-or whose steps name a path a changed file is under (``git diff BASE`` plus
-uncommitted changes); ``--job`` names them instead and ``--all`` takes every
+that read a workflow-level variable (``$BINDING_FLOOR``, ``env.X``) whose
+value differs from the base's, or whose steps name a path a file changed
+since the base is under; ``--job`` names them instead and ``--all`` takes every
 job it can replay. A job it can replay is one whose actions are only
 checkout, setup-python, the artifact actions and the caches: the Rust jobs
 and the docker wheel builds are left to CI. Where a job downloads the
@@ -71,9 +76,13 @@ class Unreplayable(Exception):
     pass
 
 
-def git(*args: str, cwd: Path = REPO) -> str:
+def git(*args: str, cwd: Path | None = None) -> str:
     return subprocess.run(
-        ['git', *args], cwd=cwd, check=True, capture_output=True, text=True
+        ['git', *args],
+        cwd=cwd or REPO,
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout
 
 
@@ -110,21 +119,41 @@ def named_paths(job: dict[str, Any]) -> set[str]:
 
 
 def changed_files(base: str) -> list[str]:
-    committed = git('diff', '--name-only', f'{base}...HEAD').split()
-    uncommitted = git('diff', '--name-only', 'HEAD').split()
-    return sorted({*committed, *uncommitted})
+    return sorted(set(git('diff', '--name-only', f'{base}...HEAD').split()))
+
+
+def reads_variable(job: dict[str, Any], name: str) -> bool:
+    """Whether a job's steps or environment read a workflow variable."""
+    text = yaml.safe_dump(job)
+    return bool(
+        re.search(
+            rf'\$\{{?{re.escape(name)}\b|\benv\.{re.escape(name)}\b', text
+        )
+    )
 
 
 def select(
-    jobs: dict[str, Any], base_jobs: dict[str, Any], changed: list[str]
+    jobs: dict[str, Any],
+    base_jobs: dict[str, Any],
+    changed: list[str],
+    env: dict[str, Any] | None = None,
+    base_env: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     """The replayable jobs a change touches, each with the reason."""
+    env, base_env = env or {}, base_env or {}
+    moved = sorted(
+        k for k in {*env, *base_env} if env.get(k) != base_env.get(k)
+    )
     chosen: dict[str, str] = {}
     for name, job in jobs.items():
         if why_unreplayable(job):
             continue
         if base_jobs.get(name) != job:
             chosen[name] = 'its block in ci.yml changed'
+            continue
+        read = [k for k in moved if reads_variable(job, k)]
+        if read:
+            chosen[name] = f'it reads {", ".join(read)}, which changed'
             continue
         for path in sorted(named_paths(job)):
             hit = next(
@@ -336,11 +365,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--postgres', action='store_true')
     parser.add_argument('--list', action='store_true')
     parser.add_argument('--keep', action='store_true')
+    parser.add_argument(
+        '--root', help="the repository (default: this script's)", type=Path
+    )
     args = parser.parse_args(argv)
     # Progress as it happens, also when the output is a pipe or a file.
     sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
+    global REPO
+    if args.root:
+        REPO = args.root.resolve()
 
-    text = (REPO / CI).read_text()
+    dirty = git('status', '--porcelain', '--untracked-files=all')
+    if dirty.strip():
+        print(
+            'replay: refused: the worktree has uncommitted changes or untracked '
+            'files, and a replay runs HEAD only, so it would not test them. '
+            'Commit or stash them first:\n' + dirty.rstrip()
+        )
+        return 2
+    # The jobs as HEAD defines them: the tree the replay checks out.
+    text = git('show', f'HEAD:{CI}')
     jobs = workflow(text)
     if args.job or args.all:
         names = list(jobs) if args.all else args.job
@@ -355,10 +399,16 @@ def main(argv: list[str] | None = None) -> int:
     else:
         base = args.base or git('merge-base', 'HEAD', PHASE).strip()
         try:
-            base_jobs = workflow(git('show', f'{base}:{CI}'))
+            base_text = git('show', f'{base}:{CI}')
         except subprocess.CalledProcessError:
-            base_jobs = {}
-        chosen = select(jobs, base_jobs, changed_files(base))
+            base_text = 'jobs: {}'
+        chosen = select(
+            jobs,
+            workflow(base_text),
+            changed_files(base),
+            yaml.safe_load(text).get('env') or {},
+            yaml.safe_load(base_text).get('env') or {},
+        )
     for name, job in jobs.items():
         reason = why_unreplayable(job)
         if name in chosen and reason:

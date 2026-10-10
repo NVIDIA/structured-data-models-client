@@ -617,7 +617,9 @@ def verify(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
     if args.phase_branch != PHASE_BRANCH:
-        raise Refusal(f'the phase branch is {args.phase_branch!r}, not {PHASE_BRANCH!r}')
+        raise Refusal(
+            f'the phase branch is {args.phase_branch!r}, not {PHASE_BRANCH!r}'
+        )
     sha = resolve(tools, args.landing, 'the landing commit')
     trailers = trailers_of(tools, sha)
     base = trailers.get('Base-SHA')
