@@ -170,7 +170,10 @@ def _quiet_the_world() -> None:
         # HTTP libraries') by category and module alone, since their text
         # may name what this script was never told of.
         module = Path(str(filename)).stem or '?'
-        if 'sdm_client' in Path(str(filename)).parts:
+        if (
+            _the_client_s(category, message)
+            or 'sdm_client' in Path(str(filename)).parts
+        ):
             say(f'warning {category.__name__}: {message}', file=sys.stderr)
         else:
             say(
@@ -179,6 +182,20 @@ def _quiet_the_world() -> None:
             )
 
     warnings.showwarning = show  # type: ignore[assignment]
+
+
+def _the_client_s(category: type[Warning], message: object) -> bool:
+    r"""Whether a warning is the client's own: one of its categories
+    (``SDMWarning``), or the core's, which the client shows as
+    ``[CODE] text``. The client attributes its warnings to the caller's
+    line, so where one was raised does not say whose it is."""
+    try:
+        from sdm_client.core.warnings import SDMWarning
+    except ImportError:
+        return False
+    if issubclass(category, SDMWarning):
+        return True
+    return re.match(r'\[[A-Z][A-Z0-9_]*\] ', str(message)) is not None
 
 
 def _no_network() -> None:

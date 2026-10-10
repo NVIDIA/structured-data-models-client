@@ -329,6 +329,11 @@ def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
         '"/x/site-packages/databricks/sdk/oauth.py", 1)\n'
         'warnings.warn_explicit("the context is small", UserWarning, '
         '"/x/site-packages/sdm_client/client.py", 1)\n'
+        'from sdm_client.core.warnings import SDMWarning\n'
+        'warnings.warn_explicit("every context row agrees", SDMWarning, '
+        '"/x/caller.py", 2)\n'
+        'warnings.warn_explicit("[MISSING_INDICES] Missing 3 indices", '
+        'UserWarning, "/x/caller.py", 3)\n'
     )
     run = subprocess.run(
         [sys.executable, '-c', script],
@@ -340,5 +345,8 @@ def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
     assert run.returncode == 0, run.stderr
     assert 'warning UserWarning from oauth (text withheld)' in run.stderr
     assert 'warning UserWarning: the context is small' in run.stderr
+    # The client's own, attributed to the caller's line, are shown too.
+    assert 'warning SDMWarning: every context row agrees' in run.stderr
+    assert 'warning UserWarning: [MISSING_INDICES] Missing 3 indices' in run.stderr
     assert 'SYNTH_UNKNOWN_USER' not in run.stderr
     assert 'vanity-corp' not in run.stderr

@@ -147,9 +147,11 @@ fn deep_text_ends_in_a_refusal_in_a_process_of_its_own() {
     assert!(stdout.contains("deep text refused"), "{stdout}");
 }
 
-/// A wide object reads in n log n: a hundred thousand members, each named
-/// once, read well inside a second, where finding each name by a scan of
-/// those before it took minutes at this width (T1.11d review round 2).
+/// A wide object reads in about n log n: reading eight times as many
+/// members takes far less than the sixty-four times a scan of the names
+/// before each one would (T1.11d review round 2). Measured as a ratio of
+/// the two sizes, each the best of three reads, so a slow debug build or a
+/// busy runner moves both alike.
 #[test]
 #[allow(
     clippy::disallowed_methods,
@@ -157,15 +159,22 @@ fn deep_text_ends_in_a_refusal_in_a_process_of_its_own() {
     reason = "test code: times the read"
 )]
 fn a_wide_object_reads_in_n_log_n() {
-    let members: Vec<String> = (0..100_000).map(|i| format!("\"k{i}\":{i}")).collect();
-    let text = format!("{{{},\"k5\":\"last\"}}", members.join(","));
-    let started = std::time::Instant::now();
-    let value = read(text.as_bytes()).unwrap();
-    let took = started.elapsed();
-    let Value::Object(read_members) = &value else {
-        panic!("an object");
+    let text = |n: usize| {
+        let members: Vec<String> = (0..n).map(|i| format!("\"k{i}\":{i}")).collect();
+        format!("{{{},\"k5\":\"last\"}}", members.join(","))
     };
-    assert_eq!(read_members.len(), 100_000);
-    assert_eq!(value.get("k5"), Some(&Value::Text("last".into())));
-    assert!(took.as_secs_f64() < 3.0, "{took:?}");
+    let best = |text: &str| {
+        (0..3)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                let value = read(text.as_bytes()).unwrap();
+                let took = started.elapsed().as_secs_f64();
+                assert_eq!(value.get("k5"), Some(&Value::Text("last".into())));
+                took
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let (small, large) = (text(20_000), text(160_000));
+    let (small, large) = (best(&small), best(&large));
+    assert!(large / small.max(1e-6) < 24.0, "{small} s, then {large} s");
 }
