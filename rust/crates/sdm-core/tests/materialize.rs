@@ -352,6 +352,24 @@ fn duckdb_refuses_a_seed_its_parser_refuses_by_name() {
     }
 }
 
+/// The error `run` ends with, answering the catalog requests it asks
+/// first: the index check comes before the task is read, as the
+/// reference builds its sampler before its task table.
+fn refusal(run: &mut Run) -> CoreError {
+    loop {
+        match run.next() {
+            Err(err) => return err,
+            Ok(Step::Fetch { requests }) => {
+                for asked in requests {
+                    let answer = catalog(&asked.request).expect("a catalog request");
+                    run.submit_fetch(asked.id, answer).unwrap();
+                }
+            }
+            Ok(other) => panic!("{other:?}"),
+        }
+    }
+}
+
 fn rule(err: &CoreError) -> String {
     assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{err:?}");
     assert_eq!(err.fields["operation"], Detail::text("materialize"));
@@ -382,7 +400,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         ),
     ] {
         let mut run = materialize(host(), &shop(), query, None).unwrap();
-        let err = run.next().unwrap_err();
+        let err = refusal(&mut run);
         assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{query}: {err:?}");
         assert_eq!(rule(&err), wanted, "{query}");
     }
@@ -419,10 +437,10 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         },
     ]);
     let mut run = materialize(host(), &parent, QUERY, None).unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), "parent_table");
+    assert_eq!(rule(&refusal(&mut run)), "parent_table");
     // A key of several columns.
     let mut composite = shop();
     composite.tables[1].primary_key = vec!["user_id".into(), "country".into()];
     let mut run = materialize(host(), &composite, QUERY, None).unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), "composite_key");
+    assert_eq!(rule(&refusal(&mut run)), "composite_key");
 }

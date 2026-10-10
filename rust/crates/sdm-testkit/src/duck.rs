@@ -20,7 +20,7 @@
 //! stay off, so nothing else loads, and the loaded ICU's version is
 //! checked.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, anyhow, bail};
 use duckdb::arrow::compute::concat_batches;
@@ -153,7 +153,9 @@ pub fn answer_with(
     // a connection to the same database, which takes the database's
     // settings and none of the session's.
     let cursor = connection.try_clone().map_err(|_| failed())?;
-    let mut bound = BTreeSet::new();
+    // Each name binds one key set; two under one name are refused, as the
+    // Python provider refuses them, never one kept over the other.
+    let mut bound = BTreeMap::new();
     for statement in statements {
         for param in &statement.params {
             let SqlParam::KeySet {
@@ -163,8 +165,10 @@ pub fn answer_with(
             else {
                 return Err(failed());
             };
-            if !bound.insert(relation.clone()) {
-                continue;
+            match bound.insert(relation.clone(), set.attachment) {
+                Some(earlier) if earlier != set.attachment => return Err(failed()),
+                Some(_) => continue,
+                None => {}
             }
             let fetched = keys.get(&set.attachment).ok_or_else(failed)?;
             bind(&cursor, relation, fetched).map_err(|_| failed())?;

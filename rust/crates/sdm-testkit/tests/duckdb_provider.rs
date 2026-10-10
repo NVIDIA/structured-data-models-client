@@ -662,3 +662,44 @@ fn a_key_set_past_the_control_cap_travels_as_an_attachment() {
         assert_eq!(name.value(row), format!("r{}", seed % modulo));
     }
 }
+
+#[test]
+fn two_key_sets_bound_to_one_name_are_refused() {
+    use sdm_contract::data::{FetchPlan, KeySet, SqlParam, SqlStatement};
+    use sdm_contract::run::FetchStep;
+    let connection = database(None);
+    let set = |id| SqlParam::KeySet {
+        keys: KeySet {
+            attachment: AttachmentId(id),
+            columns: vec![],
+        },
+        relation: "seeds".into(),
+    };
+    let step = FetchStep {
+        id: sdm_contract::run::ReplyId(1),
+        request: DataRequest::Describe {
+            tables: vec![],
+            part: sdm_contract::data::DescribePart::Tables,
+        },
+        plan: FetchPlan::Sql {
+            statements: vec![SqlStatement {
+                dialect: Dialect::Duckdb,
+                text: "SELECT 1".into(),
+                params: vec![set(1), set(2)],
+            }],
+            expect: sdm_contract::data::ExpectedSchema::Discover {},
+        },
+    };
+    let keys = |values: &[&str]| {
+        let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);
+        duck::Fetched {
+            schema: batch.schema(),
+            batches: vec![batch],
+        }
+    };
+    let both = BTreeMap::from([
+        (AttachmentId(1), keys(&["1"])),
+        (AttachmentId(2), keys(&["2"])),
+    ]);
+    assert!(duck::answer_with(&connection, &step, &both).is_err());
+}

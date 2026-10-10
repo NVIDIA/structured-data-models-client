@@ -182,10 +182,21 @@ def _indices(indices: Sequence[Any], schema: Schema, entity: str) -> Any:
         )
         column = pa.array(cast)
     except (TypeError, ValueError):
+        # The engine raises these as a ValueError naming the key, which the
+        # client maps to INVALID_REQUEST.
         raise StructuredDataError(
             f"'indices' must hold values matching the primary key of "
             f"'{entity}', which is {arrow}",
             code='INVALID_REQUEST',
+        ) from None
+    except Exception as failure:  # noqa: BLE001 - every cast failure
+        # Any other failure (an integer past the key's width overflows, a
+        # date has no cast) escapes the engine's own handling, and the
+        # client's guard of the engine reports it as INTERNAL_ERROR.
+        raise StructuredDataError(
+            f'the relational engine failed while building this request: '
+            f'{type(failure).__name__}',
+            code='INTERNAL_ERROR',
         ) from None
     return pa.table({'indices': column})
 
@@ -247,16 +258,22 @@ def gather(
     # it builds its sampler, and warns of missing ones then; the core reads
     # them on every run, so the warning is shown once per materializer here
     # (decision E41(j)).
+    # Checked means a run gave the warning or finished, so read the
+    # indexes; a run refused before its index read leaves it unchecked.
     checked = materializer._core_indexes_checked
+    given: set[str] = set()
     try:
         finished = run(
             operation,
             attachments,
             provider=DuckDBProvider(source.connection),
             quiet=frozenset({'MISSING_INDICES'}) if checked else frozenset(),
+            given=given,
         )
     finally:
-        materializer._core_indexes_checked = True
+        if 'MISSING_INDICES' in given:
+            materializer._core_indexes_checked = True
+    materializer._core_indexes_checked = True
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
     finished.take(state['query'])

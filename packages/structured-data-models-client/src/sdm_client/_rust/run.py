@@ -101,11 +101,13 @@ def run(
     *,
     provider: Provider | None = None,
     quiet: frozenset[str] = frozenset(),
+    given: set[str] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
     A warning whose code ``quiet`` names is not shown: the caller has shown
-    it already.
+    it already. ``given`` collects the code of every warning the run gave,
+    shown or not.
 
     Raises:
         StructuredDataError: The run's error, as :mod:`.errors` maps it.
@@ -130,11 +132,11 @@ def run(
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
-            _warn(handle, quiet)
+            _warn(handle, quiet, given)
             errors.raise_from_core(
                 failed.control, failed.attachments, driver_class=driver_class
             )
-        _warn(handle, quiet)
+        _warn(handle, quiet, given)
         step = codec.read(control, sent)
         if step['message'] != 'step':
             raise StructuredDataError(
@@ -194,8 +196,8 @@ def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
     return taken
 
 
-def _warn(handle: Any, quiet: frozenset[str]) -> None:
+def _warn(handle: Any, quiet: frozenset[str], given: set[str] | None) -> None:
     taken = handle.take_warnings()
     if taken is not None:
         control, sent = taken
-        errors.warn_from_core(control, sent, quiet=quiet)
+        errors.warn_from_core(control, sent, quiet=quiet, given=given)

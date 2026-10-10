@@ -192,11 +192,15 @@ def warn_from_core(
     control: bytes,
     attachments: dict[int, Any],
     quiet: frozenset[str] = frozenset(),
+    given: set[str] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
-    those whose code ``quiet`` names: one the caller has shown already."""
+    those whose code ``quiet`` names: one the caller has shown already.
+    Each code given is added to ``given``, shown or not."""
     message = codec.read(control, attachments)
     for warning in message['warnings']:
+        if given is not None:
+            given.add(warning['code'])
         if warning['code'] in quiet:
             continue
         category = WARNINGS.get(warning['code'], SDMWarning)

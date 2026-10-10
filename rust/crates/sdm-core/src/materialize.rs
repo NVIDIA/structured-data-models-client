@@ -554,7 +554,6 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let seed = seed.unwrap_or_else(|| Seed::from(DEFAULT_SEED));
     let entropy = Entropy::from_hex(seed.magnitude_hex())
         .ok_or_else(|| internal("a seed's digits do not read"))?;
-    let seed_value = seed_scalar(&seed)?;
 
     let indices = indices.ok_or_else(|| {
         invalid(
@@ -581,9 +580,6 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         )
         .with_field("field", Detail::text("indices")));
     }
-    if indices.null_count() > 0 {
-        return Err(invalid("an entity to predict for is missing", "indices"));
-    }
 
     let graph = Graph::new(&description)?;
     let profile = Profile::resolve(&ProfileSpec {
@@ -598,6 +594,15 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             "query",
         ));
     };
+    // The sampler's construction, its check of the indexes it would use,
+    // comes before what the reference reads of the task (its entities, its
+    // seed, its shape), as it does there: the model is built, and its
+    // warning given, before the task table is.
+    missing_indexes(&asker, &graph).await?;
+    if indices.null_count() > 0 {
+        return Err(invalid("an entity to predict for is missing", "indices"));
+    }
+    let seed_value = seed_scalar(&seed)?;
     let asked = asked(&validated)?;
     let entity = graph
         .table(&asked.entity_table)
@@ -659,9 +664,6 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             return Err(not_yet("text_column"));
         }
     }
-
-    // The sampler's construction: its check of the indexes it would use.
-    missing_indexes(&asker, &graph).await?;
 
     // The anchor, and the times it is checked against.
     let mut bounds: Option<Bounds> = None;

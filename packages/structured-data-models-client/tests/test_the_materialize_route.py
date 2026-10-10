@@ -16,6 +16,7 @@ reference comparison of the payload is ``contract/tests``'s.
 
 from __future__ import annotations
 
+import datetime
 import importlib.util
 import json
 import subprocess
@@ -557,3 +558,89 @@ def test_the_provider_refuses_two_key_sets_bound_to_one_name() -> None:
     keys = {1: pa.table({'key': [1]}), 2: pa.table({'key': [2]})}
     with pytest.raises(PlanNotRun):
         DuckDBProvider(duckdb.connect())(step, keys)
+
+
+# --- review round 2 (T1.11c) --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'indices',
+    [[2**100], [2**63, 0], [2**64, 0], [datetime.date(2024, 1, 1), 0]],
+)
+def test_entities_that_do_not_cast_fail_as_the_reference_fails_them(
+    monkeypatch: pytest.MonkeyPatch, indices: list[Any]
+) -> None:
+    # Past the key's width, or of no castable type: the engine's own
+    # handling lets these escape, and the client reports INTERNAL_ERROR.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(indices=indices)
+    assert refused.value.code == 'INTERNAL_ERROR'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        with pytest.raises(StructuredDataError) as old:
+            _materialize(indices=indices)
+        assert old.value.code == refused.value.code
+
+
+def _warned(query: PredictiveQuery, calls: list[dict[str, Any]]) -> list[int]:
+    r"""How many missing-index warnings each call of ``calls`` on ``query``
+    showed, a refusal of the call held as its outcome."""
+    shown = []
+    for arguments in calls:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            try:
+                query.materialize(anchor_time=ANCHOR, **arguments)
+            except StructuredDataError:
+                pass
+        shown.append(
+            sum('Missing' in str(warning.message) for warning in caught)
+        )
+    return shown
+
+
+@pytest.mark.parametrize(
+    'first',
+    [
+        # Refused by the core after its index read, as the reference
+        # refuses them after building its sampler.
+        {'indices': [None, 0]},
+        {'indices': [0, 1], 'random_seed': 10**40},
+    ],
+)
+def test_a_refused_call_does_not_lose_the_index_warning(
+    monkeypatch: pytest.MonkeyPatch, first: dict[str, Any]
+) -> None:
+    calls = [first, {'indices': [0, 1]}, {'indices': [0, 1]}]
+    shown = {}
+    for route in ('core', 'old'):
+        if route == 'core':
+            monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+        else:
+            monkeypatch.delenv(_routing.ENVIRONMENT)
+            if importlib.util.find_spec('sdm_relational_engine') is None:
+                break
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(DuckDBSource(_connection()))
+        shown[route] = _warned(PredictiveQuery(QUERY, schema), calls)
+    assert shown['core'] == [1, 0, 0]
+    if 'old' in shown:
+        assert shown['old'] == shown['core']
+
+
+def test_a_call_refused_before_the_run_leaves_the_warning_to_the_next(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An entity that does not cast is refused in the host, before the core
+    # reads the indexes; the reference casts after its index read, so it
+    # warns on that call (decision E41(j)). The warning is not lost: the
+    # next call gives it.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+    query = PredictiveQuery(QUERY, schema)
+    calls = [{'indices': ['abc']}, {'indices': [0, 1]}, {'indices': [0, 1]}]
+    assert _warned(query, calls) == [0, 1, 0]
