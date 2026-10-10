@@ -863,9 +863,10 @@ entries:
     (num_neighbors, num_hops, context_anchor_time, lag_timesteps,
     max_pq_iterations, use_prediction_time, inference_config,
     exclude_cols_dict, return_embeddings, top_k, num_context_samples, the
-    anchor time 'entity'), any column type in the payload, a seed of any
-    size, entities of a type the key casts them to, and a schema edited
-    after Schema.from_source; when a large entity table yields fewer than
+    anchor time 'entity', a random_seed of None, which samples unseeded),
+    any column type in the payload, a seed of any size, and a schema edited
+    after Schema.from_source, a table mapped to another source table
+    included; when a large entity table yields fewer than
     half the context examples asked for, it warns once per process.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, a
@@ -882,8 +883,12 @@ entries:
     indices_type, context_coverage (in place of the once-per-process
     warning), keyless_neighbors, parent_lookup, wire_dtype and seed_size; in
     the bridge, before the core runs: each sampling option the core does
-    not take, by its name, num_context_samples, anchor_entity, key_type and
-    schema_edited. A schema not described on the core has no core route
+    not take, by its name, num_context_samples, unseeded (a random_seed
+    given as None), anchor_entity, key_type and schema_edited (a table,
+    column or type changed since the description, or a table mapped to
+    another source table). The entities are cast to the key's type as the
+    reference casts them (pandas, to the key's Arrow dtype), so none the
+    reference takes is refused. A schema not described on the core has no core route
     (RouteError, the seam's own failure). A seed DuckDB's parser refuses,
     from 2**31, is INVALID_REQUEST naming the field, under RS-7. The default
     route is unchanged.
