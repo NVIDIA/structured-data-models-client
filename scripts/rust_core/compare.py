@@ -872,7 +872,11 @@ def _sql(
             if a.get('rows') != b.get('rows') or (
                 va is None or vb is None or va['unordered'] != vb['unordered']
             ):
-                report.fail(f'{at}: rows differ', 'sql.bindings')
+                report.fail(
+                    f'{at}: its rows differ as written, the order of '
+                    'columns included',
+                    'sql.bindings',
+                )
 
 
 def _sql_core(
