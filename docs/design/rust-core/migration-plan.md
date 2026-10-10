@@ -350,16 +350,16 @@ A difference only one runtime shows is a register entry naming that runtime, nev
 
 | Rule | How it's enforced |
 |---|---|
-| The epic branch holds the only candidate; work on the next slice starts only after this slice's gate passes; independent tasks within a slice may run in parallel | CI fast checks on the epic and phase branches; the status page lists open branches |
+| The epic branch holds the only candidate; work on the next slice starts only after this slice's gate passes; independent tasks within a slice may run in parallel | CI fast checks on the epic and phase branches; the phase's tracker lists open branches (Phase 1 decision E53, approved by owner 2026-10-10: no status page) |
 | Each phase's work happens on its own branch off `rust-core` (for example `rust-core-phase-0`), pushed to GitHub so nothing is lost; a candidate that passes its checks is pushed before more work builds on it; phase branches never merge into `main`; the epic branch is updated from `main` at each slice gate | Once verified (CI fast checks, local gate checks, a fresh-agent review), the phase or slice branch is merged locally into `rust-core` and `rust-core` is pushed; there are no pull requests |
 | Acceptance is what CI and the local gate checks run, plus one independent reviewer per change (a fresh agent that did not implement it), the owner's decisions, and one independent release audit of the existing evidence | The owner's approval is the local merge of a verified phase or slice branch, plus decisions in `phase-N/decisions.md` and register entries marked `approved_by: owner` |
 | A change iterates until its reviewers approve, and a check failing twice the same way changes method and goes to the owner (Phase 1 decision E29, approved by owner 2026-10-09, replacing "at most two review rounds; a third goes to the owner"); an independent reviewer checks code and behavior, not prose | Recorded in the phase's tracker |
 | A phase's acceptance checks are locked before implementation; each change states what and why; a third change to a phase's locked acceptance checks goes to the owner | Locked files change only with the owner's approval |
 | Approval by meaning: one decision approves all the files it explains | Register entries and owner decisions; no per-file hashes |
 | Stop rules (below) are lifted only by the owner, never by delegation; on a stop, implementation and live runs pause and the evidence is reported; each phase names owner check-ins, with a five-line report, past which work waits for the owner's answer (Phase 1 decision H12, approved by owner 2026-10-08) | The owner's decision in `phase-N/decisions.md`; an agent never approves its own exception or marks anything `approved_by: owner` |
-| One status page: candidate commit, gates passed, open failures, decisions needed | Generated from CI and git, not written by the executor |
-| Anything that changes behavior or scope goes to the owner straight away | Register entries and the status page |
-| New acceptance infrastructure beyond the agreed test runner needs the owner's approval | Listed on the status page |
+| The phase's tracker shows the candidate commit, gates passed, open failures and decisions needed (Phase 1 decision E53, approved by owner 2026-10-10: the generated status page is not built) | CI runs and git, cited by each tracker row |
+| Anything that changes behavior or scope goes to the owner straight away | Register entries and the phase's tracker |
+| New acceptance infrastructure beyond the agreed test runner needs the owner's approval | Listed in the phase's tracker |
 | Each phase has `docs/design/rust-core/phase-N/design.md` and `tracker.md` on its phase branch | Created with the phase branch |
 
 Where things live: the reference worktree at `~/code/sdmc-reference`; the baseline tag `reference-baseline-<sha>`; owner decisions in `phase-N/decisions.md`; the register at `docs/design/rust-core/register.yaml`, whose entries may cite issue or task IDs until contract case IDs exist in Phase 1a.
