@@ -739,6 +739,25 @@ fn two_key_sets_bound_to_one_name_are_refused() {
     assert!(duck::answer_with(&connection, &step, &both).is_err());
 }
 
+/// The Arrow type (pyarrow's spelling) DuckDB reads a column of
+/// `duckdb_type` as, for the types `base.regression`'s catalog reads hold;
+/// any other is a test failure, never a match.
+fn arrow_name(duckdb_type: &str) -> String {
+    if let Some(inner) = duckdb_type.strip_suffix("[]") {
+        return format!("list<l: {}>", arrow_name(inner));
+    }
+    match duckdb_type {
+        "BOOLEAN" => "bool",
+        "INTEGER" => "int32",
+        "BIGINT" => "int64",
+        "DOUBLE" => "double",
+        "VARCHAR" => "string",
+        "TIMESTAMP" => "timestamp[us]",
+        other => panic!("no Arrow name for {other} here"),
+    }
+    .to_owned()
+}
+
 /// The committed reference observation of `case`.
 fn reference_of(case: &str) -> Value {
     let directory = contract().join("reference");
@@ -815,6 +834,23 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         assert_eq!(ra["rows"], rb["rows"], "{position}: rows");
         if rb.get("schema").is_some() {
             assert_eq!(ra["schema"], rb["schema"], "{position}: Arrow schema");
+        } else {
+            // The reference read its catalog as rows: its DuckDB type
+            // names, as the Arrow types DuckDB reads them as, are this
+            // host's Arrow schema (compare.py's `arrow_name`).
+            let names: Vec<Value> = vb["types"]
+                .as_array()
+                .expect("the reference's DuckDB types")
+                .iter()
+                .map(|kind| Value::from(arrow_name(kind.as_str().unwrap())))
+                .collect();
+            let ours: Vec<Value> = ra["schema"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|field| field["type"].clone())
+                .collect();
+            assert_eq!(ours, names, "{position}: Arrow types");
         }
         assert_eq!(va["unordered"], vb["unordered"], "{position}: rows");
         // _by_fkey, the sixth of materialize's six, ordered totally.

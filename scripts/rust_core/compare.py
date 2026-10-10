@@ -149,13 +149,16 @@ def _capture_check() -> ModuleType:
     return module
 
 
-def _predicted(core: dict[str, Any]) -> Any:
+def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
     r"""``core.predicted``, its call's request id compared by presence and
     type only (decision E35, approved by the owner on 2026-10-10)."""
     predicted = core.get('predicted')
     if not isinstance(predicted, dict) or 'body' not in predicted:
         return predicted
-    return {**predicted, 'body': _capture_check().masked(predicted['body'])}
+    return {
+        **predicted,
+        'body': _capture_check().masked(predicted['body'], paths),
+    }
 
 
 class Report:
@@ -164,11 +167,17 @@ class Report:
     fails. :meth:`demote` turns a diagnostic case's failures into notes,
     but for the rules it keeps."""
 
-    def __init__(self, rules: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        rules: dict[str, str] | None = None,
+        paths: tuple[Any, ...] = (),
+    ) -> None:
         self.failures: list[tuple[str | None, str]] = []
         self.notes: list[str] = []
         self.info: list[str] = []
         self.rules = rules or {}
+        #: The payload exclusions of the policy compared under, checked.
+        self.paths = paths
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -513,7 +522,7 @@ def _core_agree(
                 show=False,
                 rule='core',
             )
-    if _predicted(mine) != _predicted(theirs):
+    if _predicted(mine, report.paths) != _predicted(theirs, report.paths):
         _differ(
             report, where, 'core.predicted', None, None, show=False, rule='core'
         )
@@ -600,23 +609,27 @@ def _path_of(mine: Any, theirs: Any, path: str) -> str | None:
 def _lossless(value: Any) -> Any:
     r"""A parsed payload with each number (``{"number": text}``) as its kind
     (an integer token or a float token) and its exact decimal value, so
-    ``1e-05`` and ``1e-5`` agree and ``1`` and ``1.0`` do not; nothing
-    passes through a double."""
+    ``1e-05`` and ``1e-5`` agree, and ``1`` and ``1.0`` do not, nor ``-0.0``
+    and ``0.0`` (its sign kept); nothing passes through a double."""
     if isinstance(value, dict):
         if set(value) == {'number'} and isinstance(value['number'], str):
             text = value['number']
             kind = 'integer' if _INTEGER.fullmatch(text) else 'float'
-            return ['number', kind, Decimal(text)]
+            value = Decimal(text)
+            # The sign too, which Decimal equality ignores for zero, so
+            # -0.0 and 0.0 differ while 1e-05 and 1e-5 agree.
+            return ['number', kind, value, value.is_signed()]
         return {key: _lossless(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_lossless(item) for item in value]
     return value
 
 
-def _payload(parsed: Any) -> Any:
-    r"""A payload as the ``payload`` rule compares it: under the policy's
-    exclusions (``capture_check.masked``), with lossless numbers."""
-    return _lossless(_capture_check().masked(parsed))
+def _payload(parsed: Any, paths: tuple[Any, ...]) -> Any:
+    r"""A payload as the ``payload`` rule compares it: under the exclusions
+    of the policy compared under (``paths``, ``capture_check.masked``),
+    with lossless numbers."""
+    return _lossless(_capture_check().masked(parsed, paths))
 
 
 def _reach(
@@ -669,11 +682,11 @@ def _host_fields(
     if found:
         report.fail(f'{where}: {found}', 'result')
     sent = [
-        (each['method'], each['path'], _payload(each['parsed']))
+        (each['method'], each['path'], _payload(each['parsed'], report.paths))
         for each in mine['payloads']
     ]
     wanted = [
-        (each['method'], each['path'], _payload(each['parsed']))
+        (each['method'], each['path'], _payload(each['parsed'], report.paths))
         for each in theirs['payloads']
     ]
     found = _path_of(sent, wanted, 'public.payloads')
@@ -694,10 +707,10 @@ def _core_payload(
     predicted = (observation.get('core') or {}).get('predicted')
     if not predicted or predicted.get('body') is None:
         return
-    body = _payload(predicted['body'])
+    body = _payload(predicted['body'], report.paths)
     if who == 'python-core':
         sent = [
-            _payload(each['parsed'])
+            _payload(each['parsed'], report.paths)
             for each in (observation.get('public') or {}).get('payloads', [])
         ]
         found = _path_of([body], sent, 'core.predicted.body')
@@ -709,7 +722,8 @@ def _core_payload(
             )
     if who == 'rust-host' and reference is not None:
         wanted = [
-            _payload(each['parsed']) for each in reference['public']['payloads']
+            _payload(each['parsed'], report.paths)
+            for each in reference['public']['payloads']
         ]
         found = _path_of([body], wanted, 'core.predicted.body')
         if found:
@@ -752,14 +766,92 @@ def counts(observation: dict[str, Any]) -> dict[str, int] | None:
     return {stage: len(grouped.get(stage, [])) for stage in STAGES}
 
 
+#: The methods a runner reads a result with, by what each gives: Arrow,
+#: whose schema the read records, or Python rows, which have none.
+ARROW_READS = ('to_arrow_table', 'fetch_arrow_table', 'query_arrow')
+ROW_READS = ('fetchall', 'fetchmany', 'fetchone')
+#: DuckDB's names of its types, as a Python driver's description gives
+#: them, and the Arrow type (pyarrow's spelling) DuckDB reads each as; a
+#: list is ``X[]`` and ``list<l: X>``, a decimal ``DECIMAL(p,s)`` and
+#: ``decimal128(p, s)``. A name outside this map has no Arrow name here,
+#: and is never taken as equal to one.
+DUCKDB_ARROW = {
+    'BOOLEAN': 'bool',
+    'TINYINT': 'int8',
+    'SMALLINT': 'int16',
+    'INTEGER': 'int32',
+    'BIGINT': 'int64',
+    'UTINYINT': 'uint8',
+    'USMALLINT': 'uint16',
+    'UINTEGER': 'uint32',
+    'UBIGINT': 'uint64',
+    'FLOAT': 'float',
+    'DOUBLE': 'double',
+    'VARCHAR': 'string',
+    'BLOB': 'binary',
+    'DATE': 'date32[day]',
+    'TIME': 'time64[us]',
+    'TIME_NS': 'time64[ns]',
+    'TIMESTAMP': 'timestamp[us]',
+    'TIMESTAMP_S': 'timestamp[s]',
+    'TIMESTAMP_MS': 'timestamp[ms]',
+    'TIMESTAMP_NS': 'timestamp[ns]',
+    'INTERVAL': 'month_day_nano_interval',
+}
+_DECIMAL = re.compile(r'DECIMAL\((\d+),(\d+)\)')
+
+
+def arrow_name(duckdb_type: str) -> str | None:
+    r"""The Arrow type DuckDB reads a column of ``duckdb_type`` as, or
+    None when :data:`DUCKDB_ARROW` does not say."""
+    if duckdb_type.endswith('[]'):
+        inner = arrow_name(duckdb_type[:-2])
+        return None if inner is None else f'list<l: {inner}>'
+    found = _DECIMAL.fullmatch(duckdb_type)
+    if found and int(found.group(1)) <= 38:
+        return f'decimal128({found.group(1)}, {found.group(2)})'
+    return DUCKDB_ARROW.get(duckdb_type)
+
+
+def _evidence(report: Report, at: str, who: str, read: dict[str, Any]) -> bool:
+    r"""The read carries the type evidence its runner and method give: a
+    Python driver's read DuckDB's type names (its description), an Arrow
+    read its Arrow schema, each one per column; only the pure-Rust host,
+    which has no driver description, lacks the type names, and only a row
+    read lacks a schema. Missing evidence fails, never skips the check."""
+    columns = len(read['values']['columns'])
+    method = read['method']
+    good = True
+    if method not in ARROW_READS + ROW_READS:
+        report.fail(f'{at}: {who} read it by {method!r}', 'sql.result')
+        return False
+    types = read['values']['types']
+    if who == 'rust-host':
+        if method != 'query_arrow' or types is not None:
+            report.fail(f'{at}: rust-host read it otherwise', 'sql.result')
+            good = False
+    elif not isinstance(types, list) or len(types) != columns:
+        report.fail(f'{at}: {who} recorded no DuckDB types', 'sql.result')
+        good = False
+    schema = read.get('schema')
+    if method in ARROW_READS and (
+        not isinstance(schema, list) or len(schema) != columns
+    ):
+        report.fail(f'{at}: {who} recorded no Arrow schema', 'sql.result')
+        good = False
+    return good
+
+
 def _results(
     report: Report,
     where: str,
     mine: dict[str, Any],
     theirs: dict[str, Any],
     ordered: bool,
+    who: tuple[str, str],
 ) -> None:
-    r"""One statement's results against another's: ``sql.result``."""
+    r"""One statement's results against another's: ``sql.result``. ``who``
+    names the two runners, whose evidence :func:`_evidence` requires."""
     if (mine['error'] is None) != (theirs['error'] is None):
         report.fail(f'{where}: one statement failed', 'sql.result')
         return
@@ -774,6 +866,10 @@ def _results(
         zip(mine['results'], theirs['results'], strict=True)
     ):
         at = f'{where} result {read}'
+        if not (
+            _evidence(report, at, who[0], a) & _evidence(report, at, who[1], b)
+        ):
+            continue
         va, vb = a['values'], b['values']
         if va['unencodable'] or vb['unencodable']:
             # A value the canonical form does not hold is never equal.
@@ -791,8 +887,7 @@ def _results(
             and va['types'] != vb['types']
         ):
             report.fail(f'{at}: DuckDB types differ', 'sql.result')
-        if 'schema' in a and 'schema' in b and a['schema'] != b['schema']:
-            report.fail(f'{at}: Arrow schema differs', 'sql.result')
+        _arrow_types(report, at, a, b)
         if a['rows'] != b['rows']:
             report.fail(
                 f'{at}: {a["rows"]} rows, against {b["rows"]}', 'sql.result'
@@ -804,6 +899,43 @@ def _results(
                 + ('in order' if ordered else 'as a multiset'),
                 'sql.result',
             )
+
+
+def _arrow_types(
+    report: Report, at: str, a: dict[str, Any], b: dict[str, Any]
+) -> None:
+    r"""The two reads' Arrow types: both schemas where both read Arrow;
+    where one read rows (the reference's catalog, by ``fetchall``) and the
+    other has no DuckDB type names (the pure-Rust host), the row read's
+    DuckDB types as Arrow names (:func:`arrow_name`) against the Arrow
+    read's schema, a type with no Arrow name failing."""
+    sa, sb = a.get('schema'), b.get('schema')
+    if sa is not None and sb is not None:
+        if sa != sb:
+            report.fail(f'{at}: Arrow schema differs', 'sql.result')
+        return
+    if sa is None and sb is None:
+        # Two row reads: their DuckDB types are compared.
+        return
+    arrow, rows = (a, b) if sa is not None else (b, a)
+    if arrow['values']['types'] is not None:
+        # The Arrow read carries DuckDB's names too, compared with the row
+        # read's.
+        return
+    schema, types = arrow['schema'], rows['values']['types']
+    if types is None:
+        report.fail(f'{at}: neither read records its types', 'sql.result')
+        return
+    named = [arrow_name(kind) for kind in types]
+    if None in named:
+        report.fail(
+            f'{at}: DuckDB types with no Arrow name: '
+            f'{sorted({k for k, n in zip(types, named, strict=True) if n is None})}',
+            'sql.result',
+        )
+        return
+    if named != [field['type'] for field in schema]:
+        report.fail(f'{at}: Arrow schema differs from the types', 'sql.result')
 
 
 def _complete(report: Report, where: str, observation: dict[str, Any]) -> bool:
@@ -854,7 +986,14 @@ def _sql(
                 report.fail(f'{at}: text differs', 'sql.text')
             if a['parameters'] != b['parameters']:
                 report.fail(f'{at}: parameters differ', 'sql.parameters')
-            _results(report, at, a, b, position in ordered.get(stage, []))
+            _results(
+                report,
+                at,
+                a,
+                b,
+                position in ordered.get(stage, []),
+                (who, 'python-ref'),
+            )
     mine_bound = _by_stage(observation, 'bindings') or {}
     theirs_bound = _by_stage(reference, 'bindings') or {}
     for stage in stages:
@@ -915,6 +1054,7 @@ def _sql_core(
                 a,
                 b,
                 position in ordered.get(stage, []),
+                ('python-core', 'rust-host'),
             )
 
 
@@ -933,7 +1073,7 @@ def compare(
         report = Report()
         report.fail(f'compare-policy.yaml: {problem}')
         return report
-    report = Report(policy['rules'])
+    report = Report(policy['rules'], check.excluded(policy))
     if set(policy['rules']) != set(RULES):
         report.fail(
             'compare-policy.yaml: its rules are not the ones this runs: '

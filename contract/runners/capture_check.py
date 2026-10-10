@@ -45,6 +45,12 @@ from pathlib import Path
 from typing import Any
 
 POLICY = Path(__file__).resolve().parents[1] / 'compare-policy.yaml'
+#: The decisions an exclusion must name, each by a row whose status reads
+#: "approved by owner".
+DECISIONS = (
+    Path(__file__).resolve().parents[2]
+    / 'docs/design/rust-core/phase-1/decisions.md'
+)
 #: The policy's format, and what a rule may be.
 POLICY_FORMAT = 'sdm-compare-policy/1'
 RULE_CLASSES = ('gate', 'diagnostic')
@@ -55,13 +61,63 @@ class PolicyError(Exception):
     r"""``compare-policy.yaml`` is not a policy this checker can apply."""
 
 
-def policy(path: Path = POLICY) -> dict[str, Any]:
+def _decision_rows(path: Path) -> dict[str, tuple[str, str]]:
+    r"""decisions.md's rows by ID: each row's whole text and its status,
+    the last cell."""
+    rows = {}
+    for line in path.read_text(encoding='utf-8').splitlines():
+        found = re.match(r'\| ([A-Z][A-Z0-9-]*) \|', line)
+        if found:
+            cells = [
+                cell.strip() for cell in line.strip().strip('|').split('|')
+            ]
+            rows[found.group(1)] = (line, cells[-1])
+    return rows
+
+
+def _exclusion_problem(
+    exclusion: dict[str, Any], rows: dict[str, tuple[str, str]]
+) -> str | None:
+    r"""Why an exclusion is not one the owner approved, if it is not: its
+    decision must be a row of decisions.md whose status reads its own
+    "approved by owner <date>", and its path the one that row approves,
+    written there in backticks as dotted names, never a strict prefix of a
+    path the row names (``[metadata]`` for ``metadata.request_id``), which
+    would leave out more than was approved."""
+    status = str(exclusion['status'])
+    if not re.fullmatch(r'approved by owner \d{4}-\d{2}-\d{2}', status):
+        return 'not owner-approved'
+    decision = exclusion['decision']
+    if not isinstance(decision, str) or decision not in rows:
+        return 'its decision is not a row of decisions.md'
+    text, row_status = rows[decision]
+    if status not in row_status:
+        return f'{decision} does not read {status!r}'
+    path = exclusion['path']
+    if (
+        not isinstance(path, list)
+        or not path
+        or not all(isinstance(part, str) and part for part in path)
+    ):
+        return 'its path'
+    dotted = '.'.join(path)
+    named = set(re.findall(r'`([A-Za-z0-9_.]+)`', text))
+    if dotted not in named:
+        return f'{decision} does not name {dotted}'
+    if any(other.startswith(dotted + '.') for other in named):
+        return f'{dotted} leaves out more than {decision} approves'
+    return None
+
+
+def policy(path: Path = POLICY, decisions: Path = DECISIONS) -> dict[str, Any]:
     r"""The comparator's policy, checked: every rule a gate or diagnostic;
     every exclusion value only (``keeps: [presence, type]``), of a payload,
-    naming its decision, with a status that reads "approved by owner" and a
-    date (an exclusion waits for the owner, decisions.md's preamble; an
-    unapproved one is refused here, never applied); ``ordered`` statement
-    positions by case and stage; ``reach`` stages by case."""
+    naming a decision whose row in ``decisions`` reads "approved by owner"
+    with the exclusion's own status, and the one path that row approves
+    (:func:`_exclusion_problem`; an exclusion waits for the owner,
+    decisions.md's preamble, and an unapproved or widened one is refused
+    here, never applied); ``ordered`` statement positions by case and
+    stage; ``reach`` stages by case."""
     import yaml
 
     loaded = yaml.safe_load(path.read_text(encoding='utf-8'))
@@ -75,6 +131,7 @@ def policy(path: Path = POLICY) -> dict[str, Any]:
         raise PolicyError('not a policy: its sections')
     if loaded['format'] != POLICY_FORMAT:
         raise PolicyError(f'not {POLICY_FORMAT}')
+    rows = _decision_rows(decisions)
     rules = loaded['rules']
     if not isinstance(rules, dict) or any(
         value not in RULE_CLASSES for value in rules.values()
@@ -90,23 +147,13 @@ def policy(path: Path = POLICY) -> dict[str, Any]:
             'keeps',
         }:
             raise PolicyError('an exclusion: its fields')
-        if not re.fullmatch(
-            r'approved by owner \d{4}-\d{2}-\d{2}', str(exclusion['status'])
-        ):
-            raise PolicyError(
-                f'exclusion {exclusion["id"]}: not owner-approved'
-            )
         if exclusion['in'] != 'payload':
             raise PolicyError(f'exclusion {exclusion["id"]}: not of a payload')
         if exclusion['keeps'] != ['presence', 'type']:
             raise PolicyError(f'exclusion {exclusion["id"]}: not value only')
-        path = exclusion['path']
-        if (
-            not isinstance(path, list)
-            or not path
-            or not all(isinstance(part, str) for part in path)
-        ):
-            raise PolicyError(f'exclusion {exclusion["id"]}: its path')
+        problem = _exclusion_problem(exclusion, rows)
+        if problem is not None:
+            raise PolicyError(f'exclusion {exclusion["id"]}: {problem}')
     for case, stages in loaded['ordered'].items():
         if not isinstance(stages, dict) or any(
             stage not in STAGES
@@ -121,14 +168,23 @@ def policy(path: Path = POLICY) -> dict[str, Any]:
     return loaded
 
 
-#: The payload paths the client fills at random, whose value (not presence
-#: or type) is left out of conservation and comparison: the policy's
-#: exclusions, each owner-approved (decision E35, 2026-10-10).
-RANDOM_PATHS = tuple(
-    tuple(exclusion['path'])
-    for exclusion in policy()['exclusions']
-    if exclusion['in'] == 'payload'
-)
+Paths = tuple[tuple[str, ...], ...]
+
+
+def excluded(checked: dict[str, Any]) -> Paths:
+    r"""A checked policy's payload exclusions, as the paths whose value
+    (not presence or type) is left out."""
+    return tuple(
+        tuple(exclusion['path'])
+        for exclusion in checked['exclusions']
+        if exclusion['in'] == 'payload'
+    )
+
+
+#: The repository policy's payload exclusions (decision E35, approved by the
+#: owner on 2026-10-10), the default where no policy is given; compare.py
+#: passes the policy it was given instead.
+RANDOM_PATHS: Paths = excluded(policy())
 
 
 def _json_type(value: Any) -> str:
@@ -146,15 +202,15 @@ def _json_type(value: Any) -> str:
     return 'string'
 
 
-def masked(parsed: Any) -> Any:
-    r"""A parsed prediction payload with the value at each of
-    :data:`RANDOM_PATHS` replaced by its JSON type, as conservation compares
-    it. The same rule holds the core's call (the payload it writes for the
+def masked(parsed: Any, paths: Paths | None = None) -> Any:
+    r"""A parsed prediction payload with the value at each of ``paths``
+    (by default :data:`RANDOM_PATHS`) replaced by its JSON type, as
+    conservation compares it. The same rule holds the core's call (the payload it writes for the
     endpoint, ``core.predicted.body``) across the core runners and to its
     pin (T1.11d): one value, ``metadata.request_id``, under E35, approved by
     the owner on 2026-10-10."""
     parsed = copy.deepcopy(parsed)
-    for path in RANDOM_PATHS:
+    for path in RANDOM_PATHS if paths is None else paths:
         node = parsed
         for part in path[:-1]:
             node = node.get(part) if isinstance(node, dict) else None

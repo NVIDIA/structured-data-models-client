@@ -572,3 +572,195 @@ def test_a_gate_made_diagnostic_stops_gating(tmp_path: Path) -> None:
     report = _compared(tmp_path, changed, policy=path)
     assert report.failures == []
     assert any(n.startswith('diagnostic rule payload') for n in report.notes)
+
+
+# --- fix round 1 (T1.11e review) ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'fault',
+    [
+        # A Python driver's read without its DuckDB types (fetchall).
+        lambda o: _values(o, 1).update(types=None),
+        # An Arrow read without its schema.
+        lambda o: _statement(o, 3)['results'][0].pop('schema'),
+        # A Python driver's Arrow read without its DuckDB types.
+        lambda o: _values(o, 3).update(types=None),
+    ],
+)
+def test_missing_type_evidence_fails_never_skips(
+    tmp_path: Path, fault: Fault
+) -> None:
+    report = _compared(tmp_path, fault)
+    assert _rules(report) == {'sql.result'}, report.texts
+    assert any('recorded no' in text for text in report.texts)
+
+
+def _rust_read(read: dict[str, Any]) -> dict[str, Any]:
+    r"""A reference row read as the pure-Rust host would record the same
+    result: read as Arrow, with the Arrow types DuckDB reads its columns
+    as, and no DuckDB type names."""
+    values = dict(read['values'], types=None)
+    schema = [
+        {'name': name, 'type': compare.arrow_name(kind)}
+        for name, kind in zip(
+            read['values']['columns'], read['values']['types'], strict=True
+        )
+    ]
+    return {
+        'method': 'query_arrow',
+        'rows': read['rows'],
+        'schema': schema,
+        'values': values,
+    }
+
+
+def test_rust_host_types_are_held_to_the_reference_s_row_reads() -> None:
+    r"""The reference reads its catalog as rows, so it has no Arrow schema;
+    rust-host has no DuckDB type names. The reference's names, as the
+    Arrow types DuckDB reads them as, are held to rust-host's schema: an
+    int64 read as int32 fails (the subagent's P3-1 repro)."""
+    statement = _statement(_reference(), 9)
+    assert statement['results'][0]['method'] == 'fetchall'
+    rust = dict(statement, results=[_rust_read(statement['results'][0])])
+    assert rust['results'][0]['schema'][1]['type'] == 'int64'
+
+    def failures(ours: dict[str, Any]) -> list[str]:
+        report = compare.Report({'sql.result': 'gate'})
+        compare._results(
+            report, 'at', ours, statement, False, ('rust-host', 'python-ref')
+        )
+        return report.texts
+
+    assert failures(rust) == []
+    narrowed = copy.deepcopy(rust)
+    narrowed['results'][0]['schema'][1]['type'] = 'int32'
+    assert any('differs from the types' in t for t in failures(narrowed))
+    # A type with no Arrow name is never taken as equal.
+    unnamed = copy.deepcopy(statement)
+    unnamed['results'][0]['values']['types'][1] = 'HUGEINT'
+    report = compare.Report({'sql.result': 'gate'})
+    compare._results(
+        report, 'at', rust, unnamed, False, ('rust-host', 'python-ref')
+    )
+    assert any('no Arrow name' in t for t in report.texts)
+
+
+def test_duckdb_type_names_map_to_the_arrow_types_read() -> None:
+    r""":func:`compare.arrow_name` against every vector whose columns it
+    names: DuckDB's names from the description, pyarrow's from the Arrow
+    read of the same statement."""
+    vectors = json.loads(
+        (ROOT / 'contract/result-vectors.json').read_text(encoding='utf-8')
+    )['vectors']
+    mapped = 0
+    for vector in vectors:
+        for kind, field in zip(
+            vector['values']['types'], vector['arrow'], strict=True
+        ):
+            name = compare.arrow_name(kind)
+            if name is not None:
+                assert name == field['type'], (kind, field)
+                mapped += 1
+    assert mapped >= 30
+
+
+def test_payload_zero_keeps_its_sign(tmp_path: Path) -> None:
+    def signed(observation: dict[str, Any]) -> None:
+        _first_number(_payload(observation))['number'] = '-0.0'
+
+    def unsigned(observation: dict[str, Any]) -> None:
+        _first_number(_payload(observation))['number'] = '0.0'
+
+    def respelled(observation: dict[str, Any]) -> None:
+        _first_number(_payload(observation))['number'] = '-0e0'
+
+    # The candidate's 0.0 against a reference whose token is -0.0: the
+    # reference is the fault's base, so apply -0.0 to both, then 0.0.
+    case = json.loads(CASE.read_text())
+    case['status'] = 'acceptance'
+    cases = tmp_path / 'cases'
+    cases.mkdir()
+    (cases / CASE.name).write_text(json.dumps(case))
+    reference = _reference()
+    reference['identity']['inputs']['case'] = run_python.digest(
+        (cases / CASE.name).read_bytes()
+    )
+    signed(reference)
+
+    def compared(fault: Fault) -> Any:
+        observation = copy.deepcopy(reference)
+        observation['identity'].update(runner='python-old', reference=None)
+        fault(observation)
+        paths = []
+        for name, item in (('ref', reference), ('old', observation)):
+            paths.append(tmp_path / f'{name}.jsonl')
+            paths[-1].write_text(json.dumps(item) + '\n')
+        return compare.compare([cases], paths[0], paths[1:])
+
+    assert _rules(compared(unsigned)) == {'payload'}
+    # -0e0 is -0.0 spelled otherwise: equal.
+    assert compared(respelled).failures == []
+    assert compared(signed).failures == []
+
+
+def test_the_policy_s_own_exclusions_are_applied(tmp_path: Path) -> None:
+    def another_id(observation: dict[str, Any]) -> None:
+        _payload(observation)['metadata']['request_id'] = 'sdm-000000000000'
+
+    # Under the repository's policy, E35's exclusion leaves the value out.
+    assert _compared(tmp_path, another_id).failures == []
+    # Under a policy with no exclusion, the same change differs.
+    none = _policy_with(
+        tmp_path,
+        lambda t: (
+            t[: t.index('exclusions:')]
+            + 'exclusions: []\n\n'
+            + t[t.index('# Statements whose rows') :]
+        ),
+    )
+    assert capture_check.policy(none)['exclusions'] == []
+    report = _compared(tmp_path, another_id, policy=none)
+    assert _rules(report) == {'payload'}, report.texts
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        # A strict prefix of the path E35 approves: all of metadata.
+        lambda t: t.replace('path: [metadata, request_id]', 'path: [metadata]'),
+        # A decision that is no row of decisions.md.
+        lambda t: t.replace('decision: E35', 'decision: E99').replace(
+            'path: [metadata, request_id]', 'path: [context]'
+        ),
+        # No decision.
+        lambda t: t.replace('decision: E35', "decision: ''"),
+        # A row that does not name the path.
+        lambda t: t.replace('path: [metadata, request_id]', 'path: [context]'),
+        # A row whose status is not the exclusion's.
+        lambda t: t.replace('2026-10-10', '2099-01-01'),
+    ],
+)
+def test_an_exclusion_the_owner_did_not_approve_is_refused(
+    tmp_path: Path, change: Callable[[str], str]
+) -> None:
+    path = _policy_with(tmp_path, change)
+    assert path.read_text() != POLICY.read_text()
+    with pytest.raises(capture_check.PolicyError):
+        capture_check.policy(path)
+
+
+def test_an_arrow_read_without_a_description_is_incomplete() -> None:
+    import pyarrow as pa
+
+    class Undescribed:
+        def execute(self, query: str, parameters: Any = None) -> Any:
+            return self
+
+        def to_arrow_table(self) -> Any:
+            return pa.table({'a': [1]})
+
+    log = run_python.DriverLog()
+    proxy = run_python.capture(Undescribed(), log)
+    proxy.execute('SELECT 1 AS a').to_arrow_table()
+    assert log.incomplete == ['to_arrow_table:no_description']
