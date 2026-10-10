@@ -540,7 +540,9 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
                 return Err(invalid(
                     "a column's meaning is not one its values can carry",
                     "schema",
-                ));
+                )
+                .with_field("table", Detail::text(&table.name))
+                .with_field("column", Detail::text(&column.name)));
             }
         }
     }

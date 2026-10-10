@@ -310,6 +310,10 @@ fn a_lone_edit_stamp_is_taken_in_a_log_and_refused_in_an_entity() {
         described(&made.description, "plans").time_column.as_deref(),
         Some("modified_at")
     );
+    assert_eq!(
+        described(&made.description, "plans").edit_stamp_refused,
+        None
+    );
     assert_eq!(codes(&made.warnings), ["TIME_COLUMNS_GUESSED"]);
     assert_eq!(
         made.warnings[0].message,
@@ -330,6 +334,12 @@ fn a_lone_edit_stamp_is_taken_in_a_log_and_refused_in_an_entity() {
     );
     let made = assemble::assemble(vec![plans(), subscriptions], vec![], None);
     assert_eq!(described(&made.description, "plans").time_column, None);
+    assert_eq!(
+        described(&made.description, "plans")
+            .edit_stamp_refused
+            .as_deref(),
+        Some("modified_at")
+    );
     assert_eq!(
         made.warnings[0].message,
         "Some time columns were inferred, or refused, on a guess about what a column holds:\n\
@@ -438,6 +448,17 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
         let err = assemble::check_links(&schema).unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidRequest);
         assert_eq!(err.fields["field"], Detail::text("relationships"));
+        // Named, when the link has both ends.
+        if schema.links[0].len() == 2 {
+            assert_eq!(
+                err.fields["source_table"],
+                Detail::text(&schema.links[0][0].table)
+            );
+            assert_eq!(
+                err.fields["target_column"],
+                Detail::text(&schema.links[0][1].column)
+            );
+        }
     };
     // Each way the evidence can be missing, empty or retyped.
     refused(&|s| s.links[0][0].column = "gone".into());
@@ -496,4 +517,42 @@ fn names_are_quoted_and_listed_as_the_reference_s_messages_do() {
         })
         .collect();
     assert_eq!(names, BTreeSet::from(["c", "t"]));
+}
+
+/// A name is written as Python's `repr` writes it, so a remedy holding it
+/// is valid Python: held to vectors CPython wrote (`tests/quoted.json`).
+#[test]
+fn names_are_written_as_python_string_literals() {
+    let doc: serde_json::Value =
+        serde_json::from_str(include_str!("quoted.json")).expect("the vectors read");
+    let vectors = doc["vectors"].as_array().expect("a list of vectors");
+    assert!(vectors.len() >= 20);
+    for vector in vectors {
+        let name = vector["name"].as_str().expect("a name");
+        assert_eq!(
+            assemble::quoted(name),
+            vector["repr"].as_str().unwrap(),
+            "{name:?}"
+        );
+    }
+    // A remedy naming a table with a quote is valid Python.
+    let made = assemble::assemble(
+        vec![
+            table(
+                "odd'name",
+                vec![column("user_id", Dtype::String, Stype::Id)],
+                None,
+            ),
+            users(),
+        ],
+        vec![],
+        None,
+    );
+    assert!(
+        made.warnings[0]
+            .message
+            .contains("names the key of 'users'"),
+        "{}",
+        made.warnings[0].message
+    );
 }

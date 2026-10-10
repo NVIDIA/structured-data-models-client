@@ -132,6 +132,7 @@ def description(schema: Schema) -> dict[str, Any]:
                 'columns': shaped,
                 'primary_key': [] if key is None else list(_as_key_tuple(key)),
                 'time_column': table.time_column,
+                'edit_stamp_refused': source['edit_stamp_refused'],
                 'duplicate_keys': source['duplicate_keys'],
             }
         )

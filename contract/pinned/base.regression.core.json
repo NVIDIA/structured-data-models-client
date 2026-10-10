@@ -66,6 +66,7 @@
      "t": "u64",
      "v": "0"
     },
+    "edit_stamp_refused": null,
     "name": "orders",
     "primary_key": [
      "order_id"
@@ -112,6 +113,7 @@
      "t": "u64",
      "v": "0"
     },
+    "edit_stamp_refused": null,
     "name": "users",
     "primary_key": [
      "user_id"
@@ -120,7 +122,7 @@
    }
   ]
  },
- "description": "base.regression on the core, as python-core recorded it at T1.11d: describe_source's, materialize's and predict's inputs (predict's request state as the host handed it back), every fetch the core asked for with its plan (the step trace), the SourceDescription describe_source answered, the request state materialize answered (its version, the query and the payload, each number as the text the core wrote), and predict's answer: the call the core wrote for the endpoint, each number as its text, with the value of metadata.request_id left out and its type kept (decision E35, approved by the owner on 2026-10-10, contract/compare-policy.yaml's one exclusion: the host draws that id at random), the model, call id and metadata the endpoint gave, and the result's rows, each float as its IEEE-754 bits. sdm-testkit's tests/duckdb_provider.rs holds rust-host to it and contract/tests/test_schema_route.py, test_materialize_route.py and test_predict_route.py hold python-core to it, so CI gates the two hosts' equality until T1.18's comparator does. From T1.21d the description is the schema as the core assembles it (the link inferred by name, each column's stype_before_key; decision E55), and materialize's schema is that description on both hosts: rust-host's its own, the case naming none.",
+ "description": "base.regression on the core, as python-core recorded it at T1.11d: describe_source's, materialize's and predict's inputs (predict's request state as the host handed it back), every fetch the core asked for with its plan (the step trace), the SourceDescription describe_source answered, the request state materialize answered (its version, the query and the payload, each number as the text the core wrote), and predict's answer: the call the core wrote for the endpoint, each number as its text, with the value of metadata.request_id left out and its type kept (decision E35, approved by the owner on 2026-10-10, contract/compare-policy.yaml's one exclusion: the host draws that id at random), the model, call id and metadata the endpoint gave, and the result's rows, each float as its IEEE-754 bits. sdm-testkit's tests/duckdb_provider.rs holds rust-host to it and contract/tests/test_schema_route.py, test_materialize_route.py and test_predict_route.py hold python-core to it, so CI gates the two hosts' equality until T1.18's comparator does. From T1.21d the description is the schema as the core assembles it (the link inferred by name, each column's stype_before_key and each table's edit_stamp_refused; decision E55), and materialize's schema is that description on both hosts: rust-host's its own, the case naming none.",
  "fetches": [
   {
    "plan": {
@@ -1140,6 +1142,7 @@
        "t": "u64",
        "v": "0"
       },
+      "edit_stamp_refused": null,
       "name": "orders",
       "primary_key": [
        "order_id"
@@ -1186,6 +1189,7 @@
        "t": "u64",
        "v": "0"
       },
+      "edit_stamp_refused": null,
       "name": "users",
       "primary_key": [
        "user_id"

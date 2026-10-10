@@ -102,6 +102,7 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
+                edit_stamp_refused: None,
                 duplicate_keys: None,
             },
             DescribedTable {
@@ -118,6 +119,7 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["user_id".into()],
                 time_column: None,
+                edit_stamp_refused: None,
                 duplicate_keys: None,
             },
         ],
@@ -453,6 +455,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         )],
         primary_key: vec!["code".into()],
         time_column: None,
+        edit_stamp_refused: None,
         duplicate_keys: None,
     });
     parent.links.push(vec![
@@ -504,6 +507,8 @@ fn the_schema_is_held_to_the_reference_s_consistency_check() {
     let err = run.next().unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     assert_eq!(err.fields["field"], Detail::text("schema"));
+    assert_eq!(err.fields["table"], Detail::text("orders"));
+    assert_eq!(err.fields["column"], Detail::text("price"));
     // An identifier the schema does not join on, which meant a number
     // before it was joined on: a number again, so the sum resolves and the
     // run goes on to its first read.

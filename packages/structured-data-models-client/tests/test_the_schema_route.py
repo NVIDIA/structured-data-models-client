@@ -18,6 +18,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import textwrap
@@ -511,6 +512,32 @@ SCHEMA_RULES = {
             'INTEGER)) FROM range(9) t(i)',
         ),
     ),
+    # Names a remedy quotes as Python does (Codex's P2 at T1.21d's review):
+    # tables holding a quote, a backslash and a tab, each with a lone edit
+    # stamp taken; and a table something links to whose two edit stamps are
+    # refused, their names holding double quotes and both kinds. A table
+    # named with a double quote is refused by both routes' catalog read.
+    'names a remedy quotes': (
+        {'TIME_COLUMNS_GUESSED'},
+        (
+            *(
+                statement
+                for name in ("odd'name", 'back\\slash', 'tab\there')
+                for statement in (
+                    f'CREATE TABLE "{name}" (id BIGINT, updated_at TIMESTAMP)',
+                    f'INSERT INTO "{name}" SELECT i, TIMESTAMP \'2024-01-01\' '
+                    '+ to_days(CAST(i AS INTEGER)) FROM range(5) t(i)',
+                )
+            ),
+            'CREATE TABLE plans (plan_id BIGINT, "modified ""x""" TIMESTAMP, '
+            '"changed \'a\' ""b""" TIMESTAMP)',
+            "INSERT INTO plans SELECT i, TIMESTAMP '2024-01-01' + "
+            "to_days(CAST(i AS INTEGER)), TIMESTAMP '2024-02-01' + "
+            'to_days(CAST(i AS INTEGER)) FROM range(4) t(i)',
+            'CREATE TABLE subs (sub_id BIGINT, plan_id BIGINT)',
+            'INSERT INTO subs SELECT i, i % 4 FROM range(8) t(i)',
+        ),
+    ),
     'a key by reference': (
         set(),
         (
@@ -549,6 +576,17 @@ def _before_key(schema: Schema) -> dict[tuple[str, str], str]:
     }
 
 
+def _declared(schema: Schema) -> dict[tuple[str, str], bool]:
+    r"""Each column's ``stype_declared``: a time column, or one inference
+    took as it before the links refused it, reads declared on both routes
+    (subagent P3-2, T1.21d's review)."""
+    return {
+        (table, column): c.stype_declared
+        for table, shaped in schema.tables.items()
+        for column, c in shaped.columns.items()
+    }
+
+
 @pytest.mark.parametrize('name', sorted(SCHEMA_RULES))
 def test_the_core_assembles_the_schema_as_the_old_route_does(
     monkeypatch: pytest.MonkeyPatch, name: str
@@ -558,6 +596,29 @@ def test_the_core_assembles_the_schema_as_the_old_route_does(
     # The core's warnings carry their code before the reference's text.
     given = [text.split(']', 1)[0].lstrip('[') for _, text in said]
     assert set(given) == codes, given
+    if name == 'edit stamps':
+        # The lone edit stamp a link refused: no time column, and declared
+        # as the old route's schema reads it.
+        assert schema['plans'].time_column is None
+        assert schema['plans']['modified_at'].stype_declared is True
+    if name == 'names a remedy quotes':
+        # Each remedy the warning suggests is valid Python naming the table
+        # it means, a name holding quotes, a backslash or a tab included.
+        [(_, text)] = said
+        remedies = re.findall(r'time_columns=(\{[^\n]*?\})\.(?:\n|$)', text)
+        assert len(remedies) == 5, text
+        named = {
+            (table, column)
+            for remedy in remedies
+            for table, column in ast.literal_eval(remedy).items()
+        }
+        assert named == {
+            ("odd'name", None),
+            ('back\\slash', None),
+            ('tab\there', None),
+            ('plans', 'modified "x"'),
+            ('plans', 'changed \'a\' "b"'),
+        }, text
     if name == 'a key by reference':
         assert schema['codes'].primary_key == 'tag'
         assert _before_key(schema) == {
@@ -579,3 +640,4 @@ def test_the_core_assembles_the_schema_as_the_old_route_does(
         for cls, text in said
     ] == old_said
     assert _before_key(schema) == _before_key(old_schema)
+    assert _declared(schema) == _declared(old_schema)

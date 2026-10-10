@@ -53,8 +53,10 @@ fn invalid(message: &str, field: &str) -> CoreError {
     .with_field("field", Detail::text(field))
 }
 
-/// Whether a column of `dtype` can identify a row (the language's
-/// `Stype.ID.supports_dtype` over the data types a description holds).
+/// Whether a column of `dtype` can identify a row: the integer, float and
+/// text types, as the language's `Stype.ID.supports_dtype` takes them;
+/// the language also takes binary, which no description holds
+/// (`infer::table` refuses it as `column_type`).
 fn can_identify(dtype: Dtype) -> bool {
     matches!(
         dtype,
@@ -164,6 +166,7 @@ pub fn assemble(
                 .collect(),
             primary_key: table.primary_key.into_iter().collect(),
             time_column: table.time.column,
+            edit_stamp_refused: None,
             duplicate_keys: duplicates.clone(),
         })
         .collect();
@@ -195,6 +198,9 @@ pub fn assemble(
         let settled = choice.for_links(linked.contains(table.name.as_str()));
         if settled != *choice {
             table.time_column.clone_from(&settled.column);
+            if settled.column.is_none() {
+                table.edit_stamp_refused.clone_from(&choice.fallback);
+            }
             *choice = settled;
         }
     }
@@ -396,35 +402,113 @@ pub fn mark_keys(description: &mut SourceDescription) {
 /// relationships), as `INVALID_REQUEST`.
 pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
     for link in &description.links {
-        match joins(&description.tables, link) {
-            Ok(()) => {}
+        let message = match joins(&description.tables, link) {
+            Ok(()) => continue,
             Err(Unjoinable::Missing) => {
-                return Err(invalid(
-                    "a relationship names a table or column the schema does not hold",
-                    "relationships",
-                ));
+                "a relationship names a table or column the schema does not hold"
             }
             Err(Unjoinable::NotTheKey) => {
-                return Err(invalid(
-                    "a relationship does not join to its table's primary key of one column",
-                    "relationships",
-                ));
+                "a relationship does not join to its table's primary key of one column"
             }
-            Err(Unjoinable::Types) => {
-                return Err(invalid(
-                    "a relationship joins two kinds of value that cannot match",
-                    "relationships",
-                ));
-            }
+            Err(Unjoinable::Types) => "a relationship joins two kinds of value that cannot match",
+        };
+        let mut refused = invalid(message, "relationships");
+        // The link by its names, as the warnings name one, when it has
+        // both ends.
+        if let [foreign, referenced] = link.as_slice() {
+            refused = refused
+                .with_field("source_table", Detail::text(&foreign.table))
+                .with_field("source_column", Detail::text(&foreign.column))
+                .with_field("target_table", Detail::text(&referenced.table))
+                .with_field("target_column", Detail::text(&referenced.column));
         }
+        return Err(refused);
     }
     Ok(())
 }
 
-/// A name quoted as the reference's messages quote a plain one, in single
-/// quotes.
-fn quoted(text: &str) -> String {
-    format!("'{text}'")
+/// A name as the reference's messages write it, a Python string literal
+/// (its `repr`), so a remedy the message suggests is valid Python: in
+/// single quotes, or double when the name holds a single quote and no
+/// double one; a backslash and the quote chosen escaped; tab, newline and
+/// carriage return as `\t`, `\n`, `\r`; any other character Python does
+/// not print as itself as `\xhh`, `\uhhhh` or `\Uhhhhhhhh` ([`printed`]).
+pub fn quoted(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if !printed(c) => {
+                let code = u32::from(c);
+                if code < 0x100 {
+                    out.push_str(&format!("\\x{code:02x}"));
+                } else if code < 0x1_0000 {
+                    out.push_str(&format!("\\u{code:04x}"));
+                } else {
+                    out.push_str(&format!("\\U{code:08x}"));
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// Whether Python's `str.isprintable` holds of `c`, which its `repr`
+/// writes as itself: every character but the controls (Cc), the format
+/// characters (Cf), the separators other than the space (Zs, Zl, Zp) and
+/// the private use ones (Co), as Unicode 15 assigns them. A code point no
+/// version assigns (Cn), which Python escapes too, is written as itself
+/// here: telling one apart takes the whole character database.
+fn printed(c: char) -> bool {
+    const NOT_PRINTED: &[(u32, u32)] = &[
+        (0x0000, 0x001f),
+        (0x007f, 0x00a0),
+        (0x00ad, 0x00ad),
+        (0x0600, 0x0605),
+        (0x061c, 0x061c),
+        (0x06dd, 0x06dd),
+        (0x070f, 0x070f),
+        (0x0890, 0x0891),
+        (0x08e2, 0x08e2),
+        (0x1680, 0x1680),
+        (0x180e, 0x180e),
+        (0x2000, 0x200f),
+        (0x2028, 0x202f),
+        (0x205f, 0x2064),
+        (0x2066, 0x206f),
+        (0x3000, 0x3000),
+        (0xe000, 0xf8ff),
+        (0xfeff, 0xfeff),
+        (0xfff9, 0xfffb),
+        (0x110bd, 0x110bd),
+        (0x110cd, 0x110cd),
+        (0x13430, 0x1343f),
+        (0x1bca0, 0x1bca3),
+        (0x1d173, 0x1d17a),
+        (0xe0001, 0xe0001),
+        (0xe0020, 0xe007f),
+        (0xf0000, 0xffffd),
+        (0x100000, 0x10fffd),
+    ];
+    let code = u32::from(c);
+    !NOT_PRINTED
+        .iter()
+        .any(|&(low, high)| (low..=high).contains(&code))
 }
 
 /// Names joined as the reference's `_and_list` joins them: each quoted,

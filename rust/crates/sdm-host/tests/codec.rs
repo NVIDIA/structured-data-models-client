@@ -183,6 +183,7 @@ fn description_of(size: usize) -> Vec<u8> {
             }],
             primary_key: vec![],
             time_column: None,
+            edit_stamp_refused: None,
             duplicate_keys: None,
         }],
         links: vec![vec![ColumnRef {

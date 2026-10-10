@@ -370,6 +370,13 @@ def observe_python_core(
                 schema = Schema.from_source(
                     DuckDBSource(connection), **from_source
                 )
+                # Built from the core's description, the object is that
+                # description: its own key marking changes nothing (T1.21d).
+                if runner.presented(schema):
+                    raise MapFailure(
+                        "the Schema built from the core's description "
+                        'departs from it'
+                    )
                 _edit(schema, given.get('edits', []))
                 if spec['until'] != 'from_source':
                     stage = 'materialize'

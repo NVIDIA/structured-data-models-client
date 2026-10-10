@@ -130,7 +130,7 @@
       "rule": "inference_config",
       "owner": "T1.28",
       "register": "P1B-3",
-      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:242-244",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:243-245",
       "holds": "raise _not_taken(name)",
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28); the contract's materialize and predict inputs have no place for them yet, and T1.24 passes the option through to the core rather than refuse it in the bridge",
       "observed": {"python-core": {"stage": "materialize", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "inference_config"}}
@@ -141,7 +141,7 @@
       "rule": "deeper_hop",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:663",
+      "where": "rust/crates/sdm-core/src/materialize.rs:665",
       "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
       "observed": {
         "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "deeper_hop"},
@@ -154,7 +154,7 @@
       "rule": "text_column",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:677",
+      "where": "rust/crates/sdm-core/src/materialize.rs:679",
       "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
       "observed": {
         "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "text_column"},

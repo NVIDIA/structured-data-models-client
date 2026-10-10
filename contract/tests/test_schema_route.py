@@ -129,3 +129,70 @@ def test_the_core_s_sql_for_the_schema_is_the_reference_s(
         'describe',
         'key_counts',
     ]
+
+
+def _runner() -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location('run_python', RUNNER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['run_python'] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_schema_built_from_the_description_is_the_description() -> None:
+    # Building the Python Schema re-runs its own key marking and link
+    # checks (the live object's edit semantics, E55(b)); over the core's
+    # description they change nothing, which every python-core run checks
+    # (run_python.presented, held for base.regression, S0 and the
+    # AdventureWorks probes). Seeded: a description the object's marking
+    # would override, and links it would rewrite, are both named.
+    import os
+    import warnings
+
+    import duckdb
+    from sdm_client import Schema, _routing
+    from sdm_client._rust import schema as bridge
+    from sdm_connectors import DuckDBSource
+
+    runner = _runner()
+    connection = duckdb.connect()
+    for statement in runner.load_bases()['shop']:
+        connection.execute(statement)
+    previous = os.environ.get(_routing.ENVIRONMENT)
+    os.environ[_routing.ENVIRONMENT] = ','.join(_routing.FROM_SOURCE_DUCKDB)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(DuckDBSource(connection))
+    finally:
+        if previous is None:
+            os.environ.pop(_routing.ENVIRONMENT, None)
+        else:
+            os.environ[_routing.ENVIRONMENT] = previous
+    described = schema._core_description
+    assert described is not None
+    assert runner.presented(schema) == []
+
+    def built(change: Any) -> list[str]:
+        copied = json.loads(json.dumps(described))
+        change(copied)
+        made = bridge.build(Schema, schema.source, copied)
+        made._core_description = copied
+        found: list[str] = runner.presented(made)
+        return found
+
+    def unjoined_identifier(d: dict[str, Any]) -> None:
+        [users] = [t for t in d['tables'] if t['name'] == 'users']
+        [age] = [c for c in users['columns'] if c['name'] == 'age']
+        age.update(stype='ID', stype_before_key='numerical')
+
+    assert built(unjoined_identifier) == ['users.age: its meaning']
+
+    def a_link_twice(d: dict[str, Any]) -> None:
+        d['links'] = d['links'] * 2
+
+    assert built(a_link_twice) == ['the links']
+    assert built(lambda d: None) == []

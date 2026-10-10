@@ -1,0 +1,89 @@
+{
+ "about": "Names and Python's repr of each, written by CPython 3.12's repr: the reference's warnings quote names so, and sdm-schema's assemble::quoted is held to it (tests/assemble.rs, T1.21d fix 1). A name with an unassigned code point is not listed: telling one apart takes the whole character database.",
+ "vectors": [
+  {
+   "name": "orders",
+   "repr": "'orders'"
+  },
+  {
+   "name": "odd'name",
+   "repr": "\"odd'name\""
+  },
+  {
+   "name": "say \"hi\"",
+   "repr": "'say \"hi\"'"
+  },
+  {
+   "name": "both ' and \"",
+   "repr": "'both \\' and \"'"
+  },
+  {
+   "name": "back\\slash",
+   "repr": "'back\\\\slash'"
+  },
+  {
+   "name": "new\nline",
+   "repr": "'new\\nline'"
+  },
+  {
+   "name": "tab\there",
+   "repr": "'tab\\there'"
+  },
+  {
+   "name": "cr\r",
+   "repr": "'cr\\r'"
+  },
+  {
+   "name": "bell\u0007",
+   "repr": "'bell\\x07'"
+  },
+  {
+   "name": "del\u007f",
+   "repr": "'del\\x7f'"
+  },
+  {
+   "name": "c1\u0085",
+   "repr": "'c1\\x85'"
+  },
+  {
+   "name": "nbsp\u00a0",
+   "repr": "'nbsp\\xa0'"
+  },
+  {
+   "name": "shy\u00ad",
+   "repr": "'shy\\xad'"
+  },
+  {
+   "name": "zwsp\u200b",
+   "repr": "'zwsp\\u200b'"
+  },
+  {
+   "name": "ls\u2028",
+   "repr": "'ls\\u2028'"
+  },
+  {
+   "name": "bom\ufeff",
+   "repr": "'bom\\ufeff'"
+  },
+  {
+   "name": "pua\ue000",
+   "repr": "'pua\\ue000'"
+  },
+  {
+   "name": "caf\u00e9",
+   "repr": "'caf\u00e9'"
+  },
+  {
+   "name": "\u65e5\u672c",
+   "repr": "'\u65e5\u672c'"
+  },
+  {
+   "name": "emoji\ud83d\ude00",
+   "repr": "'emoji\ud83d\ude00'"
+  },
+  {
+   "name": "tag\udb40\udc41",
+   "repr": "'tag\\U000e0041'"
+  }
+ ]
+}

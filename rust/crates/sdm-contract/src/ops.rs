@@ -347,6 +347,12 @@ pub struct DescribedTable {
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
+    /// The lone stamp of the last edit inference took as the time column
+    /// and a link to the table then refused, so the table has none: what
+    /// the time-column warning names, and the column the reference's schema
+    /// was ordered by before the links settled it (decision E55). `None`
+    /// otherwise; `materialize` does not read it.
+    pub edit_stamp_refused: Option<String>,
     /// Rows sharing a key value, when keys were checked: a `u64` scalar.
     pub duplicate_keys: Option<Scalar>,
 }

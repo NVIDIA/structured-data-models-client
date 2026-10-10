@@ -1551,6 +1551,60 @@ def _edit(schema: Any, edits: list[dict[str, str]]) -> None:
             del schema[edit['table']][edit['column']]
 
 
+def presented(schema: Any) -> list[str]:
+    r"""Each way a schema the core described departs from the description
+    it was built from (T1.21d): a table's key or time column, a column's
+    meaning or what it meant before the schema joined on it, or the links,
+    as the Python object holds them once built. Building it re-runs the
+    object's own key marking and link checks, which must change nothing of
+    the core's answer; empty for a schema not described on the core."""
+    described = getattr(schema, '_core_description', None)
+    if described is None:
+        return []
+    found = []
+    held = schema.tables
+    if [t['name'] for t in described['tables']] != list(held):
+        return ["the tables are not the description's"]
+    for table in described['tables']:
+        shaped = held[table['name']]
+        key = shaped.primary_key
+        keys = (
+            [] if key is None else [key] if isinstance(key, str) else list(key)
+        )
+        if keys != table['primary_key']:
+            found.append(f'{table["name"]}: the key')
+        if shaped.time_column != table['time_column']:
+            found.append(f'{table["name"]}: the time column')
+        if [c['name'] for c in table['columns']] != list(shaped.columns):
+            found.append(f'{table["name"]}: the columns')
+            continue
+        for column in table['columns']:
+            built = shaped.columns[column['name']]
+            if built.stype != column['stype'] or (
+                built._stype_before_key != column['stype_before_key']
+            ):
+                found.append(f'{table["name"]}.{column["name"]}: its meaning')
+    links = [
+        [
+            {'table': link.source_table, 'column': link.source_column},
+            {'table': link.target_table, 'column': link.target_column},
+        ]
+        for link in schema.relationships
+    ]
+    if links != described['links']:
+        found.append('the links')
+    return found
+
+
+def _require_presented(schema: Any) -> None:
+    found = presented(schema)
+    if found:
+        raise RunnerFailure(
+            "the Schema built from the core's description departs from it: "
+            + '; '.join(found)
+        )
+
+
 def _route_error(error: BaseException) -> bool:
     kind = type(error)
     return kind.__module__ == 'sdm_client._routing' and kind.__name__ == (
@@ -1677,6 +1731,7 @@ def _call(
             schema = Schema.from_source(
                 DuckDBSource(given_to_source), **from_source
             )
+            _require_presented(schema)
             public['schema'] = _schema_projection(schema)
             # The user's edits finish describing the schema, so a refusal
             # of one is the from_source stage's.

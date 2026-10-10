@@ -17,5 +17,9 @@ arrow-array.workspace = true
 arrow-schema.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 
+[dev-dependencies]
+# The tests' vectors, JSON written by CPython.
+serde_json.workspace = true
+
 [lints]
 workspace = true

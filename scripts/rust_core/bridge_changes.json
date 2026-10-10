@@ -3,10 +3,10 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), allowance (an owner-approved ALLOWANCES row), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: build presents the description; no link inference, edit stamps, key marking or warnings of its own"
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: build presents the description, a lone edit stamp a link refused shown as the reference's schema shows it; no link inference, edit stamps, key marking or warnings of its own"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the key marking moved into materialize, which reads each column's stype_before_key the host sends"
+      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the key marking moved into materialize, which reads each column's stype_before_key the host sends, with each table's edit_stamp_refused as described"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the consistency check moved into materialize; no check_consistent call"
