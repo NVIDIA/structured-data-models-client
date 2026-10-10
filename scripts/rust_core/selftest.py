@@ -30,8 +30,11 @@ tables, bound methods, getattr, aliases, a zero-count helper, swallowing,
 early returns, module code, ledgered bodies, a class attribute moved to
 module scope, new dunders, the bridges' package rebinding a method, a
 file leaving the freeze) fails as an undeclared change; a source-encoding
-cookie hiding code and a package shadowing a frozen module are refused; a moved rule's
-drop cannot pay for a refactor's rise, while two moved entries net;
+cookie hiding code (one behind a lone CR included) and a package shadowing
+a frozen module are refused; a moved rule's drop cannot pay for a
+refactor's rise, while two moved entries net; an entry let out but still
+defined, or in a let-out file that cannot be read, pays for no rise and no
+call;
 a declared refactor, a rename declared, a rule moved out declared, a
 widened coverage declared, a frozen file added or removed, and an approved
 allowance pass; a declared refactor raising a count, a stale or spent
@@ -1146,6 +1149,38 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         None,
     )
+    # T1.10e round 5 (subagent P3-1): a cookie behind a lone CR, which
+    # detect_encoding does not see and the interpreter honours; refused
+    # because the file reads otherwise as UTF-8 text.
+    behind_cr = '\r# -*- coding: raw_unicode_escape -*-\r'
+    hidden_rebinding = (
+        '    # tidy\\u000a    materializer._check_entity_count = len\n'
+    )
+
+    def lone_cr(r: Path) -> None:
+        # The hidden code first: edit() reads text, which would turn the
+        # lone CRs into newlines.
+        at_gather(hidden_rebinding)(r)
+        path = r / materialize
+        path.write_bytes(behind_cr.encode() + path.read_bytes())
+
+    case(
+        'a cookie behind a lone CR hiding a rebinding in a comment',
+        lone_cr,
+        'reads otherwise as UTF-8 text',
+    )
+    case(
+        'a cookie behind a lone CR, written into the baseline',
+        lone_cr,
+        '--write refused',
+        rewrite=True,
+    )
+
+    def bom(r: Path) -> None:
+        path = r / materialize
+        path.write_bytes(b'\xef\xbb\xbf' + path.read_bytes())
+
+    case('control: a UTF-8 byte order mark', bom, None)
     case(
         'a package beside a frozen module, shadowing it',
         lambda r: append(r / client / '_rust/materialize/__init__.py', ''),
@@ -1365,6 +1400,61 @@ def freeze_cases(results: list[Result]) -> None:
                         kind: 'the entity cap (T1.28)'
                     },
                 },
+            )
+    # T1.10e round 5 (Codex P3): a rule let out of the freeze but still
+    # defined leaves its calls where they were, so they fund no new call.
+    mark_keys = 'Schema._mark_key_columns'
+    key_tuple = (
+        '    from sdm_client.schema import _as_key_tuple\n'
+        '    indices = _as_key_tuple(indices)\n'
+    )
+    with covering(
+        {
+            schema_py: tuple(
+                n for n in bridge_freeze.COVERED[schema_py] if n != mark_keys
+            )
+        }
+    ):
+        case(
+            'a rule let out of the freeze but still defined pays for a new call',
+            at_gather(key_tuple),
+            'adds a call of sdm_client.schema._as_key_tuple',
+            rewrite=True,
+            declare={
+                gather: {'moved': 'key tuples (T1.21d)'},
+                f'{schema_py}::{mark_keys}': {'moved': 'key tuples (T1.21d)'},
+            },
+        )
+    # T1.10e round 5 (subagent P3-2): a file let out of the freeze that
+    # cannot be read or parsed is not gone: its entries are still defined,
+    # so they fund nothing.
+    adapter = client / 'adapters/relational.py'
+    adapter_moved = {
+        gather: {'moved': 'the preflight (T1.28)'},
+        f'{adapter}::RelationalAdapter._preflight': {
+            'moved': 'the preflight (T1.28)'
+        },
+        f'{adapter}::<module>': {'moved': 'the preflight (T1.28)'},
+    }
+    with covering({adapter: None}):
+        for name, spoil in (
+            (
+                'a latin-1 cookie',
+                lambda r: (r / adapter).write_bytes(
+                    b'# coding: latin-1\n' + (r / adapter).read_bytes()
+                ),
+            ),
+            (
+                'text that does not parse',
+                lambda r: append(r / adapter, 'def (\n'),
+            ),
+        ):
+            case(
+                f'a file let out of the freeze, with {name}, paying for a new rule',
+                lambda r, s=spoil: (s(r), at_gather(big)(r)),
+                'the entries declared moved raise raise by 1 and drop it by 0',
+                rewrite=True,
+                declare=adapter_moved,
             )
     entity_rule = (
         '        if len(indices) > ceiling:\n'

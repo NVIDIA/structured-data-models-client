@@ -518,6 +518,19 @@ def measure_text(text: str | bytes, rel: Path) -> Measured:
     ``<module>``, parsed from its bytes as the interpreter parses them."""
     data = _source_bytes(text, rel)
     tree = ast.parse(data, filename=str(rel))
+    # Whatever spells a cookie (one behind a lone CR, which
+    # ``detect_encoding`` does not see, included): the file must read the
+    # same as UTF-8 text, where any cookie is ignored, as it does as bytes.
+    try:
+        as_text = ast.parse(data.decode('utf-8-sig'), filename=str(rel))
+    except (UnicodeDecodeError, SyntaxError):
+        as_text = None
+    if as_text is None or ast.dump(as_text) != ast.dump(tree):
+        raise Unreadable(
+            f'{rel}: reads otherwise as UTF-8 text than the interpreter reads '
+            'it; a frozen file is UTF-8, so the freeze reads what the '
+            'interpreter runs'
+        )
     module = module_name(rel)
     top_level = frozenset(
         n.name
@@ -954,8 +967,11 @@ def ratchet(
     granted: Mapping[str, Mapping[str, Mapping[str, Any]]],
     code: Mapping[Path, Measured | None],
     measured_at_base: Mapping[Path, Measured | None],
+    opaque: frozenset[Path] = frozenset(),
 ) -> list[str]:
-    """The tripwire and the counts against the merge base."""
+    """The tripwire and the counts against the merge base. ``opaque`` are
+    the files let out of the freeze that cannot be read: every entry of
+    one counts as still defined."""
     problems = []
     remedy = (
         'growth needs an ALLOWANCES entry under an owner-approved decisions '
@@ -1049,15 +1065,19 @@ def ratchet(
     for rel, name, then, now in pairs:
         if declared.get(f'{rel}::{name}', ('',))[0] == 'moved':
             # An entry let out of the freeze whose body the file still
-            # defines moved nothing: its rules are still there.
-            still = now is _NOTHING and _measured(code, rel, name) is not None
+            # defines, or may (the file cannot be read), moved nothing: its
+            # rules and its calls are still there.
+            still = now is _NOTHING and (
+                rel in opaque or _measured(code, rel, name) is not None
+            )
             for kind in KINDS:
                 delta = now[kind] - then[kind]
                 if delta > 0:
                     moved_need[kind] += delta
                 elif not still:
                     moved_pool[kind] -= delta
-            moved_dropped |= set(then['calls']) - set(now['calls'])
+            if not still:
+                moved_dropped |= set(then['calls']) - set(now['calls'])
     # A covered function let out of the freeze, declared, is no new helper
     # to the covered code that still calls it.
     released = {
@@ -1179,13 +1199,16 @@ def check(
     # The files the base froze that are frozen no longer, as they stand,
     # so an entry let out whose body is still there moves nothing.
     code = dict(code)
+    opaque: set[Path] = set()
     for name in then:
         rel = Path(name)
         if rel not in code and (root / rel).is_file():
             try:
                 code[rel] = measure_text((root / rel).read_bytes(), rel)
-            except (SyntaxError, Unreadable):
+            except (OSError, SyntaxError, Unreadable):
+                # Unreadable is not gone: fail closed.
                 code[rel] = None
+                opaque.add(rel)
     problems += ratchet(
         baseline,
         then,
@@ -1195,6 +1218,7 @@ def check(
         granted=granted,
         code=code,
         measured_at_base=measured_at_base,
+        opaque=frozenset(opaque),
     )
     return problems
 
