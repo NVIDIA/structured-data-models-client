@@ -11,9 +11,11 @@
 # `uv run --python 3.12` (T1.10c's l0_scan.py failed on CI's 3.12 and passed
 # on a newer local Python):
 #
-#   on a lane branch, that every commit since the phase head names the
-#   package the worktree records (lane.py check; it refuses a lane with no
-#   recorded package, and does nothing on any other branch); cargo fmt
+#   on a lane branch, that the package the worktree records owns every
+#   commit since the phase head, each subject starting "<ID>:" or
+#   "<ID> <part>:" and naming no other package (lane.py check; it refuses a
+#   lane with no recorded package, and does nothing on any other branch);
+#   cargo fmt
 #   --check; the three clippy runs CI makes; l0_deps.py and l0_scan.py;
 #   contract_lock.py; rust_notices.py --check; the hygiene check; ruff
 #   check and ruff format --check; the self-tests of land.py, lane.py and
@@ -28,21 +30,27 @@
 #
 # --install-hook makes this the pre-push hook of the current worktree only:
 # the hook, in the clone's shared hooks directory, runs the cheap tier for
-# the worktrees listed beside it and does nothing in any other.
+# the worktrees listed beside it and does nothing in any other. lane.py start
+# installs it in each lane worktree. The hook passes git's list of the refs
+# being pushed on (--pushed-refs, read from standard input), so the lane check
+# looks at each lane ref pushed rather than at the branch checked out.
+# land.py and lane.py push with --no-verify: their own checks stand in.
 #
 # Every check runs even after one fails; the summary lists each, and the exit
 # status is non-zero if any failed.
 #
-#   scripts/rust_core/prepush.sh [--full] [--install-hook]
+#   scripts/rust_core/prepush.sh [--full] [--install-hook] [--pushed-refs]
 
 set -uo pipefail
 
 full=0
 install_hook=0
+pushed_refs=0
 for arg in "$@"; do
   case "$arg" in
     --full) full=1 ;;
     --install-hook) install_hook=1 ;;
+    --pushed-refs) pushed_refs=1 ;;
     -h | --help)
       awk 'NR > 5 && /^#/ { sub(/^# ?/, ""); print; next } NR > 5 { exit }' "$0"
       exit 0
@@ -78,7 +86,8 @@ if [ ! -x "\$top/scripts/rust_core/prepush.sh" ]; then
   echo "pre-push: \$top has no scripts/rust_core/prepush.sh; not checking" >&2
   exit 0
 fi
-exec "\$top/scripts/rust_core/prepush.sh"
+# Git gives the refs being pushed on standard input; exec passes it on.
+exec "\$top/scripts/rust_core/prepush.sh" --pushed-refs
 EOF
   chmod +x "$hook"
   touch "$list"
@@ -96,6 +105,13 @@ results=()
 times=()
 failed=0
 logdir=$(mktemp -d "${TMPDIR:-/tmp}/sdm-prepush.XXXXXX")
+
+# The pre-push hook's refs, kept before any check can read standard input.
+lane_check=(scripts/rust_core/lane.py check)
+if [ "$pushed_refs" = 1 ]; then
+  cat >"$logdir/pushed-refs"
+  lane_check+=(--pushed-refs "$logdir/pushed-refs")
+fi
 
 # check NAME DIR COMMAND...: runs COMMAND in DIR, keeping its output for the
 # summary when it fails.
@@ -120,7 +136,7 @@ check() {
   fi
 }
 
-check 'lane: one package (lane.py check)' . "${py[@]}" scripts/rust_core/lane.py check
+check 'lane: one package (lane.py check)' . "${py[@]}" "${lane_check[@]}"
 check 'cargo fmt --check' rust cargo fmt --all --check
 check 'clippy: workspace' rust \
   cargo clippy --workspace --exclude sdm-testkit --all-targets --locked -- -D warnings

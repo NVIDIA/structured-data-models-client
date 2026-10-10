@@ -13,23 +13,31 @@ the builds the lane's previous package saved. A lane carries one package
 at a time: it starts at the phase head, takes that package's commits, and
 returns to the phase head when ``land.py`` lands them.
 
-    lane.py start --lane X --package ID [--worktree PATH] [--wait] [--dry-run]
+    lane.py start --lane X --package ID --worktree PATH [--wait] [--dry-run]
     lane.py status [--lane X]
-    lane.py check
+    lane.py check [--pushed-refs FILE]
+
+A package owns a commit when the commit's subject starts with the
+package's ID followed by a colon or a space and names no other package
+ID: ``T1.11e: the payload``, ``T1.11e fix 1: review findings``,
+``T1.11e tracker: the previous package landed``. Another package is
+cited in the body (``Refs: T1.11d``), which owns nothing.
 
 ``start`` prepares the lane for a new package. ``X`` is lower-case
 letters and digits (``1b``), the package an ID such as ``T1.11e`` or
 ``CI3``. It reads the remote and refuses, changing nothing, when:
 
 - the lane holds commits the phase branch lacks: a package that has not
-  landed. It names the commits and the package they name. Abandoning that
+  landed. It names the commits and the package owning them. Abandoning that
   package is the owner's decision, so it only prints the manual steps
   (keep the tip under an archive branch with a normal push, then move the
   lane with ``--force-with-lease``), and never takes them;
 - a CI run on the lane is queued or in progress (``--wait`` watches it
   instead, then looks again);
 - the local lane branch holds commits the phase branch lacks, the worktree
-  holding it has uncommitted changes, or the worktree path is taken.
+  holding it has uncommitted changes or untracked files that are not
+  ignored (they would carry into the next package), or the worktree path
+  is taken.
 
 Otherwise it creates the remote lane at the phase head, or fast-forwards
 it there, each with a normal push (none when it is there already); makes
@@ -37,7 +45,10 @@ or reuses a local worktree on the lane at the phase head; records the
 package in that worktree's own configuration (``git config --worktree
 sdm.package ID``), first enabling ``extensions.worktreeConfig`` when the
 clone lacks it, which it undoes and refuses if that would change any other
-worktree's configuration; and prints the next steps. ``--dry-run`` makes
+worktree's configuration; refreshes the remote-tracking refs of the phase
+branch and the lane (never a local phase branch), which ``check`` reads;
+registers the worktree with ``prepush.sh``'s pre-push hook
+(``prepush.sh --install-hook``); and prints the next steps. ``--dry-run`` makes
 every check, prints what it would do, and pushes, creates and configures
 nothing (it fetches objects only, updating no ref).
 
@@ -45,10 +56,14 @@ nothing (it fetches objects only, updating no ref).
 (equal, behind, or ahead with its unlanded commits and their package),
 the package its local worktree records, and its latest CI run.
 
-``check`` is what ``prepush.sh`` runs: on a lane branch, every commit since
-the phase head (``origin/rust-core-phase-1`` as last fetched) must name the
-worktree's recorded package in its subject or body, and a lane branch with
-no recorded package is refused. On any other branch it does nothing.
+``check`` is what ``prepush.sh`` runs: on a lane branch, the recorded
+package must own every commit since the phase head
+(``origin/rust-core-phase-1`` as last fetched), and a lane branch with no
+recorded package is refused. On any other branch it does nothing. With
+``--pushed-refs FILE`` (the pre-push hook's standard input, which the
+hook passes on) it checks what is pushed instead: every lane ref pushed,
+from whichever branch or detached HEAD, must be this worktree's lane,
+hold only commits its recorded package owns, and not be a deletion.
 
 It never force-pushes, never deletes a branch or tag, and pushes nothing
 but the lane: ``main``, ``rust-core`` and the phase branch are only read.
@@ -75,21 +90,24 @@ from land import (  # noqa: E402
     WORKFLOW,
     Refusal,
     Tools,
-    commits_not_naming,
+    commits_not_owned,
     lane_of,
+    owner_of,
     recorded_package,
     repo_of,
 )
 
-#: A package ID standing as a word in a commit message.
-PACKAGE_WORD = re.compile(
-    rf'(?<![A-Za-z0-9.])({PACKAGE_ID.pattern})(?![A-Za-z0-9])'
-)
+#: prepush.sh, whose ``--install-hook`` start runs in the lane's worktree.
+PREPUSH = Path(__file__).resolve().parent / 'prepush.sh'
 #: A run in one of these states has not finished.
 ACTIVE = ('queued', 'in_progress', 'waiting', 'requested', 'pending')
 RUN_FIELDS = 'databaseId,headSha,headBranch,status,conclusion,url,createdAt'
-#: How many times ``--wait`` watches runs before giving up.
+#: How many times ``--wait`` watches runs before giving up, and the first
+#: pause after ``gh run watch`` fails, doubled each round up to the cap.
 WAIT_ROUNDS = 10
+WAIT_SECONDS = 30
+WAIT_CAP = 600
+ZERO_SHA = '0' * 40
 
 Out = Callable[[str], None]
 
@@ -151,22 +169,24 @@ def commits(tools: Tools, base: str, head: str) -> list[tuple[str, str]]:
     return found
 
 
+def owners(found: Sequence[tuple[str, str]]) -> Counter[str]:
+    """How many of the commits each package owns, by their subjects."""
+    return Counter(
+        owner_of(body.split('\n', 1)[0]) or '(no package)' for _, body in found
+    )
+
+
 def packages_named(found: Sequence[tuple[str, str]]) -> str:
-    """The packages the commits name, the commonest first, as text."""
-    counts: Counter[str] = Counter()
-    for _, body in found:
-        match = PACKAGE_WORD.search(body)
-        counts[match.group(1) if match else '(none)'] += 1
+    """The packages owning the commits, the commonest first, as text."""
     return ', '.join(
         f'{package} ({n} of {len(found)})'
-        for package, n in counts.most_common()
+        for package, n in owners(found).most_common()
     )
 
 
 def first_package(found: Sequence[tuple[str, str]]) -> str | None:
-    counts = Counter(
-        m.group(1) for _, body in found if (m := PACKAGE_WORD.search(body))
-    )
+    counts = owners(found)
+    counts.pop('(no package)', None)
     return counts.most_common(1)[0][0] if counts else None
 
 
@@ -194,7 +214,11 @@ def push_lane(tools: Tools, remote: str, sha: str, branch: str) -> None:
     lane branch, which the remote refuses unless it is a fast-forward."""
     if lane_of(branch) is None or not re.fullmatch(r'[0-9a-f]{40}', sha):
         raise Refusal(f'refusing to push {sha!r} to {branch!r}: not a lane')
-    tools.git('push', '--quiet', remote, f'{sha}:refs/heads/{branch}')
+    # --no-verify: it pushes the phase head, holding no package's commits,
+    # from wherever lane.py runs, which the pre-push hook would refuse.
+    tools.git(
+        'push', '--quiet', '--no-verify', remote, f'{sha}:refs/heads/{branch}'
+    )
 
 
 # --- worktrees ----------------------------------------------------------------
@@ -345,14 +369,14 @@ def refuse_unlanded(
     phase: str,
     found: Sequence[tuple[str, str]],
 ) -> Refusal:
-    package = first_package(found) or 'unknown'
+    package = first_package(found) or 'unnamed'
     listed = '\n'.join(
         f'  {sha[:12]} {body.splitlines()[0] if body else ""}'
         for sha, body in found
     )
     archive = f'{PHASE_BRANCH}-archive-{lane}-{package}-{tip[:7]}'
     return Refusal(
-        f'{branch} holds {len(found)} commit(s) {PHASE_BRANCH} lacks, naming '
+        f'{branch} holds {len(found)} commit(s) {PHASE_BRANCH} lacks, owned by '
         f'{packages_named(found)}: package {package} has not landed.\n'
         f'{listed}\n'
         f'Land {package} first (land.py), or start the new package on another '
@@ -366,12 +390,9 @@ def refuse_unlanded(
     )
 
 
-def default_path(trees: Sequence[Worktree], lane: str) -> str:
-    main = Path(trees[0].path)
-    return str(main.parent / f'{main.name}-lane-{lane}')
-
-
-def plan_start(args: argparse.Namespace, tools: Tools, out: Out) -> Plan | None:
+def plan_start(
+    args: argparse.Namespace, tools: Tools, out: Out, round_: int = 0
+) -> Plan | None:
     """Every check; the plan, or None when ``--wait`` watched runs and the
     remote must be read again."""
     branch = lane_branch(args.lane)
@@ -403,11 +424,18 @@ def plan_start(args: argparse.Namespace, tools: Tools, out: Out) -> Plan | None:
                 )
             for run in active:
                 out(f'wait {describe_run(run)}')
-                tools.attempt(
+                done = tools.attempt(
                     'gh', 'run', 'watch', str(run.get('databaseId')),
                     '--interval', '30',
                     *(('--repo', tools.repo) if tools.repo else ()),
                 )  # fmt: skip
+                if done.returncode != 0:
+                    # Watching failed (gh, the network); pause, doubling
+                    # each round, rather than spend the rounds at once.
+                    pause = min(args.wait_seconds * 2**round_, WAIT_CAP)
+                    why = (done.stderr or done.stdout).strip()[:200]
+                    out(f'note gh run watch failed ({why}); again in {pause}s')
+                    tools.sleep(pause)
             return None
         if remote_lane != phase and not is_ancestor(tools, remote_lane, phase):
             found = commits(tools, phase, remote_lane)
@@ -429,14 +457,7 @@ def plan_start(args: argparse.Namespace, tools: Tools, out: Out) -> Plan | None:
     holder = next(
         (t for t in trees if t.branch == f'refs/heads/{branch}'), None
     )
-    path = str(
-        Path(
-            args.worktree
-            or (holder.path if holder else default_path(trees, args.lane))
-        )
-        .expanduser()
-        .resolve()
-    )
+    path = str(Path(args.worktree).expanduser().resolve())
     if holder and Path(holder.path).resolve() != Path(path):
         raise Refusal(
             f'{branch} is checked out at {holder.path}; use that worktree '
@@ -452,7 +473,7 @@ def plan_start(args: argparse.Namespace, tools: Tools, out: Out) -> Plan | None:
         found = commits(tools, phase, local)
         raise Refusal(
             f'the local {branch} holds {len(found)} commit(s) {PHASE_BRANCH} '
-            f'lacks, naming {packages_named(found)}:\n'
+            f'lacks, owned by {packages_named(found)}:\n'
             + '\n'.join(
                 f'  {sha[:12]} {body.splitlines()[0] if body else ""}'
                 for sha, body in found
@@ -461,13 +482,17 @@ def plan_start(args: argparse.Namespace, tools: Tools, out: Out) -> Plan | None:
             'branch that holds unlanded work'
         )
     if holder:
+        # Untracked files that are not ignored would carry into the next
+        # package; ignored build and cache files are kept for reuse.
         dirty = tools.git(
-            '-C', holder.path, 'status', '--porcelain', '--untracked-files=no'
-        )
+            '-C', holder.path, 'status', '--porcelain',
+            '--untracked-files=normal',
+        )  # fmt: skip
         if dirty.strip():
             raise Refusal(
-                f'the worktree {holder.path} has uncommitted changes:\n'
-                + dirty.rstrip()
+                f'the worktree {holder.path} has uncommitted changes or '
+                'untracked files, which would carry into the next package; '
+                'commit, remove or ignore them:\n' + dirty.rstrip()
             )
     elif Path(path).exists() and any(Path(path).iterdir()):
         raise Refusal(f'{path} exists and is not a worktree of {branch}')
@@ -546,8 +571,14 @@ def execute(
         out(
             f'ok   {plan.branch} on {remote} is at the phase head ({plan.push})'
         )
-    # The remote-tracking ref, for the local branch's upstream.
-    tools.git('fetch', '--quiet', remote, f'refs/heads/{plan.branch}')
+    # The remote-tracking refs: the lane's, for the local branch's
+    # upstream, and the phase branch's, which `check` measures the lane's
+    # commits from. Only refs/remotes/ is written; no local phase branch.
+    tools.git(
+        'fetch', '--quiet', remote,
+        f'+refs/heads/{PHASE_BRANCH}:refs/remotes/{remote}/{PHASE_BRANCH}',
+        f'+refs/heads/{plan.branch}:refs/remotes/{remote}/{plan.branch}',
+    )  # fmt: skip
     if plan.holder is None:
         if plan.local:
             tools.git('worktree', 'add', '--quiet', plan.path, plan.branch)
@@ -581,6 +612,18 @@ def execute(
             f'{recorded}, not {plan.branch} at {plan.phase[:12]} recording '
             f'{plan.package}'
         )
+    hook = tools.attempt(
+        'bash', '-c', 'cd "$1" && exec bash "$2" --install-hook', 'lane.py',
+        plan.path, str(PREPUSH),
+    )  # fmt: skip
+    if hook.returncode == 0:
+        out(f"ok   prepush.sh's pre-push hook checks pushes from {plan.path}")
+    else:
+        out(
+            'note the pre-push hook was not installed '
+            f'({(hook.stderr or hook.stdout).strip()[:200]}); run prepush.sh '
+            'by hand before each push; land.py checks the lane again'
+        )
     out(
         f'ok   {plan.path} records {plan.package}'
         + (
@@ -594,8 +637,9 @@ def execute(
 def next_steps(plan: Plan, remote: str) -> list[str]:
     lines = [
         f'next: cd {plan.path}',
-        f'  name {plan.package} in every commit (`git commit -s -m '
-        f"'{plan.package}: ...'`); prepush.sh refuses a commit that does not",
+        f'  start every commit subject with {plan.package}: '
+        f"'{plan.package}: ...' or '{plan.package} tracker: ...' "
+        '(prepush.sh and land.py refuse any other)',
         '  scripts/rust_core/prepush.sh before each push, --full before the '
         'last',
         f'  git push {remote} HEAD:{plan.branch}',
@@ -617,13 +661,14 @@ def next_steps(plan: Plan, remote: str) -> list[str]:
 
 def start(args: argparse.Namespace, tools: Tools, out: Out) -> int:
     plan = None
-    for _ in range(WAIT_ROUNDS):
-        plan = plan_start(args, tools, out)
+    for round_ in range(WAIT_ROUNDS):
+        plan = plan_start(args, tools, out, round_)
         if plan is not None:
             break
     if plan is None:
         raise Refusal(
-            f'runs on the lane kept starting for {WAIT_ROUNDS} rounds'
+            f'CI on the lane had not finished after {WAIT_ROUNDS} rounds of '
+            'watching; look at it, then start again'
         )
     steps = describe_plan(plan, args.remote)
     if args.dry_run:
@@ -685,19 +730,33 @@ def status(args: argparse.Namespace, tools: Tools, out: Out) -> int:
 # --- check (prepush.sh) -------------------------------------------------------
 
 
-def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
-    done = tools.attempt('git', 'symbolic-ref', '--quiet', '--short', 'HEAD')
-    branch = done.stdout.strip()
-    if not branch.startswith(LANE_PREFIX):
-        out(
-            f'not a lane branch ({branch or "detached HEAD"}); nothing to check'
-        )
-        return 0
-    if lane_of(branch) is None:
+def check_lane_range(
+    tools: Tools, remote: str, branch: str, head: str, package: str
+) -> int:
+    """Refuses a commit since the phase head that ``package`` does not own;
+    the number of commits checked."""
+    base_ref = f'refs/remotes/{remote}/{PHASE_BRANCH}'
+    base = tools.attempt(
+        'git', 'rev-parse', '--verify', '--quiet', base_ref
+    ).stdout.strip()
+    if not base:
+        raise Refusal(f'no {base_ref}; fetch {remote} first')
+    stray = commits_not_owned(tools, base, head, package)
+    if stray:
         raise Refusal(
-            f'{branch} is under {LANE_PREFIX} but is not a lane name: '
-            'lower-case letters and digits'
+            f'{branch} carries {package}, and these commits since '
+            f'{remote}/{PHASE_BRANCH} ({base[:12]}) are not owned by it (a '
+            f"subject '{package}: ...' or '{package} <part>: ...', naming no "
+            "other package), so they may be another package's; if the phase "
+            'branch has moved, fetch and look again:\n'
+            + '\n'.join(
+                f'  {sha[:12]} {subject} ({why})' for sha, subject, why in stray
+            )
         )
+    return len(commits(tools, base, head))
+
+
+def worktree_package(tools: Tools, branch: str) -> str:
     package = recorded_package(tools)
     if package is None:
         raise Refusal(
@@ -705,24 +764,64 @@ def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
             f'({PACKAGE_KEY} is unset; `git config --worktree {PACKAGE_KEY}`). '
             'Start the lane with scripts/rust_core/lane.py start'
         )
-    package_id(package)
-    base_ref = f'refs/remotes/{args.remote}/{PHASE_BRANCH}'
-    base = tools.attempt(
-        'git', 'rev-parse', '--verify', '--quiet', base_ref
-    ).stdout.strip()
-    if not base:
-        raise Refusal(f'no {base_ref}; fetch {args.remote} first')
-    missing = commits_not_naming(tools, base, 'HEAD', package)
-    if missing:
-        raise Refusal(
-            f'{branch} carries {package}, and these commits since '
-            f'{args.remote}/{PHASE_BRANCH} ({base[:12]}) do not name it, so '
-            "they may be another package's (if the phase branch has moved, "
-            'fetch and look again):\n'
-            + '\n'.join(f'  {sha[:12]} {subject}' for sha, subject in missing)
+    return package_id(package)
+
+
+def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
+    done = tools.attempt('git', 'symbolic-ref', '--quiet', '--short', 'HEAD')
+    current = done.stdout.strip()
+    if args.pushed_refs:
+        return check_pushed(args, tools, out, current)
+    if not current.startswith(LANE_PREFIX):
+        out(
+            f'not a lane branch ({current or "detached HEAD"}); '
+            'nothing to check'
         )
-    count = len(commits(tools, base, 'HEAD'))
-    out(f'ok   {branch} carries {package}: {count} commit(s), each naming it')
+        return 0
+    if lane_of(current) is None:
+        raise Refusal(
+            f'{current} is under {LANE_PREFIX} but is not a lane name: '
+            'lower-case letters and digits'
+        )
+    package = worktree_package(tools, current)
+    count = check_lane_range(tools, args.remote, current, 'HEAD', package)
+    out(f'ok   {current} carries {package}: {count} commit(s), each its own')
+    return 0
+
+
+def check_pushed(
+    args: argparse.Namespace, tools: Tools, out: Out, current: str
+) -> int:
+    """The pre-push hook's refs: ``<local ref> <local sha> <remote ref>
+    <remote sha>`` a line. Each lane ref pushed is checked, whatever is
+    checked out."""
+    pushed = 0
+    for line in Path(args.pushed_refs).read_text().splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
+        _, sha, remote_ref, _ = fields
+        branch = remote_ref.removeprefix('refs/heads/')
+        if not remote_ref.startswith('refs/heads/' + LANE_PREFIX):
+            continue
+        if lane_of(branch) is None:
+            raise Refusal(f'the push names {branch}, which is not a lane')
+        if sha == ZERO_SHA:
+            raise Refusal(
+                f'the push deletes {branch}; a lane is never deleted (E43)'
+            )
+        if current != branch:
+            raise Refusal(
+                f'the push sends {sha[:12]} to {branch} from '
+                f'{current or "a detached HEAD"}; push a lane only from its '
+                'own worktree, on its own branch'
+            )
+        package = worktree_package(tools, branch)
+        count = check_lane_range(tools, args.remote, branch, sha, package)
+        out(f'ok   {branch} carries {package}: {count} commit(s), each its own')
+        pushed += 1
+    if not pushed:
+        out('no lane branch in this push; nothing to check')
     return 0
 
 
@@ -739,12 +838,24 @@ def parser() -> argparse.ArgumentParser:
     begin = sub.add_parser('start', help='prepare a lane for a new package')
     begin.add_argument('--lane', required=True)
     begin.add_argument('--package', required=True)
-    begin.add_argument('--worktree')
+    begin.add_argument(
+        '--worktree', required=True, help="the lane's worktree directory"
+    )
     begin.add_argument('--wait', action='store_true')
+    begin.add_argument(
+        '--wait-seconds', type=float, default=WAIT_SECONDS,
+        help=argparse.SUPPRESS,
+    )  # fmt: skip
     begin.add_argument('--dry-run', action='store_true')
     show = sub.add_parser('status', help='show the lanes')
     show.add_argument('--lane')
-    sub.add_parser('check', help="prepush.sh's check of a lane's commits")
+    inspect = sub.add_parser(
+        'check', help="prepush.sh's check of a lane's commits"
+    )
+    inspect.add_argument(
+        '--pushed-refs', metavar='FILE',
+        help="the pre-push hook's standard input: check the refs pushed",
+    )  # fmt: skip
     return top
 
 

@@ -74,6 +74,9 @@ elif args[:2] == ['run', 'list'] and '--commit' in args:
             for i, branch in enumerate(state['green_on'])
         ]
     out = json.dumps(found)
+elif args[:2] == ['run', 'watch'] and state.get('watch_fails'):
+    code = 1
+    sys.stderr.write('fake gh: network down\n')
 elif args[:2] in (['run', 'watch'], ['run', 'view']):
     found = [r for r in runs if str(r['databaseId']) == args[2]]
     if not found:
@@ -254,6 +257,11 @@ class World:
             'config': self.git('config', '--list', '--local'),
             'remote': json.dumps(self.refs()),
             'lane worktree': str(self.worktree.exists()),
+            'hooks': ' '.join(
+                sorted(
+                    p.name for p in (self.clone / '.git' / 'hooks').iterdir()
+                )
+            ),
         }
 
     def package(self, where: Path) -> str | None:
@@ -329,10 +337,14 @@ def refused_untouched(
 @case('start: creates the lane at the phase head, its worktree and package')
 def _(w: World) -> tuple[bool, str]:
     before, other = w.refs(), w.other_config()
-    default = w.tmp / 'clone-lane-1b'
-    ran = w.lane('start', '--lane', '1b', '--package', 'T1.11e')
+    default = w.worktree
+    ran = w.start()
+    hooks = w.clone / '.git' / 'hooks'
+    listed = (hooks / 'prepush-worktrees').read_text().splitlines()
     ok = (
-        ran.code == 0
+        str(default) in listed
+        and 'prepush.sh --install-hook' in (hooks / 'pre-push').read_text()
+        and ran.code == 0
         and w.tip(BRANCH) == w.phase
         and protected(w, before)
         and w.git('rev-parse', 'HEAD', cwd=default).strip() == w.phase
@@ -482,24 +494,118 @@ def _(w: World) -> tuple[bool, str]:
     return verdict(ok, 'refused', ran)
 
 
+@case('refused: untracked files would carry into the next package')
+def _(w: World) -> tuple[bool, str]:
+    w.start()
+    (w.worktree / 'pending.py').write_text('x = 1\n')
+    w.advance_phase()
+    before = w.refs()
+    ran = w.start('T1.11f')
+    ok = (
+        ran.code == 2
+        and 'pending.py' in ran.text
+        and w.refs() == before
+        and w.package(w.worktree) == 'T1.11e'
+    )
+    return verdict(ok, 'refused, the package unchanged', ran)
+
+
+@case('start: ignored build files stay, and do not block the next package')
+def _(w: World) -> tuple[bool, str]:
+    w.start()
+    exclude = w.clone / '.git' / 'info' / 'exclude'
+    exclude.parent.mkdir(exist_ok=True)
+    exclude.write_text('target/\n')
+    (w.worktree / 'target').mkdir()
+    (w.worktree / 'target' / 'build.o').write_text('o')
+    w.advance_phase()
+    ran = w.start('T1.11f')
+    ok = (
+        ran.code == 0
+        and (w.worktree / 'target' / 'build.o').exists()
+        and w.package(w.worktree) == 'T1.11f'
+    )
+    return verdict(ok, 'started, the build kept', ran)
+
+
+@case('start: a foreign pre-push hook is left alone, and the push goes')
+def _(w: World) -> tuple[bool, str]:
+    hook = w.clone / '.git' / 'hooks' / 'pre-push'
+    hook.parent.mkdir(exist_ok=True)
+    hook.write_text('#!/bin/sh\nexit 1\n')
+    hook.chmod(0o755)
+    ran = w.start()
+    ok = (
+        ran.code == 0
+        and w.tip(BRANCH) == w.phase
+        and hook.read_text() == '#!/bin/sh\nexit 1\n'
+        and 'pre-push hook was not installed' in ran.text
+    )
+    return verdict(ok, 'pushed; the hook untouched, the gap reported', ran)
+
+
+@case('refused: start without --worktree')
+def _(w: World) -> tuple[bool, str]:
+    before = w.refs()
+    ran = w.lane('start', '--lane', '1b', '--package', 'T1.11e')
+    ok = (
+        ran.code == 2
+        and '--worktree' in ran.text
+        and w.refs() == before
+        and not w.gh_calls()
+    )
+    return verdict(ok, 'refused', ran)
+
+
+@case('start --wait: a failing gh watch backs off, then gives up')
+def _(w: World) -> tuple[bool, str]:
+    w.put_lane(w.base)
+    w.set_runs(ci_run(77, w.base, 'in_progress'))
+    state = w.gh_state()
+    state['watch_fails'] = True
+    w.gh_state(state)
+    before = w.refs()
+    ran = w.start('T1.11e', '--wait', '--wait-seconds', '0.001')
+    watches = [c for c in w.gh_calls() if c[:2] == ['run', 'watch']]
+    ok = (
+        ran.code == 2
+        and len(watches) == 10
+        and ran.text.count('gh run watch failed (fake gh: network down)') == 10
+        and 'again in 0.001s' in ran.text
+        and 'again in 0.002s' in ran.text
+        and 'again in 0.512s' in ran.text
+        and 'after 10 rounds' in ran.text
+        and w.refs() == before
+    )
+    return verdict(ok, 'ten paced rounds, then refused', ran)
+
+
 # --- dry run ------------------------------------------------------------------
 
 
-for setup in ('create', 'fast-forward', 'enable worktreeConfig'):
+for setup in ('create', 'fast-forward', 'an existing worktree'):
 
     @case(f'dry run: {setup}, with no side effect')
     def _(w: World, setup: str = setup) -> tuple[bool, str]:
         if setup == 'fast-forward':
             w.put_lane(w.base)
+        package = 'T1.11e'
+        if setup == 'an existing worktree':
+            # The worktree, the extension and the hook are there already;
+            # the phase moves on, so the next package would fast-forward.
+            w.start()
+            w.advance_phase()
+            package = 'T1.11f'
         before = w.local_state()
-        ran = w.start('T1.11e', '--dry-run')
+        ran = w.start(package, '--dry-run')
         after = w.local_state()
         changed = [k for k in before if before[k] != after[k]]
         ok = (
             ran.code == 0
             and not changed
             and 'nothing pushed, no worktree made' in ran.text
-            and 'record T1.11e' in ran.text
+            and f'record {package}' in ran.text
+            and (setup != 'an existing worktree' or 'fast-forward' in ran.text)
         )
         return verdict(
             ok, 'checked, nothing changed', f'changed {changed}; {ran.text}'
@@ -517,7 +623,10 @@ for lane in BAD_LANES:
     @case(f'refused: the lane name {lane!r}')
     def _(w: World, lane: str = lane) -> tuple[bool, str]:
         before = w.refs()
-        ran = w.lane('start', '--lane', lane, '--package', 'T1.11e')
+        ran = w.lane(
+            'start', '--lane', lane, '--package', 'T1.11e',
+            '--worktree', str(w.worktree),
+        )  # fmt: skip
         ok = (
             refused_untouched(w, ran, 'not a lane name', before)
             and not w.gh_calls()
@@ -541,11 +650,15 @@ for package in BAD_PACKAGES:
 # --- prepush.sh's check -------------------------------------------------------
 
 
-@case('check: passes when every lane commit names the package')
+@case('check: passes when the package owns every lane commit')
 def _(w: World) -> tuple[bool, str]:
     w.start()
     w.commit(w.worktree, 'T1.11e: the work')
-    w.commit(w.worktree, 'Tidy the docs\n\nPart of T1.11e.')
+    w.commit(
+        w.worktree,
+        'T1.11e tracker: the previous package landed\n\n'
+        'T1.11d landed at abc1234.\n\nRefs: T1.11d',
+    )
     ran = w.lane('check', cwd=w.worktree)
     ok = ran.code == 0 and 'carries T1.11e: 2 commit(s)' in ran.text
     return verdict(ok, 'passed', ran)
@@ -571,7 +684,7 @@ def _(w: World) -> tuple[bool, str]:
     w.commit(w.worktree, 'T1.11ee and T1.11e1 and xT1.11e')
     ran = w.lane('check', cwd=w.worktree)
     return verdict(
-        ran.code == 2 and 'do not name it' in ran.text, 'refused', ran
+        ran.code == 2 and 'not owned by it' in ran.text, 'refused', ran
     )
 
 
@@ -597,6 +710,103 @@ def _(w: World) -> tuple[bool, str]:
     w.commit(w.clone, 'no package named')
     ran = w.lane('check')
     ok = ran.code == 0 and 'not a lane branch (main)' in ran.text
+    return verdict(ok, 'nothing to check', ran)
+
+
+#: The two ways a commit could pass as the recorded package's while being
+#: another's (CI2 review round 1): a subject naming another package that
+#: mentions this one, and a subject naming none with this one in a trailer.
+REPROS = (
+    ('T1.11f: the next package, which builds on T1.11e', "T1.11f's"),
+    ('Unrelated change\n\nRefs: T1.11e', 'does not start with T1.11e'),
+)
+
+for message, why in REPROS:
+
+    @case(f'check: refuses {message.splitlines()[0]!r}')
+    def _(w: World, message: str = message, why: str = why) -> tuple[bool, str]:
+        w.start()
+        w.commit(w.worktree, 'T1.11e: the work')
+        stray = w.commit(w.worktree, message)
+        ran = w.lane('check', cwd=w.worktree)
+        ok = ran.code == 2 and stray[:12] in ran.text and why in ran.text
+        return verdict(ok, 'refused, naming the commit', ran)
+
+
+@case('check: a fresh phase head after start (another lane landed)')
+def _(w: World) -> tuple[bool, str]:
+    # The clone has not fetched since the phase moved; start must leave its
+    # tracking ref at the head it started from, or check counts the other
+    # lane's landed commit as this lane's.
+    moved = w.advance_phase('Land T1.11x: another lane')
+    started = w.start()
+    w.commit(w.worktree, 'T1.11e: the work')
+    ran = w.lane('check', cwd=w.worktree)
+    tracking = w.git('rev-parse', f'refs/remotes/origin/{PHASE}').strip()
+    local_phase = w.git_ok('rev-parse', '--verify', f'refs/heads/{PHASE}')
+    ok = (
+        started.code == 0
+        and ran.code == 0
+        and tracking == moved
+        and local_phase.code != 0
+        and 'carries T1.11e: 1 commit(s)' in ran.text
+    )
+    return verdict(ok, 'the tracking ref refreshed; check passes', ran)
+
+
+def pushed(w: World, *lines: str, cwd: Path | None = None) -> Ran:
+    refs = w.tmp / 'pushed-refs'
+    refs.write_text(''.join(line + '\n' for line in lines))
+    return w.lane('check', '--pushed-refs', str(refs), cwd=cwd)
+
+
+@case('check --pushed-refs: a lane push of owned commits passes')
+def _(w: World) -> tuple[bool, str]:
+    w.start()
+    sha = w.commit(w.worktree, 'T1.11e: the work')
+    ran = pushed(
+        w,
+        f'refs/heads/{BRANCH} {sha} refs/heads/{BRANCH} {w.phase}',
+        f'refs/heads/x {sha} refs/heads/other {"0" * 40}',
+        cwd=w.worktree,
+    )
+    ok = ran.code == 0 and 'carries T1.11e: 1 commit(s)' in ran.text
+    return verdict(ok, 'passed', ran)
+
+
+@case('check --pushed-refs: a stray commit pushed to the lane is refused')
+def _(w: World) -> tuple[bool, str]:
+    w.start()
+    stray = w.commit(w.worktree, REPROS[0][0])
+    ran = pushed(
+        w, f'HEAD {stray} refs/heads/{BRANCH} {w.phase}', cwd=w.worktree
+    )
+    return verdict(ran.code == 2 and stray[:12] in ran.text, 'refused', ran)
+
+
+@case('check --pushed-refs: a lane pushed from another branch is refused')
+def _(w: World) -> tuple[bool, str]:
+    w.start()
+    sha = w.commit(w.clone, 'T1.11e: from the wrong worktree')
+    ran = pushed(w, f'refs/heads/main {sha} refs/heads/{BRANCH} {w.phase}')
+    ok = ran.code == 2 and 'from main' in ran.text
+    return verdict(ok, 'refused', ran)
+
+
+@case('check --pushed-refs: deleting a lane is refused')
+def _(w: World) -> tuple[bool, str]:
+    w.start()
+    ran = pushed(
+        w, f'(delete) {"0" * 40} refs/heads/{BRANCH} {w.phase}', cwd=w.worktree
+    )
+    return verdict(ran.code == 2 and 'deletes' in ran.text, 'refused', ran)
+
+
+@case('check --pushed-refs: a push naming no lane is not checked')
+def _(w: World) -> tuple[bool, str]:
+    sha = w.commit(w.clone, 'no package named')
+    ran = pushed(w, f'refs/heads/main {sha} refs/heads/main {w.base}')
+    ok = ran.code == 0 and 'no lane branch in this push' in ran.text
     return verdict(ok, 'nothing to check', ran)
 
 
@@ -669,6 +879,29 @@ def _(w: World) -> tuple[bool, str]:
         'landed; the next package starts with no push',
         f'{ran.text}\n{nxt.text}',
     )
+
+
+for message, why in REPROS:
+
+    @case(f'land.py: refuses {message.splitlines()[0]!r} under T1.11e')
+    def _(w: World, message: str = message, why: str = why) -> tuple[bool, str]:
+        sha = candidate(w, message)
+        before = w.refs()
+        ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
+        ok = ran.code == 2 and why in ran.text and w.refs() == before
+        return verdict(ok, 'refused, nothing landed', ran)
+
+
+@case('land.py: lands past a pre-push hook that would refuse it')
+def _(w: World) -> tuple[bool, str]:
+    sha = candidate(w)
+    hook = w.clone / '.git' / 'hooks' / 'pre-push'
+    hook.write_text('#!/bin/sh\necho hook refused >&2\nexit 1\n')
+    hook.chmod(0o755)
+    ran = w.land(*land_args(w, sha, 'Land T1.11e: the work'))
+    landing = w.git('rev-parse', 'HEAD', cwd=w.worktree).strip()
+    ok = ran.code == 0 and w.tip(PHASE) == landing
+    return verdict(ok, "landed; land.py's checks stand in", ran)
 
 
 # --- status -------------------------------------------------------------------

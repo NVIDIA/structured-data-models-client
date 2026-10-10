@@ -331,6 +331,7 @@ def _(tmp: Path) -> tuple[bool, str]:
         == [
             (
                 '--quiet',
+                '--no-verify',
                 '--atomic',
                 'origin',
                 f'{LAND}:refs/heads/{TOPIC}',
@@ -603,6 +604,7 @@ for topic in (
     f'{PHASE}-lane-A',
     f'{PHASE}-lane-1.b',
     f'{PHASE}-lane-a_b',
+    f'{PHASE}-archive-1b-T1.11e-abc1234',
 ):
 
     @case(f'refused: --topic-branch {topic}')
@@ -737,8 +739,8 @@ def _(tmp: Path) -> tuple[bool, str]:
         c.code == 0
         and pushes
         == [
-            ('--quiet', 'origin', f'{LAND}:refs/heads/{TOPIC}'),
-            ('--quiet', 'origin', f'{LAND}:refs/heads/{PHASE}'),
+            ('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{TOPIC}'),
+            ('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{PHASE}'),
         ]
         and 'fast-forwarded' in c.text
     )
@@ -761,7 +763,8 @@ def _(tmp: Path) -> tuple[bool, str]:
     c = Case(tmp, fake).land('--wait-for-landing-run')
     ok = (
         c.code == 2
-        and fake.pushes == [('--quiet', 'origin', f'{LAND}:refs/heads/{TOPIC}')]
+        and fake.pushes
+        == [('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{TOPIC}')]
         and fake.remote_phase == BASE
         and 'was not moved' in c.text
     )
@@ -915,7 +918,34 @@ def _(tmp: Path) -> tuple[bool, str]:
 def _(tmp: Path) -> tuple[bool, str]:
     fake = Fake()
     fake.commits[CAND]['message'] = 'T1.99a and T1.990 and xT1.99\n'
-    return refused(Case(tmp, fake).land(), 'do not name T1.99')
+    return refused(Case(tmp, fake).land(), 'not owned by T1.99')
+
+
+for message, why in (
+    ('T1.98: the next package, which builds on T1.99\n', "T1.98's"),
+    ('Unrelated change\n\nRefs: T1.99\n', 'does not start with T1.99'),
+    ('T1.98: next package\n\nDepends-on: T1.99\n', "T1.98's"),
+    ('T1.99: port the helper T1.98 added\n', 'also names T1.98'),
+):
+
+    @case(f'refused: a lane commit {message.splitlines()[0]!r}')
+    def _(
+        tmp: Path, message: str = message, why: str = why
+    ) -> tuple[bool, str]:
+        fake = Fake()
+        fake.commits[CAND]['message'] = message
+        return refused(Case(tmp, fake).land(), why)
+
+
+@case('lands: a lane commit citing another package in its body only')
+def _(tmp: Path) -> tuple[bool, str]:
+    fake = Fake()
+    fake.commits[CAND]['message'] = (
+        'T1.99 tracker: the previous package landed\n\n'
+        'T1.98 landed at abc1234.\n\nRefs: T1.98\n'
+    )
+    c = Case(tmp, fake).land()
+    return c.code == 0, 'landed' if c.code == 0 else c.text
 
 
 @case('lands: a task branch is not held to a recorded package')
@@ -948,23 +978,28 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'confirmed' if ok else c.text
 
 
-def names(text: str, package: str) -> bool:
-    return land.names_package(text, package)
-
-
-@case('names_package: a word of its own, case and suffix exact')
+@case('ownership_problem: only the subject owns, and names no other ID')
 def _(tmp: Path) -> tuple[bool, str]:
     checks = {
-        ('T1.11e: the work', 'T1.11e'): True,
-        ('Fix (T1.11e).', 'T1.11e'): True,
-        ('body\n\nPart of CI3.', 'CI3'): True,
-        ('T1.11e', 'T1.11'): False,
-        ('CI30', 'CI3'): False,
-        ('t1.11e', 'T1.11e'): False,
-        ('xT1.11e', 'T1.11e'): False,
-        ('1.T1.11e', 'T1.11e'): False,
+        'T1.11e: the work': True,
+        'T1.11e tracker: the previous package landed': True,
+        'T1.11e fix 2: review findings': True,
+        'T1.11e:no space': True,
+        'T1.11f: the next package, which builds on T1.11e': False,
+        'T1.11e: port the helper T1.11d added': False,
+        'Unrelated change': False,
+        'Fix (T1.11e).': False,
+        'Land T1.11e: the work': False,
+        'T1.11: a shorter ID': False,
+        'T1.11ee: a longer ID': False,
+        't1.11e: lower case': False,
+        'T1.11e-ish: no separator': False,
     }
-    wrong = {k: v for k, v in checks.items() if names(*k) != v}
+    wrong = {
+        subject: expect
+        for subject, expect in checks.items()
+        if (land.ownership_problem(subject, 'T1.11e') is None) != expect
+    }
     return not wrong, 'as expected' if not wrong else f'wrong: {wrong}'
 
 

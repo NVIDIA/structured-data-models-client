@@ -24,12 +24,16 @@ Before it changes anything it refuses, naming the reason, unless:
   package branch under it (``rust-core-phase-1-<name>``, a lane
   ``rust-core-phase-1-lane-<x>`` included), never ``main``, ``rust-core``
   or anything else; a name under ``rust-core-phase-1-lane-`` must be a
-  lane, ``<x>`` lower-case letters and digits;
+  lane, ``<x>`` lower-case letters and digits, and an archive branch
+  (``rust-core-phase-1-archive-...``) is refused;
 - on a lane, the package ``--title`` names (``Land <ID>: ...``) is the one
   ``lane.py start`` recorded for this worktree (``git config --worktree
-  sdm.package``), and every commit the candidate adds to the phase head
-  names that package in its subject or body, so a second package's commits
-  never land under the first's title;
+  sdm.package``), and every commit the candidate adds to the phase head is
+  owned by that package: its subject starts with the ID followed by a colon
+  or a space (``T1.11e: ...``, ``T1.11e tracker: ...``) and names no other
+  package ID. A mention in the body or a trailer (``Refs: T1.11e``) is not
+  ownership, so a commit whose subject is another package's, or names no
+  package, never lands under this title;
 - the worktree is clean, HEAD is the candidate, and the candidate descends
   from the phase branch's head on the remote without being it;
 - the checkpoint is a commit the candidate descends from;
@@ -95,8 +99,20 @@ TOPIC_BRANCH = re.compile(
 #: A lane branch is this prefix and a lane name (decision E43, CI2).
 LANE_PREFIX = PHASE_BRANCH + '-lane-'
 LANE_NAME = re.compile(r'[a-z0-9]{1,16}')
+#: Where the tip of an abandoned lane package is kept, by hand, on the
+#: owner's decision; never a topic branch (CI2).
+ARCHIVE_PREFIX = PHASE_BRANCH + '-archive-'
 #: A package: a task (``T1.11e``) or a process package (``CI3``).
 PACKAGE_ID = re.compile(r'T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+')
+#: A package ID standing as a word of its own: ``T1.11`` is not a word in
+#: ``T1.11e``, nor ``CI3`` in ``CI30``.
+PACKAGE_WORD = re.compile(
+    rf'(?<![A-Za-z0-9.])({PACKAGE_ID.pattern})(?![A-Za-z0-9])'
+)
+#: The package that owns a commit: its subject starts with the ID, then a
+#: colon or a space (``T1.11e: ...``, ``T1.11e fix 1: ...``,
+#: ``T1.11e tracker: ...``).
+SUBJECT_OWNER = re.compile(rf'({PACKAGE_ID.pattern})(?=[: ])')
 #: Where ``lane.py start`` records a lane worktree's package.
 PACKAGE_KEY = 'sdm.package'
 WORKFLOW = 'ci.yml'
@@ -234,6 +250,11 @@ def check_branches(phase: str, topic: str) -> None:
             f'the topic branch {topic!r} is not a package branch '
             f'({PHASE_BRANCH}-<name> or {PHASE_BRANCH}-lane-<x>)'
         )
+    if topic.startswith(ARCHIVE_PREFIX):
+        raise Refusal(
+            f'the topic branch {topic!r} is an archive branch, which keeps an '
+            'abandoned package and never lands'
+        )
     if topic.startswith(LANE_PREFIX) and lane_of(topic) is None:
         raise Refusal(
             f'the topic branch {topic!r} is under {LANE_PREFIX} but is not a '
@@ -250,15 +271,31 @@ def lane_of(branch: str) -> str | None:
     return name if LANE_NAME.fullmatch(name) else None
 
 
-def names_package(text: str, package: str) -> bool:
-    """Whether ``text`` names ``package`` as a word of its own: ``T1.11``
-    is not named by ``T1.11e``, nor ``CI3`` by ``CI30``."""
-    return (
-        re.search(
-            rf'(?<![A-Za-z0-9.]){re.escape(package)}(?![A-Za-z0-9])', text
+def owner_of(subject: str) -> str | None:
+    """The package a commit's subject names as its owner, if any."""
+    match = SUBJECT_OWNER.match(subject)
+    return match.group(1) if match else None
+
+
+def ownership_problem(subject: str, package: str) -> str | None:
+    """None when ``package`` owns a commit with this subject; else why
+    not. Only the subject counts: the body and trailers may cite other
+    packages, and a mention there owns nothing."""
+    owner = owner_of(subject)
+    if owner is None:
+        return (
+            f'the subject does not start with {package} '
+            f"('{package}: ...' or '{package} <part>: ...')"
         )
-        is not None
-    )
+    if owner != package:
+        return f"the subject is {owner}'s"
+    others = sorted({m for m in PACKAGE_WORD.findall(subject) if m != package})
+    if others:
+        return (
+            f'the subject also names {", ".join(others)}; cite another '
+            'package in the body'
+        )
+    return None
 
 
 def recorded_package(tools: Tools, path: str | None = None) -> str | None:
@@ -279,18 +316,20 @@ def recorded_package(tools: Tools, path: str | None = None) -> str | None:
     return value if done.returncode == 0 and value else None
 
 
-def commits_not_naming(
+def commits_not_owned(
     tools: Tools, base: str, head: str, package: str, *where: str
-) -> list[tuple[str, str]]:
-    """The commits in ``base..head`` whose message does not name
-    ``package``, each as (SHA, subject)."""
-    out = tools.git(*where, 'log', '--format=%H%x00%B%x1e', f'{base}..{head}')
-    missing: list[tuple[str, str]] = []
+) -> list[tuple[str, str, str]]:
+    """The commits in ``base..head`` that ``package`` does not own, each as
+    (SHA, subject, why)."""
+    out = tools.git(*where, 'log', '--format=%H%x00%s%x1e', f'{base}..{head}')
+    found: list[tuple[str, str, str]] = []
     for entry in out.split('\x1e'):
-        sha, sep, body = entry.strip('\n').partition('\x00')
-        if sep and not names_package(body, package):
-            missing.append((sha, body.split('\n', 1)[0]))
-    return missing
+        sha, sep, text = entry.strip('\n').partition('\x00')
+        subject = text.split('\n', 1)[0]
+        why = ownership_problem(subject, package) if sep else None
+        if why:
+            found.append((sha, subject, why))
+    return found
 
 
 def check_lane_package(tools: Tools, topic: str, package: str) -> None:
@@ -318,12 +357,15 @@ def check_lane_package(tools: Tools, topic: str, package: str) -> None:
 def check_lane_commits(
     tools: Tools, base: str, candidate: str, package: str
 ) -> None:
-    missing = commits_not_naming(tools, base, candidate, package)
-    if missing:
+    stray = commits_not_owned(tools, base, candidate, package)
+    if stray:
         raise Refusal(
-            f'commits on the lane do not name {package}, so they may be '
-            "another package's:\n- "
-            + '\n- '.join(f'{sha[:12]} {subject}' for sha, subject in missing)
+            f'commits on the lane are not owned by {package} (a subject '
+            f"'{package}: ...' or '{package} <part>: ...', naming no other "
+            "package), so they may be another package's:\n- "
+            + '\n- '.join(
+                f'{sha[:12]} {subject} ({why})' for sha, subject, why in stray
+            )
         )
 
 
@@ -698,7 +740,7 @@ def land(
                 f'the landing run is not green ({describe(final)}); '
                 f'{args.phase_branch} was not moved'
             )
-        tools.git('push', '--quiet', args.remote, phase_ref)
+        tools.git('push', '--quiet', '--no-verify', args.remote, phase_ref)
         out(
             f'ok   {describe(final)}; {args.phase_branch} fast-forwarded to {sha}'
         )
@@ -738,8 +780,11 @@ def land(
 
 
 def push(tools: Tools, undo: str, *args: str) -> None:
+    # --no-verify: the pre-push hook (prepush.sh) would refuse the landing
+    # commit, whose subject is 'Land <ID>: ...', and land.py has made every
+    # check it stands for and more.
     try:
-        tools.git('push', '--quiet', *args)
+        tools.git('push', '--quiet', '--no-verify', *args)
     except Refusal as why:
         raise Refusal(f'{why}\n{undo}') from None
 
