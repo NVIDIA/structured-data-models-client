@@ -174,7 +174,18 @@ class RelationalMaterializer:
         num_context_samples: int | None,
         options: dict[str, Any],
     ) -> tuple[dict[str, Any], ...]:
-        r"""Sample and encode using the engine's own materializer."""
+        r"""Sample and encode using the engine's own materializer, or, over
+        a DuckDB source on the core route (T1.11c), the core's."""
+        source = self.schema.source
+        if getattr(source, 'backend', None) == 'duckdb':
+            from sdm_client import _routing
+
+            if _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core':
+                from sdm_client._rust import materialize as on_the_core
+
+                return on_the_core.gather(
+                    self, query, indices, num_context_samples, options
+                )
         run_mode = self._run_mode_for(num_context_samples)
         self._check_entity_count(indices)
         self._check_shape(options, RELATIONAL_LIMITS)

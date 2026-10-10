@@ -115,9 +115,15 @@ ERRORS: dict[str, tuple[type[StructuredDataError], str]] = {
 }
 
 #: Warning codes the core gives, with the class each is shown as; any other
-#: code is shown as :class:`~sdm_client.core.warnings.SDMWarning`. The core
-#: promises no warning yet (D4's comes with T1.6b).
-WARNINGS: dict[str, type[SDMWarning]] = {}
+#: code is shown as :class:`~sdm_client.core.warnings.SDMWarning`. From
+#: T1.11c ``materialize`` gives the reference's sampler warnings, which the
+#: reference shows as ``UserWarning``: indices missing for its reads, a
+#: context reaching back before the data, an anchor after it.
+WARNINGS: dict[str, type[Warning]] = {
+    'MISSING_INDICES': UserWarning,
+    'CONTEXT_BEFORE_DATA': UserWarning,
+    'ANCHOR_AFTER_DATA': UserWarning,
+}
 
 
 def _instance(

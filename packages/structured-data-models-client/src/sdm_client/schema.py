@@ -868,6 +868,10 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
+        # The core's description of the source, kept by Schema.from_source
+        # on the core route for materialize on the core (private routing
+        # seam, T1.11c); None otherwise.
+        self._core_description: Any = None
 
     @property
     def source(self) -> Source | None:
@@ -922,7 +926,14 @@ class Schema:
         schema of frames.
         """
         object.__setattr__(
-            self, '__dict__', {'_source': None, '_engine_tables': None, **state}
+            self,
+            '__dict__',
+            {
+                '_source': None,
+                '_engine_tables': None,
+                '_core_description': None,
+                **state,
+            },
         )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
@@ -976,6 +987,7 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
+        copied._core_description = self._core_description
         return copied
 
     @classmethod

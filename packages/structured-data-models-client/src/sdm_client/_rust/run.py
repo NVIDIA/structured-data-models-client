@@ -28,8 +28,10 @@ from sdm_client._rust import codec, errors, facts
 from sdm_client.errors import StructuredDataError
 
 #: A provider: answers one fetch, the ``FetchStep`` as the contract writes
-#: it, with an object that exports Arrow through ``__arrow_c_stream__``.
-Provider = Callable[[dict[str, Any]], Any]
+#: it, with an object that exports Arrow through ``__arrow_c_stream__``; the
+#: key sets its plan names are handed over with it, by attachment id, each
+#: an object exporting Arrow the same way.
+Provider = Callable[[dict[str, Any], Mapping[int, Any]], Any]
 
 
 def native() -> ModuleType:
@@ -147,7 +149,7 @@ def run(
         for request in step['requests']:
             attached: dict[int, Any] = {}
             try:
-                attached[1] = provider(request)
+                attached[1] = provider(request, _key_sets(handle, request))
                 outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
             except RouteError:
                 # The route itself failed (an import of the old engine on
@@ -172,6 +174,20 @@ def run(
                     refused.attachments,
                     driver_class=driver_class,
                 )
+
+
+def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
+    r"""The key sets ``request``'s plan names, taken from the run by id: the
+    attachments the core sent with the step (decision Q1)."""
+    plan = request['plan']
+    taken: dict[int, Any] = {}
+    for statement in plan.get('statements', ()):
+        for param in statement['params']:
+            if param['param'] == 'key_set':
+                attachment = param['keys']['attachment']
+                if attachment not in taken:
+                    taken[attachment] = handle.take_attachment(attachment)
+    return taken
 
 
 def _warn(handle: Any) -> None:

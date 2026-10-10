@@ -285,8 +285,21 @@ FROM_SOURCE_DUCKDB_TABLES = (
     'schema.from-source/catalog-keys/duckdb',
 )
 
+#: ``PredictiveQuery.materialize`` with ``indices`` over a schema of a DuckDB
+#: source: one call ends on the path of the task kind the query resolves to,
+#: so its six paths are routed together (T1.11c). The core materializes a
+#: regression and refuses the other kinds by name (register entry P1B-3).
+MATERIALIZE_DUCKDB = (
+    'query.materialize/indices-binary/duckdb',
+    'query.materialize/indices-multiclass/duckdb',
+    'query.materialize/indices-regression/duckdb',
+    'query.materialize/indices-link-prediction/duckdb',
+    'query.materialize/indices-ranking/duckdb',
+    'query.materialize/indices-forecast/duckdb',
+)
+
 #: The paths this build can run on the core.
-CORE_ROUTED = frozenset(S0 + FROM_SOURCE_DUCKDB)
+CORE_ROUTED = frozenset(S0 + FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB)
 
 
 class RouteError(RuntimeError):

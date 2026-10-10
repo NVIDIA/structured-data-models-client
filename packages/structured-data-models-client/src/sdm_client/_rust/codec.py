@@ -245,6 +245,16 @@ def timestamp(value: int, unit: str, zone: str | None) -> dict[str, Any]:
     return {**integer('i64', value), 't': 'ts', 'unit': unit, 'zone': zone}
 
 
+def seed(value: int) -> str:
+    r"""A seed as the contract writes one: an integer of any size as signed
+    hexadecimal text with no leading zeros, so no integer reader's digit
+    limit is met (decision H7)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise CodecError('seed: not an integer')
+    sign = '-' if value < 0 else ''
+    return f'{sign}0x{abs(value):x}'
+
+
 def encode(message: dict[str, Any]) -> bytes:
     r"""A control message the host sends, within the control cap.
 

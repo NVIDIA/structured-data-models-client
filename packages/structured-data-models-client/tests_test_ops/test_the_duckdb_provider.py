@@ -10,7 +10,12 @@ provider tests read too: a result the driver hands over in several batches
 is admitted as one attachment of its rows, the same as when handed over
 whole; an empty one keeps its schema; and a ``TIMESTAMPTZ`` column reads in
 the database zone's wall clock, a zone set for the source's session alone
-being seen by no read, as in the reference.
+being seen by no read, as in the reference. From T1.11c, a key set the core
+sends with a step is bound by the provider exactly: keys that collide as
+float64 (an unsigned key past int64, 38-digit and scale-18 decimals) each
+find their own row, which keys forced to float64 do not (decision H22), and a
+key set past the 64 KB control cap travels as an attachment beside a step
+under it.
 """
 
 from __future__ import annotations
@@ -52,8 +57,8 @@ def _admitted(
     provider = DuckDBProvider(connection, batch_rows=batch_rows)
     handed: list[int] = []
 
-    def answer(step: dict[str, Any]) -> Any:
-        table = provider(step)
+    def answer(step: dict[str, Any], keys: Any) -> Any:
+        table = provider(step, keys)
         handed.append(len(table.to_batches()))
         return table
 
@@ -124,3 +129,130 @@ def test_a_timestamptz_column_reads_in_the_database_zone_s_wall_clock() -> None:
     # A zone set for the source's own session is not one its reads see, as
     # in the reference, whose reads are on cursors too.
     assert _bounds('session_zone') == _bounds(None)
+
+
+def _seeds(kind: dict[str, Any], values: list[str]) -> pa.Table:
+    r"""A key-set case's seeds: its keys, of the type named, from their
+    exact text, and their batch positions."""
+    from decimal import Decimal
+
+    if kind['type'] == 'decimal128':
+        arrow = pa.decimal128(kind['precision'], kind['scale'])
+        keys = pa.array([Decimal(v) for v in values], type=arrow)
+    else:
+        keys = pa.array(
+            [int(v) for v in values], type=pa.type_for_alias(kind['type'])
+        )
+    return pa.table(
+        {'key': keys, 'batch': pa.array(range(len(values)), pa.int64())}
+    )
+
+
+def _keyed(
+    connection: Any, request: dict[str, Any], seeds: pa.Table
+) -> tuple[pa.Table, dict[str, Any]]:
+    r"""A lookup with ``seeds``, through the core: the core attaches them to
+    the step as its own key set, the provider binds them and answers, and
+    the core echoes what it admitted. Also the step as the provider saw it,
+    and the key set it was handed."""
+    from sdm_client._rust.codec import CONTROL_CAP
+
+    provider = DuckDBProvider(connection)
+    seen: dict[str, Any] = {}
+
+    def answer(step: dict[str, Any], keys: Any) -> Any:
+        seen['step'] = step
+        seen['keys'] = {
+            attachment: pa.RecordBatchReader._import_from_c_capsule(
+                stream.__arrow_c_stream__()
+            ).read_all()
+            for attachment, stream in keys.items()
+        }
+        seen['control'] = len(json.dumps(step).encode())
+        assert seen['control'] < CONTROL_CAP
+        return provider(step, {a: t for a, t in seen['keys'].items()})
+
+    kinds = {
+        'uint64': {'type': 'uint64'},
+        'int64': {'type': 'int64'},
+        'double': {'type': 'float64'},
+    }
+    request = dict(request)
+    request['seeds'] = {
+        'attachment': 0,
+        'columns': [
+            {
+                'name': field.name,
+                'type': kinds.get(str(field.type))
+                or {
+                    'type': 'decimal128',
+                    'precision': field.type.precision,
+                    'scale': field.type.scale,
+                },
+                'nullable': field.nullable,
+            }
+            for field in seeds.schema
+        ],
+    }
+    fetch = {
+        'request': request,
+        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'echo': True,
+    }
+    finished = run(
+        {'op': 'test', 'test': 'keyed', 'fetch': 1, 'keys': 2},
+        {1: codec.attachment(fetch), 2: seeds},
+        provider=answer,
+    )
+    stream = finished.take(finished.result['data'])
+    data = pa.RecordBatchReader._import_from_c_capsule(
+        stream.__arrow_c_stream__()
+    ).read_all()
+    return data, seen
+
+
+def _each_seed_finds_its_own_row(data: pa.Table, labels: list[str]) -> bool:
+    found: dict[int, str] = {}
+    for row in data.to_pylist():
+        if row['__kumo_matches__'] != 1 or row['__kumo_batch__'] in found:
+            return False
+        found[row['__kumo_batch__']] = row['label']
+    return [found.get(i) for i in range(len(labels))] == labels
+
+
+def test_keys_that_collide_as_float64_bind_join_and_answer_exactly() -> None:
+    connection = _database()
+    cases = VECTORS['keys']['cases']
+    assert len(cases) == 3
+    for case in cases:
+        exact = _seeds(case['type'], case['values'])
+        data, seen = _keyed(connection, case['request'], exact)
+        # The provider was handed the keys exactly as sent.
+        [handed] = seen['keys'].values()
+        assert handed.equals(exact), case['column']
+        assert _each_seed_finds_its_own_row(data, case['labels']), case[
+            'column'
+        ]
+        # The values collide as float64, and keys forced to it fail.
+        forced = exact.set_column(
+            0, 'key', exact.column('key').cast(pa.float64(), safe=False)
+        )
+        assert len(set(forced.column('key').to_pylist())) < len(case['values'])
+        data, _ = _keyed(connection, case['request'], forced)
+        assert not _each_seed_finds_its_own_row(data, case['labels']), case[
+            'column'
+        ]
+
+
+def test_a_key_set_past_the_control_cap_travels_as_an_attachment() -> None:
+    from sdm_client._rust.codec import CONTROL_CAP
+
+    large = VECTORS['large']
+    values = [str(i % large['modulo']) for i in range(large['rows'])]
+    seeds = _seeds({'type': 'int64'}, values)
+    assert seeds.nbytes > CONTROL_CAP
+    data, seen = _keyed(_database(), large['request'], seeds)
+    assert seen['control'] < CONTROL_CAP
+    assert data.num_rows == large['rows']
+    for row in data.to_pylist():
+        assert row['name'] == f'r{row["__kumo_batch__"] % large["modulo"]}'

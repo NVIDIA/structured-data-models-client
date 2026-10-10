@@ -91,13 +91,15 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # Every default is the old code until the Phase 3 switch.
     assert set(_routing.ROUTES.values()) == {'old'}
     # S0 and, from T1.11b, a DuckDB source's Schema.from_source with no
-    # tables named have core routes.
+    # tables named, and from T1.11c, materialize with indices over a DuckDB
+    # source's schema, have core routes.
     assert _routing.CORE_ROUTED == set(
-        _routing.S0 + _routing.FROM_SOURCE_DUCKDB
+        _routing.S0 + _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
     assert _routing.route(_routing.S0) == 'old'
     assert _routing.route(_routing.FROM_SOURCE_DUCKDB) == 'old'
+    assert _routing.route(_routing.MATERIALIZE_DUCKDB) == 'old'
 
 
 def test_a_refused_and_an_accepted_query_give_the_old_outcome_on_the_core(

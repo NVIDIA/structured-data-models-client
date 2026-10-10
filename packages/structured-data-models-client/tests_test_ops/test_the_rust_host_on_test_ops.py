@@ -172,7 +172,7 @@ class DriverError(Exception):
 
 
 def test_a_provider_error_raises_with_no_driver_exception_chained() -> None:
-    def provider(_request: dict[str, Any]) -> Any:
+    def provider(_request: dict[str, Any], _keys: Any) -> Any:
         raise DriverError(f'duplicate key value {CANARY}')
 
     fetch = {

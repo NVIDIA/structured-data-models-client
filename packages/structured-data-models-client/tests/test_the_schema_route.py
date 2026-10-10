@@ -217,9 +217,9 @@ def test_the_route_imports_nothing_of_the_engine(tmp_path: Path) -> None:
 
     # The hook sees an import on the route, and the route fails with it.
     answer = provider.DuckDBProvider.__call__
-    def importing(self, step):
+    def importing(self, step, keys=None):
         import sdm_relational_engine
-        return answer(self, step)
+        return answer(self, step, keys)
     provider.DuckDBProvider.__call__ = importing
     try:
         with route():
@@ -280,11 +280,11 @@ def test_a_core_route_running_leaves_another_thread_s_old_call_alone(
 
     paused, resume = threading.Event(), threading.Event()
     answer = DuckDBProvider.__call__
-    def pausing(self, step):
+    def pausing(self, step, keys=None):
         if not paused.is_set():
             paused.set()
             assert resume.wait(60)
-        return answer(self, step)
+        return answer(self, step, keys)
     DuckDBProvider.__call__ = pausing
 
     core = {{}}
@@ -378,9 +378,9 @@ def test_the_provider_answers_the_core_s_plans_with_pandas_unimportable(
     steps: list[dict[str, Any]] = []
     answers: list[Any] = []
 
-    def recording(self: Any, step: dict[str, Any]) -> Any:
+    def recording(self: Any, step: dict[str, Any], keys: Any = None) -> Any:
         steps.append(step)
-        table = answer(self, step)
+        table = answer(self, step, keys)
         answers.append(table)
         return table
 

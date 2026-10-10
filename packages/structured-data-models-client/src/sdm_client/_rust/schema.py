@@ -180,6 +180,10 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
     schema._engine_tables = EngineTables()
+    # Kept for materialize on the core (T1.11c), which needs what the
+    # catalog said of each column and the schema does not hold: the type
+    # received, whether it may be null, whether the source keys it.
+    schema._core_description = described
     schema._mark_key_columns()
     _warn_how_time_columns_were_inferred(schema, chose, None)
     _warn_two_ways_to_reach_one_table(built, schema.relationships)
