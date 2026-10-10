@@ -11,7 +11,7 @@
     "case": {"$ref": "urn:sdm:case:1#/$defs/id"},
     "identity": {"$ref": "#/$defs/identity"},
     "outcome": {
-      "description": "Where the public call ended. For rust-host, which makes no public call, the outcome is the core's answer as the route maps it: an accepted query or a description is a success, a refused query INVALID_REQUEST, and a core error a refusal with its code.",
+      "description": "Where the public call ended. For rust-host, which makes no public call, the outcome is the core's answer as the route maps it: an accepted query, a description or a materialized request is a success, a refused query INVALID_REQUEST, and a core error a refusal with its code.",
       "type": "object",
       "additionalProperties": false,
       "required": ["result", "stage", "error", "code"],
@@ -149,10 +149,10 @@
       }
     },
     "core": {
-      "description": "python-core and rust-host only: the inputs each core operation was started with, every fetch the core asked for (its request and the plan its data layer made, in order: the step trace), and its answer: validate_query's acceptance, describe_source's description, or the core error's kind and code.",
+      "description": "python-core and rust-host only: the inputs each core operation was started with, every fetch the core asked for (its request and the plan its data layer made, in order: the step trace), and its answers: validate_query's acceptance, describe_source's description, materialize's request state, or the core error's kind and code.",
       "type": ["object", "null"],
       "additionalProperties": false,
-      "required": ["inputs", "fetches", "accepted", "described", "error"],
+      "required": ["inputs", "fetches", "accepted", "described", "materialized", "error"],
       "properties": {
         "inputs": {
           "type": "array",
@@ -179,6 +179,20 @@
                   "source": {"description": "The contract's SourceSpec.", "type": "object"},
                   "check_keys": {"type": "boolean"}
                 }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "provider", "schema", "query", "indices", "anchor_time", "seed"],
+                "properties": {
+                  "op": {"const": "materialize"},
+                  "provider": {"type": "object"},
+                  "schema": {"description": "The contract's SourceDescription.", "type": "object"},
+                  "query": {"type": "string"},
+                  "indices": {"description": "One Arrow column, each value a contract scalar.", "type": ["array", "null"], "items": {"type": "object"}},
+                  "anchor_time": {"type": ["object", "null"]},
+                  "seed": {"type": ["string", "null"]}
+                }
               }
             ]
           }
@@ -196,6 +210,17 @@
         "described": {
           "description": "describe_source's SourceDescription, as the JSON the core attached.",
           "type": ["object", "null"]
+        },
+        "materialized": {
+          "description": "materialize's RequestState: its version, the query as the core wrote it back, and the payload as the JSON the core attached, each number as {\"number\": text}, the text the core wrote.",
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["version", "query", "payload"],
+          "properties": {
+            "version": {"type": "integer"},
+            "query": {"type": "string"},
+            "payload": {"type": "object"}
+          }
         },
         "error": {
           "type": ["object", "null"],

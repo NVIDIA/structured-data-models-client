@@ -1,10 +1,12 @@
 {
-  "description": "The DuckDB provider on both hosts (T1.11b): each fetch is planned by the core's data layer for DuckDB, answered by the host's DuckDB provider, admitted, and echoed back by the test-only fetch; both hosts' tests hold the admitted data to these expectations. 'several' is a result the driver hands over in batches of batch_rows; 'empty' keeps its schema with no rows; 'time_bounds' reads a TIMESTAMPTZ column as CAST(column AS TIMESTAMP), which under the zone 'zone' sets both hosts' DuckDB answer in America/New_York's wall clock, as counts of microseconds. The provider reads each request on its own cursor, as the reference's reads do, and a cursor takes the database's zone, not a session's: under 'session_zone' alone, set on the source's connection, both hosts read as with no zone set, in the host's own.",
+  "description": "The DuckDB provider on both hosts (T1.11b): each fetch is planned by the core's data layer for DuckDB, answered by the host's DuckDB provider, admitted, and echoed back by the test-only fetch; both hosts' tests hold the admitted data to these expectations. 'several' is a result the driver hands over in batches of batch_rows; 'empty' keeps its schema with no rows; 'time_bounds' reads a TIMESTAMPTZ column as CAST(column AS TIMESTAMP), which under the zone 'zone' sets both hosts' DuckDB answer in America/New_York's wall clock, as counts of microseconds. The provider reads each request on its own cursor, as the reference's reads do, and a cursor takes the database's zone, not a session's: under 'session_zone' alone, set on the source's connection, both hosts read as with no zone set, in the host's own. From T1.11c, 'keys' binds key sets: each case's keys, of the type named, are the seeds of a lookup on 'keyed' (a test-only fetch whose keys travel as an Arrow attachment, which the core attaches to the step as its own key set and the provider binds as the relation the plan names); each seed must find exactly its own row, its label the one listed, in batch order. The values collide as float64 (an unsigned key past int64, 38-digit decimals, decimals at scale 18 that differ in the 18th place), so a key that passed through a float would match several rows: each host's test also shows its check fails when the seeds are forced to float64 (decision H22). 'large' is a key set of 'rows' seeds, past the 64 KB control cap as Arrow, which travels as an attachment while the step's control message stays under it.",
   "setup": [
     "CREATE TABLE many AS SELECT i::BIGINT AS n, 'r' || i AS name FROM range(5000) t(i)",
     "CREATE TABLE nothing (n BIGINT, name VARCHAR)",
     "CREATE TABLE stamps (ts TIMESTAMPTZ)",
-    "INSERT INTO stamps VALUES ('2024-07-01 12:00:00+00'), ('2024-01-15 03:30:00+00')"
+    "INSERT INTO stamps VALUES ('2024-07-01 12:00:00+00'), ('2024-01-15 03:30:00+00')",
+    "CREATE TABLE keyed (u UBIGINT, d38 DECIMAL(38,0), d18 DECIMAL(38,18), label VARCHAR)",
+    "INSERT INTO keyed VALUES (18446744073709551615, 10000000000000000000000000000000000001, 0.100000000000000001, 'a'), (9223372036854775808, 10000000000000000000000000000000000002, 0.100000000000000002, 'b'), (9223372036854775809, 10000000000000000000000000000000000003, 0.100000000000000003, 'c')"
   ],
   "zone": "SET GLOBAL TimeZone='America/New_York'",
   "session_zone": "SET TimeZone='America/New_York'",
@@ -21,5 +23,13 @@
     "request": {"request": "time_bounds", "columns": [{"table": "stamps", "column": "ts"}]},
     "rows": [[0, 1705271400000000, 1719820800000000]],
     "wall_clock": ["2024-01-14T22:30:00", "2024-07-01T08:00:00"]
-  }
+  },
+  "keys": {
+    "cases": [
+      {"column": "u", "type": {"type": "uint64"}, "values": ["9223372036854775809", "18446744073709551615", "9223372036854775808"], "labels": ["c", "a", "b"], "request": {"request": "lookup", "table": "keyed", "key": "u", "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "uint64"}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}},
+      {"column": "d38", "type": {"type": "decimal128", "precision": 38, "scale": 0}, "values": ["10000000000000000000000000000000000002", "10000000000000000000000000000000000003", "10000000000000000000000000000000000001"], "labels": ["b", "c", "a"], "request": {"request": "lookup", "table": "keyed", "key": "d38", "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "decimal128", "precision": 38, "scale": 0}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}},
+      {"column": "d18", "type": {"type": "decimal128", "precision": 38, "scale": 18}, "values": ["0.100000000000000003", "0.100000000000000001", "0.100000000000000002"], "labels": ["c", "a", "b"], "request": {"request": "lookup", "table": "keyed", "key": "d18", "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "decimal128", "precision": 38, "scale": 18}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}}
+    ]
+  },
+  "large": {"request": {"request": "lookup", "table": "many", "key": "n", "columns": ["name"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "int64"}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}, "rows": 20000, "modulo": 5000}
 }

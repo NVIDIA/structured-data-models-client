@@ -28,8 +28,8 @@ each acceptance case, the rules of Phase 1a so far (T1.10):
   the call going on); ``python-core`` and ``rust-host`` started the same
   operations with the same inputs, the core asked both for the same
   fetches with the same plans (the step trace), and answered both the
-  same: the same acceptance or description, or an error of the same kind
-  and code;
+  same: the same acceptance, description or request state (from T1.11c,
+  its payload included), or an error of the same kind and code;
 - route proof: ``python-core`` ran the case's core operations with
   ``sdm_client._native`` loaded; ``python-old`` and ``python-ref`` never
   loaded it; ``python-ref``'s guard passed; every runner ran DuckDB at the
@@ -265,6 +265,22 @@ def _core_consistent(
     core = observation['core']
     if core is None:
         return
+    if 'materialize' in case.get('core', {}) and core['described'] is not None:
+        # Described, the call goes on to materialize, which answers its
+        # request state or an error, never both (T1.11c); its error ends
+        # the call there, as a refusal with its code.
+        where = f'{case["id"]}: {who}'
+        if (core['materialized'] is None) == (core['error'] is None):
+            report.fail(f'{where}: core: not one request state or one error')
+        elif core['error'] is not None:
+            seen = (
+                observation['outcome']['result'],
+                observation['outcome']['code'],
+            )
+            wanted = ('refusal', core['error']['code'])
+            if seen != wanted:
+                _differ(report, where, 'outcome against core', wanted, seen)
+        return
     if 'describe_source' in case.get('core', {}):
         where = f'{case["id"]}: {who}'
         if (core['described'] is None) == (core['error'] is None):
@@ -320,7 +336,7 @@ def _core_agree(
     mine, theirs = python['core'], rust['core']
     if mine is None or theirs is None:
         return
-    for field in ('inputs', 'fetches', 'described'):
+    for field in ('inputs', 'fetches', 'described', 'materialized'):
         if mine[field] != theirs[field]:
             _differ(report, where, f'core.{field}', None, None, show=False)
     for field in ('accepted', 'error'):
@@ -358,6 +374,14 @@ def _case_inputs(
     if 'describe_source' in case.get('core', {}):
         wanted.append(
             {'op': 'describe_source', **case['core']['describe_source']}
+        )
+    if 'materialize' in case.get('core', {}):
+        wanted.append(
+            {
+                'op': 'materialize',
+                'query': case['input']['pql'],
+                **case['core']['materialize'],
+            }
         )
     if any(each not in core['inputs'] for each in wanted):
         _differ(

@@ -279,17 +279,34 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
             native={'sha256': 'a' * 64},
             native_loaded=True,
             operations=sorted(case['core']),
-            contract=6,
+            contract=7,
         )
         if 'describe_source' in case['core']:
-            # A description, whatever the call did after it.
+            # A description, whatever the call did after it, and from T1.11c
+            # a request state, for a case that materializes on the core.
+            inputs = [
+                {'op': 'describe_source', **case['core']['describe_source']}
+            ]
+            materialized = None
+            if 'materialize' in case['core']:
+                inputs.append(
+                    {
+                        'op': 'materialize',
+                        'query': case['input']['pql'],
+                        **case['core']['materialize'],
+                    }
+                )
+                materialized = {
+                    'version': 1,
+                    'query': case['input']['pql'],
+                    'payload': {},
+                }
             observation['core'] = {
-                'inputs': [
-                    {'op': 'describe_source', **case['core']['describe_source']}
-                ],
+                'inputs': inputs,
                 'fetches': [],
                 'accepted': None,
                 'described': {'tables': [], 'links': []},
+                'materialized': materialized,
                 'error': None,
             }
             return
@@ -310,6 +327,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 else accepted
             ),
             'described': None,
+            'materialized': None,
             'error': error,
         }
 

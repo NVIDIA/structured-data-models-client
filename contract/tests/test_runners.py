@@ -96,7 +96,8 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
     assert 'DIFFERS' not in compared.stdout
     operations = {
         'S0': ['validate_query'],
-        'S1': ['describe_source'],
+        # From T1.11c base.regression's materialize runs on the core too.
+        'S1': ['describe_source', 'materialize'],
     }
     for observation in _observations(core):
         slice_ = next(

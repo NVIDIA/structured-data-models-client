@@ -68,7 +68,9 @@ def test_base_regression_s_schema_on_the_core_is_the_reference_s(
     reference = _reference()
     core = _run('python-core', tmp_path / 'python-core.jsonl')
     old = _run('python-old', tmp_path / 'python-old.jsonl')
-    assert core['identity']['operations'] == ['describe_source']
+    # From T1.11c the call's materialize runs on the core too
+    # (test_materialize_route.py).
+    assert core['identity']['operations'] == ['describe_source', 'materialize']
     assert core['core']['error'] is None
     assert core['core']['described'] is not None
     assert old['identity']['native_loaded'] is False
@@ -91,8 +93,9 @@ def test_the_core_s_sql_for_the_schema_is_the_reference_s(
     reference = _reference()['driver']['capture']['statements']
     core = _run('python-core', tmp_path / 'python-core.jsonl')
     asked = core['core']['fetches']
-    # Schema.from_source asks one statement per fetch; what follows is the
-    # old materializer's.
+    # Schema.from_source asks one statement per fetch, the first ten; what
+    # follows is materialize's (test_materialize_route.py).
+    asked = asked[:10]
     ran = core['driver']['capture']['statements'][: len(asked)]
     assert len(asked) == 10
     assert [s['sql'] for s in ran] == [s['sql'] for s in reference[:10]]

@@ -395,8 +395,10 @@ class _Guard:
 class _Capture:
     r"""What crossed ``sdm_client._native`` during one case: each operation
     started with its inputs, each fetch the core asked for (its request and
-    plan, the step trace), and the core's answer: ``validate_query``'s
-    acceptance, ``describe_source``'s description, or an error."""
+    plan, the step trace), and the core's answers: ``validate_query``'s
+    acceptance, ``describe_source``'s description, ``materialize``'s
+    request state (its version, the query and the payload, each number as
+    the text the core wrote), or an error."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
@@ -404,8 +406,10 @@ class _Capture:
         self.fetches: list[dict[str, Any]] = []
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
+        self.materialized: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
         self._description: int | None = None
+        self._state: dict[str, Any] | None = None
 
     def started(self, message: bytes, attachments: Any) -> None:
         operation = json.loads(message)['operation']
@@ -428,6 +432,23 @@ class _Capture:
                     'check_keys': operation['check_keys'],
                 }
             )
+        elif operation['op'] == 'materialize':
+            indices = operation['indices']
+            self.inputs.append(
+                {
+                    'op': 'materialize',
+                    'provider': operation['provider'],
+                    'schema': json.loads(attachments[operation['schema']]),
+                    'query': json.loads(attachments[operation['query']]),
+                    'indices': (
+                        None
+                        if indices is None
+                        else _scalars(attachments[indices])
+                    ),
+                    'anchor_time': operation['anchor_time'],
+                    'seed': operation['seed'],
+                }
+            )
 
     def stepped(self, step: dict[str, Any]) -> None:
         if step.get('step') == 'fetch':
@@ -444,10 +465,22 @@ class _Capture:
             self.accepted = bool(result['accepted'])
         if result.get('op') == 'describe_source':
             self._description = result['description']
+        if result.get('op') == 'materialize':
+            self._state = result['state']
+            self.materialized = {'version': result['state']['version']}
 
     def taken(self, attachment: int, value: Any) -> None:
         if attachment == self._description and isinstance(value, bytes):
             self.described = json.loads(value)
+        state = self._state
+        if state is None or self.materialized is None:
+            return
+        if attachment == state['payload'] and isinstance(value, bytes):
+            self.materialized['payload'] = json.loads(
+                value, parse_int=_number, parse_float=_number
+            )
+        if attachment == state['query'] and isinstance(value, bytes):
+            self.materialized['query'] = json.loads(value)
 
     def core(self) -> dict[str, Any]:
         return {
@@ -455,8 +488,37 @@ class _Capture:
             'fetches': self.fetches,
             'accepted': self.accepted,
             'described': self.described,
+            'materialized': self.materialized,
             'error': self.error,
         }
+
+
+#: A pyarrow integer type's contract scalar tag.
+_INTEGER_TAGS = {
+    'int8': 'i8',
+    'int16': 'i16',
+    'int32': 'i32',
+    'int64': 'i64',
+    'uint8': 'u8',
+    'uint16': 'u16',
+    'uint32': 'u32',
+    'uint64': 'u64',
+}
+
+
+def _scalars(table: Any) -> list[dict[str, Any]]:
+    r"""The one column of an Arrow table the host sent, each value as the
+    contract's tagged scalar: an integer by its width, text as ``utf8``."""
+    from sdm_client._rust import codec
+
+    column = table.column(0)
+    kind = str(column.type)
+    values = column.to_pylist()
+    if kind in _INTEGER_TAGS:
+        return [codec.integer(_INTEGER_TAGS[kind], v) for v in values]
+    if kind in ('string', 'large_string'):
+        return [{'t': 'utf8', 'v': v} for v in values]
+    raise RunnerFailure('the entities sent are neither integers nor text')
 
 
 class _Handle:
