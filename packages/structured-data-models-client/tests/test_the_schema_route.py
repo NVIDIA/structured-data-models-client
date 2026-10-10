@@ -16,6 +16,7 @@ core does not describe yet is refused by name (register entry P1B-2).
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import subprocess
 import sys
@@ -456,3 +457,125 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
             Schema.from_source(DuckDBSource(_connection()), **arguments)
         assert refused.value.code == 'UNSUPPORTED_REQUEST'
         assert refused.value.details['rule'] == rule
+
+
+#: Sources whose schema takes the rules the core holds from T1.21d
+#: (decision E55), each beside the shop base, with the codes of the
+#: warnings the core gives on it: a lone edit stamp in a table nothing
+#: links to (taken) and in one something links to (refused), a stamp of a
+#: load and a date of birth passed over; a key whose type cannot join, a
+#: foreign key to a column that is not its table's key, two ways from one
+#: table to another, two tables naming each other; and a keyless table
+#: keyed by the one column a foreign key refers to.
+SCHEMA_RULES = {
+    'edit stamps': (
+        {'TIME_COLUMNS_GUESSED'},
+        (
+            'CREATE TABLE logs (log_id BIGINT, user_id BIGINT, '
+            'updated_at TIMESTAMP)',
+            "INSERT INTO logs SELECT i, i % 3, TIMESTAMP '2024-01-01' + "
+            'to_days(CAST(i AS INTEGER)) FROM range(9) t(i)',
+            'CREATE TABLE plans (plan_id BIGINT, modified_at TIMESTAMP)',
+            "INSERT INTO plans SELECT i, TIMESTAMP '2024-01-01' + "
+            'to_days(CAST(i AS INTEGER)) FROM range(4) t(i)',
+            'CREATE TABLE subscriptions (sub_id BIGINT, plan_id BIGINT, '
+            '_loaded_at TIMESTAMP, birth_date DATE, started TIMESTAMP)',
+            'INSERT INTO subscriptions SELECT i, i % 4, '
+            "TIMESTAMP '2024-02-01' + to_days(CAST(i AS INTEGER)), "
+            "DATE '1990-01-01' + CAST(i AS INTEGER), "
+            "TIMESTAMP '2023-01-01' + to_days(CAST(i AS INTEGER)) "
+            'FROM range(8) t(i)',
+        ),
+    ),
+    'links': (
+        {'LINK_CANNOT_JOIN', 'TWO_WAYS_TO_A_TABLE', 'TABLES_NAME_EACH_OTHER'},
+        (
+            'CREATE TABLE accounts (account_id BIGINT PRIMARY KEY, '
+            'refund_id BIGINT)',
+            'INSERT INTO accounts SELECT i, i FROM range(4) t(i)',
+            'CREATE TABLE refunds (refund_id BIGINT PRIMARY KEY, '
+            'account_id BIGINT, payer BIGINT REFERENCES accounts '
+            '(account_id))',
+            'INSERT INTO refunds SELECT i, i % 4, (i + 1) % 4 '
+            'FROM range(6) t(i)',
+            'CREATE TABLE notes (note_id BIGINT, account_id VARCHAR)',
+            "INSERT INTO notes SELECT i, 'a' || chr(97 + CAST(i AS INTEGER)) "
+            'FROM range(5) t(i)',
+            'CREATE TABLE items (item_id BIGINT PRIMARY KEY, sku VARCHAR '
+            'UNIQUE)',
+            "INSERT INTO items SELECT i, 's' || chr(97 + CAST(i AS INTEGER)) "
+            'FROM range(5) t(i)',
+            'CREATE TABLE lines (line_id BIGINT, sku VARCHAR REFERENCES '
+            'items (sku))',
+            "INSERT INTO lines SELECT i, 's' || chr(97 + CAST(i % 5 AS "
+            'INTEGER)) FROM range(9) t(i)',
+        ),
+    ),
+    'a key by reference': (
+        set(),
+        (
+            'CREATE TABLE codes (tag VARCHAR UNIQUE, label VARCHAR UNIQUE)',
+            "INSERT INTO codes SELECT 't' || chr(97 + CAST(i AS INTEGER)), "
+            "'l' || chr(97 + CAST(i AS INTEGER)) FROM range(5) t(i)",
+            'CREATE TABLE coded (coded_id BIGINT, tag VARCHAR REFERENCES '
+            'codes (tag))',
+            "INSERT INTO coded SELECT i, 't' || chr(97 + CAST(i % 5 AS "
+            'INTEGER)) FROM range(9) t(i)',
+        ),
+    ),
+}
+
+
+def _described(
+    monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...], routes: str
+) -> tuple[dict[str, Any], list[tuple[str, str]], Schema]:
+    if routes:
+        monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+    else:
+        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(DuckDBSource(_connection(*setup)))
+    said = [(type(w.message).__name__, str(w.message)) for w in shown]
+    return _projection(schema), said, schema
+
+
+def _before_key(schema: Schema) -> dict[tuple[str, str], str]:
+    return {
+        (table, column): c._stype_before_key
+        for table, shaped in schema.tables.items()
+        for column, c in shaped.columns.items()
+        if c._stype_before_key is not None
+    }
+
+
+@pytest.mark.parametrize('name', sorted(SCHEMA_RULES))
+def test_the_core_assembles_the_schema_as_the_old_route_does(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    codes, setup = SCHEMA_RULES[name]
+    core, said, schema = _described(monkeypatch, setup, CORE)
+    # The core's warnings carry their code before the reference's text.
+    given = [text.split(']', 1)[0].lstrip('[') for _, text in said]
+    assert set(given) == codes, given
+    if name == 'a key by reference':
+        assert schema['codes'].primary_key == 'tag'
+        assert _before_key(schema) == {
+            ('codes', 'tag'): 'categorical',
+            ('coded', 'tag'): 'categorical',
+        }
+        # Given back when the schema stops joining on it.
+        edited = schema.snapshot()
+        edited.relationships = []
+        edited['codes'].primary_key = 'label'
+        assert edited['codes']['tag'].stype == 'categorical'
+        assert edited['coded']['tag'].stype == 'categorical'
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    old, old_said, old_schema = _described(monkeypatch, setup, '')
+    assert core == old
+    assert [
+        (cls, text.split('] ', 1)[1] if text.startswith('[') else text)
+        for cls, text in said
+    ] == old_said
+    assert _before_key(schema) == _before_key(old_schema)

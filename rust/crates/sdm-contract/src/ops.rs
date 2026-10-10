@@ -333,6 +333,10 @@ pub struct DescribedSource {
 #[serde(deny_unknown_fields)]
 pub struct SourceDescription {
     pub tables: Vec<DescribedTable>,
+    /// The relationships, each `[foreign key, referenced key]`, once: in a
+    /// description `describe_source` answers, the declared foreign keys and
+    /// the links inferred by name that can join, in that order (decision
+    /// E55); in `materialize`'s schema, the host's.
     pub links: Vec<Vec<ColumnRef>>,
 }
 
@@ -358,7 +362,17 @@ pub struct DescribedColumn {
     )]
     pub received: ColumnType,
     pub dtype: Dtype,
+    /// What the column means in the schema as it stands: `ID` for a column
+    /// the schema joins on, its primary key or a link's foreign key
+    /// (decision E55).
     pub stype: Stype,
+    /// What the column meant before the schema's joining on it made it an
+    /// identifier, given back when the schema stops joining on it; `None`
+    /// when joining on it changed nothing, or it is not joined on. In a
+    /// description `describe_source` answers, the core's; in `materialize`'s
+    /// schema, what the host holds, from which the core marks the columns
+    /// joined on again (decision E55).
+    pub stype_before_key: Option<Stype>,
     /// Whether the column may hold no value, as the catalog declares it:
     /// neither declared `NOT NULL` nor part of the declared primary key.
     pub nullable: bool,

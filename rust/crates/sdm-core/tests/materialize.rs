@@ -71,6 +71,7 @@ fn column(
         received,
         dtype,
         stype,
+        stype_before_key: None,
         nullable: !unique,
         unique,
     }
@@ -466,9 +467,56 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     ]);
     let mut run = materialize(host(), &parent, QUERY, None).unwrap();
     assert_eq!(rule(&refusal(&mut run)), "parent_table");
-    // A key of several columns.
+    // A key of several columns, of a table no link refers to.
+    let mut composite = shop();
+    composite.tables[0].primary_key = vec!["order_id".into(), "user_id".into()];
+    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    assert_eq!(rule(&refusal(&mut run)), "composite_key");
+    // One a link refers to is the reference's refusal of a relationship
+    // that cannot join, before anything is read (decision E55).
     let mut composite = shop();
     composite.tables[1].primary_key = vec!["user_id".into(), "country".into()];
     let mut run = materialize(host(), &composite, QUERY, None).unwrap();
-    assert_eq!(rule(&refusal(&mut run)), "composite_key");
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("relationships"));
+}
+
+/// The schema `materialize` is handed is held as the reference holds a
+/// schema it makes a request of (`Schema.check_consistent`, decision E55),
+/// before anything is read: a meaning the column's values cannot carry is
+/// refused; the columns joined on are marked again from what the host
+/// holds, so a column the schema no longer joins on means again what it
+/// meant before.
+#[test]
+fn the_schema_is_held_to_the_reference_s_consistency_check() {
+    fn price(schema: &mut SourceDescription) -> &mut DescribedColumn {
+        schema.tables[0]
+            .columns
+            .iter_mut()
+            .find(|c| c.name == "price")
+            .unwrap()
+    }
+    // Text a float cannot be.
+    let mut text = shop();
+    price(&mut text).stype = Stype::Text;
+    let mut run = materialize(host(), &text, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("schema"));
+    // An identifier the schema does not join on, which meant a number
+    // before it was joined on: a number again, so the sum resolves and the
+    // run goes on to its first read.
+    let mut released = shop();
+    price(&mut released).stype = Stype::Id;
+    price(&mut released).stype_before_key = Some(Stype::Numerical);
+    let mut run = materialize(host(), &released, QUERY, None).unwrap();
+    assert!(matches!(run.next(), Ok(Step::Fetch { .. })));
+    // The control: an identifier with nothing to give back stays one, and
+    // a sum over it does not resolve.
+    let mut kept = shop();
+    price(&mut kept).stype = Stype::Id;
+    let mut run = materialize(host(), &kept, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
 }

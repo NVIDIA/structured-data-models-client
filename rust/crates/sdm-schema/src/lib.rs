@@ -17,15 +17,24 @@
 //! does not port yet, rather than guess (register entry P1B-2): a column
 //! type outside the plain set, text that may hold dates or several values,
 //! a tie between key candidates, a time column chosen among several,
-//! refused for its name or values or a time of day, a preview of a whole 1,000 rows, an
-//! empty table. T1.23 and T1.25 complete it.
+//! refused for its values or a time of day, a preview of a whole 1,000
+//! rows, an empty table. T1.23 and T1.25 complete it. From T1.21d
+//! (decision E55) it holds the schema's assembly the reference client
+//! makes after the engine's reading, which the Python bridge held before:
+//! a timestamp passed over by its name, links inferred by name and kept
+//! where they join, a lone edit stamp settled by them, the columns joined
+//! on marked, the warnings, and the consistency check of the schema
+//! `materialize` is handed.
 //!
 //! - [`catalog`] reads the key counts.
 //! - [`infer`] infers one table: each column's data and semantic types,
 //!   its primary key and its time column.
+//! - [`assemble`] assembles the tables into the schema, and holds the
+//!   schema `materialize` is handed to it.
 
 #![forbid(unsafe_code)]
 
+pub mod assemble;
 pub mod catalog;
 pub mod infer;
 mod names;

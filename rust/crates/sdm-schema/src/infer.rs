@@ -6,7 +6,8 @@
 //! from the Arrow type its preview returned, its semantic type from its name
 //! and the preview's values, the primary key from the catalog or, where it
 //! declares none, from names and values, and the time column among the
-//! timestamps. Every path these rules take that this build does not port is
+//! timestamps, those named as a load, an edit or a birth passed over
+//! (T1.21d). Every path these rules take that this build does not port is
 //! refused by name ([`crate::not_yet`]).
 
 use std::collections::BTreeSet;
@@ -31,6 +32,10 @@ pub struct InferredColumn {
     pub name: String,
     pub dtype: Dtype,
     pub stype: Stype,
+    /// What the column meant before a key named after inference made it an
+    /// identifier (a keyless table keyed by the column its declared foreign
+    /// keys refer to), as the reference's key setter records it.
+    pub stype_before_key: Option<Stype>,
     /// The column's type as admitted from the preview.
     pub received: ColumnType,
     /// Whether the catalog lets the column hold no value.
@@ -40,13 +45,84 @@ pub struct InferredColumn {
     pub unique: bool,
 }
 
+/// Why inference passed a timestamp over for the time column by its name,
+/// as the reference's `RejectedTimeColumn` says it: a stamp of a row's
+/// load, of its last edit, or a date of birth.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PassedOver {
+    LoadStamp,
+    EditStamp,
+    BirthDate,
+}
+
+impl PassedOver {
+    /// The reason, said as a clause about the column (`RejectedTimeColumn.why`).
+    pub fn why(self) -> &'static str {
+        match self {
+            PassedOver::EditStamp => "it looks like when a row was last changed, not when it began",
+            PassedOver::LoadStamp => "it looks like when a row was loaded, not when it began",
+            PassedOver::BirthDate => "it looks like a date of birth, not when a row began",
+        }
+    }
+}
+
+/// How the time column was taken: the one timestamp left, or a lone stamp
+/// of the last edit in a table no other links to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Taken {
+    Only,
+    EditStamp,
+}
+
+/// The time column inference took and how, and the timestamps it passed
+/// over by name, as the reference's `TimeColumnChoice` holds them for the
+/// paths this build takes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TimeChoice {
+    pub column: Option<String>,
+    pub how: Option<Taken>,
+    /// Every timestamp passed over by its name, in table order, the lone
+    /// edit stamp taken as the last resort included.
+    pub refused: Vec<(String, PassedOver)>,
+    /// The lone edit stamp left, when no other timestamp was.
+    pub fallback: Option<String>,
+}
+
+impl TimeChoice {
+    /// This choice for a table another table links to, or none does
+    /// (`TimeColumnChoice.for_links`): a lone edit stamp is refused in a
+    /// table something links to, an entity edited in place, and taken in
+    /// one nothing links to, a log of changes.
+    pub fn for_links(&self, linked: bool) -> TimeChoice {
+        let Some(fallback) = &self.fallback else {
+            return self.clone();
+        };
+        TimeChoice {
+            column: (!linked).then(|| fallback.clone()),
+            how: (!linked).then_some(Taken::EditStamp),
+            refused: self.refused.clone(),
+            fallback: self.fallback.clone(),
+        }
+    }
+
+    /// The timestamps passed over, each with its reason, in table order:
+    /// the refused but the one taken.
+    pub fn rejected(&self) -> impl Iterator<Item = &(String, PassedOver)> {
+        self.refused
+            .iter()
+            .filter(move |(name, _)| Some(name) != self.column.as_ref())
+    }
+}
+
 /// One table, inferred.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredTable {
     pub name: String,
     pub columns: Vec<InferredColumn>,
     pub primary_key: Option<String>,
-    pub time_column: Option<String>,
+    /// The time column chosen, before the links settle a lone edit stamp
+    /// (`crate::assemble`); `time.column` is the table's time column.
+    pub time: TimeChoice,
     /// The column sets the catalog declares a primary or unique key over,
     /// which the source refuses to repeat.
     pub unique: Vec<BTreeSet<String>>,
@@ -119,6 +195,7 @@ pub fn table(
             name: declared.name.clone(),
             dtype,
             stype,
+            stype_before_key: None,
             received: ColumnType::from_arrow(&declared.name, field.data_type())?,
             nullable: !is_primary && !declared.not_null,
             unique: declared_unique.contains(&declared.name),
@@ -150,12 +227,12 @@ pub fn table(
         column.stype = Stype::Id;
     }
 
-    let time_column = choose_time_column(&columns, &samples, rows)?;
+    let time = choose_time_column(&columns, &samples, rows, key.as_deref())?;
     Ok(InferredTable {
         name: name.to_owned(),
         columns,
         primary_key: key,
-        time_column,
+        time,
         unique,
     })
 }
@@ -519,20 +596,28 @@ fn snake_case(name: &str) -> String {
     second
 }
 
-/// The time column among the timestamps, as the reference chooses it when
-/// one is plain: no name of a load, an edit or a birth, held in at least
-/// half the rows and not one value in every row, read in a preview that
-/// holds every row. Any other choice is refused.
+/// The time column among the timestamps, as the reference chooses it
+/// (`predictive_query.time_columns.choose_time_column`) where its choice is
+/// plain: a stamp of a load or a date of birth is passed over by its name;
+/// every other timestamp must be held in at least half the rows and not be
+/// one value in every row, read in a preview that holds every row; a stamp
+/// of the last edit is passed over too, and taken only when it is the one
+/// timestamp left (settled by the links, [`TimeChoice::for_links`]); of
+/// the rest, the one left is taken. The key is never the time column. Any
+/// other choice is refused: a timestamp refused for its values
+/// (`time_values`), several left (`time_several`), a time of day, and a
+/// preview that may not hold every row.
 fn choose_time_column(
     columns: &[InferredColumn],
     samples: &[Vec<Option<Value>>],
     rows: usize,
-) -> Result<Option<String>, CoreError> {
+    key: Option<&str>,
+) -> Result<TimeChoice, CoreError> {
     let candidates: Vec<usize> = (0..columns.len())
-        .filter(|&i| columns[i].stype == Stype::Timestamp)
+        .filter(|&i| columns[i].stype == Stype::Timestamp && Some(columns[i].name.as_str()) != key)
         .collect();
     if candidates.is_empty() {
-        return Ok(None);
+        return Ok(TimeChoice::default());
     }
     // A time of day: the reference reads none of its values as a time, so
     // it refuses the column for its values and warns; not ported.
@@ -542,10 +627,18 @@ fn choose_time_column(
     if rows as u64 >= PREVIEW_ROWS {
         return Err(not_yet("time_whole_table"));
     }
+    let mut refused = Vec::new();
+    let mut plain = Vec::new();
+    let mut edited = Vec::new();
     for &i in &candidates {
         let name = &columns[i].name;
-        if names::is_load_stamp(name) || names::is_birth_date(name) || names::is_edit_stamp(name) {
-            return Err(not_yet("time_name"));
+        if names::is_load_stamp(name) {
+            refused.push((name.clone(), PassedOver::LoadStamp));
+            continue;
+        }
+        if names::is_birth_date(name) {
+            refused.push((name.clone(), PassedOver::BirthDate));
+            continue;
         }
         let held = samples[i].iter().flatten().count();
         let missing = rows - held;
@@ -553,9 +646,31 @@ fn choose_time_column(
         if constant || 2 * missing > rows {
             return Err(not_yet("time_values"));
         }
+        if names::is_edit_stamp(name) {
+            refused.push((name.clone(), PassedOver::EditStamp));
+            edited.push(name.clone());
+        } else {
+            plain.push(name.clone());
+        }
     }
-    match candidates.as_slice() {
-        [one] => Ok(Some(columns[*one].name.clone())),
+    match (plain.as_slice(), edited.as_slice()) {
+        ([], [one]) => Ok(TimeChoice {
+            column: None,
+            how: None,
+            refused,
+            fallback: Some(one.clone()),
+        }
+        .for_links(false)),
+        ([], _) => Ok(TimeChoice {
+            refused,
+            ..TimeChoice::default()
+        }),
+        ([one], _) => Ok(TimeChoice {
+            column: Some(one.clone()),
+            how: Some(Taken::Only),
+            refused,
+            fallback: None,
+        }),
         _ => Err(not_yet("time_several")),
     }
 }

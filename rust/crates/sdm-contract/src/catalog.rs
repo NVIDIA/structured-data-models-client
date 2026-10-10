@@ -74,10 +74,14 @@ pub struct CatalogKey {
     pub columns: Vec<String>,
 }
 
-/// One column pair of a declared foreign key.
+/// One row of a declared foreign key, as the dialect's reader gives it:
+/// either one column pair of the key, or the whole key, every pair in
+/// `columns` and `referenced_columns` in order. The rows of one key share
+/// `key`, so a reader groups them by it; a key is one pair only when it
+/// has one row of one pair.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogForeignKey {
-    /// The key the pair belongs to: the same number for each of its pairs.
+    /// The key the row belongs to: the same number for each of its rows.
     pub key: i64,
     pub referenced_table: String,
     pub columns: Vec<String>,

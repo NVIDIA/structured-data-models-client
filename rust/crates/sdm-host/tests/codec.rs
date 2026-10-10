@@ -177,6 +177,7 @@ fn description_of(size: usize) -> Vec<u8> {
                 received: ColumnType::Int64,
                 dtype: Dtype::Int,
                 stype: Stype::Numerical,
+                stype_before_key: None,
                 nullable: true,
                 unique: false,
             }],

@@ -270,12 +270,12 @@ fn schema_definition(schema: &QuerySchema) -> interim::SchemaDefinition {
 
 macro_rules! same_names {
     ($to:ident, $from:ident, $a:ty, $b:ty, [$($v:ident),+ $(,)?]) => {
-        fn $to(value: $a) -> $b {
+        pub(crate) fn $to(value: $a) -> $b {
             match value {
                 $(<$a>::$v => <$b>::$v,)+
             }
         }
-        fn $from(value: $b) -> $a {
+        pub(crate) fn $from(value: $b) -> $a {
             match value {
                 $(<$b>::$v => <$a>::$v,)+
             }

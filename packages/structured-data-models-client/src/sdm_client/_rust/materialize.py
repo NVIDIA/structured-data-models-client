@@ -2,12 +2,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the schema's consistency check (T1.21d), the option refusals (T1.24), the
-# zoned anchor's conversion (T1.25), the run mode, entity count, shape,
-# limits and capped-context notice (T1.28) and the index warning's
-# once-flag (T1.26, by E52), are deleted in Phase 1 by those tasks;
-# casting the entities to the key's type stays the host's. Frozen
-# meanwhile (E50, scripts/rust_core/bridge_freeze.py).
+# the option refusals (T1.24), the zoned anchor's conversion (T1.25), the
+# run mode, entity count, shape, limits and capped-context notice (T1.28)
+# and the index warning's once-flag (T1.26, by E52), are deleted in Phase 1
+# by those tasks; casting the entities to the key's type stays the host's.
+# Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request's gathering (T1.11c).
 
@@ -25,7 +24,10 @@ this module hands it what the schema says now, with what the core's
 description of the source said of each column that the schema does not
 hold (the type the source handed over, whether it may be null, whether the
 source keys it), and the entities to predict for as one Arrow column of the
-key's own type. Nothing here imports the relational engine.
+key's own type. From T1.21d the core holds that schema to the reference's
+consistency check itself, marking the columns it joins on again from what
+each column means and meant before it was joined on (decision E55); this
+module checks none of it. Nothing here imports the relational engine.
 
 As built at T1.11c the core materializes a regression over a windowed
 ``SUM``, with the sampling options' defaults or the anchor time and seed
@@ -82,9 +84,10 @@ def _not_taken(rule: str) -> StructuredDataError:
 
 def description(schema: Schema) -> dict[str, Any]:
     r"""The schema as the contract's ``SourceDescription``: its tables, their
-    columns' data and semantic types, keys and time columns, and its
-    relationships, as they stand; of each column, what the core's
-    description of the source said that the schema does not hold.
+    columns' data and semantic types (what each means, and meant before the
+    schema joined on it), keys and time columns, and its relationships, as
+    they stand; of each column, what the core's description of the source
+    said that the schema does not hold.
 
     Raises:
         RouteError: The schema was not described on the core, so what the
@@ -115,7 +118,13 @@ def description(schema: Schema) -> dict[str, Any]:
             read = columns.get(column_name)
             if read is None or wire_dtype(read['dtype']) != column.dtype:
                 raise _not_taken('schema_edited')
-            shaped.append({**read, 'stype': str(column.stype)})
+            shaped.append(
+                {
+                    **read,
+                    'stype': str(column.stype),
+                    'stype_before_key': column._stype_before_key,
+                }
+            )
         key = table.primary_key
         tables.append(
             {
@@ -244,7 +253,6 @@ def gather(
     materializer._run_mode_for(num_context_samples)
     materializer._check_entity_count(indices)
     materializer._check_shape(options, RELATIONAL_LIMITS)
-    schema.check_consistent()
     entity = table_name(query.entity_column)
     seed = options.get('random_seed')
     operation = {

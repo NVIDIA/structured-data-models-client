@@ -522,16 +522,42 @@ fn warn(asker: &Asker, code: &str, message: &str) {
     });
 }
 
+/// Holds the schema `materialize` is handed as the reference holds a
+/// schema it is asked to make a request of (`Schema.check_consistent`,
+/// decision E55): the columns it joins on marked again, from what the
+/// host holds, so a host's edit is followed as the reference's schema
+/// follows it; each column's meaning one its values can carry, as the
+/// language answers it (`Stype.supports_dtype`); and each link able to
+/// join. Before anything else of the call is read, as the reference asks
+/// it before the gathering starts.
+fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
+    sdm_schema::assemble::mark_keys(description);
+    for table in &description.tables {
+        for column in &table.columns {
+            let supported = crate::pql::interim_stype(column.stype)
+                .supports_dtype(crate::pql::interim_dtype(column.dtype));
+            if !supported {
+                return Err(invalid(
+                    "a column's meaning is not one its values can carry",
+                    "schema",
+                ));
+            }
+        }
+    }
+    sdm_schema::assemble::check_links(description)
+}
+
 /// The body of a `materialize` run.
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
     let Inputs {
-        description,
+        mut description,
         query,
         indices,
         anchor_time,
         seed,
         facts,
     } = inputs;
+    consistent(&mut description)?;
     // The seed reaches this entry as the integer the caller gave, of any
     // size (decision H7); numpy's generator takes it whole, and the sample
     // takes it as the narrowest exact scalar.

@@ -15,7 +15,11 @@
 //! at T1.11b the operation is thin: it describes every table of the source
 //! with no overrides, and refuses by name ([`sdm_schema::not_yet`]) the
 //! inputs whose description takes a rule it does not port yet (register
-//! entry P1B-2).
+//! entry P1B-2). From T1.21d the description is the schema as the
+//! reference's client assembles it ([`sdm_schema::assemble`], decision
+//! E55): a keyless table keyed by the column foreign keys refer to before
+//! the count, then the links, the edit stamps, the columns joined on, and
+//! the warnings, which the run gives the host.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -23,11 +27,9 @@ use std::task::{Context, Poll};
 
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
 use sdm_contract::data::{DataRequest, DescribePart, TableKey};
-use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedSource, DescribedTable, OperationResult,
-    SourceDescription, SourceSpec,
-};
+use sdm_contract::ops::{ColumnRef, DescribedSource, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_schema::assemble::{self, Assembled};
 use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
 use sdm_schema::not_yet;
@@ -141,22 +143,13 @@ pub(crate) async fn run(
             .collect(),
     )
     .await?;
-    let mut links = Vec::new();
+    let mut declared = Vec::new();
     for (table, answer) in tables.iter().zip(foreign) {
-        links.extend(declared_links(table, &foreign_keys(answer)?, &tables));
+        declared.extend(declared_links(table, &foreign_keys(answer)?, &tables));
     }
-    // The reference keys a keyless table by the one column the declared
-    // foreign keys refer to, before the keys are counted; not ported yet.
-    for table in &tables {
-        let referenced = links
-            .iter()
-            .filter(|link: &&Vec<ColumnRef>| link[1].table == table.name)
-            .map(|link| &link[1].column)
-            .collect::<std::collections::BTreeSet<_>>();
-        if table.primary_key.is_none() && referenced.len() == 1 {
-            return Err(not_yet("key_by_reference"));
-        }
-    }
+    // A keyless table keyed by the one column the declared foreign keys
+    // refer to, before the keys are counted, as the reference keys it.
+    assemble::key_by_reference(&mut tables, &declared)?;
 
     let duplicates = if check_keys {
         count_keys(&asker, &tables).await?;
@@ -165,30 +158,16 @@ pub(crate) async fn run(
         None
     };
 
-    let description = SourceDescription {
-        tables: tables
-            .into_iter()
-            .map(|table| DescribedTable {
-                name: table.name,
-                columns: table
-                    .columns
-                    .into_iter()
-                    .map(|c| DescribedColumn {
-                        name: c.name,
-                        received: c.received,
-                        dtype: c.dtype,
-                        stype: c.stype,
-                        nullable: c.nullable,
-                        unique: c.unique,
-                    })
-                    .collect(),
-                primary_key: table.primary_key.into_iter().collect(),
-                time_column: table.time_column,
-                duplicate_keys: duplicates.clone(),
-            })
-            .collect(),
-        links,
-    };
+    // The schema as the reference's client assembles it: the links, the
+    // edit stamps they settle, the columns joined on marked, and the
+    // warnings, given in the reference's order (decision E55).
+    let Assembled {
+        description,
+        warnings,
+    } = assemble::assemble(tables, declared, duplicates);
+    for warning in warnings {
+        asker.warn(warning);
+    }
     let bytes = serde_json::to_vec(&description)
         .map_err(|_| internal("a source description does not serialize"))?;
     let id = asker.attach(Attachment::Bytes(bytes))?;

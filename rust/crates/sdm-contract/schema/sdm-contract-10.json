@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/9",
+  "$id": "sdm-contract/10",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -2379,7 +2379,7 @@
       ]
     },
     "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the provider binds\nunder `relation`, the name the statement's text reads it by (for\nexample by registering the attachment as a relation for the statement).",
+      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation.",
       "oneOf": [
         {
           "type": "object",

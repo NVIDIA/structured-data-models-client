@@ -454,9 +454,14 @@ pub enum ProviderChoice {
     Host { capabilities: ProviderCapabilities },
 }
 
-/// A statement's parameter: a scalar, or a key set the provider binds
-/// under `relation`, the name the statement's text reads it by (for
-/// example by registering the attachment as a relation for the statement).
+/// A statement's parameter: a scalar, or a key set the statement's text
+/// reads under `relation`. How the keys come to be read by that name is
+/// the dialect's, which `sdm-data` renders and its provider binds: the
+/// DuckDB provider registers the attachment as a relation of that name; a
+/// PostgreSQL dialect may bind the keys as JSON text that a common table
+/// expression of that name unpacks, as the reference's PostgreSQL sampler
+/// does. `relation` names what the text reads, not an instruction to
+/// register an Arrow relation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "param", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SqlParam {

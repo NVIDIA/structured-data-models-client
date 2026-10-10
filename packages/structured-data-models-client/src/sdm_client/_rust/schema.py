@@ -2,9 +2,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# link inference, key marking, edit stamps and the schema's warnings
-# (T1.21d) and the option refusals (T1.24), are deleted in Phase 1 by those
-# tasks; building today's Schema stays the host's. Frozen meanwhile (E50).
+# the option refusals (T1.24), are deleted in Phase 1 by that task; building
+# today's Schema from the description stays the host's. Frozen meanwhile
+# (E50).
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 
@@ -12,11 +12,13 @@ r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 and no tables named. The core's ``describe_source`` reads the source through
 the DuckDB provider (:mod:`.providers.duckdb`) and infers each table, its
 columns' data and semantic types, its key and its time column, by the
-reference's rules, and the source's declared foreign keys; this module
-builds today's :class:`~sdm_client.schema.Schema` from that description,
-with the client's own assembly as ``Schema.from_source`` does it after the
-engine has read the source: the relationships inferred by name, the edit
-stamps settled by them, the key columns marked, and the same warnings.
+reference's rules, with the source's declared foreign keys; from T1.21d it
+assembles the schema as the client's ``Schema.from_source`` does after the
+engine has read the source, and says so in the same warnings: the
+relationships inferred by name, the edit stamps settled by them, the key
+columns marked (decision E55). This module builds today's
+:class:`~sdm_client.schema.Schema` from that description and decides
+nothing of it; the run shows the core's warnings as it gives them.
 
 Nothing here imports the relational engine. The proof is the tests':
 an import hook that refuses the engine for the length of the route is a
@@ -104,26 +106,16 @@ def from_source(
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
-    r"""Today's ``Schema`` of a ``SourceDescription``, assembled as
-    ``Schema.from_source`` assembles the engine's reading of a source."""
-    from predictive_query.time_columns import TimeColumnChoice
-
+    r"""Today's ``Schema`` of a ``SourceDescription``, as the core assembled
+    it: each column's meaning as the description gives it, with what it
+    meant before the schema joined on it (``Column._stype_before_key``,
+    which the schema gives back if it stops joining on it), each table's
+    key and time column, and the links."""
     from sdm_client.core.warnings import SDMWarning
     from sdm_client.materializers.sources import EngineTables, wire_dtype
-    from sdm_client.schema import (
-        Column,
-        Relationship,
-        SourceTable,
-        _infer_relationships,
-        _joinable_inferred_links,
-        _key_by_the_referenced_column,
-        _settle_edit_stamps,
-        _warn_how_time_columns_were_inferred,
-        _warn_two_ways_to_reach_one_table,
-    )
+    from sdm_client.schema import Column, Relationship, SourceTable
 
     built: dict[str, SourceTable] = {}
-    chose: dict[str, TimeColumnChoice | None] = {}
     for table in described['tables']:
         name = table['name']
         columns = {}
@@ -137,30 +129,29 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             columns[column['name']] = Column(
                 column['name'], dtype, column['stype']
             )
-        shaped = SourceTable(name=name, source_name=name, columns=columns)
+        table_shape = SourceTable(name=name, source_name=name, columns=columns)
         keys = tuple(table['primary_key'])
-        if keys and all(key in columns for key in keys):
-            shaped.primary_key = keys[0] if len(keys) == 1 else keys
-        time = table['time_column']
-        if time is not None and time in columns and time not in keys:
-            shaped.time_column = time
+        if keys:
+            table_shape.primary_key = keys[0] if len(keys) == 1 else keys
+        table_shape.time_column = table['time_column']
+        # Once the key and time column are set, whose setters re-derive
+        # the marks of a table held on its own.
+        for column in table['columns']:
+            object.__setattr__(
+                table_shape.columns[column['name']],
+                '_stype_before_key',
+                column['stype_before_key'],
+            )
         duplicates = table['duplicate_keys']
         object.__setattr__(
-            shaped,
+            table_shape,
             'duplicate_keys',
             None
             if duplicates is None
             else int(codec.decode_scalar(duplicates)),
         )
-        built[name] = shaped
-        # The core takes a time column only as the one timestamp left, and
-        # refuses every other choice, so the choice is that or none.
-        chose[name] = (
-            TimeColumnChoice(time, 'only', (time,), ())
-            if time is not None
-            else TimeColumnChoice(None, None, (), ())
-        )
-    declared = [
+        built[name] = table_shape
+    links = [
         Relationship(
             source_table=foreign['table'],
             source_column=foreign['column'],
@@ -169,17 +160,8 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
         )
         for foreign, referenced in described['links']
     ]
-    # The core refuses a keyless table the declared keys would key, so this
-    # keys nothing; it runs where the reference runs it.
-    _key_by_the_referenced_column(built, declared)
-    covered = {(link.source_table, link.source_column) for link in declared}
-    by_name = [
-        link
-        for link in _infer_relationships(built)
-        if (link.source_table, link.source_column) not in covered
-    ]
-    links = _joinable_inferred_links(built, declared + by_name)
-    _settle_edit_stamps(built, chose, None, links)
+    # The core gave the schema's warnings as it assembled it; building the
+    # object repeats none of them.
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', SDMWarning)
         schema = cls(built, links, source=source)
@@ -188,7 +170,4 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     # catalog said of each column and the schema does not hold: the type
     # received, whether it may be null, whether the source keys it.
     schema._core_description = described
-    schema._mark_key_columns()
-    _warn_how_time_columns_were_inferred(schema, chose, None)
-    _warn_two_ways_to_reach_one_table(built, schema.relationships)
     return schema
