@@ -808,9 +808,10 @@ entries:
     tables named or every table, keys, time columns and relationships given,
     keys that repeat or miss values (warned, declined or refused by its
     rules), text that holds dates or several categories, a tie between key
-    candidates, several timestamps, a preview of a whole 1,000 rows, a table
-    keyed by the column declared foreign keys refer to; an empty table is
-    refused with a RuntimeError.
+    candidates, several timestamps, a time-of-day (TIME) column (refused as
+    a time column for its values, with a warning), a preview of a whole
+    1,000 rows, a table keyed by the column declared foreign keys refer to;
+    an empty table is refused with a RuntimeError.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, a
     DuckDB source's Schema.from_source with no tables named runs on the
@@ -820,10 +821,12 @@ entries:
     rule): tables_named, primary_keys, time_columns, column_type,
     float_nan, float_signed_zero, text_time, multicategorical, key_type,
     key_name_order, key_tie, key_by_reference, key_missing, key_repeats,
-    time_whole_table, time_name, time_values, time_several and empty_table;
-    the schema bridge refuses relationships and a time column cleared
-    (None) the same way before the core runs. The default route is
-    unchanged.
+    time_of_day, time_whole_table, time_name, time_values, time_several and
+    empty_table; the schema bridge refuses relationships and a time column
+    cleared (None) the same way before the core runs, with the rules
+    relationships and time_column_cleared. tables_named is reachable only
+    from a rust-host case, since the bridge always sends no tables: a call
+    with tables named has no core route. The default route is unchanged.
   affected_inputs: >-
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
@@ -835,7 +838,9 @@ entries:
   notes: >-
     Proposed by the implementer of T1.11b (Phase 1 decisions row E38), for
     the owner: each is a refusal of an input the reference accepts, or, for
-    an empty table, a named refusal in place of a RuntimeError, so it waits
+    an empty table, a named refusal in place of a RuntimeError (a time of
+    day was taken as the time column before T1.11b's first review round
+    found it; it is refused now), so it waits
     for the owner (P1B-1 process) and is never self-approved; the route is
     not a default anywhere, so no caller meets it. The tests that pin the
     refusals are diagnostic (base.regression is diagnostic until T1.29).
