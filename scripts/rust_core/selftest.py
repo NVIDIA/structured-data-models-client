@@ -636,7 +636,16 @@ def freeze_cases(results: list[Result]) -> None:
     rounds 1 and 2 are seeds, each checked as written (exactness) and
     after ``--write`` (the tripwire)."""
     committed = (REPO_ROOT / bridge_freeze.BASELINE).read_text()
-    changes = (REPO_ROOT / bridge_freeze.CHANGES).read_text()
+    # The seeds are the fixture's own changes, so neither its base nor its
+    # tree holds the declarations a package made of its own (T1.21d's
+    # moves): a seed's message would otherwise name them, spent, in place
+    # of the fault seeded.
+    changes = json.dumps(
+        {
+            **json.loads((REPO_ROOT / bridge_freeze.CHANGES).read_text()),
+            'changes': {},
+        }
+    )
     decisions = (REPO_ROOT / bridge_freeze.DECISIONS).read_text()
     script = (REPO_ROOT / bridge_freeze.SCRIPT).read_text()
 
@@ -702,6 +711,7 @@ def freeze_cases(results: list[Result]) -> None:
         declare: dict[str, dict[str, str]] | None = None,
     ) -> None:
         with tree(*FREEZE_TREE) as root:
+            (root / bridge_freeze.CHANGES).write_text(changes)
             change(root)
             refused: list[str] = []
             if rewrite:
@@ -1357,14 +1367,16 @@ def freeze_cases(results: list[Result]) -> None:
 
     def t121d(root: Path) -> None:
         # The review's fric3: a rule moved out of schema.py, its warning
-        # presented by the _rust/ glue.
+        # presented by the _rust/ glue. From T1.21d the glue calls the rule
+        # no longer, so the warning is added where it would present it.
         edit(
             root / schema,
-            f'    {two_ways}(built, schema.relationships)\n',
+            '    schema._core_description = described\n    return schema\n',
+            '    schema._core_description = described\n'
             "    for said in described.get('warnings', ()):\n"
-            '        warnings.warn(said, stacklevel=2)\n',
+            '        warnings.warn(said, stacklevel=2)\n'
+            '    return schema\n',
         )
-        edit(root / schema, f'        {two_ways},\n', '')
 
     moved_both = {
         f'{schema}::build': {'moved': 'two ways to one table (T1.21d)'},
