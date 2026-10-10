@@ -18,11 +18,12 @@ exception the run then ends with names the driver's class and is raised
 
 A model call (from T1.11d, ``predict``'s) is answered by the caller's
 ``model``: given the body's bytes, it returns the answer's bytes, which the
-core reads as the endpoint's 200; it raises :class:`Unreached` when the
-endpoint could not be reached, which the core is told as the contract's
+core reads as the endpoint's 200; it raises :class:`TransportFailed` when
+the client's transport failed (the endpoint could not be reached, or its
+answer could not be read), which the core is told as the contract's
 transport error (kind and ``retryable`` only, never the transport's text);
-anything else it raises (the endpoint's own refusal, as the client's
-transport reports it) cancels the run and is raised as it is.
+anything else it raises (the endpoint's refusal, which the caller has made
+safe to show) cancels the run and is raised as it is.
 """
 
 from __future__ import annotations
@@ -46,9 +47,10 @@ Provider = Callable[[dict[str, Any], Mapping[int, Any]], Any]
 Model = Callable[[bytes], bytes]
 
 
-class Unreached(Exception):
-    r"""The model endpoint could not be reached: raised by a :data:`Model`,
-    and told to the core as a transport error. It carries no text."""
+class TransportFailed(Exception):
+    r"""The client's transport failed: the endpoint could not be reached,
+    or its answer could not be read. Raised by a :data:`Model`, and told to
+    the core as a transport error. It carries no text."""
 
 
 def native() -> ModuleType:
@@ -205,12 +207,12 @@ def run(
 
 def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
     r"""Answers one model call with ``model``: its answer as a 200, or, when
-    it could not reach the endpoint, the contract's transport error."""
+    the transport failed, the contract's transport error."""
     body = handle.take_attachment(step['body'])
     attached: dict[int, Any] = {}
     try:
         answer = model(body)
-    except Unreached:
+    except TransportFailed:
         outcome: dict[str, Any] = {
             'outcome': 'transport_error',
             'kind': 'model_endpoint',
@@ -218,8 +220,8 @@ def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
             'retryable': False,
         }
     except BaseException:
-        # The endpoint's own refusal, as the client's transport reports it,
-        # or an interrupt: the run ends here, and the caller sees it as is.
+        # The endpoint's refusal, made safe to show by the caller, or an
+        # interrupt: the run ends here, and the caller sees it as is.
         handle.cancel()
         raise
     else:

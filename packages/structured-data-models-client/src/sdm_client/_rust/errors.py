@@ -54,7 +54,8 @@ ERRORS: dict[str, tuple[type[StructuredDataError], str]] = {
     ),
     'TRANSPORT_ERROR': (
         StructuredDataError,
-        'the model endpoint could not be reached',
+        'the transport to the model endpoint failed: the endpoint could not '
+        'be reached, or its answer could not be read',
     ),
     'INTERNAL_ERROR': (
         StructuredDataError,

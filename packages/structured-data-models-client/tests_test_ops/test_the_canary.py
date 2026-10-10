@@ -16,6 +16,10 @@ driven through it:
   driver's own message quotes;
 - transport: the model endpoint unreachable at a URL carrying the fake
   credential;
+- refusal: the endpoint refusing the call (HTTP 422, its detail, title and
+  other fields echoing the data and the credential; HTTP 500, echoing
+  nothing), behind a URL carrying the credential, raised as the transport's
+  ``NimRequestError`` with its status and code and none of its words;
 - panic: the test-only operation, panicking in the run's body with the
   sentinel as its payload.
 
@@ -65,6 +69,7 @@ from sdm_client._rust import codec, errors
 from sdm_client._rust import run as run_module
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.run import run
+from sdm_client.errors import NimRequestError
 
 ROOT = Path(__file__).resolve().parents[3]
 DATA = 'SENTINEL-data-7a1f'
@@ -214,8 +219,9 @@ def _endpoint() -> Any:
 
 
 @contextmanager
-def _answering(body: bytes) -> Iterator[str]:
-    r"""An endpoint answering every request 200 with ``body``."""
+def _answering(body: bytes, status: int = 200) -> Iterator[str]:
+    r"""An endpoint answering every request ``status`` with ``body``; its
+    URL carries the fake credential."""
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
@@ -225,7 +231,7 @@ def _answering(body: bytes) -> Iterator[str]:
 
         def do_POST(self) -> None:  # noqa: N802 - http.server's name
             self.rfile.read(int(self.headers.get('Content-Length') or 0))
-            self.send_response(200)
+            self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
@@ -235,7 +241,7 @@ def _answering(body: bytes) -> Iterator[str]:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f'http://127.0.0.1:{server.server_address[1]}'
+        yield f'http://sdm:{DSN}@127.0.0.1:{server.server_address[1]}'
     finally:
         server.shutdown()
         server.server_close()
@@ -314,12 +320,21 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
         {'id': [DATA], 'model': DSN, 'metadata': {}, 'predictions': []}
     ).encode()
 
-    def answered(body: bytes) -> Callable[[], Any]:
+    def answered(body: bytes, status: int = 200) -> Callable[[], Any]:
         def call() -> Any:
-            with _answering(body) as url:
+            with _answering(body, status) as url:
                 return _predict(url)
 
         return call
+
+    echoing_refusal = json.dumps(
+        {
+            'code': 'UNSUPPORTED_FEATURE',
+            'detail': f'column country holds {DATA}; caller {CREDENTIAL}',
+            'title': DSN,
+            'invalid_params': [{'name': DATA, 'reason': DSN}],
+        }
+    ).encode()
 
     def operation() -> Any:
         return run({'op': DATA, 'state': CREDENTIAL}, {})
@@ -362,6 +377,12 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
             'data'
         ),
         'transport: an unreachable endpoint behind a credential': transport,
+        'refusal: a 422 echoing the request behind a credential': answered(
+            echoing_refusal, 422
+        ),
+        'refusal: a 500 behind a credential': answered(
+            b'{"code": "INTERNAL_ERROR", "detail": "internal failure"}', 500
+        ),
         'panic: in the run s body': panic,
     }
 
@@ -381,15 +402,23 @@ def test_no_sentinel_reaches_anything_written(
     with _watching(monkeypatch, capfd) as seen:
         error = _raised(seen, scenario)
     assert seen.leaks() == [], name
-    # The error is the core's, raised with no cause chained.
-    assert error.__cause__ is None and error.__suppress_context__, name
-    assert any(where == 'core error' for where, _ in seen.texts), name
+    path = name.split(':')[0]
+    if path == 'refusal':
+        # The endpoint's refusal, as the host raises it on the core route:
+        # its class, status and code, no cause and no context.
+        assert isinstance(error, NimRequestError), name
+        assert error.__cause__ is None and error.__context__ is None, name
+    else:
+        # The error is the core's, raised with no cause chained.
+        assert error.__cause__ is None and error.__suppress_context__, name
+        assert any(where == 'core error' for where, _ in seen.texts), name
     expected = {
         'codec': {'INVALID_MESSAGE', 'INVALID_RESPONSE'},
         'provider': {'PROVIDER_ERROR'},
         'transport': {'TRANSPORT_ERROR'},
+        'refusal': {'UNSUPPORTED_FEATURE', 'INTERNAL_ERROR'},
         'panic': {'INTERNAL_ERROR'},
-    }[name.split(':')[0]]
+    }[path]
     assert error.code in expected, (name, error.code)
 
 
@@ -454,6 +483,14 @@ def _leaky_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(errors, '_instance', leaky)
 
 
+def _leaky_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    r"""A route that raises the endpoint's refusal as the transport wrote
+    it, as the old route does."""
+    from sdm_client._rust import predict as bridge
+
+    monkeypatch.setattr(bridge, '_refusal', lambda refused: refused)
+
+
 def _leaky_panic(monkeypatch: pytest.MonkeyPatch) -> None:
     r"""A formatter that writes the operation it ran into the error."""
     made = errors._instance
@@ -478,6 +515,11 @@ def _leaky_panic(monkeypatch: pytest.MonkeyPatch) -> None:
             'transport: an unreachable endpoint behind a credential',
             _leaky_transport,
             DSN,
+        ),
+        (
+            'refusal: a 422 echoing the request behind a credential',
+            _leaky_refusal,
+            DATA,
         ),
         ('panic: in the run s body', _leaky_panic, PANIC),
     ],

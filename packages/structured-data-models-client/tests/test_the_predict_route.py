@@ -91,8 +91,11 @@ def _shop() -> list[str]:
     return statements
 
 
-def _materialized(monkeypatch: pytest.MonkeyPatch) -> Request:
-    r"""base.regression's request, materialized on the core."""
+def _materialized(
+    monkeypatch: pytest.MonkeyPatch, indices: list[int] | None = None
+) -> Request:
+    r"""base.regression's request, materialized on the core, for
+    ``indices`` (its own, ``[0, 1]``, by default)."""
     monkeypatch.setenv(_routing.ENVIRONMENT, MATERIALIZE)
     connection = duckdb.connect()
     for statement in _shop():
@@ -101,7 +104,8 @@ def _materialized(monkeypatch: pytest.MonkeyPatch) -> Request:
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(connection))
         request = PredictiveQuery(QUERY, schema).materialize(
-            indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+            indices=[0, 1] if indices is None else indices,
+            anchor_time=pd.Timestamp('2024-03-01'),
         )
     monkeypatch.delenv(_routing.ENVIRONMENT)
     return request
@@ -247,22 +251,40 @@ def test_outputs_other_than_a_regression_s_default_are_refused_by_name(
     assert len(received.requests) == 1
 
 
-def test_an_endpoint_s_refusal_is_its_own_error_as_on_the_old_route(
+def test_an_endpoint_s_refusal_keeps_its_class_status_and_code_not_its_words(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _materialized(monkeypatch)
-    answer = json.dumps(
-        {'code': 'UNSUPPORTED_FEATURE', 'detail': 'not served here'}
-    ).encode()
-    with _answering(422, answer) as (url, _):
-        core, old = _both(monkeypatch, request, url)
-    assert isinstance(core, NimRequestError)
-    assert (type(core), core.status_code, core.code, str(core)) == (
-        type(old),
-        old.status_code,
-        old.code,
-        str(old),
-    )
+    for status, answer in (
+        (422, {'code': 'UNSUPPORTED_FEATURE', 'detail': 'column x is 5'}),
+        (
+            500,
+            {
+                'code': 'INTERNAL_ERROR',
+                'detail': 'failed to collect any context examples for 7',
+                'extra': 'value 7',
+            },
+        ),
+        (400, {'title': 'bad request for 7'}),
+    ):
+        with _answering(status, json.dumps(answer).encode()) as (url, _):
+            core, old = _both(monkeypatch, request, url)
+        assert isinstance(core, NimRequestError)
+        assert (type(core), core.status_code, core.code) == (
+            type(old),
+            old.status_code,
+            old.code,
+        )
+        # The client's own diagnosis is kept; the endpoint's words, its
+        # other fields and the transport's exception are not.
+        assert core.details == {
+            key: old.details[key]
+            for key in ('diagnosis', 'endpoint_code')
+            if key in old.details
+        }
+        for said in ('column x', 'context examples', 'value 7', 'bad request'):
+            assert said not in str(core) + repr(core.details), said
+        assert core.__cause__ is None and core.__context__ is None
 
 
 def test_an_endpoint_that_cannot_be_reached_is_a_transport_error_with_no_cause(
@@ -312,3 +334,89 @@ def test_an_answer_that_is_not_this_request_s_is_an_invalid_response(
             core, old = _both(monkeypatch, request, url)
         assert (type(core), core.code) == (type(old), old.code), answered
         assert core.code == 'INVALID_RESPONSE'
+
+
+def test_distinct_answers_out_of_order_land_on_their_own_entities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Entities that are not their rows' positions, answered in reverse
+    # order with a distinct prediction each: a swapped column or a misplaced
+    # prediction differs from the old route (T1.11d review round 1, F4).
+    request = _materialized(monkeypatch, indices=[5, 2, 7])
+    [rows] = [request.payloads[0]['predict']['instance_table']['rows']]
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r7',
+        'model': 'kumo-relational',
+        'metadata': {'n': 12345678901234567890, 'tiny': 1e-05},
+        'predictions': [
+            {
+                'id': str(instance),
+                'row_index': index,
+                'prediction': 10.5 * (index + 1),
+            }
+            for index, instance in reversed(list(enumerate(instances)))
+        ],
+    }
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        core, old = _both(monkeypatch, request, url)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.items == old.items
+    assert (core.request_id, core.metadata) == (old.request_id, old.metadata)
+    frame = core.to_pandas()
+    assert frame['id'].tolist() == [5, 2, 7]
+    assert frame['prediction'].tolist() == [10.5, 21.0, 31.5]
+    assert [item.row_index for item in core.items] == [2, 1, 0]
+
+
+def test_an_overflowing_prediction_is_refused_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized(monkeypatch)
+    for token in ('1e400', '-1e400'):
+        answer = (
+            '{"id": "r1", "model": "kumo-relational", "metadata": {}, '
+            '"predictions": [{"id": "112", "row_index": 0, "prediction": '
+            + token
+            + '}, {"id": "113", "row_index": 1, "prediction": 1.0}]}'
+        )
+        with _answering(200, answer.encode()) as (url, _):
+            core, old = _both(monkeypatch, request, url)
+        # The core refuses it as the Rust host does (sdm-core's
+        # tests/predict.rs), where the old route gives an infinity
+        # (register P1B-4).
+        assert isinstance(core, StructuredDataError)
+        assert core.code == 'INVALID_RESPONSE'
+        assert core.details['field'] == 'prediction.prediction'
+        assert core.details['reason'] == 'not_finite'
+        assert old.to_pandas()['prediction'].tolist()[0] in (
+            float('inf'),
+            float('-inf'),
+        )
+
+
+def test_a_failed_transport_is_named_for_what_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A 200 whose body is not JSON: the reference's TRANSPORT_ERROR, said
+    # as a transport failure, not as an endpoint never reached.
+    request = _materialized(monkeypatch)
+    with _answering(200, b'<html>' + b'x' * 10 + b'</html>') as (url, _):
+        core, old = _both(monkeypatch, request, url)
+    assert (core.code, old.code) == ('TRANSPORT_ERROR', 'TRANSPORT_ERROR')
+    assert 'its answer could not be read' in str(core)
+
+
+def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _materialized(monkeypatch)
+    request.payloads[0]['context']['instance_table']['rows'][0][-1] = float(
+        'nan'
+    )
+    with _endpoint().serve() as (url, received):
+        core, old = _both(monkeypatch, request, url)
+    assert (type(core), core.code) == (type(old), old.code)
+    assert core.code == 'INVALID_REQUEST'
+    assert received.requests == []

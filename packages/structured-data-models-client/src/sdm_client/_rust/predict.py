@@ -18,9 +18,22 @@ the request holds them now), and the id this call carries, drawn as the
 adapter draws one; it makes the call the adapter makes, which this host
 sends through the client's own transport, reads the answer as the client's
 bindings read it, and lays it out: one row per answer, under the entity it
-is about. An endpoint's refusal is the transport's error, as on the old
-route; an endpoint that could not be reached is told to the core, which
-ends the run with ``TRANSPORT_ERROR``.
+is about. The endpoint's answer reaches the core as its JSON, every
+non-finite number Python's reader made of it written as a token the core
+reads as one (an overflowing ``1e400`` for an infinity), so both hosts
+refuse it alike.
+
+No text the endpoint wrote, and no value of the request, reaches an
+exception on this route (decision H17; E45(c) as revised in T1.11d's first
+review round): an endpoint's refusal (HTTP 4xx or 5xx) is raised as the
+transport raises it, a :class:`~sdm_client.errors.NimRequestError` with the
+endpoint's status and code and the client's own diagnosis, but with a fixed
+sentence, none of the endpoint's detail, title or other fields, and no
+cause; a failed transport (the endpoint could not be reached, or its
+answer could not be read) is told to the core, which ends the run with
+``TRANSPORT_ERROR``; any other error of the transport keeps its code and
+gets a fixed sentence. Whether a user needs the endpoint's own words on a
+refusal is a question for the owner (E45).
 
 As built at T1.11d the core predicts a regression asked for its default
 output; the rest is refused with ``UNSUPPORTED_REQUEST`` naming the rule
@@ -31,11 +44,12 @@ Nothing here imports the relational engine.
 from __future__ import annotations
 
 import json
+import math
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
-from sdm_client._rust.run import Unreached, run
+from sdm_client._rust.run import TransportFailed, run
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 if TYPE_CHECKING:
@@ -60,6 +74,74 @@ def _rows(stream: Any) -> list[dict[str, Any]]:
         stream.__arrow_c_stream__()
     )
     return reader.read_all().to_pylist()
+
+
+def _payload(payload: dict[str, Any]) -> bytes:
+    r"""A payload as the core reads it; one holding a value JSON has no form
+    for is refused as the client's transport refuses it."""
+    try:
+        return json.dumps(payload, allow_nan=False).encode()
+    except (TypeError, ValueError):
+        raise StructuredDataError(
+            'this request carries a value that cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        ) from None
+
+
+def _encoded(value: Any) -> bytes:
+    r"""An answer the transport decoded, as JSON text for the core: what
+    ``json.dumps`` writes, but a non-finite float, which Python's reader
+    made of the endpoint's text (an overflowing ``1e400``, or a ``NaN`` or
+    ``Infinity`` JSON does not hold), as a token the core reads as one: an
+    infinity as ``1e400`` or ``-1e400``, a NaN as ``NaN``, which the core
+    refuses as not JSON."""
+    out: list[str] = []
+
+    def write(item: Any) -> None:
+        if isinstance(item, float) and not math.isfinite(item):
+            out.append(
+                'NaN' if item != item else ('1e400' if item > 0 else '-1e400')
+            )
+        elif isinstance(item, dict):
+            out.append('{')
+            for index, (key, member) in enumerate(item.items()):
+                if index:
+                    out.append(', ')
+                out.append(json.dumps(str(key)))
+                out.append(': ')
+                write(member)
+            out.append('}')
+        elif isinstance(item, (list, tuple)):
+            out.append('[')
+            for index, member in enumerate(item):
+                if index:
+                    out.append(', ')
+                write(member)
+            out.append(']')
+        else:
+            out.append(json.dumps(item))
+
+    write(value)
+    return ''.join(out).encode()
+
+
+def _refusal(refused: NimRequestError) -> NimRequestError:
+    r"""The endpoint's refusal as this route raises it: its class, status
+    and code, and the client's own diagnosis of it, with a fixed sentence
+    and none of the endpoint's text (decision H17)."""
+    details = refused.details if isinstance(refused.details, dict) else {}
+    kept = {
+        name: details[name]
+        for name in ('diagnosis', 'endpoint_code')
+        if isinstance(details.get(name), str)
+    }
+    return NimRequestError(
+        refused.status_code,
+        code=refused.code if isinstance(refused.code, str) else None,
+        message='the model endpoint refused the request; its own words are '
+        'not shown on this route',
+        details=kept,
+    )
 
 
 def predict(
@@ -96,17 +178,28 @@ def predict(
     adapter._preflight(payloads, fields, request.query)
 
     def model(body: bytes) -> bytes:
+        # What failed is noted inside the handlers and raised after them, so
+        # the transport's exception, whose text the endpoint wrote, is not
+        # even the context of what is raised.
+        failure: StructuredDataError | None = None
+        transport_failed = False
         try:
             answer = client._send(adapter, json.loads(body))
-        except NimRequestError:
-            # The endpoint answered, and refused: its own error, explained
-            # by the adapter, as on the old route.
-            raise
+        except NimRequestError as refused:
+            failure = _refusal(refused)
         except StructuredDataError as failed:
             if failed.code == 'TRANSPORT_ERROR':
-                raise Unreached from None
-            raise
-        return json.dumps(answer).encode()
+                transport_failed = True
+            else:
+                failure = StructuredDataError(
+                    'the transport to the model endpoint refused the call',
+                    code=failed.code,
+                )
+        if transport_failed:
+            raise TransportFailed
+        if failure is not None:
+            raise failure
+        return _encoded(answer)
 
     parts = []
     for payload in payloads:
@@ -116,10 +209,7 @@ def predict(
             'model': adapter.spec.model_id,
             'request_id': _request_id(),
         }
-        attachments = {
-            1: json.dumps(payload, allow_nan=False).encode(),
-            2: codec.attachment(request.query),
-        }
+        attachments = {1: _payload(payload), 2: codec.attachment(request.query)}
         finished = run(operation, attachments, model=model)
         answered = finished.result
         rows = _rows(finished.take(answered['result']))

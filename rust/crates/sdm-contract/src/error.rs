@@ -100,7 +100,8 @@ pub enum ErrorCode {
     InvalidResponse,
     /// The host's configuration of a run is not one the core accepts.
     InvalidConfiguration,
-    /// The model endpoint could not be reached.
+    /// The transport to the model endpoint failed: it could not reach the
+    /// endpoint, or could not read its answer.
     TransportError,
     /// A defect in the core, a contained panic included.
     InternalError,
@@ -335,7 +336,7 @@ impl CoreError {
         let mut out = Self::new(
             kind,
             ErrorCode::TransportError,
-            "the model endpoint could not be reached",
+            "the transport to the model endpoint failed",
         );
         out.retryable = retryable;
         out
