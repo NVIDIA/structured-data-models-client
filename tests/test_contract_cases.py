@@ -279,7 +279,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
             native={'sha256': 'a' * 64},
             native_loaded=True,
             operations=sorted(case['core']),
-            contract=7,
+            contract=8,
         )
         if 'describe_source' in case['core']:
             # A description, whatever the call did after it, and from T1.11c
@@ -301,12 +301,31 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                     'query': case['input']['pql'],
                     'payload': {},
                 }
+            # From T1.11d, a prediction, for a case that predicts on the
+            # core.
+            predicted = None
+            if 'predict' in case['core']:
+                inputs.append(
+                    {
+                        'op': 'predict',
+                        **case['core']['predict'],
+                        'state': materialized,
+                    }
+                )
+                predicted = {
+                    'body': {},
+                    'model': 'kumo-relational',
+                    'request_id': 'r1',
+                    'metadata': {},
+                    'result': {'columns': [], 'rows': []},
+                }
             observation['core'] = {
                 'inputs': inputs,
                 'fetches': [],
                 'accepted': None,
                 'described': {'tables': [], 'links': []},
                 'materialized': materialized,
+                'predicted': predicted,
                 'error': None,
             }
             return
@@ -328,6 +347,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
             ),
             'described': None,
             'materialized': None,
+            'predicted': None,
             'error': error,
         }
 
