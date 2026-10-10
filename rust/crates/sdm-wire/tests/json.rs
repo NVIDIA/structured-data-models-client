@@ -6,6 +6,11 @@
 //! a member named twice keeping its first place and last value, and what
 //! JSON does not allow refused by position and category, never by text.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reruns its own binary for the deep-text test"
+)]
+
 use sdm_wire::json::{MAX_DEPTH, Value, is_integer_token, read, whole};
 
 #[test]

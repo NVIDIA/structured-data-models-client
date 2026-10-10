@@ -11,6 +11,11 @@
 //! answer (H17). The refusals of what the thin route does not port are
 //! diagnostic, register entry P1B-4.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reruns its own binary for the deeply nested answer"
+)]
+
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
