@@ -272,16 +272,28 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 if json.loads(path.read_text())['id'] == observation['case']
             ).read_text()
         )
-        spec = case['core']['validate_query']
         identity = observation['identity']
         identity.update(
             runner='python-core',
             reference=None,
             native={'sha256': 'a' * 64},
             native_loaded=True,
-            operations=['validate_query'],
-            contract=4,
+            operations=sorted(case['core']),
+            contract=6,
         )
+        if 'describe_source' in case['core']:
+            # A description, whatever the call did after it.
+            observation['core'] = {
+                'inputs': [
+                    {'op': 'describe_source', **case['core']['describe_source']}
+                ],
+                'fetches': [],
+                'accepted': None,
+                'described': {'tables': [], 'links': []},
+                'error': None,
+            }
+            return
+        spec = case['core']['validate_query']
         observation['core'] = {
             'inputs': [
                 {
@@ -291,11 +303,13 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                     'schema': spec['schema'],
                 }
             ],
+            'fetches': [],
             'accepted': (
                 observation['outcome']['result'] == 'success'
                 if accepted is None
                 else accepted
             ),
+            'described': None,
             'error': error,
         }
 
