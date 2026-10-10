@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: on the core route, the num_context_samples bound in
+# _validate_materialize_args (design, "Host-held semantics") is deleted in
+# Phase 1 by T1.28; the decomposition and the model and route choice move
+# in a later phase (the ledger), and the S0 hook in _resolve goes in Phase 5.
 
 r"""Asking a question in PQL, and gathering the data that answers it.
 

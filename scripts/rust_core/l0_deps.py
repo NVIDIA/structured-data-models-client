@@ -31,8 +31,10 @@ features, every target platform) and checks:
   which forbid it, and forbids it at its root; the binding and the test
   host deny it;
 - bridge headers (decision F7): each bridge file carries a header naming the
-  phase that deletes it, a shipped file that reads ``SDM_CORE_ROUTES`` is a
-  bridge file, and every ``Bridge code:`` header names a phase. The parser
+  phase that deletes it, a shipped file that reads ``SDM_CORE_ROUTES`` is
+  one of the seam's (``ROUTE_READERS``, a narrower list than the bridge
+  files), and every ``Bridge code:`` header names a phase; which task owns
+  a rule a header names is for review, not this check. The parser
   is not bridge code (E18): nothing is asked of it, and it carries no such
   header.
 
@@ -143,18 +145,25 @@ _TEST_OPS_MODULE = re.compile(
     r'#\[cfg\(feature\s*=\s*"test-ops"\)\]\s*(?:pub\s+)?mod\s+test_ops\s*;'
 )
 
-# Bridge files (decision F7): the private seam deleted in Phase 5, and the
-# files that keep a rule of the design's "Host-held semantics" ledger on a
-# core route, each deleted from that route by its owning task (T1.11f).
+# The private seam deleted in Phase 5: the only shipped files that may read
+# SDM_CORE_ROUTES (decision B-D7).
 _CLIENT = 'packages/structured-data-models-client/src/sdm_client/'
-BRIDGE_FILES = (
+ROUTE_READERS = (
     Path(_CLIENT + '_routing.py'),
     Path(_CLIENT + '_rust/s0.py'),
+)
+# Bridge files (decision F7), each held to a header naming the phase that
+# deletes it: the seam, and the files that keep a rule of the design's
+# "Host-held semantics" ledger on a core route (T1.11f). Which task owns
+# each rule is the ledger's, held by review, not by this check.
+BRIDGE_FILES = (
+    *ROUTE_READERS,
     Path(_CLIENT + '_rust/schema.py'),
     Path(_CLIENT + '_rust/materialize.py'),
     Path(_CLIENT + '_rust/predict.py'),
     Path(_CLIENT + 'materializers/relational.py'),
     Path(_CLIENT + 'client.py'),
+    Path(_CLIENT + 'query.py'),
 )
 SHIPPED_PYTHON = Path('packages/structured-data-models-client/src')
 _BRIDGE_HEADER = re.compile(r'^(?:#|//)\s*Bridge code\b.*', re.M)
@@ -415,10 +424,10 @@ def check_bridges(root: Path, parser_root: Path) -> list[str]:
         if (
             path.suffix == '.py'
             and 'SDM_CORE_ROUTES' in text
-            and rel not in BRIDGE_FILES
+            and rel not in ROUTE_READERS
         ):
             problems.append(
-                f'{rel}: reads SDM_CORE_ROUTES but is not a listed bridge file'
+                f'{rel}: reads SDM_CORE_ROUTES but is not a seam file allowed to'
             )
     return problems
 

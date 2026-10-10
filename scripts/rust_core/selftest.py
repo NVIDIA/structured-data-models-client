@@ -530,6 +530,14 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm_client/_rust/extra.py: reads SDM_CORE_ROUTES',
     )
     bridges(
+        'SDM_CORE_ROUTES read in a ledger bridge file (client.py)',
+        lambda r: append(
+            r / client / 'sdm_client/client.py',
+            "\nimport os as _os\n\n_R = _os.environ.get('SDM_CORE_ROUTES')\n",
+        ),
+        'sdm_client/client.py: reads SDM_CORE_ROUTES',
+    )
+    bridges(
         'a bridge header on the parser (E18)',
         lambda r: edit(
             r / 'rust/crates' / l0_deps.PARSER / 'src/lib.rs',
