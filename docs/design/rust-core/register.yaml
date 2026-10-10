@@ -849,6 +849,67 @@ entries:
     and tables named) and T1.25 (text dates, DT-7) remove each rule's
     refusal, and this entry is set to rejected when the last one goes.
 
+- id: P1B-3
+  title: materialize on the core route refuses what T1.11c's thin route does not port yet
+  kind: change
+  old_behavior: >-
+    The reference materializes any query its relational engine answers over
+    a DuckDB source: every task kind (binary, multiclass, regression,
+    forecasting, link prediction, ranking), any aggregation and window
+    (months included), entity filters, ASSUMING and named entities, EXPLAIN
+    and EVALUATE, any graph of tables (tables the entity table refers to,
+    hops past the first, a keyless table's neighbors), composite keys, keys
+    of any type, text columns (normalized), every sampling option
+    (num_neighbors, num_hops, context_anchor_time, lag_timesteps,
+    max_pq_iterations, use_prediction_time, inference_config,
+    exclude_cols_dict, return_embeddings, top_k, num_context_samples, the
+    anchor time 'entity'), any column type in the payload, a seed of any
+    size, entities of a type the key casts them to, and a schema edited
+    after Schema.from_source; when a large entity table yields fewer than
+    half the context examples asked for, it warns once per process.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    DuckDB source's PredictiveQuery.materialize with indices runs on the
+    core's materialize (T1.11c), which materializes a regression over a
+    windowed SUM for each entity of a table that only tables referring to
+    it link, with the reference's defaults or the anchor time and seed
+    given, by the reference's rules, and refuses every other input with
+    UNSUPPORTED_REQUEST naming the rule, never a value (fields operation and
+    rule). In the core: composite_key, evaluate, explain, problem_type,
+    assuming, entity_ids, entity_filter, static_target, aggregation,
+    target_filter, open_window, month_window, entity_key, parent_table,
+    deeper_hop, text_column, anchor_zone, key_type, time_type, target_type,
+    indices_type, context_coverage (in place of the once-per-process
+    warning), keyless_neighbors, parent_lookup, wire_dtype and seed_size; in
+    the bridge, before the core runs: each sampling option the core does
+    not take, by its name, num_context_samples, anchor_entity, key_type and
+    schema_edited. A schema not described on the core has no core route
+    (RouteError, the seam's own failure). A seed DuckDB's parser refuses,
+    from 2**31, is INVALID_REQUEST naming the field, under RS-7. The default
+    route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source's schema
+    under a forced core route, with any of the inputs above; base.regression
+    is none of them, and its payload is the reference's.
+  cases: [base.regression, T1.11c, T1.22, T1.26, T1.27, T1.28, T1.29]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by the implementer of T1.11c (Phase 1 decisions row E41), for
+    the owner: each is a refusal of an input the reference accepts, so it
+    waits for the owner (P1B-1 process) and is never self-approved; the
+    route is not a default anywhere, so no caller meets it. The tests that
+    pin the refusals (sdm-core's tests/materialize.rs, the client's
+    tests/test_the_materialize_route.py) are diagnostic: base.regression is
+    diagnostic until T1.29. context_coverage is a choice for the owner: the
+    reference's warning is held once per process by a module global, which a
+    core holding no state across runs cannot promise; the host could hold
+    it. Recommendation: approve as temporary, as P1B-2; T1.22 (seeds and
+    streams), T1.26 (sampling), T1.27 (labels) and T1.28 (the payload)
+    remove each rule's refusal, and this entry is set to rejected when the
+    last one goes.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
