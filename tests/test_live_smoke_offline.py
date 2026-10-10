@@ -275,3 +275,70 @@ def test_a_vanity_host_is_known_by_its_bare_name(
     for secret in ('vanity-corp', 'SYNTH_USER', 'SYNTHETIC_ENDPOINT'):
         assert secret not in said, secret
     assert 'smoke failed:' in said
+
+
+def test_an_interrupt_while_the_profile_is_read_is_reported_in_fixed_words(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    smoke = _smoke()
+    monkeypatch.setattr(smoke, '_quiet_the_world', lambda: None)
+    monkeypatch.setenv('HOME', '/nonexistent-home')
+
+    def interrupted(self: Any, *args: Any, **kwargs: Any) -> Any:
+        raise KeyboardInterrupt('SYNTHETIC_SECRET')
+
+    monkeypatch.setattr(smoke.ConfigParser, 'read', interrupted)
+    status = smoke.main(['--endpoint', 'SYNTHETIC_ENDPOINT'])
+    captured = capsys.readouterr()
+    said = captured.out + captured.err
+    assert status == 1
+    assert 'interrupted' in said
+    assert 'SYNTHETIC' not in said and 'Traceback' not in said
+
+
+def test_the_dry_run_reads_no_profile(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    smoke = _smoke()
+    monkeypatch.setattr(smoke, '_quiet_the_world', lambda: None)
+    monkeypatch.setattr(smoke, '_no_network', lambda: None)
+    read: list[Any] = []
+    monkeypatch.setattr(
+        smoke.ConfigParser, 'read', lambda self, *a, **k: read.append(a)
+    )
+
+    def stop(route: str) -> Any:
+        raise RuntimeError('stop here')
+
+    monkeypatch.setattr(smoke, 'build_request', stop)
+    assert smoke.main(['--dry-run']) == 1
+    assert read == []
+    capsys.readouterr()
+
+
+def test_another_s_warning_is_shown_by_category_and_module_alone() -> None:
+    script = (
+        'import importlib.util, sys, warnings\n'
+        f'spec = importlib.util.spec_from_file_location("s", {str(SCRIPT)!r})\n'
+        'smoke = importlib.util.module_from_spec(spec)\n'
+        'sys.modules["s"] = smoke\n'
+        'spec.loader.exec_module(smoke)\n'
+        'smoke._quiet_the_world()\n'
+        'warnings.warn_explicit("token for SYNTH_UNKNOWN_USER at '
+        'other-host.vanity-corp.test", UserWarning, '
+        '"/x/site-packages/databricks/sdk/oauth.py", 1)\n'
+        'warnings.warn_explicit("the context is small", UserWarning, '
+        '"/x/site-packages/sdm_client/client.py", 1)\n'
+    )
+    run = subprocess.run(
+        [sys.executable, '-c', script],
+        capture_output=True,
+        text=True,
+        env=_clean_env(),
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    assert 'warning UserWarning from oauth (text withheld)' in run.stderr
+    assert 'warning UserWarning: the context is small' in run.stderr
+    assert 'SYNTH_UNKNOWN_USER' not in run.stderr
+    assert 'vanity-corp' not in run.stderr

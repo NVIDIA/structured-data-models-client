@@ -27,9 +27,11 @@ line it prints and every warning it shows passes through :func:`redact`,
 which knows, before any client exists, every value of the arguments, the
 ``DATABRICKS_`` and ``SDM_SMOKE_`` variables and the CLI profile, bare host
 names included; an error is reported by its class, its code and its HTTP
-status alone, never by its text, and with no traceback; a log record of any
-logger but the client's is shown by its name and level alone; and argument
-errors name no value.
+status alone, never by its text, and with no traceback, a failure or an
+interrupt while the CLI profile is read included; a log record of any
+logger but the client's is shown by its name and level alone, and a warning
+from any code but the client's by its category and module alone; and
+argument errors name no value.
 
 ``--dry-run`` builds the same request on the core and shows what would be
 sent, answered in process by the scripted endpoint's rule, with no network
@@ -160,10 +162,21 @@ def _quiet_the_world() -> None:
     def show(
         message: Warning | str,
         category: type[Warning],
+        filename: str = '',
         *_: object,
         **__: object,
     ) -> None:
-        say(f'warning {category.__name__}: {message}', file=sys.stderr)
+        # The client's warnings, redacted; anyone else's (the SDK's, the
+        # HTTP libraries') by category and module alone, since their text
+        # may name what this script was never told of.
+        module = Path(str(filename)).stem or '?'
+        if 'sdm_client' in Path(str(filename)).parts:
+            say(f'warning {category.__name__}: {message}', file=sys.stderr)
+        else:
+            say(
+                f'warning {category.__name__} from {module} (text withheld)',
+                file=sys.stderr,
+            )
 
     warnings.showwarning = show  # type: ignore[assignment]
 
@@ -240,19 +253,25 @@ def resolve(
     endpoint = arguments.endpoint or environ.get(ENDPOINT_VARIABLE) or None
     profile = arguments.profile or environ.get(PROFILE_VARIABLE) or None
     redact.know(endpoint, profile)
-    know_configuration(environ, profile)
+    know_environment(environ)
     return endpoint, profile
 
 
-def know_configuration(environ: dict[str, str], profile: str | None) -> None:
-    r"""Adds to the secrets, before any client exists, every value the
-    Databricks configuration may hold: each ``DATABRICKS_`` and
-    ``SDM_SMOKE_`` variable's value, and each value of the profile's
-    section of the CLI's configuration file (``DATABRICKS_CONFIG_FILE``, or
-    ``~/.databrickscfg``), a host's bare name included."""
+def know_environment(environ: dict[str, str]) -> None:
+    r"""Adds to the secrets each ``DATABRICKS_`` and ``SDM_SMOKE_``
+    variable's value, a host's bare name included; it reads no file."""
     for name, value in environ.items():
         if name.startswith(('DATABRICKS_', 'SDM_SMOKE_')):
             redact.know_host(value)
+
+
+def know_profile(environ: dict[str, str], profile: str | None) -> None:
+    r"""Adds to the secrets, before any client exists, each value of the
+    profile's section of the CLI's configuration file
+    (``DATABRICKS_CONFIG_FILE``, or ``~/.databrickscfg``), a host's bare
+    name included. It reads that file, so :func:`main` calls it only for a
+    live smoke, inside the boundary that reports a failure or an interrupt
+    in fixed words."""
     path = Path(
         environ.get('DATABRICKS_CONFIG_FILE')
         or Path(environ.get('HOME', '~')).expanduser() / '.databrickscfg'
@@ -446,6 +465,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if arguments.dry_run:
             _no_network()
+        else:
+            # The CLI profile is read for a live smoke only, inside this
+            # boundary: a failure or an interrupt while reading it is
+            # reported in fixed words.
+            know_profile(dict(os.environ), profile)
         from sdm_client import KumoRelational, SDMClient
 
         case = json.loads(CASE.read_text(encoding='utf-8'))
