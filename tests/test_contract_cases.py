@@ -185,6 +185,34 @@ def _changed(
 MALFORMED = ROOT / 'contract/tests/malformed-cases.json'
 
 
+def test_a_case_nested_past_the_parser_s_depth_is_refused_by_name(
+    tmp_path: Path,
+) -> None:
+    # sdm-testkit's loader refuses it by serde_json's depth limit; the Python
+    # loader refused nothing and raised RecursionError (T1.21c's probe).
+    case = json.loads(
+        (ROOT / 'contract/cases/s1/base.adventureworks.json').read_text()
+    )
+    case['expect'] = {
+        'outcome': 'refusal',
+        'stage': 'predict',
+        'error': 'E',
+        'code': None,
+    }
+    deep = 100_000
+    path = tmp_path / 'case.json'
+    path.write_text(
+        json.dumps(case).replace(
+            '"code": null', '"code": ' + '[' * deep + ']' * deep
+        )
+    )
+    with pytest.raises(run_python.RunnerFailure, match='not a case'):
+        run_python.load_cases([path])
+    path.write_text('{"format": ')
+    with pytest.raises(run_python.RunnerFailure, match='not a case'):
+        run_python.load_cases([path])
+
+
 def test_both_loaders_refuse_the_same_malformed_edits_and_relationships(
     tmp_path: Path,
 ) -> None:
@@ -192,7 +220,7 @@ def test_both_loaders_refuse_the_same_malformed_edits_and_relationships(
     # loader, which must refuse and take the same ones (T1.21b).
     listed = json.loads(MALFORMED.read_text())
     case = json.loads((ROOT / listed['case']).read_text())
-    assert len(listed['refused']) >= 39
+    assert len(listed['refused']) >= 54
     path = tmp_path / 'case.json'
     path.write_text(json.dumps(case))
     assert run_python.load_cases([path])

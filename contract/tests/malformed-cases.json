@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -401,6 +401,158 @@
         "today"
       ],
       "value": null
+    },
+    {
+      "why": "core naming no operation (minProperties)",
+      "path": [
+        "core"
+      ],
+      "value": {}
+    },
+    {
+      "why": "from_source naming no argument (minProperties)",
+      "path": [
+        "input",
+        "from_source"
+      ],
+      "value": {}
+    },
+    {
+      "why": "no setup statements (minItems)",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": []
+    },
+    {
+      "why": "an empty setup statement (minLength)",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": [
+        ""
+      ]
+    },
+    {
+      "why": "core.materialize without its seed, which is required and may be null",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "schema": {},
+        "indices": [
+          {}
+        ],
+        "anchor_time": null
+      }
+    },
+    {
+      "why": "core.materialize with no entities (minItems)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "schema": {},
+        "indices": [],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "an empty query (minLength)",
+      "path": [
+        "input",
+        "pql"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty why (minLength)",
+      "path": [
+        "why"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty source (minLength)",
+      "path": [
+        "source"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty register entry (minLength)",
+      "path": [
+        "register"
+      ],
+      "value": ""
+    },
+    {
+      "why": "a success naming an error",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "why": "a success naming a code, null",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "code": null
+      }
+    },
+    {
+      "why": "a success naming a message",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "message": "m"
+      }
+    },
+    {
+      "why": "a refusal without its code",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "why": "a refusal without its error",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "code": "INVALID_REQUEST"
+      }
     }
   ],
   "accepted": [
@@ -432,6 +584,48 @@
         "relationships"
       ],
       "value": []
+    },
+    {
+      "why": "core.materialize with its seed null, the default",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "schema": {},
+        "indices": [
+          {}
+        ],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "a refusal naming its error and a null code",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "error": "RuntimeError",
+        "code": null
+      }
+    },
+    {
+      "why": "a success with only what it is today",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "today": "t"
+      }
     }
   ],
   "omitted": [
@@ -470,6 +664,22 @@
       "why": "no seam",
       "path": [
         "seam"
+      ]
+    },
+    {
+      "why": "no tables named",
+      "path": [
+        "input",
+        "from_source",
+        "tables"
+      ]
+    },
+    {
+      "why": "no time columns given",
+      "path": [
+        "input",
+        "from_source",
+        "time_columns"
       ]
     }
   ]

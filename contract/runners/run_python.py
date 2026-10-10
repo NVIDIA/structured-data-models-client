@@ -162,7 +162,14 @@ def load_cases(paths: Iterable[Path]) -> list[tuple[dict[str, Any], str]]:
     seen: set[str] = set()
     for path in case_files(paths):
         data = path.read_bytes()
-        case = json.loads(data)
+        try:
+            case = json.loads(data)
+        except (ValueError, RecursionError):
+            # Not JSON, or nested past the parser's depth: refused by name,
+            # as the Rust loader refuses it (T1.21c).
+            raise RunnerFailure(
+                f'{path.name}: not a case: not JSON it reads'
+            ) from None
         problem = _invalid(validate, case) or _indices(case['input'])
         if problem is not None:
             raise RunnerFailure(f'{path.name}: not a case: {problem}')

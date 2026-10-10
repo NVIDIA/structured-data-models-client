@@ -5,7 +5,13 @@
 //! The case loader: `contract/cases/*.json`, in the format of
 //! `contract/case.schema.json` (`sdm-case/1`). Every key of the format is
 //! read, an unknown one refused, so the loader cannot drift from the schema
-//! the Python runner validates against.
+//! the Python runner validates against: what is required is required, null
+//! only where the schema takes it, and the schema's `minItems`,
+//! `minProperties` and `minLength` and `expect`'s `if`/`then`/`else` held
+//! (T1.21b, T1.21c; `contract/tests/malformed-cases.json` holds both loaders
+//! to the same changes). Its patterns and enumerations of text (an id, a
+//! slice, a seam, a path or cell, a seed's digits) are the Python
+//! validator's alone.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -35,12 +41,14 @@ pub struct Case {
     pub cells: Vec<String>,
     pub input: Input,
     pub until: Until,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "some_core")]
     pub core: Option<CoreInputs>,
     pub expect: Expect,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "some_text")]
     pub register: Option<String>,
+    #[serde(deserialize_with = "text")]
     pub why: String,
+    #[serde(deserialize_with = "text")]
     pub source: String,
 }
 
@@ -66,14 +74,15 @@ pub enum Until {
 #[serde(deny_unknown_fields)]
 pub struct Input {
     pub base: String,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "some_statements")]
     pub setup: Option<Vec<String>>,
-    #[serde(default, deserialize_with = "present")]
+    #[serde(default, deserialize_with = "some_from_source")]
     pub from_source: Option<FromSource>,
     /// The user's edits to the schema `Schema.from_source` returned, in
     /// order, at least one; the Python runner makes them (T1.21b).
     #[serde(default, deserialize_with = "some_edits")]
     pub edits: Option<Vec<Edit>>,
+    #[serde(deserialize_with = "text")]
     pub pql: String,
     pub materialize: Materialize,
 }
@@ -189,6 +198,81 @@ fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     deserializer: D,
 ) -> Result<Option<T>, D::Error> {
     T::deserialize(deserializer).map(Some)
+}
+
+/// Text the case schema requires to hold something (`minLength: 1`).
+fn text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    if text.is_empty() {
+        return Err(D::Error::custom("a text the case format requires is empty"));
+    }
+    Ok(text)
+}
+
+/// Optional text that, when given, holds something (`minLength: 1`).
+fn some_text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    text(deserializer).map(Some)
+}
+
+/// `input.setup`, when given: at least one statement, none empty, as the
+/// schema's `statements` says (`minItems`, `minLength`).
+fn some_statements<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    let statements = Vec::<String>::deserialize(deserializer)?;
+    if statements.is_empty() || statements.iter().any(String::is_empty) {
+        return Err(D::Error::custom(
+            "input.setup is empty or holds an empty statement",
+        ));
+    }
+    Ok(Some(statements))
+}
+
+/// `input.from_source`, when given, names at least one argument
+/// (`minProperties`).
+fn some_from_source<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<FromSource>, D::Error> {
+    let from_source = FromSource::deserialize(deserializer)?;
+    if from_source.tables.is_none()
+        && from_source.primary_keys.is_none()
+        && from_source.time_columns.is_none()
+        && from_source.relationships.is_none()
+    {
+        return Err(D::Error::custom("input.from_source names no argument"));
+    }
+    Ok(Some(from_source))
+}
+
+/// `core`, when given, names at least one operation (`minProperties`).
+fn some_core<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<CoreInputs>, D::Error> {
+    let core = CoreInputs::deserialize(deserializer)?;
+    if core.validate_query.is_none()
+        && core.describe_source.is_none()
+        && core.materialize.is_none()
+        && core.predict.is_none()
+    {
+        return Err(D::Error::custom("core names no operation"));
+    }
+    Ok(Some(core))
+}
+
+/// A field the case schema requires and lets be null: absent is refused,
+/// null is `None` (no `serde(default)`, so serde does not take a missing
+/// `Option` for `None`).
+fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    Option::<T>::deserialize(deserializer)
+}
+
+/// `core.materialize.indices`: at least one entity (`minItems`).
+fn some_indices<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Value>, D::Error> {
+    let indices = Vec::<Value>::deserialize(deserializer)?;
+    if indices.is_empty() {
+        return Err(D::Error::custom("core.materialize.indices is empty"));
+    }
+    Ok(indices)
 }
 
 /// `input.edits`, when given, holds at least one edit, as the case schema's
@@ -311,8 +395,11 @@ pub struct PredictInput {
 pub struct MaterializeInput {
     pub provider: Value,
     pub schema: Value,
+    #[serde(deserialize_with = "some_indices")]
     pub indices: Vec<Value>,
     pub anchor_time: Value,
+    /// Required, and null for the default.
+    #[serde(deserialize_with = "nullable")]
     pub seed: Option<String>,
 }
 
@@ -336,20 +423,56 @@ pub struct ValidateQueryInput {
     pub schema: Value,
 }
 
-/// The reference's outcome.
+/// The reference's outcome. As the schema's `if`/`then`/`else` says, a
+/// refusal names its error and its code (null for an error without one),
+/// and a success names none of error, code and message.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "ExpectFields")]
 pub struct Expect {
     pub outcome: String,
     pub stage: String,
-    #[serde(default, deserialize_with = "present")]
     pub error: Option<String>,
-    #[serde(default)]
     pub code: Option<String>,
-    #[serde(default, deserialize_with = "present")]
     pub message: Option<String>,
-    #[serde(default, deserialize_with = "present")]
     pub today: Option<String>,
+}
+
+/// [`Expect`]'s fields as written: `code` is `None` when absent and
+/// `Some(None)` when null, which the schema tells apart.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExpectFields {
+    outcome: String,
+    stage: String,
+    #[serde(default, deserialize_with = "present")]
+    error: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    code: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    message: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    today: Option<String>,
+}
+
+impl TryFrom<ExpectFields> for Expect {
+    type Error = String;
+    fn try_from(fields: ExpectFields) -> Result<Expect, String> {
+        if fields.outcome == "refusal" {
+            if fields.error.is_none() || fields.code.is_none() {
+                return Err("a refusal names its error and its code".into());
+            }
+        } else if fields.error.is_some() || fields.code.is_some() || fields.message.is_some() {
+            return Err("a success names no error, code or message".into());
+        }
+        Ok(Expect {
+            outcome: fields.outcome,
+            stage: fields.stage,
+            error: fields.error,
+            code: fields.code.flatten(),
+            message: fields.message,
+            today: fields.today,
+        })
+    }
 }
 
 /// A case with the SHA-256 of its file's bytes.

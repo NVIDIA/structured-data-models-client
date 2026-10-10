@@ -130,7 +130,7 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
         changed
     };
     let refused = listed["refused"].as_array().unwrap();
-    assert!(refused.len() >= 39);
+    assert!(refused.len() >= 54);
     for change in refused {
         assert!(
             load_error("malformed", &changed(change)).is_some(),
