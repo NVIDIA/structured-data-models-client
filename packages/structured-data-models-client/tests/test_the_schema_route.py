@@ -6,8 +6,9 @@
 For a DuckDB source with no tables named, the core's ``describe_source``
 reads the source through the Python host's DuckDB provider and the schema
 bridge builds today's ``Schema``: on ``base.regression``'s base it is the
-reference's. The relational engine is not imported on the route, and an
-import of it there fails. The providers import no pandas, which an AST scan
+reference's. The relational engine is not imported on the route, which a
+test-only import hook in a process of its own shows, and a core route
+running leaves another thread's old-route call as it is alone. The providers import no pandas, which an AST scan
 of ``_rust/providers`` and a run with pandas unimportable show. What the
 core does not describe yet is refused by name (register entry P1B-2).
 """
@@ -176,35 +177,56 @@ def test_the_route_imports_nothing_of_the_engine(tmp_path: Path) -> None:
     fake = tmp_path / 'sdm_relational_engine'
     fake.mkdir()
     (fake / '__init__.py').write_text('IMPORTED = True\n', encoding='utf-8')
+    # The hook is this test's own, in a process of its own: production
+    # installs none, since a hook on sys.meta_path is the whole process's.
     script = f"""
     import sys
+    from contextlib import contextmanager
     sys.path.insert(0, {str(tmp_path)!r})
     import duckdb
     from sdm_client import Schema
     from sdm_client._routing import RouteError
-    from sdm_client._rust import providers, schema
     from sdm_client._rust.providers import duckdb as provider
     from sdm_connectors import DuckDBSource
 
-    statements = {_shop()!r}
-    connection = duckdb.connect()
-    for statement in statements:
-        connection.execute(statement)
-    before = 'sdm_relational_engine' in sys.modules
-    Schema.from_source(DuckDBSource(connection))
-    print(before, 'sdm_relational_engine' in sys.modules)
+    ENGINE = 'sdm_relational_engine'
 
-    # An import of the engine on the route fails the route.
+    class NoEngine:
+        def find_spec(self, name, path=None, target=None):
+            if name == ENGINE or name.startswith(ENGINE + '.'):
+                raise RouteError(f'{{name}} was imported after route entry')
+
+    @contextmanager
+    def route():
+        before = ENGINE in sys.modules
+        hook = NoEngine()
+        sys.meta_path.insert(0, hook)
+        try:
+            yield
+        finally:
+            sys.meta_path.remove(hook)
+        assert before or ENGINE not in sys.modules
+
+    connection = duckdb.connect()
+    for statement in {_shop()!r}:
+        connection.execute(statement)
+    before = ENGINE in sys.modules
+    with route():
+        Schema.from_source(DuckDBSource(connection))
+    print(before, ENGINE in sys.modules)
+
+    # The hook sees an import on the route, and the route fails with it.
     answer = provider.DuckDBProvider.__call__
     def importing(self, step):
         import sdm_relational_engine
         return answer(self, step)
     provider.DuckDBProvider.__call__ = importing
     try:
-        Schema.from_source(DuckDBSource(connection))
+        with route():
+            Schema.from_source(DuckDBSource(connection))
     except RouteError as refused:
-        print('refused', 'sdm_relational_engine' in str(refused))
-    print('sdm_relational_engine' in sys.modules)
+        print('refused', ENGINE in str(refused))
+    print(ENGINE in sys.modules)
     """
     result = _subprocess(script, **{_routing.ENVIRONMENT: CORE})
     assert result.returncode == 0, result.stderr
@@ -215,6 +237,81 @@ def test_the_route_imports_nothing_of_the_engine(tmp_path: Path) -> None:
         'True',
         'False',
     ]
+
+
+def _sqlite(path: Path) -> Path:
+    r"""A SQLite database of one keyed table, at ``path``."""
+    import sqlite3
+
+    database = path / 'old.sqlite'
+    with sqlite3.connect(database) as setup:
+        setup.execute(
+            'CREATE TABLE users (user_id INTEGER PRIMARY KEY, age INTEGER)'
+        )
+        setup.executemany(
+            'INSERT INTO users VALUES (?, ?)', [(i, 20 + i) for i in range(8)]
+        )
+    return database
+
+
+def test_a_core_route_running_leaves_another_thread_s_old_call_alone(
+    tmp_path: Path,
+) -> None:
+    # In a process of its own, so the old route's first import of the
+    # engine happens while the DuckDB core route runs: the DuckDB call is
+    # paused in its provider while a SQLite call, whose route is the old
+    # one, runs on another thread; then the same SQLite call runs alone.
+    database = _sqlite(tmp_path)
+    script = f"""
+    import importlib.util, threading
+    import adbc_driver_sqlite.dbapi
+    import duckdb
+    from sdm_client import Schema
+    from sdm_client._rust.providers.duckdb import DuckDBProvider
+    from sdm_connectors import DuckDBSource, SQLiteSource
+
+    def old():
+        connection = adbc_driver_sqlite.dbapi.connect({str(database)!r})
+        try:
+            schema = Schema.from_source(SQLiteSource(connection))
+        except Exception as error:
+            return [type(error).__name__, getattr(error, 'code', None)]
+        return ['success', sorted(schema.tables)]
+
+    paused, resume = threading.Event(), threading.Event()
+    answer = DuckDBProvider.__call__
+    def pausing(self, step):
+        if not paused.is_set():
+            paused.set()
+            assert resume.wait(60)
+        return answer(self, step)
+    DuckDBProvider.__call__ = pausing
+
+    core = {{}}
+    def described():
+        connection = duckdb.connect()
+        for statement in {_shop()!r}:
+            connection.execute(statement)
+        core['tables'] = sorted(Schema.from_source(DuckDBSource(connection)).tables)
+    thread = threading.Thread(target=described)
+    thread.start()
+    assert paused.wait(60)
+    during = old()
+    resume.set()
+    thread.join(60)
+    alone = old()
+    engine = importlib.util.find_spec('sdm_relational_engine') is not None
+    import json
+    print(json.dumps([during, alone, core['tables'], engine]))
+    """
+    result = _subprocess(script, **{_routing.ENVIRONMENT: CORE})
+    assert result.returncode == 0, result.stderr
+    during, alone, tables, engine = json.loads(result.stdout)
+    assert during == alone
+    assert tables == ['orders', 'users']
+    if engine:
+        # With the engine installed, the old route describes the source.
+        assert alone == ['success', ['users']]
 
 
 def _imports(text: str) -> set[str]:
@@ -334,16 +431,28 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
         ),
         (_connection, {'primary_keys': {'users': 'user_id'}}, 'primary_keys'),
         (_connection, {'time_columns': {'orders': 'ts'}}, 'time_columns'),
+        # A time of day, which the reference reads as no time and refuses
+        # as a time column, with a warning.
+        (
+            lambda: _connection(
+                'CREATE TABLE things (thing_id BIGINT, tod TIME)',
+                "INSERT INTO things SELECT i, TIME '01:00:00' + INTERVAL (i) "
+                'MINUTE FROM range(30) t(i)',
+            ),
+            {},
+            'time_of_day',
+        ),
     ]
     for build, arguments, rule in refusals:
         with pytest.raises(StructuredDataError) as refused:
             Schema.from_source(DuckDBSource(build()), **arguments)
         assert refused.value.code == 'UNSUPPORTED_REQUEST'
         assert refused.value.details['rule'] == rule
-    for arguments in (
-        {'relationships': []},
-        {'time_columns': {'orders': None}},
+    for arguments, rule in (
+        ({'relationships': []}, 'relationships'),
+        ({'time_columns': {'orders': None}}, 'time_column_cleared'),
     ):
         with pytest.raises(StructuredDataError) as refused:
             Schema.from_source(DuckDBSource(_connection()), **arguments)
         assert refused.value.code == 'UNSUPPORTED_REQUEST'
+        assert refused.value.details['rule'] == rule

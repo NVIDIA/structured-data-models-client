@@ -14,9 +14,12 @@ with the client's own assembly as ``Schema.from_source`` does it after the
 engine has read the source: the relationships inferred by name, the edit
 stamps settled by them, the key columns marked, and the same warnings.
 
-The relational engine is not imported: an import hook refuses it for the
-length of the route, and the route fails if it was imported anyway
-(design, "Routing seam"). The old materializer, which a query still takes
+Nothing here imports the relational engine. The proof is the tests':
+an import hook that refuses the engine for the length of the route is a
+test's own, installed in a process of its own, since a hook on
+``sys.meta_path`` is the whole process's and would refuse another
+thread's call on the old route (design, "Routing seam"). The old
+materializer, which a query still takes
 until T1.11c, reads the source itself later; the schema hands it an empty
 store of engine tables (``EngineTables``), which it fills then.
 
@@ -29,15 +32,11 @@ same reason.
 
 from __future__ import annotations
 
-import importlib.abc
 import json
-import sys
 import warnings
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._routing import RouteError
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.run import run
@@ -45,38 +44,6 @@ from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
     from sdm_client.schema import Relationship, Schema
-
-#: The old engine, which no core route imports.
-ENGINE = 'sdm_relational_engine'
-
-
-class _NoEngine(importlib.abc.MetaPathFinder):
-    r"""Refuses an import of the relational engine, or any module in it."""
-
-    def find_spec(
-        self, name: str, path: Any = None, target: Any = None
-    ) -> None:
-        if name == ENGINE or name.startswith(ENGINE + '.'):
-            raise RouteError(
-                f'{name} was imported on a core route, which imports nothing '
-                'from the old engine'
-            )
-
-
-@contextmanager
-def no_engine() -> Iterator[None]:
-    r"""The length of a core route: an import of the relational engine
-    raises :class:`~sdm_client._routing.RouteError`, and so does the route
-    if the engine was imported in it some other way."""
-    before = ENGINE in sys.modules
-    hook = _NoEngine()
-    sys.meta_path.insert(0, hook)
-    try:
-        yield
-    finally:
-        sys.meta_path.remove(hook)
-    if not before and ENGINE in sys.modules:
-        raise RouteError(f'{ENGINE} was imported on a core route')
 
 
 def from_source(
@@ -93,21 +60,21 @@ def from_source(
 
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
-            ``UNSUPPORTED_REQUEST`` for an input it does not describe yet.
-        RouteError: The relational engine was imported on the route.
+            ``UNSUPPORTED_REQUEST`` naming the rule for an input it does not
+            describe yet.
     """
     if relationships is not None:
         raise StructuredDataError(
             'Schema.from_source on the core does not take relationships yet',
             code='UNSUPPORTED_REQUEST',
-            details={'field': 'relationships'},
+            details={'rule': 'relationships', 'field': 'relationships'},
         )
     if any(column is None for column in (time_columns or {}).values()):
         raise StructuredDataError(
             'Schema.from_source on the core does not take a time column '
             'cleared yet',
             code='UNSUPPORTED_REQUEST',
-            details={'field': 'time_columns'},
+            details={'rule': 'time_column_cleared', 'field': 'time_columns'},
         )
     spec = {
         'tables': [],
@@ -123,14 +90,13 @@ def from_source(
         'source': 1,
         'check_keys': bool(check_keys),
     }
-    with no_engine():
-        finished = run(
-            operation,
-            {1: codec.attachment(spec)},
-            provider=DuckDBProvider(source.connection),
-        )
-        described = json.loads(finished.take(finished.result['description']))
-        return build(cls, source, described)
+    finished = run(
+        operation,
+        {1: codec.attachment(spec)},
+        provider=DuckDBProvider(source.connection),
+    )
+    described = json.loads(finished.take(finished.result['description']))
+    return build(cls, source, described)
 
 
 def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
