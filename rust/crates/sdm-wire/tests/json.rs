@@ -6,7 +6,7 @@
 //! a member named twice keeping its first place and last value, and what
 //! JSON does not allow refused by position and category, never by text.
 
-use sdm_wire::json::{Value, is_integer_token, read, whole};
+use sdm_wire::json::{MAX_DEPTH, Value, is_integer_token, read, whole};
 
 #[test]
 fn a_value_read_and_written_again_is_the_same_text() {
@@ -85,4 +85,59 @@ fn a_whole_number_is_an_integer_or_a_float_with_no_fraction() {
     assert!(!is_integer_token("1.0"));
     assert!(!is_integer_token("1e3"));
     assert!(!is_integer_token("-"));
+}
+
+fn nested(depth: usize) -> Vec<u8> {
+    let mut text = "[".repeat(depth).into_bytes();
+    text.push(b'0');
+    text.extend("]".repeat(depth).bytes());
+    text
+}
+
+/// Text nested past the reader's depth is refused by category, before any
+/// value is built or dropped; the deepest it takes reads and drops whole.
+#[test]
+fn text_nested_past_the_depth_is_refused_before_anything_is_built() {
+    let deepest = read(&nested(MAX_DEPTH)).unwrap();
+    drop(deepest);
+    for depth in [MAX_DEPTH + 1, 10_000, 200_000] {
+        let refused = read(&nested(depth)).unwrap_err();
+        assert_eq!(refused.category, "depth", "{depth}");
+        assert_eq!((refused.line, refused.column), (1, MAX_DEPTH + 1));
+    }
+    // In an object member, past brackets and quotes held in text.
+    let mut text = br#"{"a": "[[[{{{\"", "b": "#.to_vec();
+    text.extend(nested(10_000));
+    text.push(b'}');
+    assert_eq!(read(&text).unwrap_err().category, "depth");
+    let within = format!(
+        r#"{{"a": "{}", "b": {}}}"#,
+        "[".repeat(500),
+        String::from_utf8(nested(10)).unwrap()
+    );
+    assert!(read(within.as_bytes()).is_ok());
+    println!("deep text refused");
+}
+
+/// The same check in a process of its own: it must end with a refusal, not
+/// abort on an overflowed stack (T1.11d review round 1).
+#[test]
+fn deep_text_ends_in_a_refusal_in_a_process_of_its_own() {
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "text_nested_past_the_depth_is_refused_before_anything_is_built",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&child.stdout);
+    assert!(
+        child.status.success(),
+        "{:?}\n{stdout}\n{}",
+        child.status,
+        String::from_utf8_lossy(&child.stderr)
+    );
+    assert!(stdout.contains("deep text refused"), "{stdout}");
 }

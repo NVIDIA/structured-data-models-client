@@ -483,3 +483,65 @@ fn a_payload_that_is_not_json_is_refused_by_where_never_by_what() {
     assert_eq!(error.fields["category"], text("syntax"));
     assert!(!written(&error).contains(CANARY));
 }
+
+/// An answer nested far past the reader's depth, about 20 KB, as an
+/// endpoint might send: refused as an invalid response, before anything of
+/// it is built.
+#[test]
+fn a_deeply_nested_answer_is_an_invalid_response() {
+    let deep = format!(
+        r#"{{"id":"r1","model":"m","metadata":{{"nested":{}0{}}},"predictions":[]}}"#,
+        "[".repeat(10_000),
+        "]".repeat(10_000)
+    );
+    let (_, step) = answered(200, deep.as_bytes());
+    let error = step.unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidResponse);
+    assert_eq!(error.fields["field"], text("response"));
+    assert_eq!(error.fields["reason"], text("too_deep"));
+    println!("deep answer refused");
+}
+
+/// The same answer in a process of its own: it must end the run with that
+/// error, not abort the process on an overflowed stack (T1.11d review
+/// round 1).
+#[test]
+fn a_deeply_nested_answer_ends_the_run_in_a_process_of_its_own() {
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "a_deeply_nested_answer_is_an_invalid_response",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&child.stdout);
+    assert!(
+        child.status.success(),
+        "{:?}\n{stdout}\n{}",
+        child.status,
+        String::from_utf8_lossy(&child.stderr)
+    );
+    assert!(stdout.contains("deep answer refused"), "{stdout}");
+}
+
+/// A prediction written as a finite token past a double's range reads as
+/// infinity: refused, as NaN and Infinity are, on every host (register
+/// P1B-4), never laid out.
+#[test]
+fn an_overflowing_prediction_is_an_invalid_response() {
+    for token in ["1e400", "-1e400", "1.7976931348623159e308"] {
+        let answer = format!(
+            r#"{{"id":"r1","model":"m","metadata":{{}},"predictions":[{{"id":"2","row_index":0,"prediction":{token}}},{{"id":"3","row_index":1,"prediction":1.0}}]}}"#
+        );
+        let (_, step) = answered(200, answer.as_bytes());
+        let error = step.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidResponse, "{token}");
+        assert_eq!(error.fields["field"], text("prediction.prediction"));
+        assert_eq!(error.fields["reason"], text("not_finite"));
+    }
+    // The largest double is a prediction like any other.
+    let answer = r#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.7976931348623157e308},{"id":"3","row_index":1,"prediction":1.0}]}"#;
+    assert!(answered(200, answer.as_bytes()).1.is_ok());
+}

@@ -288,6 +288,12 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<RecordBa
                 let value: f64 = token
                     .parse()
                     .map_err(|_| bad_response("prediction.prediction", "not_a_number"))?;
+                // A finite token past a double's range reads as infinity,
+                // which the reference passes on and this build refuses, as
+                // it refuses NaN and Infinity (register P1B-4).
+                if !value.is_finite() {
+                    return Err(bad_response("prediction.prediction", "not_finite"));
+                }
                 predictions.push(value);
             }
             _ => return Err(not_yet("prediction_type")),

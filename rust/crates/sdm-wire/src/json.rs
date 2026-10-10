@@ -33,7 +33,8 @@ pub enum Value {
 /// Why a text is not JSON: where, and what kind of fault, never the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReadError {
-    /// `syntax`, `eof` or `data`, as `serde_json` classifies the fault.
+    /// `syntax`, `eof` or `data`, as `serde_json` classifies the fault, or
+    /// `depth` for text nested past [`MAX_DEPTH`].
     pub category: &'static str,
     pub line: usize,
     pub column: usize,
@@ -55,12 +56,63 @@ impl ReadError {
     }
 }
 
-/// Reads `bytes` as one JSON value.
+/// The deepest nesting of arrays and objects [`read`] takes: `serde_json`'s
+/// own default limit, which every other JSON reading in the core keeps. A
+/// prediction response nests a handful of levels, and a request state's
+/// payload six; anything deeper is refused (category `depth`) before a
+/// value is built, so neither building nor dropping one recurses past it.
+pub const MAX_DEPTH: usize = 128;
+
+/// Reads `bytes` as one JSON value, nested at most [`MAX_DEPTH`] deep.
 pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
-    // The whole text once, for its faults' positions within it.
+    // The whole text once, for its faults' positions within it. Ignoring a
+    // value is iterative in `serde_json`, so this holds at any depth.
     serde_json::from_slice::<serde::de::IgnoredAny>(bytes).map_err(|e| ReadError::of(&e))?;
+    // The text is JSON, so its nesting can be counted without recursion
+    // before anything recursive reads it.
+    check_depth(bytes)?;
     let raw: &RawValue = serde_json::from_slice(bytes).map_err(|e| ReadError::of(&e))?;
     value(raw).map_err(|e| ReadError::of(&e))
+}
+
+/// Refuses JSON text nested past [`MAX_DEPTH`], at the bracket that passes
+/// it; the text has already been read as JSON.
+fn check_depth(bytes: &[u8]) -> Result<(), ReadError> {
+    let (mut depth, mut line, mut column) = (0usize, 1usize, 0usize);
+    let (mut in_text, mut escaped) = (false, false);
+    for &byte in bytes {
+        if byte == b'\n' {
+            line += 1;
+            column = 0;
+        } else {
+            column += 1;
+        }
+        if in_text {
+            match (escaped, byte) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_text = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_text = true,
+            b'[' | b'{' => {
+                depth += 1;
+                if depth > MAX_DEPTH {
+                    return Err(ReadError {
+                        category: "depth",
+                        line,
+                        column,
+                    });
+                }
+            }
+            b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn value(raw: &RawValue) -> Result<Value, serde_json::Error> {

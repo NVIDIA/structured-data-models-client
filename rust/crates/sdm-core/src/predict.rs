@@ -79,8 +79,15 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     };
     // The answer is read whatever content type it names, as the client's
     // transport decodes every answer's body as JSON.
+    // Text nested past the reader's depth is refused before anything of it
+    // is built (`sdm_wire::json::MAX_DEPTH`).
     let read = json::read(&answer).map_err(|e| {
-        bad_response("response", "not_json").with_field("category", Detail::text(e.category))
+        let reason = if e.category == "depth" {
+            "too_deep"
+        } else {
+            "not_json"
+        };
+        bad_response("response", reason).with_field("category", Detail::text(e.category))
     })?;
     let response = PredictionResponse::read(&read).map_err(refused)?;
     let table = layout(&payload, &response)?;
