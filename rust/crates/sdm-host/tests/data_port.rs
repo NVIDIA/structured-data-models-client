@@ -248,7 +248,8 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
             filters: vec![],
             limit: None,
         },
-        plan: FetchPlan::Host { expect },
+        plan: Some(FetchPlan::Host { expect }),
+        provider: None,
         echo: true,
     };
     let run = HostRun::start(

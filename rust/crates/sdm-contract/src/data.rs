@@ -162,7 +162,8 @@ pub struct TieBreak(pub Vec<TieTerm>);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "request", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DataRequest {
-    /// One part of the catalog for the tables named (all when empty).
+    /// One part of the catalog for the tables named (all when empty), in
+    /// the shape [`DataRequest::expected`] gives.
     Describe {
         tables: Vec<String>,
         part: DescribePart,
@@ -503,8 +504,129 @@ pub trait DataLayer: Send + Sync {
     ) -> Result<FetchPlan, CoreError>;
 }
 
+/// The columns of the answers whose shape the contract fixes (decision
+/// E36): every provider, a host provider included, answers these requests
+/// with exactly these columns, in this order, of these types, and check (b)
+/// holds it to them (decision H16). They are the reference's own names, as
+/// the result helper columns of `neighbors` and `lookup` are, so each
+/// answer is the result of the reference statement it stands for (H9).
+pub mod results {
+    /// `describe` `tables`: one row per table, its name.
+    pub const TABLE_NAME: &str = "table_name";
+    /// `describe` `columns`, for one table: one row per column, in the
+    /// table's order: its position, name, declared type as the catalog
+    /// spells it, whether it is declared `NOT NULL`, its default and whether
+    /// it is part of the primary key.
+    pub const COLUMN_POSITION: &str = "cid";
+    pub const COLUMN_NAME: &str = "name";
+    pub const COLUMN_TYPE: &str = "type";
+    pub const COLUMN_NOT_NULL: &str = "notnull";
+    pub const COLUMN_DEFAULT: &str = "dflt_value";
+    pub const COLUMN_PRIMARY_KEY: &str = "pk";
+    /// `describe` `keys`, for one table: one row per constraint the catalog
+    /// declares on it, its type (`PRIMARY KEY`, `UNIQUE` and others the
+    /// reader leaves alone) and its columns.
+    pub const CONSTRAINT_TYPE: &str = "constraint_type";
+    pub const CONSTRAINT_COLUMNS: &str = "constraint_column_names";
+    /// `describe` `foreign_keys`, for one table: one row per column pair of
+    /// each declared foreign key, the constraint's index naming the key.
+    pub const CONSTRAINT_INDEX: &str = "constraint_index";
+    pub const REFERENCED_TABLE: &str = "referenced_table";
+    pub const REFERENCED_COLUMNS: &str = "referenced_column_names";
+    /// `describe` `indexes`: one row per index, its table and its
+    /// expressions as the catalog spells them (`TABLE_NAME` and this).
+    pub const INDEX_EXPRESSIONS: &str = "expressions";
+    /// `key_counts`: one row per key, its position in the request, the
+    /// table's rows, the key's distinct values among rows holding all of
+    /// it, and the rows missing part of it.
+    pub const KEY_POSITION: &str = "k";
+    pub const KEY_ROWS: &str = "n";
+    pub const KEY_DISTINCT: &str = "d";
+    pub const KEY_MISSING: &str = "z";
+    /// `time_bounds`: one row per column, its position in the request and
+    /// its smallest and largest `CAST(column AS TIMESTAMP)`, NULL when no
+    /// row holds a value.
+    pub const BOUNDS_POSITION: &str = "table_index";
+    pub const BOUNDS_MIN: &str = "min_date";
+    pub const BOUNDS_MAX: &str = "max_date";
+    /// The name of a list's item field in these answers.
+    pub const LIST_ITEM: &str = "l";
+}
+
+impl DataRequest {
+    /// The schema every provider's answer to this request must have: fixed
+    /// for the requests whose answer the contract shapes ([`results`]), a
+    /// discovery marker for those whose columns are the source's own (a
+    /// preview, a scan, a sample, neighbors, a lookup) and for a count no
+    /// provider renders yet.
+    pub fn expected(&self) -> ExpectedSchema {
+        use ColumnType::{Bool, Int32, Int64, Utf8};
+        let timestamp = || ColumnType::Timestamp {
+            unit: Unit::Us,
+            zone: None,
+        };
+        let names = || ColumnType::List {
+            item: Box::new(field(results::LIST_ITEM, Utf8, true)),
+        };
+        let fields = match self {
+            DataRequest::Describe { part, .. } => match part {
+                DescribePart::Tables => vec![field(results::TABLE_NAME, Utf8, false)],
+                DescribePart::Columns => vec![
+                    field(results::COLUMN_POSITION, Int32, false),
+                    field(results::COLUMN_NAME, Utf8, false),
+                    field(results::COLUMN_TYPE, Utf8, false),
+                    field(results::COLUMN_NOT_NULL, Bool, false),
+                    field(results::COLUMN_DEFAULT, Utf8, true),
+                    field(results::COLUMN_PRIMARY_KEY, Bool, false),
+                ],
+                DescribePart::Keys => vec![
+                    field(results::CONSTRAINT_TYPE, Utf8, false),
+                    field(results::CONSTRAINT_COLUMNS, names(), false),
+                ],
+                DescribePart::ForeignKeys => vec![
+                    field(results::CONSTRAINT_INDEX, Int64, false),
+                    field(results::REFERENCED_TABLE, Utf8, false),
+                    field(results::CONSTRAINT_COLUMNS, names(), false),
+                    field(results::REFERENCED_COLUMNS, names(), false),
+                ],
+                DescribePart::Indexes => vec![
+                    field(results::TABLE_NAME, Utf8, false),
+                    field(results::INDEX_EXPRESSIONS, Utf8, true),
+                ],
+            },
+            DataRequest::KeyCounts { .. } => vec![
+                field(results::KEY_POSITION, Int32, false),
+                field(results::KEY_ROWS, Int64, false),
+                field(results::KEY_DISTINCT, Int64, false),
+                field(results::KEY_MISSING, Int64, false),
+            ],
+            DataRequest::TimeBounds { .. } => vec![
+                field(results::BOUNDS_POSITION, Int32, false),
+                field(results::BOUNDS_MIN, timestamp(), true),
+                field(results::BOUNDS_MAX, timestamp(), true),
+            ],
+            DataRequest::Scan { .. }
+            | DataRequest::Preview { .. }
+            | DataRequest::CountRows { .. }
+            | DataRequest::SampleEntities { .. }
+            | DataRequest::Neighbors { .. }
+            | DataRequest::Lookup { .. } => return ExpectedSchema::Discover {},
+        };
+        ExpectedSchema::Schema { fields }
+    }
+}
+
+fn field(name: &str, column_type: ColumnType, nullable: bool) -> Field {
+    Field {
+        name: name.to_owned(),
+        column_type,
+        nullable,
+        metadata: Default::default(),
+    }
+}
+
 /// The Arrow schema a request expects back, or that the answer discovers
-/// it (a describe or a preview).
+/// it (a preview, a scan).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "expect", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExpectedSchema {

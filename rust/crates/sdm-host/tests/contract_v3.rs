@@ -244,14 +244,15 @@ fn wide_fetch(pad: usize) -> TestFetch {
             filters: vec![],
             limit: None,
         },
-        plan: FetchPlan::Sql {
+        plan: Some(FetchPlan::Sql {
             statements: vec![SqlStatement {
                 dialect: Dialect::Duckdb,
                 text: format!("SELECT * FROM orders{}", " ".repeat(pad)),
                 params: vec![],
             }],
             expect: ExpectedSchema::Schema { fields },
-        },
+        }),
+        provider: None,
     }
 }
 
@@ -260,7 +261,7 @@ fn fetch_step(fetch: &TestFetch) -> ControlMessage {
         requests: vec![FetchStep {
             id: ReplyId(1),
             request: fetch.request.clone(),
-            plan: fetch.plan.clone(),
+            plan: fetch.plan.clone().expect("the test fetch's own plan"),
         }],
     })
 }

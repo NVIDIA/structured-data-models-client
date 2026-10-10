@@ -59,9 +59,9 @@ pub enum Until {
     Predict,
 }
 
-/// The public call's inputs. The pure-Rust host reads `pql`; the base, the
-/// setup and the call's arguments are the Python runner's until the
-/// pure-Rust host builds data (T1.11b).
+/// The public call's inputs. The pure-Rust host reads `pql` for S0, and the
+/// base and the setup for an operation that reads data (from T1.11b); the
+/// public call's arguments are the Python runner's.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Input {
@@ -153,6 +153,19 @@ pub enum IndicesAs {
 pub struct CoreInputs {
     #[serde(default)]
     pub validate_query: Option<ValidateQueryInput>,
+    #[serde(default)]
+    pub describe_source: Option<DescribeSourceInput>,
+}
+
+/// `describe_source`'s inputs, kept as written: the provider, the source's
+/// tables and overrides (the contract's `SourceSpec`) and whether keys are
+/// checked. The data are the case's base and setup.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DescribeSourceInput {
+    pub provider: Value,
+    pub source: Value,
+    pub check_keys: bool,
 }
 
 /// `validate_query`'s inputs beside the query text, which is `input.pql`:

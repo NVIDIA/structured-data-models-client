@@ -210,8 +210,11 @@ fn every_operation_dispatches_to_a_run() {
             sampling: Determinism::Unseeded,
         },
     };
+    // Tables named are an override this core does not take yet (T1.11b):
+    // refused by the rule, before anything is fetched.
     let err = run_of(&root, describe(host)).unwrap().next().unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(named(&err, "rule"), "tables_named");
 }
 
 /// A data layer that plans every request as one statement, to show that the
@@ -285,6 +288,25 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
     assert_eq!(named(&err, "request"), "scan");
     assert_eq!(named(&err, "dialect"), "duckdb");
+    // It renders the catalog (T1.11b), each plan expecting the answer's
+    // fixed shape.
+    assert_eq!(
+        access.capabilities().optional,
+        BTreeSet::from([
+            OptionalRequest::Preview,
+            OptionalRequest::KeyCounts,
+            OptionalRequest::TimeBounds
+        ])
+    );
+    let tables = DataRequest::Describe {
+        tables: vec![],
+        part: DescribePart::Tables,
+    };
+    let FetchPlan::Sql { statements, expect } = access.plan(&tables).unwrap() else {
+        panic!("DuckDB answers with SQL");
+    };
+    assert_eq!(statements.len(), 1);
+    assert_eq!(expect, tables.expected());
 
     let sqlite = ProviderChoice::Sql {
         dialect: Dialect::Sqlite,
@@ -312,24 +334,31 @@ fn a_host_provider_is_asked_only_for_what_it_declared() {
         capabilities: capabilities(&[OptionalRequest::Preview]),
     };
     let access = root().data_access(&host).unwrap();
+    // A host provider is held to the shape the contract fixes for a
+    // request's answer, as a rendering is (decision E36); a request whose
+    // columns are the source's own discovers them.
     let pass = |request: DataRequest| {
         assert_eq!(
             access.plan(&request).unwrap(),
             FetchPlan::Host {
-                expect: ExpectedSchema::Discover {}
+                expect: request.expected()
             }
         );
     };
     pass(scan());
-    pass(DataRequest::Describe {
+    let tables = DataRequest::Describe {
         tables: vec![],
         part: DescribePart::Tables,
-    });
-    pass(DataRequest::Preview {
+    };
+    assert!(matches!(tables.expected(), ExpectedSchema::Schema { .. }));
+    pass(tables);
+    let preview = DataRequest::Preview {
         table: "t".into(),
         columns: vec![],
         limit: 10,
-    });
+    };
+    assert_eq!(preview.expected(), ExpectedSchema::Discover {});
+    pass(preview);
     let err = access.plan(&count()).unwrap_err();
     assert_eq!(
         (err.kind, err.code),

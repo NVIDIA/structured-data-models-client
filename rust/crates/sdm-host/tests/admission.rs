@@ -37,7 +37,7 @@ use arrow_schema::{
 };
 use half::f16;
 use sdm_contract::data::{
-    AttachmentId, DataRequest, DescribePart, Determinism, ProviderCapabilities, ProviderChoice,
+    AttachmentId, DataRequest, Determinism, ProviderCapabilities, ProviderChoice,
 };
 use sdm_contract::ops::{OperationResult, QueryValidation};
 use sdm_contract::run::{FetchOutcome, FetchReply};
@@ -753,9 +753,12 @@ fn through_host_run(data: ArrowData) -> ArrowData {
     let run = HostRun::with(
         Run::with_data(access, move |asker| async move {
             let reply = asker
-                .fetch(DataRequest::Describe {
-                    tables: vec![],
-                    part: DescribePart::Tables,
+                // A scan, whose answer's columns are the source's own.
+                .fetch(DataRequest::Scan {
+                    table: "t".into(),
+                    columns: vec![],
+                    filters: vec![],
+                    limit: None,
                 })?
                 .await;
             if let Reply::Fetch(FetchResult::Data(data)) = reply {

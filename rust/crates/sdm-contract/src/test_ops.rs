@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::data::{AttachmentId, DataRequest, FetchPlan};
+use crate::data::{AttachmentId, DataRequest, FetchPlan, ProviderChoice};
 use crate::ops::AttachmentKind;
 use crate::scalar::Scalar;
 
@@ -74,14 +74,19 @@ impl TestOperation {
     }
 }
 
-/// The fetch a test operation asks: the request, and the plan it is asked
-/// with, in place of the one a data layer would make, so a test can drive
-/// a plan of any size or shape.
+/// The fetch a test operation asks: the request, and either the plan it is
+/// asked with, in place of the one a data layer would make, so a test can
+/// drive a plan of any size or shape, or the provider whose plan the root's
+/// data layer makes for it, so a test can drive a provider with the SQL the
+/// layer renders. Exactly one of the two is given.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TestFetch {
     pub request: DataRequest,
-    pub plan: FetchPlan,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan: Option<FetchPlan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderChoice>,
     /// Whether the admitted data comes back, attached, so a binding's tests
     /// can export what the core holds.
     #[serde(default)]

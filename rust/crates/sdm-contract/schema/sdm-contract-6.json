@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/5",
+  "$id": "sdm-contract/6",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -1293,7 +1293,7 @@
       "description": "A typed request for data.",
       "oneOf": [
         {
-          "description": "One part of the catalog for the tables named (all when empty).",
+          "description": "One part of the catalog for the tables named (all when empty), in\nthe shape [`DataRequest::expected`] gives.",
           "type": "object",
           "properties": {
             "tables": {
@@ -2422,7 +2422,7 @@
       ]
     },
     "ExpectedSchema": {
-      "description": "The Arrow schema a request expects back, or that the answer discovers\nit (a describe or a preview).",
+      "description": "The Arrow schema a request expects back, or that the answer discovers\nit (a preview, a scan).",
       "oneOf": [
         {
           "type": "object",

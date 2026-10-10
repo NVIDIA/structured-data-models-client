@@ -14,11 +14,13 @@ use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFac
 use sdm_engine::time::Zones;
 
 use crate::attached::take_json;
+use crate::compose::CompositionRoot;
 use crate::profiles::Profile;
-use crate::run::{Attachment, Attachments, FetchResult, Reply, Run, internal};
+use crate::run::{Asker, Attachment, Attachments, FetchResult, Reply, Run, internal};
 
 /// The run of a test-only operation.
 pub(crate) fn run(
+    root: &CompositionRoot,
     operation: TestOperation,
     attachments: &mut Attachments,
     facts: HostFacts,
@@ -27,8 +29,26 @@ pub(crate) fn run(
     Ok(match operation {
         TestOperation::Fetch { fetch } => {
             let fetch: TestFetch = take_json(attachments, fetch)?;
-            Run::new(move |asker| async move {
-                match asker.fetch_planned(fetch.request, fetch.plan).await {
+            // The test's own plan, or the one the root's data layer makes
+            // for the provider named, through the run's data access, as an
+            // operation's body asks.
+            let (plan, access) = match (fetch.plan, &fetch.provider) {
+                (Some(plan), None) => (Some(plan), None),
+                (None, Some(provider)) => (None, Some(root.data_access(provider)?)),
+                _ => {
+                    return Err(CoreError::new(
+                        ErrorKind::InvalidRequest,
+                        ErrorCode::InvalidRequest,
+                        "a test fetch names a plan or a provider, and not both",
+                    ));
+                }
+            };
+            let make = move |asker: Asker| async move {
+                let asked = match plan {
+                    Some(plan) => asker.fetch_planned(fetch.request, plan),
+                    None => asker.fetch(fetch.request)?,
+                };
+                match asked.await {
                     Reply::Fetch(FetchResult::Data(data)) => {
                         let rows = data.batches.iter().map(|b| b.num_rows() as u64).sum();
                         let data = if fetch.echo {
@@ -45,7 +65,11 @@ pub(crate) fn run(
                     Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
                     Reply::Model(_) => Err(internal("a fetch was answered by the model")),
                 }
-            })
+            };
+            match access {
+                Some(access) => Run::with_data(access, make),
+                None => Run::new(make),
+            }
         }
         TestOperation::Finish { result } => {
             let result: OperationResult = take_json(attachments, result)?;

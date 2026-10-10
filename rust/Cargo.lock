@@ -1414,6 +1414,7 @@ dependencies = [
  "sdm-data",
  "sdm-engine",
  "sdm-pql-interim",
+ "sdm-schema",
  "serde",
  "serde_json",
  "serde_stacker",
@@ -1482,6 +1483,11 @@ version = "1.0.0"
 [[package]]
 name = "sdm-schema"
 version = "1.0.0"
+dependencies = [
+ "arrow-array",
+ "arrow-schema",
+ "sdm-contract",
+]
 
 [[package]]
 name = "sdm-testkit"

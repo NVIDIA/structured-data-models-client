@@ -60,6 +60,16 @@
             "profile": {"description": "The contract's ProfileSpec.", "type": "object"},
             "schema": {"description": "The contract's QuerySchema; the query text is input.pql.", "type": "object"}
           }
+        },
+        "describe_source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "source", "check_keys"],
+          "properties": {
+            "provider": {"description": "The contract's ProviderChoice.", "type": "object"},
+            "source": {"description": "The contract's SourceSpec; the data are input.base and input.setup.", "type": "object"},
+            "check_keys": {"type": "boolean"}
+          }
         }
       }
     },

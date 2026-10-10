@@ -23,10 +23,15 @@ use sdm_core::{
     ArrowData, Asker, Attachment, CompositionRoot, FetchResult, ModelResult, Reply, Run, RunState,
 };
 
+/// A request every provider answers whose answer's columns are the
+/// source's own, so data of any shape answers it (a `describe`'s shape is
+/// fixed, decision E36).
 fn describe(table: &str) -> DataRequest {
-    DataRequest::Describe {
-        tables: vec![table.to_owned()],
-        part: DescribePart::Columns,
+    DataRequest::Scan {
+        table: table.to_owned(),
+        columns: vec![],
+        filters: vec![],
+        limit: None,
     }
 }
 

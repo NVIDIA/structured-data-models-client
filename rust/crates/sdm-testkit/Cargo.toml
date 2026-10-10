@@ -23,6 +23,11 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 
+[dev-dependencies]
+# The test-only fetch, which echoes what the core admitted, for the
+# provider's tests.
+sdm-host = { path = "../sdm-host", features = ["test-ops"] }
+
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the
 # Arrow FFI sites can allow it locally.
 [lints.rust]

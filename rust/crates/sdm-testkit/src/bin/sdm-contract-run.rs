@@ -8,7 +8,9 @@
 //! sdm-contract-run --out FILE CASE_OR_DIRECTORY...
 //! ```
 //!
-//! Runs every case through `HostRun` and writes one observation per case,
+//! Runs every case through `HostRun`, building a case's data from
+//! `contract/bases.yaml` when its operation reads data, and writes one
+//! observation per case,
 //! one JSON object per line, for `scripts/rust_core/compare.py`. A runner
 //! failure (a case it cannot load or run, a step S0 never takes) exits
 //! non-zero and leaves no output file, an earlier run's included;
@@ -19,7 +21,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
-use sdm_testkit::{case, host, observation};
+use sdm_testkit::{bases, case, host, observation};
 
 fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     let (out, cases) = match arguments {
@@ -44,11 +46,21 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     if loaded.is_empty() {
         bail!("no cases");
     }
-    let identity = observation::Identity::new(&std::env::current_dir()?)?;
+    let here = std::env::current_dir()?;
+    let identity = observation::Identity::new(&here)?;
+    let bases_path = observation::repository(&here)?.join("contract/bases.yaml");
+    let bases = bases::load(&bases_path)?;
+    let bases_digest = case::sha256(&std::fs::read(&bases_path)?);
     let mut lines = String::new();
     for each in &loaded {
-        let observed = host::run(&each.case)?;
-        lines.push_str(&observation::write(&identity, each, &observed).to_string());
+        let observed = host::run(&each.case, &bases)?;
+        let read_bases = each
+            .case
+            .core
+            .as_ref()
+            .is_some_and(|core| core.describe_source.is_some());
+        let digest = read_bases.then_some(bases_digest.as_str());
+        lines.push_str(&observation::write(&identity, each, &observed, digest).to_string());
         lines.push('\n');
     }
     std::fs::write(&partial, lines)?;

@@ -12,16 +12,19 @@
 //! asked only for what it declared; a built-in SQL provider is answered
 //! with statements this crate renders for its dialect, and its
 //! capabilities are the requests this crate renders for that dialect. As
-//! built at T1.11a no request has a rendering yet: DuckDB's catalog
-//! requests come with T1.11b, and the rest with the tasks that reach them.
+//! built at T1.11b DuckDB renders the catalog (`describe` in each part,
+//! `preview`, `key_counts`, `time_bounds`); the rest come with the tasks
+//! that reach them. Either way a plan expects the schema the contract fixes
+//! for the request's answer, or discovers it where the answer's columns
+//! are the source's own (`DataRequest::expected`, decision E36), so a host
+//! provider is held to the same shape as a rendering.
 
 #![forbid(unsafe_code)]
 
 mod duckdb;
 
 use sdm_contract::data::{
-    DataLayer, DataRequest, Dialect, ExpectedSchema, FetchPlan, ProviderCapabilities,
-    ProviderChoice,
+    DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -53,7 +56,7 @@ impl DataLayer for Data {
     ) -> Result<FetchPlan, CoreError> {
         match provider {
             ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
-                expect: expected(request),
+                expect: request.expected(),
             }),
             ProviderChoice::Sql {
                 dialect: Dialect::Duckdb,
@@ -61,14 +64,6 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect } => Err(no_dialect(*dialect)),
         }
     }
-}
-
-/// The schema a request's answer must have. As built at T1.11a every
-/// answer establishes its own (a discovery request); the requests whose
-/// shape the contract fixes get their expected schemas with their
-/// renderings, so the data layer and the host provider are held to one.
-fn expected(_request: &DataRequest) -> ExpectedSchema {
-    ExpectedSchema::Discover {}
 }
 
 /// The name a dialect has on the wire.

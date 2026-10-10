@@ -14,9 +14,7 @@ use std::sync::{Arc, Barrier};
 use arrow_array::{ArrayRef, LargeStringArray, RecordBatch, new_null_array};
 use arrow_schema::{DataType, IntervalUnit};
 use sdm_contract::data::{AttachmentId, DataRequest, ProviderError};
-use sdm_contract::data::{
-    DescribePart, Determinism, Dialect, ProviderCapabilities, ProviderChoice,
-};
+use sdm_contract::data::{Determinism, Dialect, ProviderCapabilities, ProviderChoice};
 use sdm_contract::facts::{PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::Dtype;
 use sdm_contract::ops::{
@@ -328,9 +326,12 @@ fn fetching_run() -> Run {
         let mut seen = Vec::new();
         for _ in 0..2 {
             let reply = asker
-                .fetch(DataRequest::Describe {
-                    tables: vec![],
-                    part: DescribePart::Tables,
+                // A scan, whose answer's columns are the source's own.
+                .fetch(DataRequest::Scan {
+                    table: "t".into(),
+                    columns: vec![],
+                    filters: vec![],
+                    limit: None,
                 })?
                 .await;
             seen.push(match reply {

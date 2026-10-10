@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "base.regression",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "seam": "baseline",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target",
+    "utf8/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "users.user_id and orders.order_id inferred as keys; orders.ts the time column; result columns row_index int64, id int64, prediction float64"
+  },
+  "why": "The plain journey every other case varies one thing of; also probe#1 (a ts[us] time column). From T1.11b its schema is described on the core (describe_source); materialize and predict stay on the old route until T1.11c and T1.11d. Diagnostic until T1.29",
+  "source": "phase-1b-inventory.yaml base.regression, with the core operation its schema route starts"
+}

@@ -73,9 +73,12 @@ pub fn start(
             })
         }
         Operation::DescribeSource(request) => {
-            let _source: SourceSpec = take_json(&mut attachments, request.source)?;
+            let source: SourceSpec = take_json(&mut attachments, request.source)?;
             let access = root.data_access(&request.provider)?;
-            Run::with_data(access, |_| async { Err(not_yet("describe_source")) })
+            let check_keys = request.check_keys;
+            Run::with_data(access, move |asker| {
+                crate::describe::run(asker, source, check_keys)
+            })
         }
         Operation::Materialize(request) => {
             let _schema: SourceDescription = take_json(&mut attachments, request.schema)?;
@@ -100,7 +103,7 @@ pub fn start(
         }
         #[cfg(feature = "test-ops")]
         Operation::Test(operation) => {
-            crate::test_ops::run(operation, &mut attachments, facts, zones)?
+            crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
         }
     })
 }

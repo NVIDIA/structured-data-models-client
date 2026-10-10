@@ -16,6 +16,10 @@ fn cases_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/cases")
 }
 
+fn bases() -> sdm_testkit::bases::Bases {
+    sdm_testkit::bases::load(&cases_dir().join("../bases.yaml")).unwrap()
+}
+
 #[test]
 fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
     let loaded = case::load(&[cases_dir()]).unwrap();
@@ -29,7 +33,7 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
         let case = &each.case;
         assert_eq!(case.status, Status::Acceptance);
         assert_eq!(case.until, Until::Materialize);
-        let observed = host::run(case).unwrap();
+        let observed = host::run(case, &bases()).unwrap();
         assert_eq!(observed.operations, ["validate_query"]);
         let (result, code) = observed.answer.outcome();
         assert_eq!(result, case.expect.outcome, "{}", case.id);
@@ -127,7 +131,7 @@ fn the_host_records_the_inputs_it_encoded() {
         .as_mut()
         .unwrap();
     spec.profile["capabilities"] = serde_json::json!({});
-    let observed = host::run(&loaded).unwrap();
+    let observed = host::run(&loaded, &bases()).unwrap();
     assert!(observed.inputs[0]["profile"].get("capabilities").is_none());
 }
 
@@ -135,7 +139,7 @@ fn the_host_records_the_inputs_it_encoded() {
 fn a_case_without_a_core_operation_is_this_hosts_failure() {
     let mut case = case::load(&[cases_dir()]).unwrap().remove(0).case;
     case.core = None;
-    assert!(host::run(&case).is_err());
+    assert!(host::run(&case, &bases()).is_err());
 }
 
 /// `contract/tests/index_literals.json`, which the Python loader's tests

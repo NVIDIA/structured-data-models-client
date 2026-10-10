@@ -162,9 +162,10 @@ fn fetch_run() -> HostRun {
             filters: vec![],
             limit: None,
         },
-        plan: FetchPlan::Host {
+        plan: Some(FetchPlan::Host {
             expect: ExpectedSchema::Discover {},
-        },
+        }),
+        provider: None,
         echo: false,
     };
     let run = HostRun::start(

@@ -87,7 +87,8 @@ fn fetching(expect: ExpectedSchema) -> HostRun {
             filters: vec![],
             limit: None,
         },
-        plan: FetchPlan::Host { expect },
+        plan: Some(FetchPlan::Host { expect }),
+        provider: None,
     };
     let run = HostRun::start(
         &sdm_host::default_root(),

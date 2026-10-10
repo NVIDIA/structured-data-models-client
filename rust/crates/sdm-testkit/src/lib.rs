@@ -10,9 +10,12 @@
 //! core operations through `sdm_host::HostRun`, with no Python in the
 //! process; [`observation`] writes what it saw in the format of
 //! `contract/observation.schema.json`, which `sdm-contract-run` puts out for
-//! `scripts/rust_core/compare.py`. The scripted endpoint arrives with
-//! T1.11d.
+//! `scripts/rust_core/compare.py`. [`duck`] is its DuckDB: the connection,
+//! with ICU loaded, and the provider that answers a fetch; [`bases`] reads
+//! `contract/bases.yaml`. The scripted endpoint arrives with T1.11d.
 
+pub mod bases;
 pub mod case;
+pub mod duck;
 pub mod host;
 pub mod observation;

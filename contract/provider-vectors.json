@@ -1,0 +1,25 @@
+{
+  "description": "The DuckDB provider on both hosts (T1.11b): each fetch is planned by the core's data layer for DuckDB, answered by the host's DuckDB provider, admitted, and echoed back by the test-only fetch; both hosts' tests hold the admitted data to these expectations. 'several' is a result the driver hands over in batches of batch_rows; 'empty' keeps its schema with no rows; 'time_bounds' reads a TIMESTAMPTZ column as CAST(column AS TIMESTAMP), which under the zone 'zone' sets both hosts' DuckDB answer in America/New_York's wall clock, as counts of microseconds. The provider reads each request on its own cursor, as the reference's reads do, and a cursor takes the database's zone, not a session's: under 'session_zone' alone, set on the source's connection, both hosts read as with no zone set, in the host's own.",
+  "setup": [
+    "CREATE TABLE many AS SELECT i::BIGINT AS n, 'r' || i AS name FROM range(5000) t(i)",
+    "CREATE TABLE nothing (n BIGINT, name VARCHAR)",
+    "CREATE TABLE stamps (ts TIMESTAMPTZ)",
+    "INSERT INTO stamps VALUES ('2024-07-01 12:00:00+00'), ('2024-01-15 03:30:00+00')"
+  ],
+  "zone": "SET GLOBAL TimeZone='America/New_York'",
+  "session_zone": "SET TimeZone='America/New_York'",
+  "several": {
+    "request": {"request": "preview", "table": "many", "columns": ["n", "name"], "limit": 5000},
+    "batch_rows": 2048,
+    "rows": 5000
+  },
+  "empty": {
+    "request": {"request": "preview", "table": "nothing", "columns": ["n", "name"], "limit": 1000},
+    "fields": [["n", "int64"], ["name", "utf8"]]
+  },
+  "time_bounds": {
+    "request": {"request": "time_bounds", "columns": [{"table": "stamps", "column": "ts"}]},
+    "rows": [[0, 1705271400000000, 1719820800000000]],
+    "wall_clock": ["2024-01-14T22:30:00", "2024-07-01T08:00:00"]
+  }
+}

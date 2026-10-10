@@ -48,6 +48,20 @@ pub fn commit(directory: &Path) -> Result<Value> {
     }))
 }
 
+/// The root of the checkout holding `directory`.
+pub fn repository(directory: &Path) -> Result<std::path::PathBuf> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(directory)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .context("running git")?;
+    if !out.status.success() {
+        bail!("git rev-parse failed");
+    }
+    Ok(String::from_utf8(out.stdout)?.trim().into())
+}
+
 /// The DuckDB version this host links, from `SELECT version()`, without
 /// its leading `v`.
 pub fn duckdb_version() -> Result<String> {
@@ -71,12 +85,19 @@ impl Identity {
     }
 }
 
-/// One observation of `loaded`, as `observed`.
-pub fn write(identity: &Identity, loaded: &Loaded, observed: &Observed) -> Value {
+/// One observation of `loaded`, as `observed`; `bases` is the SHA-256 of
+/// `contract/bases.yaml` when the case's data was built from it.
+pub fn write(
+    identity: &Identity,
+    loaded: &Loaded,
+    observed: &Observed,
+    bases: Option<&str>,
+) -> Value {
     let (result, code) = observed.answer.outcome();
-    let (accepted, error) = match &observed.answer {
-        Answer::Validated(accepted) => (Some(*accepted), Value::Null),
-        Answer::Error { kind, code } => (None, json!({"kind": kind, "code": code})),
+    let (accepted, described, error) = match &observed.answer {
+        Answer::Validated(accepted) => (Some(*accepted), Value::Null, Value::Null),
+        Answer::Described(description) => (None, description.clone(), Value::Null),
+        Answer::Error { kind, code } => (None, Value::Null, json!({"kind": kind, "code": code})),
     };
     json!({
         "format": FORMAT,
@@ -92,10 +113,16 @@ pub fn write(identity: &Identity, loaded: &Loaded, observed: &Observed) -> Value
             "operations": observed.operations,
             "contract": CONTRACT_VERSION,
             "versions": {"duckdb": identity.duckdb},
-            "inputs": {"case": loaded.digest, "bases": null},
+            "inputs": {"case": loaded.digest, "bases": bases},
         },
         "outcome": {"result": result, "stage": null, "error": null, "code": code},
         "host": null,
-        "core": {"inputs": observed.inputs, "accepted": accepted, "error": error},
+        "core": {
+            "inputs": observed.inputs,
+            "fetches": observed.fetches,
+            "accepted": accepted,
+            "described": described,
+            "error": error,
+        },
     })
 }
