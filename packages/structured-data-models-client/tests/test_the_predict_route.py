@@ -251,9 +251,12 @@ def test_outputs_other_than_a_regression_s_default_are_refused_by_name(
     assert len(received.requests) == 1
 
 
-def test_an_endpoint_s_refusal_keeps_its_class_status_and_code_not_its_words(
+def test_an_endpoint_s_refusal_is_shown_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The endpoint's own text, its code, detail, title and other fields and
+    # the client's diagnosis of it, as the old route shows them (decision
+    # E47, owner decision 2026-10-10); nothing chained to it.
     request = _materialized(monkeypatch)
     for status, answer in (
         (422, {'code': 'UNSUPPORTED_FEATURE', 'detail': 'column x is 5'}),
@@ -265,25 +268,18 @@ def test_an_endpoint_s_refusal_keeps_its_class_status_and_code_not_its_words(
                 'extra': 'value 7',
             },
         ),
-        (400, {'title': 'bad request for 7'}),
+        (400, {'title': 'bad request for 7', 'endpoint_code': 'E9'}),
     ):
         with _answering(status, json.dumps(answer).encode()) as (url, _):
             core, old = _both(monkeypatch, request, url)
         assert isinstance(core, NimRequestError)
-        assert (type(core), core.status_code, core.code) == (
+        assert (type(core), core.status_code, core.code, str(core)) == (
             type(old),
             old.status_code,
             old.code,
+            str(old),
         )
-        # The client's own diagnosis is kept; the endpoint's words, its
-        # other fields and the transport's exception are not.
-        assert core.details == {
-            key: old.details[key]
-            for key in ('diagnosis', 'endpoint_code')
-            if key in old.details
-        }
-        for said in ('column x', 'context examples', 'value 7', 'bad request'):
-            assert said not in str(core) + repr(core.details), said
+        assert core.details == old.details
         assert core.__cause__ is None and core.__context__ is None
 
 
@@ -388,7 +384,7 @@ def test_an_overflowing_prediction_is_refused_on_the_core(
         # (register P1B-4).
         assert isinstance(core, StructuredDataError)
         assert core.code == 'INVALID_RESPONSE'
-        assert core.details['field'] == 'prediction.prediction'
+        assert core.details['field'] == 'response'
         assert core.details['reason'] == 'not_finite'
         assert old.to_pandas()['prediction'].tolist()[0] in (
             float('inf'),
@@ -408,6 +404,60 @@ def test_a_failed_transport_is_named_for_what_failed(
     assert 'its answer could not be read' in str(core)
 
 
+def test_a_non_finite_number_anywhere_in_the_answer_is_refused_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # One policy over the whole answer, as the Rust host's (sdm-core's
+    # tests/predict.rs, the same tokens in the metadata): the old route
+    # passes the value on (register P1B-4).
+    request = _materialized(monkeypatch)
+    for token in ('1e400', '-1e400', 'Infinity', '-Infinity', 'NaN'):
+        answer = (
+            '{"id": "r1", "model": "kumo-relational", "metadata": {"x": [1, '
+            '{"y": ' + token + '}]}, "predictions": [{"id": "112", '
+            '"row_index": 0, "prediction": 1.0}, {"id": "113", '
+            '"row_index": 1, "prediction": 1.0}]}'
+        )
+        with _answering(200, answer.encode()) as (url, _):
+            core, old = _both(monkeypatch, request, url)
+        assert isinstance(core, StructuredDataError), token
+        assert core.code == 'INVALID_RESPONSE', token
+        assert (core.details['field'], core.details['reason']) == (
+            'response',
+            'not_finite',
+        ), token
+        assert not isinstance(old, Exception), token
+
+
+def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Python's reader takes nesting the core refuses: the host writes it
+    # without recursion, and the core refuses it as too deep. 126 arrays in
+    # the metadata nest 128 deep in all, the deepest the core reads.
+    request = _materialized(monkeypatch)
+    for depth in (126, 960, 5000):
+        answer = (
+            '{"id": "r1", "model": "kumo-relational", "metadata": {"x": '
+            + '[' * depth
+            + '0'
+            + ']' * depth
+            + '}, "predictions": [{"id": "112", "row_index": 0, '
+            '"prediction": 1.0}, {"id": "113", "row_index": 1, '
+            '"prediction": 1.0}]}'
+        )
+        monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+        with _answering(200, answer.encode()) as (url, _):
+            if depth == 126:
+                assert len(_predict(url, request)) == 2
+                continue
+            with pytest.raises(StructuredDataError) as refused:
+                _predict(url, request)
+        assert refused.value.code == 'INVALID_RESPONSE'
+        assert refused.value.details['reason'] == 'too_deep'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+
+
 def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -419,4 +469,5 @@ def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
         core, old = _both(monkeypatch, request, url)
     assert (type(core), core.code) == (type(old), old.code)
     assert core.code == 'INVALID_REQUEST'
+    assert core.__cause__ is None and core.__context__ is None
     assert received.requests == []

@@ -23,17 +23,21 @@ non-finite number Python's reader made of it written as a token the core
 reads as one (an overflowing ``1e400`` for an infinity), so both hosts
 refuse it alike.
 
-No text the endpoint wrote, and no value of the request, reaches an
-exception on this route (decision H17; E45(c) as revised in T1.11d's first
-review round): an endpoint's refusal (HTTP 4xx or 5xx) is raised as the
-transport raises it, a :class:`~sdm_client.errors.NimRequestError` with the
-endpoint's status and code and the client's own diagnosis, but with a fixed
-sentence, none of the endpoint's detail, title or other fields, and no
-cause; a failed transport (the endpoint could not be reached, or its
-answer could not be read) is told to the core, which ends the run with
-``TRANSPORT_ERROR``; any other error of the transport keeps its code and
-gets a fixed sentence. Whether a user needs the endpoint's own words on a
-refusal is a question for the owner (E45).
+What the endpoint itself wrote in a refusal (HTTP 4xx or 5xx) is shown as
+on the old route (decision E47, owner decision 2026-10-10, an exception to
+H17 for the endpoint's own text only): the refusal is raised as the
+client's transport raises it and its adapter explains it, a
+:class:`~sdm_client.errors.NimRequestError` with the endpoint's status,
+``code``, message (its ``detail`` or ``title``) and details
+(``endpoint_code``, ``diagnosis`` and its other fields, as the transport
+reads them), the same class, message and details as the old route's. That
+text is the endpoint's, so a request value it echoes back is shown, which
+the owner accepted. Nothing of this side's is added to it: the
+transport's exception, and with it the endpoint's URL and any credential
+the URL holds, is not chained, nor any other context. A failed transport
+(the endpoint could not be reached, or its answer could not be read) is
+told to the core, which ends the run with ``TRANSPORT_ERROR``; any other
+error of the transport keeps its code and gets a fixed sentence.
 
 As built at T1.11d the core predicts a regression asked for its default
 output; the rest is refused with ``UNSUPPORTED_REQUEST`` naming the rule
@@ -43,6 +47,7 @@ Nothing here imports the relational engine.
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 from typing import TYPE_CHECKING, Any
@@ -78,69 +83,78 @@ def _rows(stream: Any) -> list[dict[str, Any]]:
 
 def _payload(payload: dict[str, Any]) -> bytes:
     r"""A payload as the core reads it; one holding a value JSON has no form
-    for is refused as the client's transport refuses it."""
+    for is refused as the client's transport refuses it, with no context."""
     try:
         return json.dumps(payload, allow_nan=False).encode()
     except (TypeError, ValueError):
-        raise StructuredDataError(
-            'this request carries a value that cannot be sent as JSON',
-            code='INVALID_REQUEST',
-        ) from None
+        pass
+    raise StructuredDataError(
+        'this request carries a value that cannot be sent as JSON',
+        code='INVALID_REQUEST',
+    )
+
+
+#: How deep :func:`_encoded` writes an answer: past the core's reader's
+#: depth (``sdm_wire::json::MAX_DEPTH``, 128), so the core, not Python's
+#: recursion, refuses one nested deeper, as ``too_deep``.
+_ENCODED_DEPTH = 129
 
 
 def _encoded(value: Any) -> bytes:
     r"""An answer the transport decoded, as JSON text for the core: what
-    ``json.dumps`` writes, but a non-finite float, which Python's reader
-    made of the endpoint's text (an overflowing ``1e400``, or a ``NaN`` or
-    ``Infinity`` JSON does not hold), as a token the core reads as one: an
-    infinity as ``1e400`` or ``-1e400``, a NaN as ``NaN``, which the core
-    refuses as not JSON."""
+    ``json.dumps`` writes, but each non-finite float Python's reader made of
+    the endpoint's text (an overflowing ``1e400``, or the ``NaN`` and
+    ``Infinity`` JSON does not hold), wherever it is, as a token the core
+    reads as non-finite and refuses alike on every host: an infinity as
+    ``1e400`` or ``-1e400``, a NaN as ``NaN``. It writes without recursion,
+    and an answer nested past the core's depth is cut at one level past it,
+    which the core refuses as too deep."""
     out: list[str] = []
-
-    def write(item: Any) -> None:
+    # Each entry: text to write, or an item to write at a depth.
+    stack: list[tuple[str | None, Any, int]] = [(None, value, 0)]
+    while stack:
+        text, item, depth = stack.pop()
+        if text is not None:
+            out.append(text)
+            continue
         if isinstance(item, float) and not math.isfinite(item):
             out.append(
                 'NaN' if item != item else ('1e400' if item > 0 else '-1e400')
             )
-        elif isinstance(item, dict):
-            out.append('{')
-            for index, (key, member) in enumerate(item.items()):
-                if index:
-                    out.append(', ')
-                out.append(json.dumps(str(key)))
-                out.append(': ')
-                write(member)
-            out.append('}')
-        elif isinstance(item, (list, tuple)):
-            out.append('[')
-            for index, member in enumerate(item):
-                if index:
-                    out.append(', ')
-                write(member)
-            out.append(']')
+        elif isinstance(item, (dict, list, tuple)):
+            if depth >= _ENCODED_DEPTH:
+                # Deep enough for the core to refuse; what is inside is
+                # never read.
+                out.append('[]')
+                continue
+            members = (
+                [(json.dumps(str(k)) + ': ', v) for k, v in item.items()]
+                if isinstance(item, dict)
+                else [('', v) for v in item]
+            )
+            close = '}' if isinstance(item, dict) else ']'
+            out.append('{' if isinstance(item, dict) else '[')
+            stack.append((close, None, depth))
+            for index in range(len(members) - 1, -1, -1):
+                prefix, member = members[index]
+                stack.append((None, member, depth + 1))
+                stack.append(((', ' if index else '') + prefix, None, depth))
         else:
             out.append(json.dumps(item))
-
-    write(value)
     return ''.join(out).encode()
 
 
 def _refusal(refused: NimRequestError) -> NimRequestError:
-    r"""The endpoint's refusal as this route raises it: its class, status
-    and code, and the client's own diagnosis of it, with a fixed sentence
-    and none of the endpoint's text (decision H17)."""
+    r"""The endpoint's refusal as this route raises it: the old route's
+    class, status, code, message and details, the endpoint's own text and
+    the adapter's explanation of it (decision E47), but a new exception, so
+    nothing of the transport's (its URL, a credential) is chained to it."""
     details = refused.details if isinstance(refused.details, dict) else {}
-    kept = {
-        name: details[name]
-        for name in ('diagnosis', 'endpoint_code')
-        if isinstance(details.get(name), str)
-    }
-    return NimRequestError(
+    return type(refused)(
         refused.status_code,
-        code=refused.code if isinstance(refused.code, str) else None,
-        message='the model endpoint refused the request; its own words are '
-        'not shown on this route',
-        details=kept,
+        code=refused.code,
+        message=refused.message,
+        details=copy.deepcopy(details),
     )
 
 

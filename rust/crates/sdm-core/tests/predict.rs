@@ -340,7 +340,7 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
             "not_text",
         ),
         (format!("{{\"{CANARY}\""), "response", "not_json"),
-        ("[1, NaN]".to_owned(), "response", "not_json"),
+        ("[1, NaN]".to_owned(), "response", "not_finite"),
     ];
     for (answer, field, reason) in cases {
         let (_, step) = answered(200, answer.as_bytes());
@@ -543,9 +543,27 @@ fn an_overflowing_prediction_is_an_invalid_response() {
         let (_, step) = answered(200, answer.as_bytes());
         let error = step.unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidResponse, "{token}");
-        assert_eq!(error.fields["field"], text("prediction.prediction"));
+        assert_eq!(error.fields["field"], text("response"));
         assert_eq!(error.fields["reason"], text("not_finite"));
     }
+    // The same policy over the whole answer: a non-finite number in the
+    // endpoint's metadata, written as a token past a double's range or as
+    // the NaN and Infinity tokens JSON does not hold (Python's reader takes
+    // them), is refused alike, as the Python host's tests show
+    // (`tests/test_the_predict_route.py`).
+    for token in ["1e400", "-1e400", "Infinity", "-Infinity", "NaN"] {
+        let answer = format!(
+            r#"{{"id":"r1","model":"m","metadata":{{"x":[1,{{"y":{token}}}]}},"predictions":[{{"id":"2","row_index":0,"prediction":1.0}},{{"id":"3","row_index":1,"prediction":1.0}}]}}"#
+        );
+        let (_, step) = answered(200, answer.as_bytes());
+        let error = step.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidResponse, "{token}");
+        assert_eq!(error.fields["field"], text("response"), "{token}");
+        assert_eq!(error.fields["reason"], text("not_finite"), "{token}");
+    }
+    // Text holding those words, and an integer of any size, are finite.
+    let answer = r#"{"id":"r1","model":"m","metadata":{"w":"NaN Infinity","n":123456789012345678901234567890},"predictions":[{"id":"2","row_index":0,"prediction":1.0},{"id":"3","row_index":1,"prediction":1.0}]}"#;
+    assert!(answered(200, answer.as_bytes()).1.is_ok());
     // The largest double is a prediction like any other.
     let answer = r#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.7976931348623157e308},{"id":"3","row_index":1,"prediction":1.0}]}"#;
     assert!(answered(200, answer.as_bytes()).1.is_ok());

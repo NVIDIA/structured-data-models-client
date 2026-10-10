@@ -57,9 +57,9 @@ fn a_member_named_twice_keeps_its_place_and_its_last_value() {
 #[test]
 fn what_json_does_not_allow_is_refused_by_position_and_category() {
     for (text, category) in [
-        (&b"{\"a\": NaN}"[..], "syntax"),
-        (b"[Infinity]", "syntax"),
-        (b"[-Infinity]", "syntax"),
+        (&b"{\"a\": NaN}"[..], "not_finite"),
+        (b"[Infinity]", "not_finite"),
+        (b"[-Infinity]", "not_finite"),
         (b"{\"a\": 1", "eof"),
         (b"{\"secret-value\" 1}", "syntax"),
         (b"", "eof"),
@@ -145,4 +145,27 @@ fn deep_text_ends_in_a_refusal_in_a_process_of_its_own() {
         String::from_utf8_lossy(&child.stderr)
     );
     assert!(stdout.contains("deep text refused"), "{stdout}");
+}
+
+/// A wide object reads in n log n: a hundred thousand members, each named
+/// once, read well inside a second, where finding each name by a scan of
+/// those before it took minutes at this width (T1.11d review round 2).
+#[test]
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "test code: times the read"
+)]
+fn a_wide_object_reads_in_n_log_n() {
+    let members: Vec<String> = (0..100_000).map(|i| format!("\"k{i}\":{i}")).collect();
+    let text = format!("{{{},\"k5\":\"last\"}}", members.join(","));
+    let started = std::time::Instant::now();
+    let value = read(text.as_bytes()).unwrap();
+    let took = started.elapsed();
+    let Value::Object(read_members) = &value else {
+        panic!("an object");
+    };
+    assert_eq!(read_members.len(), 100_000);
+    assert_eq!(value.get("k5"), Some(&Value::Text("last".into())));
+    assert!(took.as_secs_f64() < 3.0, "{took:?}");
 }

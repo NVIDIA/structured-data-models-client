@@ -16,14 +16,15 @@ driven through it:
   driver's own message quotes;
 - transport: the model endpoint unreachable at a URL carrying the fake
   credential;
-- refusal: the endpoint refusing the call (HTTP 422, its detail, title and
-  other fields echoing the data and the credential; HTTP 500, echoing
-  nothing), behind a URL carrying the credential, raised as the transport's
-  ``NimRequestError`` with its status and code and none of its words;
+- refusal: the endpoint refusing the call (HTTP 422 in the endpoint's own
+  words, a sentinel of its own in its code, detail, title and other fields;
+  HTTP 500, echoing nothing), behind a URL carrying the credential, raised
+  as the old route raises it, the endpoint's own words shown (decision E47,
+  owner decision 2026-10-10), none of ours;
 - panic: the test-only operation, panicking in the run's body with the
   sentinel as its payload.
 
-None of the sentinels may appear in the core's error (its message, every
+None of our sentinels may appear in the core's error (its message, every
 field and every cause, as the control message carried it), in ``str`` or
 ``repr`` of the exception, in its formatted traceback, in any warning
 shown, in any log record captured at ``DEBUG`` from every logger (the
@@ -34,6 +35,15 @@ fails (the driver's message, the URL the transport was given, the bytes the
 codec refused, the panic's location written to stderr), and the same check
 catches each when a deliberately leaky formatter, installed only inside
 this test, writes it into the exception.
+
+One exception, the owner's (decision E47, 2026-10-10): text the model
+endpoint itself writes in a refusal is shown on the core route, as the old
+route shows it. A sentinel only the endpoint writes is asserted to reach
+``str`` and the details, so the exception works and cannot quietly regress
+to hiding; and an endpoint that echoes our data has that echo shown
+verbatim, as on the old route, which is the case the owner accepted. Our
+own sentinels still reach nothing through our code: the credential in the
+URL is never chained or added.
 """
 
 from __future__ import annotations
@@ -268,6 +278,35 @@ def _closed_port() -> int:
         return int(closed.getsockname()[1])
 
 
+#: A sentinel only the endpoint writes, in every field of its refusal it
+#: may write: its code, detail, title, ``endpoint_code``, ``diagnosis`` and
+#: another field. The owner chose to show the endpoint's own words on the
+#: core route, as the old route does (decision E47, owner decision
+#: 2026-10-10), so this one must reach ``str(exc)`` and the details.
+ENDPOINT = 'SENTINEL-endpoint-5d1e'
+_ENDPOINT_CODE = 'ENDPOINT_SENTINEL_5D1E'
+_ENDPOINT_S_OWN = {
+    'code': _ENDPOINT_CODE,
+    'detail': f'this deployment does not serve that ({ENDPOINT})',
+    'title': f'title {ENDPOINT}',
+    'endpoint_code': f'{ENDPOINT}-code',
+    'diagnosis': f'{ENDPOINT}-diagnosis',
+    'hint': f'{ENDPOINT}-hint',
+}
+
+
+def _shows_the_endpoint_s_own_words(error: NimRequestError) -> None:
+    r"""The exception is a working one: the endpoint's own words are in its
+    text and its details, as on the old route, and none of ours is."""
+    assert error.status_code == 422
+    assert error.code == _ENDPOINT_CODE
+    assert ENDPOINT in str(error)
+    assert _ENDPOINT_CODE in str(error)
+    assert error.details['endpoint_code'] == f'{ENDPOINT}-code'
+    assert error.details['diagnosis'] == f'{ENDPOINT}-diagnosis'
+    assert error.details['hint'] == f'{ENDPOINT}-hint'
+
+
 def _failing(kind: str) -> str:
     r"""A statement whose cast fails on the planted value of ``kind``,
     which the driver's message quotes."""
@@ -327,14 +366,7 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
 
         return call
 
-    echoing_refusal = json.dumps(
-        {
-            'code': 'UNSUPPORTED_FEATURE',
-            'detail': f'column country holds {DATA}; caller {CREDENTIAL}',
-            'title': DSN,
-            'invalid_params': [{'name': DATA, 'reason': DSN}],
-        }
-    ).encode()
+    endpoint_s_refusal = json.dumps(_ENDPOINT_S_OWN).encode()
 
     def operation() -> Any:
         return run({'op': DATA, 'state': CREDENTIAL}, {})
@@ -377,8 +409,8 @@ def _scenarios() -> dict[str, Callable[[], Any]]:
             'data'
         ),
         'transport: an unreachable endpoint behind a credential': transport,
-        'refusal: a 422 echoing the request behind a credential': answered(
-            echoing_refusal, 422
+        'refusal: a 422 in the endpoint s own words behind a credential': (
+            answered(endpoint_s_refusal, 422)
         ),
         'refusal: a 500 behind a credential': answered(
             b'{"code": "INTERNAL_ERROR", "detail": "internal failure"}', 500
@@ -405,9 +437,13 @@ def test_no_sentinel_reaches_anything_written(
     path = name.split(':')[0]
     if path == 'refusal':
         # The endpoint's refusal, as the host raises it on the core route:
-        # its class, status and code, no cause and no context.
+        # the old route's class, status, code, message and details, the
+        # endpoint's own words (decision E47), nothing of ours, and no
+        # cause and no context.
         assert isinstance(error, NimRequestError), name
         assert error.__cause__ is None and error.__context__ is None, name
+        if 'own words' in name:
+            _shows_the_endpoint_s_own_words(error)
     else:
         # The error is the core's, raised with no cause chained.
         assert error.__cause__ is None and error.__suppress_context__, name
@@ -416,7 +452,7 @@ def test_no_sentinel_reaches_anything_written(
         'codec': {'INVALID_MESSAGE', 'INVALID_RESPONSE'},
         'provider': {'PROVIDER_ERROR'},
         'transport': {'TRANSPORT_ERROR'},
-        'refusal': {'UNSUPPORTED_FEATURE', 'INTERNAL_ERROR'},
+        'refusal': {_ENDPOINT_CODE, 'INTERNAL_ERROR'},
         'panic': {'INTERNAL_ERROR'},
     }[path]
     assert error.code in expected, (name, error.code)
@@ -483,14 +519,6 @@ def _leaky_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(errors, '_instance', leaky)
 
 
-def _leaky_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
-    r"""A route that raises the endpoint's refusal as the transport wrote
-    it, as the old route does."""
-    from sdm_client._rust import predict as bridge
-
-    monkeypatch.setattr(bridge, '_refusal', lambda refused: refused)
-
-
 def _leaky_panic(monkeypatch: pytest.MonkeyPatch) -> None:
     r"""A formatter that writes the operation it ran into the error."""
     made = errors._instance
@@ -516,11 +544,6 @@ def _leaky_panic(monkeypatch: pytest.MonkeyPatch) -> None:
             _leaky_transport,
             DSN,
         ),
-        (
-            'refusal: a 422 echoing the request behind a credential',
-            _leaky_refusal,
-            DATA,
-        ),
         ('panic: in the run s body', _leaky_panic, PANIC),
     ],
 )
@@ -543,3 +566,46 @@ def test_a_leaky_formatter_is_caught(
     with _watching(monkeypatch, capfd) as seen:
         _raised(seen, scenario)
     assert any(found == sentinel for _, found in seen.leaks()), seen.leaks()
+
+
+def test_an_endpoint_echoing_our_data_is_shown_verbatim_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    r"""The owner-accepted exception (decision E47): an endpoint that echoes
+    a value of our request in its refusal has that text shown, verbatim, as
+    the old route shows it. It is the endpoint's text, not ours: nothing of
+    our side (the credential in the URL) is added, and nothing is chained."""
+    echoing = json.dumps(
+        {
+            'code': 'UNSUPPORTED_FEATURE',
+            'detail': f'column country holds {DATA}',
+            'invalid_params': [{'name': 'country', 'reason': DATA}],
+        }
+    ).encode()
+    shown = {}
+    with _answering(echoing, 422) as url:
+        for route, routes in (
+            ('core', CORE),
+            (
+                'old',
+                ','.join(
+                    _routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB
+                ),
+            ),
+        ):
+            monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+            with pytest.raises(NimRequestError) as raised:
+                _predict(url)
+            shown[route] = raised.value
+    core, old = shown['core'], shown['old']
+    assert DATA in str(core)
+    assert (str(core), core.code, core.status_code, core.details) == (
+        str(old),
+        old.code,
+        old.status_code,
+        old.details,
+    )
+    assert core.__cause__ is None and core.__context__ is None
+    formatted = ''.join(traceback.format_exception(core))
+    assert DSN not in formatted + repr(core.details)

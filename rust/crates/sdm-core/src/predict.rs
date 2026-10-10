@@ -82,13 +82,21 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // Text nested past the reader's depth is refused before anything of it
     // is built (`sdm_wire::json::MAX_DEPTH`).
     let read = json::read(&answer).map_err(|e| {
-        let reason = if e.category == "depth" {
-            "too_deep"
-        } else {
-            "not_json"
+        let reason = match e.category {
+            "depth" => "too_deep",
+            "not_finite" => "not_finite",
+            _ => "not_json",
         };
         bad_response("response", reason).with_field("category", Detail::text(e.category))
     })?;
+    // One policy for a number that is not finite, wherever in the answer it
+    // is, and however it was written: a `NaN` or `Infinity` token (above), or
+    // a token past a double's range, which reads as an infinity, is refused
+    // (register P1B-4). The Python host writes back any non-finite number
+    // its reader made as such a token, so both hosts refuse alike.
+    if !read.all_finite() {
+        return Err(bad_response("response", "not_finite"));
+    }
     let response = PredictionResponse::read(&read).map_err(refused)?;
     let table = layout(&payload, &response)?;
     let result = asker.attach(Attachment::Arrow(ArrowData::new(

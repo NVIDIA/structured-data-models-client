@@ -14,6 +14,8 @@
 //! its first place and its last value, as a Python dictionary built from
 //! the same text does.
 
+use std::collections::BTreeMap;
+
 use serde::de::{Deserializer, MapAccess, Visitor};
 use serde_json::value::RawValue;
 
@@ -33,8 +35,9 @@ pub enum Value {
 /// Why a text is not JSON: where, and what kind of fault, never the text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReadError {
-    /// `syntax`, `eof` or `data`, as `serde_json` classifies the fault, or
-    /// `depth` for text nested past [`MAX_DEPTH`].
+    /// `syntax`, `eof` or `data`, as `serde_json` classifies the fault,
+    /// `depth` for text nested past [`MAX_DEPTH`], or `not_finite` for a
+    /// `NaN` or `Infinity` token.
     pub category: &'static str,
     pub line: usize,
     pub column: usize,
@@ -63,8 +66,13 @@ impl ReadError {
 /// value is built, so neither building nor dropping one recurses past it.
 pub const MAX_DEPTH: usize = 128;
 
-/// Reads `bytes` as one JSON value, nested at most [`MAX_DEPTH`] deep.
+/// Reads `bytes` as one JSON value, nested at most [`MAX_DEPTH`] deep, with
+/// no number that is not finite: a `NaN` or `Infinity` token, which JSON
+/// does not hold and Python's reader takes, is refused as category
+/// `not_finite`, as a finite-looking token past a double's range is by
+/// [`Value::all_finite`].
 pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
+    check_non_finite_tokens(bytes)?;
     // The whole text once, for its faults' positions within it. Ignoring a
     // value is iterative in `serde_json`, so this holds at any depth.
     serde_json::from_slice::<serde::de::IgnoredAny>(bytes).map_err(|e| ReadError::of(&e))?;
@@ -73,6 +81,52 @@ pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
     check_depth(bytes)?;
     let raw: &RawValue = serde_json::from_slice(bytes).map_err(|e| ReadError::of(&e))?;
     value(raw).map_err(|e| ReadError::of(&e))
+}
+
+/// Refuses a `NaN`, `Infinity` or `-Infinity` token outside text, as the
+/// non-finite number Python's reader takes it for. JSON's only bare words
+/// are `true`, `false` and `null`, so a bare `N` or `I` is one of these or
+/// text that is not JSON, which the reading after this refuses either way.
+fn check_non_finite_tokens(bytes: &[u8]) -> Result<(), ReadError> {
+    let (mut line, mut column) = (1usize, 0usize);
+    let (mut in_text, mut escaped) = (false, false);
+    for (at, &byte) in bytes.iter().enumerate() {
+        if byte == b'\n' {
+            line += 1;
+            column = 0;
+        } else {
+            column += 1;
+        }
+        if in_text {
+            match (escaped, byte) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_text = false,
+                _ => {}
+            }
+            continue;
+        }
+        let word = |w: &[u8]| bytes[at..].starts_with(w);
+        match byte {
+            b'"' => in_text = true,
+            b'N' if word(b"NaN") => {
+                return Err(ReadError {
+                    category: "not_finite",
+                    line,
+                    column,
+                });
+            }
+            b'I' if word(b"Infinity") => {
+                return Err(ReadError {
+                    category: "not_finite",
+                    line,
+                    column,
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// Refuses JSON text nested past [`MAX_DEPTH`], at the bracket that passes
@@ -121,11 +175,17 @@ fn value(raw: &RawValue) -> Result<Value, serde_json::Error> {
         Some(b'{') => {
             let Members(members) = serde_json::from_str(text)?;
             let mut read: Vec<(String, Value)> = Vec::with_capacity(members.len());
+            // Each name's place, so a repeated one is found in log time and
+            // a wide object reads in n log n, not n squared.
+            let mut placed: BTreeMap<String, usize> = BTreeMap::new();
             for (name, raw) in members {
                 let member = value(raw)?;
-                match read.iter_mut().find(|(n, _)| *n == name) {
-                    Some(slot) => slot.1 = member,
-                    None => read.push((name, member)),
+                match placed.get(&name) {
+                    Some(&at) => read[at].1 = member,
+                    None => {
+                        placed.insert(name.clone(), read.len());
+                        read.push((name, member));
+                    }
                 }
             }
             Value::Object(read)
@@ -203,6 +263,20 @@ impl Value {
         match self {
             Value::Text(text) => Some(text),
             _ => None,
+        }
+    }
+
+    /// Whether every number in the value reads as a finite double: an
+    /// integer token always does, as an integer of any size; a float token
+    /// past a double's range (`1e400`) reads as an infinity, and does not.
+    pub fn all_finite(&self) -> bool {
+        match self {
+            Value::Number(token) => {
+                is_integer_token(token) || token.parse::<f64>().is_ok_and(f64::is_finite)
+            }
+            Value::Array(items) => items.iter().all(Value::all_finite),
+            Value::Object(members) => members.iter().all(|(_, v)| v.all_finite()),
+            _ => true,
         }
     }
 
