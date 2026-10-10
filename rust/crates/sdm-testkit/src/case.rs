@@ -30,15 +30,15 @@ pub struct Case {
     pub slice: String,
     pub paths: Vec<String>,
     pub routes: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub seam: Option<String>,
     pub cells: Vec<String>,
     pub input: Input,
     pub until: Until,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub core: Option<CoreInputs>,
     pub expect: Expect,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub register: Option<String>,
     pub why: String,
     pub source: String,
@@ -66,9 +66,9 @@ pub enum Until {
 #[serde(deny_unknown_fields)]
 pub struct Input {
     pub base: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub setup: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub from_source: Option<FromSource>,
     /// The user's edits to the schema `Schema.from_source` returned, in
     /// order, at least one; the Python runner makes them (T1.21b).
@@ -82,14 +82,14 @@ pub struct Input {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FromSource {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub tables: Option<Tables>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub primary_keys: Option<serde_json::Map<String, Value>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub time_columns: Option<serde_json::Map<String, Value>>,
     /// The relationships passed in (T1.21b).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub relationships: Option<Vec<Relationship>>,
 }
 
@@ -182,6 +182,15 @@ enum EditFields {
     DeleteColumn { table: Name, column: Name },
 }
 
+/// An optional field the case schema does not let be null: absent is
+/// `None` (`serde(default)`), and present is read as `T`, so a null is
+/// refused as the Python validator refuses it, never taken for absent.
+fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
+}
+
 /// `input.edits`, when given, holds at least one edit, as the case schema's
 /// `minItems` says.
 fn some_edits<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Vec<Edit>>, D::Error> {
@@ -217,9 +226,9 @@ pub enum Tables {
 #[serde(deny_unknown_fields)]
 pub struct Materialize {
     pub indices: Vec<Index>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub indices_as: Option<IndicesAs>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub anchor_time: Option<String>,
     /// The inference options passed, kept as written, free-form (T1.21b).
     #[serde(default, deserialize_with = "some_options")]
@@ -272,13 +281,13 @@ pub enum IndicesAs {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CoreInputs {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub validate_query: Option<ValidateQueryInput>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub describe_source: Option<DescribeSourceInput>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub materialize: Option<MaterializeInput>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub predict: Option<PredictInput>,
 }
 
@@ -333,13 +342,13 @@ pub struct ValidateQueryInput {
 pub struct Expect {
     pub outcome: String,
     pub stage: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub error: Option<String>,
     #[serde(default)]
     pub code: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub message: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub today: Option<String>,
 }
 

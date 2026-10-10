@@ -130,13 +130,28 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
         changed
     };
     let refused = listed["refused"].as_array().unwrap();
-    assert!(refused.len() >= 15);
+    assert!(refused.len() >= 39);
     for change in refused {
         assert!(
             load_error("malformed", &changed(change)).is_some(),
             "{}",
             change["why"]
         );
+    }
+    let omitted = listed["omitted"].as_array().unwrap();
+    assert!(!omitted.is_empty());
+    for change in omitted {
+        let mut without = case.clone();
+        let path = change["path"].as_array().unwrap();
+        let mut at = &mut without;
+        for key in &path[..path.len() - 1] {
+            at = &mut at[key.as_str().unwrap()];
+        }
+        at.as_object_mut()
+            .unwrap()
+            .remove(path[path.len() - 1].as_str().unwrap())
+            .unwrap();
+        assert_eq!(load_error("omitted", &without), None, "{}", change["why"]);
     }
     for change in listed["accepted"].as_array().unwrap() {
         assert_eq!(

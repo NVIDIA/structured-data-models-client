@@ -192,7 +192,7 @@ def test_both_loaders_refuse_the_same_malformed_edits_and_relationships(
     # loader, which must refuse and take the same ones (T1.21b).
     listed = json.loads(MALFORMED.read_text())
     case = json.loads((ROOT / listed['case']).read_text())
-    assert len(listed['refused']) >= 15
+    assert len(listed['refused']) >= 39
     path = tmp_path / 'case.json'
     path.write_text(json.dumps(case))
     assert run_python.load_cases([path])
@@ -206,6 +206,15 @@ def test_both_loaders_refuse_the_same_malformed_edits_and_relationships(
         path.write_text(
             json.dumps(_changed(case, change['path'], change['value']))
         )
+        assert run_python.load_cases([path]), change['why']
+    assert listed['omitted']
+    for change in listed['omitted']:
+        omitted = copy.deepcopy(case)
+        at = omitted
+        for key in change['path'][:-1]:
+            at = at[key]
+        del at[change['path'][-1]]
+        path.write_text(json.dumps(omitted))
         assert run_python.load_cases([path]), change['why']
 
 
