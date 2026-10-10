@@ -23,6 +23,7 @@ Decision E43.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,13 @@ jobs:
 """
 
 
+#: The environment the temporary repositories' git and the replays run in:
+#: without git's own variables, which a pre-push hook sets (GIT_DIR and the
+#: like) and which would point every git call here at the repository being
+#: pushed instead of the temporary one, as lane_selftest.py leaves them out.
+_ENV = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+
+
 @dataclass
 class Result:
     name: str
@@ -84,6 +92,7 @@ class Repo:
             ['git', '-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
              *args],
             cwd=self.root, check=True, capture_output=True, text=True,
+            env=_ENV,
         ).stdout  # fmt: skip
 
     def write(self, path: str, text: str) -> None:
@@ -100,7 +109,7 @@ class Repo:
         return subprocess.run(
             [sys.executable, str(SCRIPT), '--root', str(self.root),
              '--base', self.base, *args],
-            capture_output=True, text=True, timeout=600,
+            capture_output=True, text=True, timeout=600, env=_ENV,
         )  # fmt: skip
 
 
