@@ -6,10 +6,10 @@
       "moved": "T1.23 (E59): the schema's assembly in sdm-schema decides each table's source name and the time column inference took before the links or the caller settled another (time_column_inferred, in place of edit_stamp_refused); build presents them as the description gives them"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
-      "refactor": "T1.23 (E59): each table's source name passed back to the core as the description gave it (contract version 12); no rule added"
+      "moved": "T1.24 (E61): a table named otherwise than its source is the core's to sample (the core's table_source refusal lifted); the table's source name is held to the one the description gave, the schema_edited refusal staying for T1.24b"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the consistency check moved into materialize; no check_consistent call"
+      "moved": "T1.24 (E61): the option, unseeded and num_context_samples refusals moved into the core; each option passes through, by name or in its field (contract version 13)"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_infer_relationships": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: links inferred by name, no longer reached on the core route"
@@ -55,6 +55,27 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_require_joinable": {
       "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor": {
+      "moved": "T1.24 (E61): the anchor_entity refusal moved into the core; 'entity' is carried as Materialize.anchor_entity"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
+      "moved": "T1.24 (E61): the outputs refusal moved into the core; _not_taken, which only it called, removed"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_not_taken": {
+      "moved": "T1.24 (E61): the outputs refusal moved into the core, its only caller"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
+      "moved": "T1.24 (E61): the outputs refusal moved into the core; the outputs asked for pass through as Predict.outputs"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
+      "moved": "T1.24 (E61): the option refusals moved into the core; from_source takes the call's tables named, which pass through to describe_source with its other arguments"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
+      "moved": "T1.24 (E61): the relationships and time_column_cleared refusals moved into the core, which takes both (contract version 13 says a time column cleared); the tables named, keys, time columns and relationships pass through as the contract's SourceSpec; a relationship that is not a Relationship is refused as the reference refuses it, the host's conversion of its own value, which the contract cannot carry"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
+      "moved": "T1.24 (E61): a call naming its tables routes to the core (schema.from-source/tables/duckdb), the tables passed to the schema bridge"
     }
   }
 }

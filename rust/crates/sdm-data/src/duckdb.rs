@@ -661,7 +661,11 @@ fn describe(
 /// not one the name reads. Asked only when reading a named table's columns
 /// has failed: no row says the source holds no such relation, so the
 /// caller named one it lacks; any row, that the failure was another
-/// (T1.23 fix 3).
+/// (T1.23 fix 3). A search path naming a schema of another attached
+/// database (`SET search_path = 'other.main'`) is not followed: the
+/// filter holds the current database. No provider of this build sets
+/// such a path on the connection it reads through, so it is unreachable
+/// today; recorded here rather than ported (T1.23's review).
 fn held(names: &[String]) -> String {
     let fold = |text: &str| {
         format!("translate({text}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')")

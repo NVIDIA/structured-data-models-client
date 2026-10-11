@@ -686,6 +686,7 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
             },
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
+            outputs: vec!["prediction".into()],
         })),
         Attachments::from([
             (

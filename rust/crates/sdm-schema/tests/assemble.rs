@@ -545,7 +545,7 @@ fn a_warning_s_message_names_nothing_and_its_fields_name_everything() {
 /// cannot hold a time, an empty key, and a key of two columns.
 #[test]
 fn keys_and_time_columns_named_are_applied_and_checked() {
-    let named = |keys: &[(&str, &[&str])], times: &[(&str, &str)]| {
+    let named = |keys: &[(&str, &[&str])], times: &[(&str, Option<&str>)]| {
         let mut tables = vec![orders(Dtype::Int), users()];
         tables[0]
             .columns
@@ -560,7 +560,7 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
             .collect();
         let times = times
             .iter()
-            .map(|(t, c)| ((*t).to_owned(), (*c).to_owned()))
+            .map(|(t, c)| ((*t).to_owned(), c.map(str::to_owned)))
             .collect();
         assemble::apply_keys_and_times(&mut tables, &keys, &times).map(|()| tables)
     };
@@ -573,9 +573,20 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
         Some(Stype::Numerical)
     );
     // Text named as the time column means a timestamp.
-    let tables = named(&[], &[("orders", "note")]).unwrap();
+    let tables = named(&[], &[("orders", Some("note"))]).unwrap();
     assert_eq!(tables[0].time_column.as_deref(), Some("note"));
     assert_eq!(tables[0].columns[4].stype, Stype::Timestamp);
+    // A time column cleared leaves the table none, its column still
+    // meaning a timestamp, as the reference's setter takes None (T1.24).
+    let tables = named(&[], &[("orders", None)]).unwrap();
+    assert_eq!(tables[0].time_column, None);
+    assert_eq!(tables[0].columns[3].stype, Stype::Timestamp);
+    // A key may then be the column that was the time column.
+    let tables = named(&[("orders", &["ts"])], &[("orders", None)]);
+    assert!(
+        tables.is_err(),
+        "the keys are applied before the times, as the reference applies them"
+    );
     let rule = |result: Result<Vec<InferredTable>, sdm_contract::CoreError>| {
         let err = result.unwrap_err();
         (
@@ -598,19 +609,23 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
     );
     assert_eq!(rule(named(&[("users", &[])], &[])), invalid("primary_keys"));
     assert_eq!(
-        rule(named(&[], &[("nowhere", "ts")])),
+        rule(named(&[], &[("nowhere", Some("ts"))])),
         invalid("time_columns")
     );
     assert_eq!(
-        rule(named(&[], &[("orders", "nothing")])),
+        rule(named(&[], &[("nowhere", None)])),
         invalid("time_columns")
     );
     assert_eq!(
-        rule(named(&[], &[("orders", "order_id")])),
+        rule(named(&[], &[("orders", Some("nothing"))])),
         invalid("time_columns")
     );
     assert_eq!(
-        rule(named(&[], &[("orders", "price")])),
+        rule(named(&[], &[("orders", Some("order_id"))])),
+        invalid("time_columns")
+    );
+    assert_eq!(
+        rule(named(&[], &[("orders", Some("price"))])),
         invalid("time_columns")
     );
     assert_eq!(
@@ -629,17 +644,18 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
 /// warned of.
 #[test]
 fn relationships_given_are_the_schema_s_and_checked() {
-    let given = |links: &[Link], times: Option<&std::collections::BTreeMap<String, String>>| {
-        assemble::assemble(
-            vec![orders(Dtype::Int), users()],
-            vec![],
-            Given {
-                time_columns: times,
-                relationships: Some(links),
-            },
-            None,
-        )
-    };
+    let given =
+        |links: &[Link], times: Option<&std::collections::BTreeMap<String, Option<String>>>| {
+            assemble::assemble(
+                vec![orders(Dtype::Int), users()],
+                vec![],
+                Given {
+                    time_columns: times,
+                    relationships: Some(links),
+                },
+                None,
+            )
+        };
     let none = given(&[], None).unwrap();
     assert!(none.description.links.is_empty());
     assert_eq!(
@@ -682,7 +698,8 @@ fn relationships_given_are_the_schema_s_and_checked() {
         Some("sub_id"),
     );
     subscriptions.time_column = None;
-    let timed = std::collections::BTreeMap::from([("plans".to_owned(), "modified_at".to_owned())]);
+    let timed =
+        std::collections::BTreeMap::from([("plans".to_owned(), Some("modified_at".to_owned()))]);
     let made = assemble::assemble(
         vec![plans(), subscriptions],
         vec![],
@@ -695,6 +712,29 @@ fn relationships_given_are_the_schema_s_and_checked() {
     .unwrap();
     assert_eq!(
         described(&made.description, "plans").time_column.as_deref(),
+        Some("modified_at")
+    );
+    assert!(made.warnings.is_empty(), "{:?}", made.warnings);
+    // A time column cleared (T1.24) is given too: the table keeps none,
+    // inference's column is recorded as the one it took, and nothing is
+    // settled or warned of, though no link refers to the table.
+    let mut cleared_plans = plans();
+    cleared_plans.time_column = None;
+    let cleared = std::collections::BTreeMap::from([("plans".to_owned(), None)]);
+    let made = assemble::assemble(
+        vec![cleared_plans, users()],
+        vec![],
+        Given {
+            time_columns: Some(&cleared),
+            relationships: None,
+        },
+        None,
+    )
+    .unwrap();
+    let plans_described = described(&made.description, "plans");
+    assert_eq!(plans_described.time_column, None);
+    assert_eq!(
+        plans_described.time_column_inferred.as_deref(),
         Some("modified_at")
     );
     assert!(made.warnings.is_empty(), "{:?}", made.warnings);

@@ -318,8 +318,9 @@ pub struct SourceSpec {
     pub tables: Vec<NamedTable>,
     /// Declared primary keys, by the schema's name of the table.
     pub primary_keys: BTreeMap<String, Vec<String>>,
-    /// Declared time columns, by the schema's name of the table.
-    pub time_columns: BTreeMap<String, String>,
+    /// Declared time columns, by the schema's name of the table; `null`
+    /// says the table has none, as the caller's `None` does (decision E61).
+    pub time_columns: BTreeMap<String, Option<String>>,
     /// The relationships given, each `[foreign key, referenced key]` by the
     /// schema's names, in place of the declared and inferred ones; an empty
     /// list says there are none. Left out, they are the source's declared
@@ -426,6 +427,31 @@ pub struct Materialize {
     pub anchor_time: Option<Scalar>,
     /// The sampling seed, an integer of any size.
     pub seed: Option<Seed>,
+    /// Whether the caller asked for an unseeded sample, a new one each
+    /// call (`random_seed=None`), with `seed` left out; the core samples
+    /// under a seed and refuses it by name, `unseeded` (decision E61).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unseeded: bool,
+    /// Whether the caller anchored each entity at its own time
+    /// (`anchor_time='entity'`), with `anchor_time` left out; refused by
+    /// name, `anchor_entity`, until the core takes it (decision E61).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub anchor_entity: bool,
+    /// The most context examples the caller asked for; refused by name,
+    /// `num_context_samples`, until the run mode it selects is the core's
+    /// (T1.28a; decision E61).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_context_samples: Option<u64>,
+    /// The names of the call's other sampling options, which this message
+    /// carries no value of (the reference's `context_anchor_time`,
+    /// `exclude_cols_dict`, `inference_config`, `lag_timesteps`,
+    /// `max_pq_iterations`, `num_hops`, `num_neighbors`,
+    /// `return_embeddings`, `top_k` and `use_prediction_time`): the core
+    /// takes none of them yet and refuses the first in name order by its
+    /// name, and another name as `INVALID_REQUEST` (decision E61). The host
+    /// passes each the call gave, so it refuses none of its own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
 }
 
 /// An integer of any size, as signed hexadecimal text with no leading
@@ -563,6 +589,10 @@ pub struct Predict {
     /// draws it, as the reference's client draws one for every request; the
     /// core draws nothing at random but under a seed.
     pub request_id: String,
+    /// The outputs asked for, by the wire's names, in order; the core
+    /// predicts a regression's default, `prediction`, alone, and refuses
+    /// any other list by name, `outputs` (decision E61).
+    pub outputs: Vec<String>,
 }
 
 /// The prediction. Nothing inline grows with the result's width or the

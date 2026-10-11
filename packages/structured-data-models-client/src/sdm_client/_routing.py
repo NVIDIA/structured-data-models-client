@@ -278,8 +278,9 @@ FROM_SOURCE_DUCKDB = (
     'schema.from-source/catalog-keys/duckdb',
 )
 
-#: ``Schema.from_source`` over a DuckDB source with tables named, which has
-#: no core route yet: forcing the keys path alone fails such a call.
+#: ``Schema.from_source`` over a DuckDB source with tables named, each
+#: under the name the schema gives it, routed with the keys path (T1.24):
+#: forcing one without the other fails such a call.
 FROM_SOURCE_DUCKDB_TABLES = (
     'schema.from-source/tables/duckdb',
     'schema.from-source/catalog-keys/duckdb',
@@ -315,7 +316,11 @@ PREDICT_DUCKDB = (
 
 #: The paths this build can run on the core.
 CORE_ROUTED = frozenset(
-    S0 + FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB + PREDICT_DUCKDB
+    S0
+    + FROM_SOURCE_DUCKDB
+    + FROM_SOURCE_DUCKDB_TABLES
+    + MATERIALIZE_DUCKDB
+    + PREDICT_DUCKDB
 )
 
 

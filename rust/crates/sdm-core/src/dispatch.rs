@@ -112,6 +112,10 @@ pub fn start(
                 indices,
                 anchor_time: request.anchor_time,
                 seed: request.seed,
+                unseeded: request.unseeded,
+                anchor_entity: request.anchor_entity,
+                num_context_samples: request.num_context_samples,
+                options: request.options,
                 facts,
             };
             Run::with_data(access, move |asker| crate::materialize::run(asker, inputs))
@@ -143,6 +147,7 @@ pub fn start(
                 payload,
                 model: request.model,
                 request_id: request.request_id,
+                outputs: request.outputs,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }

@@ -246,8 +246,12 @@ def test_outputs_other_than_a_regression_s_default_are_refused_by_name(
         assert len(_predict(url, request, outputs=['prediction'])) == 2
         with pytest.raises(StructuredDataError) as refused:
             _predict(url, request, outputs=['prediction', 'quantiles'])
+    # Passed through to the core, which refuses it by name before the
+    # model is called (T1.24, decision E61); the bridge refuses none.
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details == {'operation': 'predict', 'rule': 'outputs'}
+    assert type(refused.value).__name__ == 'UnsupportedRequestError'
+    assert refused.value.details['operation'] == 'predict'
+    assert refused.value.details['rule'] == 'outputs'
     assert len(received.requests) == 1
 
 

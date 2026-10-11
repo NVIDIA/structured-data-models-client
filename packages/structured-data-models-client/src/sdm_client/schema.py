@@ -1187,6 +1187,7 @@ class Schema:
                 return on_the_core.from_source(
                     cls,
                     source,
+                    tables,
                     primary_keys=primary_keys,
                     time_columns=time_columns,
                     relationships=relationships,

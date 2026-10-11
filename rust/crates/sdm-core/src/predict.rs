@@ -35,7 +35,14 @@ pub(crate) struct Inputs {
     pub payload: Vec<u8>,
     pub model: String,
     pub request_id: String,
+    /// The outputs asked for, by the wire's names.
+    pub outputs: Vec<String>,
 }
+
+/// The outputs this core predicts: a regression's default alone. Any other
+/// list is refused by name before the state is read, as the host's bridge
+/// refused it before the core ran until T1.24 (decision E61).
+const OUTPUTS: [&str; 1] = ["prediction"];
 
 /// The JSON a request state's payload holds, or a refusal naming where in
 /// it and what kind of fault, never the text.
@@ -55,6 +62,9 @@ fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
 }
 
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
+    if inputs.outputs != OUTPUTS {
+        return Err(sdm_request::predict::not_yet("outputs"));
+    }
     let payload = payload(&inputs.payload)?;
     let call = body(&payload, &inputs.model, &inputs.request_id)?;
     let reply = asker

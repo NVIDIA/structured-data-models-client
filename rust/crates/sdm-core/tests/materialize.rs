@@ -190,6 +190,10 @@ fn materialize_start(
             value: ANCHOR,
         }),
         seed,
+        unseeded: false,
+        anchor_entity: false,
+        num_context_samples: None,
+        options: vec![],
     });
     let indices = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new(
@@ -642,18 +646,158 @@ fn the_schema_is_held_to_the_reference_s_consistency_check() {
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
 }
 
-#[test]
-fn a_table_read_under_another_name_is_refused_by_name() {
-    // T1.23: a description may name a table otherwise than its source
-    // does (contract version 12), which materialize does not sample until
-    // the route that takes tables named (T1.24): refused by name, before
-    // anything is fetched. Seeded: the same schema named as its source
-    // reaches the catalog requests.
+/// The tables of `description` named otherwise than the source names them:
+/// orders read from `app_orders`, users from `app_users`.
+fn renamed() -> SourceDescription {
     let mut renamed = shop();
+    renamed.tables[0].source = "app_orders".into();
     renamed.tables[1].source = "app_users".into();
-    let mut run = materialize(host(), &renamed, QUERY, None).unwrap();
-    let err = run.next().unwrap_err();
-    assert_eq!(rule(&err), "table_source");
-    let mut run = materialize(host(), &shop(), QUERY, None).unwrap();
-    assert!(matches!(run.next(), Ok(Step::Fetch { .. })));
+    renamed
+}
+
+/// The index answer: one index over `column` of each source table named.
+fn indexes(on: &[(&str, &str)]) -> FetchResult {
+    let tables: Vec<&str> = on.iter().map(|(t, _)| *t).collect();
+    let mut builder =
+        arrow_array::builder::ListBuilder::new(arrow_array::builder::StringBuilder::new())
+            .with_field(Arc::new(Field::new(
+                catalog_columns::LIST_ITEM,
+                DataType::Utf8,
+                true,
+            )));
+    for (_, column) in on {
+        builder.values().append_value(column);
+        builder.append(true);
+    }
+    data(vec![
+        (catalog_columns::TABLE, Arc::new(StringArray::from(tables))),
+        (catalog_columns::COLUMNS, Arc::new(builder.finish())),
+    ])
+}
+
+/// Every request `run` asks up to the sample, each answered as
+/// [`catalog`] answers it, the indexes as `index_answer`, and the warnings
+/// given on the way.
+fn requests_to_the_sample(
+    run: &mut Run,
+    index_answer: &dyn Fn() -> FetchResult,
+) -> (Vec<DataRequest>, Vec<String>) {
+    let mut asked_for = Vec::new();
+    let mut warnings = Vec::new();
+    loop {
+        let step = run.next().unwrap();
+        warnings.extend(run.take_warnings().into_iter().map(|w| w.code));
+        let Step::Fetch { requests } = step else {
+            panic!("not a fetch: {step:?}");
+        };
+        for asked in requests {
+            asked_for.push(asked.request.clone());
+            let answer = match &asked.request {
+                DataRequest::Describe {
+                    part: DescribePart::Indexes,
+                    ..
+                } => index_answer(),
+                other => match catalog(other) {
+                    Some(answer) => answer,
+                    None => return (asked_for, warnings),
+                },
+            };
+            run.submit_fetch(asked.id, answer).unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_table_named_otherwise_is_read_by_its_source_name() {
+    // T1.24 (decision E61): a description may name a table otherwise than
+    // its source does (contract version 12); every data request names the
+    // source's table, as the reference's engine reads it, while the query
+    // names the schema's. Until T1.24 it was refused by name
+    // (`table_source`).
+    let mut run = materialize(host(), &renamed(), QUERY, None).unwrap();
+    let (asked, warnings) = requests_to_the_sample(&mut run, &|| indexes(&[]));
+    let tables: Vec<String> = asked
+        .iter()
+        .filter_map(|request| match request {
+            DataRequest::TimeBounds { columns } => Some(columns[0].table.clone()),
+            DataRequest::SampleEntities { table, .. } => Some(table.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(tables, ["app_orders", "app_users"]);
+    // Orders' foreign key, which no index covers.
+    assert_eq!(warnings, ["MISSING_INDICES"]);
+    // An index is the source's: one over the source table's column covers
+    // the schema's table read from it, and none is warned of; seeded, the
+    // same index under the schema's name of the table covers nothing.
+    let mut run = materialize(host(), &renamed(), QUERY, None).unwrap();
+    let (_, warnings) = requests_to_the_sample(&mut run, &|| indexes(&[("app_orders", "user_id")]));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let mut run = materialize(host(), &renamed(), QUERY, None).unwrap();
+    let (_, warnings) = requests_to_the_sample(&mut run, &|| indexes(&[("orders", "user_id")]));
+    assert_eq!(warnings, ["MISSING_INDICES"]);
+}
+
+#[test]
+fn the_options_the_host_passes_through_are_refused_by_name() {
+    // T1.24 (decision E61): the host's bridge refuses none of the call's
+    // options; the core refuses by name each it does not take, before
+    // anything is fetched: the other options, the first in name order,
+    // then an unseeded sample, a context size and an anchor at each
+    // entity's own time. Seeded: the call with none of them reaches its
+    // first fetch.
+    let with = |change: &dyn Fn(&mut Materialize)| {
+        let (mut operation, attachments) = materialize_start(host(), &shop(), QUERY, None);
+        let Operation::Materialize(request) = &mut operation else {
+            unreachable!()
+        };
+        change(request);
+        let mut run =
+            materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+        run.next()
+    };
+    let refused = |change: &dyn Fn(&mut Materialize)| rule(&with(change).unwrap_err());
+    assert_eq!(
+        refused(&|m| m.options = vec!["num_neighbors".into(), "inference_config".into()]),
+        "inference_config"
+    );
+    assert_eq!(refused(&|m| m.unseeded = true), "unseeded");
+    assert_eq!(
+        refused(&|m| m.num_context_samples = Some(10)),
+        "num_context_samples"
+    );
+    assert_eq!(refused(&|m| m.anchor_entity = true), "anchor_entity");
+    // The options before the seed, the seed before the context size, as
+    // the bridge refused them.
+    assert_eq!(
+        refused(&|m| {
+            m.unseeded = true;
+            m.options = vec!["top_k".into()];
+        }),
+        "top_k"
+    );
+    assert_eq!(
+        refused(&|m| {
+            m.unseeded = true;
+            m.num_context_samples = Some(10);
+        }),
+        "unseeded"
+    );
+    // A name that is not one of the reference's options is the host's
+    // fault.
+    let err = with(&|m| m.options = vec!["no_such_option".into()]).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("options"));
+    for name in [
+        "context_anchor_time",
+        "exclude_cols_dict",
+        "lag_timesteps",
+        "max_pq_iterations",
+        "num_hops",
+        "return_embeddings",
+        "use_prediction_time",
+    ] {
+        assert_eq!(refused(&|m| m.options = vec![name.into()]), name);
+    }
+    assert!(matches!(with(&|_| {}), Ok(Step::Fetch { .. })));
 }

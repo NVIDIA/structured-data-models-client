@@ -18,7 +18,13 @@ use crate::not_yet;
 /// One table of the graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Table {
+    /// The name the schema gives the table, which the query and the
+    /// payload use.
     pub name: String,
+    /// The source's name of the table, which every data request names, as
+    /// the reference's engine reads a table named otherwise by its source
+    /// name (decision E61).
+    pub source: String,
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Option<String>,
     pub time_column: Option<String>,
@@ -100,6 +106,7 @@ impl Graph {
             }
             tables.push(Table {
                 name: table.name.clone(),
+                source: table.source.clone(),
                 columns: table.columns.clone(),
                 primary_key,
                 time_column: table.time_column.clone(),

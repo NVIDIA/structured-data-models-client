@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the option refusals (T1.24), the zoned anchor's conversion (T1.25), the
+# the schema_edited refusal (T1.24b), the zoned anchor's conversion (T1.25), the
 # run mode, entity count, shape, limits and capped-context notice (T1.28a),
 # the index once-flag (T1.26, by E52) and the entities' cast to the key's
 # type (T1.32a, checkpoint 4), are deleted in Phase 1 by those tasks.
@@ -31,9 +31,15 @@ module checks none of it. Nothing here imports the relational engine.
 
 As built at T1.11c the core materializes a regression over a windowed
 ``SUM``, with the sampling options' defaults or the anchor time and seed
-given; an option it does not take yet, or a schema it does not sample yet,
-is refused with ``UNSUPPORTED_REQUEST`` naming the rule (register entry
-P1B-3), here for an option and in the core for the rest.
+given; from T1.24 it samples tables named otherwise than the source names
+them, by their source names. Every option of the call passes through to
+the core (decision E61): the anchor time and seed in their fields, an
+unseeded sample, an anchor at each entity's own time and a context size as
+the contract says them, and the names of the rest; the core refuses with
+``UNSUPPORTED_REQUEST``, naming the rule, each it does not take yet, and
+any schema it does not sample yet (register entry P1B-3). Here a schema
+edited past its description is still refused (``schema_edited``, with the
+edit semantics at T1.24b).
 """
 
 from __future__ import annotations
@@ -55,8 +61,10 @@ if TYPE_CHECKING:
     from sdm_client.materializers.relational import RelationalMaterializer
     from sdm_client.schema import Schema
 
-#: The options the core takes; ``prediction_statistic`` is the client's own,
-#: recorded on the payload after the gathering, as on the old route.
+#: The options the contract carries in fields of their own;
+#: ``prediction_statistic`` is the client's own, recorded on the payload
+#: after the gathering, as on the old route. The core is told the names of
+#: the rest (decision E61).
 TAKEN = frozenset({'anchor_time', 'random_seed', 'prediction_statistic'})
 
 #: The integer types a key the core samples may have, as pyarrow names
@@ -108,9 +116,11 @@ def description(schema: Schema) -> dict[str, Any]:
     tables = []
     for name, table in schema.tables.items():
         source = by_name.get(name)
-        # The description names each table by the source table it read; a
-        # table mapped to another source table since is not followed yet.
-        if source is None or getattr(table, 'source_name', name) != name:
+        # The description names the source table each table read; a table
+        # mapped to another source table since is not followed yet.
+        if source is None or (
+            getattr(table, 'source_name', name) != source['source']
+        ):
             raise _not_taken('schema_edited')
         columns = {column['name']: column for column in source['columns']}
         shaped = []
@@ -150,13 +160,12 @@ def description(schema: Schema) -> dict[str, Any]:
 def _anchor(value: Any) -> dict[str, Any] | None:
     r"""The anchor time as the contract's ``ts`` scalar, in nanoseconds with
     no zone; a zoned one read at its UTC wall clock, as the engine reads it.
+    The literal ``'entity'`` is carried as ``anchor_entity``, beside it.
     """
     import pandas as pd
 
-    if value is None:
+    if value is None or (isinstance(value, str) and value == 'entity'):
         return None
-    if isinstance(value, str) and value == 'entity':
-        raise _not_taken('anchor_entity')
     if not isinstance(value, pd.Timestamp):
         raise StructuredDataError(
             f"'anchor_time' must be a pandas.Timestamp or the literal "
@@ -241,30 +250,27 @@ def gather(
     )
     from sdm_client.models import RELATIONAL_LIMITS
 
-    for name in sorted(options):
-        if name not in TAKEN:
-            raise _not_taken(name)
-    # A seed given as None asks the reference for an unseeded sample, a new
-    # one each call; the core samples under a seed, so it is refused, never
-    # taken for the default.
-    if 'random_seed' in options and options['random_seed'] is None:
-        raise _not_taken('unseeded')
-    if num_context_samples is not None:
-        raise _not_taken('num_context_samples')
     schema = materializer.schema
     materializer._run_mode_for(num_context_samples)
     materializer._check_entity_count(indices)
     materializer._check_shape(options, RELATIONAL_LIMITS)
     entity = table_name(query.entity_column)
     seed = options.get('random_seed')
+    anchor = options.get('anchor_time')
     operation = {
         'op': 'materialize',
         'provider': {'provider': 'sql', 'dialect': 'duckdb'},
         'schema': 1,
         'query': 2,
         'indices': 3,
-        'anchor_time': _anchor(options.get('anchor_time')),
+        'anchor_time': _anchor(anchor),
         'seed': None if seed is None else codec.seed(int(seed)),
+        # A seed given as None asks for an unseeded sample, a new one each
+        # call, never the default; the core says whether it takes it.
+        'unseeded': 'random_seed' in options and seed is None,
+        'anchor_entity': isinstance(anchor, str) and anchor == 'entity',
+        'num_context_samples': num_context_samples,
+        'options': sorted(set(options) - TAKEN),
     }
     attachments = {
         1: codec.attachment(description(schema)),

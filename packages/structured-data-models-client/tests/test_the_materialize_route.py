@@ -198,11 +198,21 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
         ({'anchor_time': 'entity'}, 'anchor_entity'),
         # A seed given as None, which the reference reads as unseeded.
         ({'random_seed': None}, 'unseeded'),
+        ({'inference_config': {'num_estimators': 4}}, 'inference_config'),
+        # The first in name order, before the seed, as the bridge refused
+        # them until T1.24.
+        (
+            {'top_k': 3, 'num_hops': 2, 'random_seed': None},
+            'num_hops',
+        ),
     ],
 )
 def test_what_the_core_does_not_take_yet_is_refused_by_name(
     monkeypatch: pytest.MonkeyPatch, options: dict[str, Any], rule: str
 ) -> None:
+    # Every option passes through to the core, which refuses by name what
+    # it does not take (T1.24, decision E61): the bridge refuses none of
+    # its own, so the refusal is the core's, mapped by the host.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -211,7 +221,58 @@ def test_what_the_core_does_not_take_yet_is_refused_by_name(
         with pytest.raises(StructuredDataError) as refused:
             PredictiveQuery(QUERY, schema).materialize(**arguments)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert type(refused.value).__name__ == 'UnsupportedRequestError'
+    assert refused.value.details['operation'] == 'materialize'
     assert refused.value.details['rule'] == rule
+
+
+#: Tables named otherwise than the source names them (T1.24): the query
+#: and the payload use the schema's names, the reads the source's.
+NAMED = {'buyers': 'users', 'purchases': 'orders'}
+
+
+def _named(**options: Any) -> tuple[Request, Schema]:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        # The key's guess is by the schema's name of the table, as the
+        # engine's, so both are named.
+        schema = Schema.from_source(
+            DuckDBSource(_connection()),
+            NAMED,
+            primary_keys={'buyers': 'user_id', 'purchases': 'order_id'},
+        )
+        request = PredictiveQuery(
+            'PREDICT SUM(purchases.price, 0, 30, days) FOR EACH buyers.user_id',
+            schema,
+        ).materialize(indices=[0, 1], anchor_time=ANCHOR, **options)
+    return request, schema
+
+
+def test_tables_named_are_sampled_as_the_old_route_samples_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT,
+        ','.join(
+            _routing.FROM_SOURCE_DUCKDB_TABLES + _routing.MATERIALIZE_DUCKDB
+        ),
+    )
+    core, schema = _named()
+    assert schema._core_description is not None
+    assert {
+        t['name']: t['source'] for t in schema._core_description['tables']
+    } == NAMED
+    payload = core._payloads[0]
+    assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
+    assert core.entity_table == 'buyers'
+    if _old_route_needs_the_engine():
+        return
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    old, _ = _named()
+    assert json.loads(json.dumps(payload)) == json.loads(
+        json.dumps(old._payloads[0], default=str)
+    )
+    assert core.task == old.task
 
 
 def test_a_schema_not_described_on_the_core_has_no_core_route(

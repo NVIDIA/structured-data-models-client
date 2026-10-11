@@ -615,6 +615,10 @@ fn materialize(
             indices: Some(AttachmentId(3)),
             anchor_time,
             seed,
+            unseeded: false,
+            anchor_entity: false,
+            num_context_samples: None,
+            options: vec![],
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
@@ -743,6 +747,7 @@ fn predict(
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
+            outputs: vec!["prediction".into()],
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;

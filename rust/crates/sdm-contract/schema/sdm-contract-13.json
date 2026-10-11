@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/12",
+  "$id": "sdm-contract/13",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -437,10 +437,13 @@
           }
         },
         "time_columns": {
-          "description": "Declared time columns, by the schema's name of the table.",
+          "description": "Declared time columns, by the schema's name of the table; `null`\nsays the table has none, as the caller's `None` does (decision E61).",
           "type": "object",
           "additionalProperties": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "relationships": {
@@ -2110,6 +2113,30 @@
                 }
               ]
             },
+            "unseeded": {
+              "description": "Whether the caller asked for an unseeded sample, a new one each\ncall (`random_seed=None`), with `seed` left out; the core samples\nunder a seed and refuses it by name, `unseeded` (decision E61).",
+              "type": "boolean"
+            },
+            "anchor_entity": {
+              "description": "Whether the caller anchored each entity at its own time\n(`anchor_time='entity'`), with `anchor_time` left out; refused by\nname, `anchor_entity`, until the core takes it (decision E61).",
+              "type": "boolean"
+            },
+            "num_context_samples": {
+              "description": "The most context examples the caller asked for; refused by name,\n`num_context_samples`, until the run mode it selects is the core's\n(T1.28a; decision E61).",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "options": {
+              "description": "The names of the call's other sampling options, which this message\ncarries no value of (the reference's `context_anchor_time`,\n`exclude_cols_dict`, `inference_config`, `lag_timesteps`,\n`max_pq_iterations`, `num_hops`, `num_neighbors`,\n`return_embeddings`, `top_k` and `use_prediction_time`): the core\ntakes none of them yet and refuses the first in name order by its\nname, and another name as `INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "op": {
               "type": "string",
               "const": "materialize"
@@ -2138,6 +2165,13 @@
               "description": "The id the request carries in its `metadata.request_id`. The host\ndraws it, as the reference's client draws one for every request; the\ncore draws nothing at random but under a seed.",
               "type": "string"
             },
+            "outputs": {
+              "description": "The outputs asked for, by the wire's names, in order; the core\npredicts a regression's default, `prediction`, alone, and refuses\nany other list by name, `outputs` (decision E61).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "op": {
               "type": "string",
               "const": "predict"
@@ -2148,7 +2182,8 @@
             "op",
             "state",
             "model",
-            "request_id"
+            "request_id",
+            "outputs"
           ]
         }
       ]

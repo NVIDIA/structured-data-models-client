@@ -4,7 +4,7 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "f302968db49daa6dd782950f470d5e19f59124cc3ef0cf77fca0dc1978342de5",
+        "fingerprint": "8da5bc5cebeeccb2a0f1e76ce921a9e4b86d1cf97912dba0b75c1eab9430ef39",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -27,14 +27,13 @@
         ]
       },
       "from_source": {
-        "fingerprint": "6ca76cc3330142d650a8b3d485881f114e9c8af08e245cc86428c17841d06180",
-        "raise": 2,
+        "fingerprint": "7b2fd91a862f03fd1017c3cac6c6792121fa485ed0703c30ab92c14eed4befbe",
+        "raise": 1,
         "warn": 0,
-        "branch": 6,
+        "branch": 7,
         "calls": [
           ".items",
           ".take",
-          ".values",
           "sdm_client._rust.codec.attachment",
           "sdm_client._rust.providers.duckdb.DuckDBProvider",
           "sdm_client._rust.run.run",
@@ -51,8 +50,8 @@
         "calls": []
       },
       "_anchor": {
-        "fingerprint": "b95ea89e0d6e5011a18c2a5ada7e73c99814249740530264a53ec3972185ebc6",
-        "raise": 2,
+        "fingerprint": "5a4d1d7bd21d873ea41258383192a52341ecb5eeb0717f9ad328da9908fcf078",
+        "raise": 1,
         "warn": 0,
         "branch": 5,
         "calls": [
@@ -83,7 +82,7 @@
         ]
       },
       "description": {
-        "fingerprint": "5140ad9a9b5353aaa6ef848e121157c1f467e312cddafe6a76c464466695d046",
+        "fingerprint": "19bda8a3f2622aba9c0c7e5b36161d5deecbb1253f37fa59bb3dd30314de2c34",
         "raise": 3,
         "warn": 0,
         "branch": 8,
@@ -97,10 +96,10 @@
         ]
       },
       "gather": {
-        "fingerprint": "99443f2d8cff7353014b8ae0c8f031b5d45f9940cdcc1141c22fc5d4cd74202f",
-        "raise": 3,
+        "fingerprint": "a81060638af53dfcf8b42515bc12919f50577b9594bfbf5a67cc78b75e465994",
+        "raise": 0,
         "warn": 0,
-        "branch": 8,
+        "branch": 5,
         "calls": [
           "._check_entity_count",
           "._check_limits",
@@ -119,7 +118,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "34b7db4fc3051f1d20a74670c122df9322bc5bb70bf39d8cf5c2af6cc1a4dea7",
+        "fingerprint": "888c9dad2f96df9eb4e866a1ab5bb5cafc19b2394b2fdc152bb6675b7f16c759",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -147,15 +146,6 @@
           ".items",
           ".join",
           ".pop"
-        ]
-      },
-      "_not_taken": {
-        "fingerprint": "ae496baff29c3d9a850eb39e3580158a08b781e767ea3fdc540e5209e4a2475b",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
         ]
       },
       "_payload": {
@@ -187,10 +177,10 @@
         ]
       },
       "predict": {
-        "fingerprint": "d853c8f2f15778cdb13b4ec69b87d8311ec91e8a350a1bbd211626396a636465",
-        "raise": 5,
+        "fingerprint": "c945c70255355cf3cac5c253fc3d5eec4ec10369ed474d38d0754eec1ea56978",
+        "raise": 4,
         "warn": 0,
-        "branch": 9,
+        "branch": 8,
         "calls": [
           "._payloads",
           "._preflight",
@@ -787,7 +777,7 @@
         ]
       },
       "Schema.from_source": {
-        "fingerprint": "120549457b3d9a01d47d23528438ec5f1006cf49d11820011ca4ee30f63b18e1",
+        "fingerprint": "a2f7dc2824930c06e1e67d66e9129f5b5fd571c2b20b0db4805303d6b9fc4bd4",
         "raise": 1,
         "warn": 0,
         "branch": 15,

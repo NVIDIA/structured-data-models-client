@@ -119,6 +119,10 @@ pub(crate) struct Inputs {
     pub indices: Option<ArrowData>,
     pub anchor_time: Option<Scalar>,
     pub seed: Option<Seed>,
+    pub unseeded: bool,
+    pub anchor_entity: bool,
+    pub num_context_samples: Option<u64>,
+    pub options: Vec<String>,
     pub facts: HostFacts,
 }
 
@@ -428,7 +432,7 @@ async fn time_bounds(asker: &Asker, table: &Table) -> Result<Bounds, CoreError> 
         asker,
         DataRequest::TimeBounds {
             columns: vec![TableColumn {
-                table: table.name.clone(),
+                table: table.source.clone(),
                 column,
             }],
         },
@@ -498,16 +502,18 @@ async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> 
             "the data layer read another part of the catalog than was asked for",
         ));
     };
+    // An index is the source's, named by the source's name of its table:
+    // it covers each table of the graph read from that one.
     for index in indexes {
-        if graph.table(&index.table).is_none() {
+        let [column] = index.columns.as_slice() else {
             continue;
-        }
-        if let [column] = index.columns.as_slice()
-            && let Some(at) = missing.iter().position(|(t, _)| *t == index.table)
-        {
-            missing[at].1.retain(|c| c != column);
-            if missing[at].1.is_empty() {
-                missing.remove(at);
+        };
+        for table in graph.tables.iter().filter(|t| t.source == index.table) {
+            if let Some(at) = missing.iter().position(|(t, _)| *t == table.name) {
+                missing[at].1.retain(|c| c != column);
+                if missing[at].1.is_empty() {
+                    missing.remove(at);
+                }
             }
         }
     }
@@ -570,8 +576,54 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
     sdm_schema::assemble::check_links(description)
 }
 
+/// The refusal of one of the reference's sampling options this message
+/// carries by name only (`Materialize::options`), which this core takes
+/// none of yet, by its own name; a name that is not one of the
+/// reference's options is the host's fault, `INVALID_REQUEST`.
+fn option_not_taken(name: &str) -> CoreError {
+    match name {
+        "context_anchor_time" => not_yet("context_anchor_time"),
+        "exclude_cols_dict" => not_yet("exclude_cols_dict"),
+        "inference_config" => not_yet("inference_config"),
+        "lag_timesteps" => not_yet("lag_timesteps"),
+        "max_pq_iterations" => not_yet("max_pq_iterations"),
+        "num_hops" => not_yet("num_hops"),
+        "num_neighbors" => not_yet("num_neighbors"),
+        "return_embeddings" => not_yet("return_embeddings"),
+        "top_k" => not_yet("top_k"),
+        "use_prediction_time" => not_yet("use_prediction_time"),
+        _ => invalid(
+            "an option named is not one of the sampling options",
+            "options",
+        ),
+    }
+}
+
+/// The call's options this core does not take yet, each refused by its
+/// name before anything else of the call is read, as the host's bridge
+/// refused them before the core ran until T1.24 (decision E61): the other
+/// sampling options, the first in name order; an unseeded sample; a
+/// context size, whose run mode is T1.28a's; and an anchor at each
+/// entity's own time.
+fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
+    if let Some(first) = inputs.options.iter().min() {
+        return Err(option_not_taken(first));
+    }
+    if inputs.unseeded {
+        return Err(not_yet("unseeded"));
+    }
+    if inputs.num_context_samples.is_some() {
+        return Err(not_yet("num_context_samples"));
+    }
+    if inputs.anchor_entity {
+        return Err(not_yet("anchor_entity"));
+    }
+    Ok(())
+}
+
 /// The body of a `materialize` run.
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
+    options_taken(&inputs)?;
     let Inputs {
         mut description,
         query,
@@ -579,13 +631,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         anchor_time,
         seed,
         facts,
+        ..
     } = inputs;
-    // A table the schema names otherwise than the source does: its data
-    // requests would name the schema's table, so it is refused by name
-    // until the route that takes tables named samples them (T1.24).
-    if description.tables.iter().any(|t| t.source != t.name) {
-        return Err(not_yet("table_source"));
-    }
+    // A table the schema names otherwise than the source does is read by
+    // its source name (`Table::source`), as the reference's engine reads
+    // it; the query and the payload name it as the schema does.
     consistent(&mut description)?;
     // The seed reaches this entry as the integer the caller gave, of any
     // size (decision H7); numpy's generator takes it whole, and the sample
@@ -787,7 +837,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         &ask(
             &asker,
             DataRequest::SampleEntities {
-                table: entity.name.clone(),
+                table: entity.source.clone(),
                 key: vec![key.clone()],
                 n: trials as u64,
                 seed: seed_value,
@@ -849,7 +899,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         &ask(
             &asker,
             DataRequest::Neighbors {
-                table: aggregated.name.clone(),
+                table: aggregated.source.clone(),
                 key: edge.fkey.clone(),
                 columns: aggregated.ordered(&label_columns),
                 seeds: key_set(&asker, seeds)?,
@@ -917,7 +967,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         &ask(
             &asker,
             DataRequest::Lookup {
-                table: entity.name.clone(),
+                table: entity.source.clone(),
                 key: key.clone(),
                 columns: entity.ordered(&entity_names),
                 seeds: key_set(&asker, sample::seeds(all_keys, vec![])?)?,
@@ -997,7 +1047,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             &ask(
                 &asker,
                 DataRequest::Neighbors {
-                    table: src.clone(),
+                    table: table.source.clone(),
                     key: fkey.clone(),
                     columns: columns.clone(),
                     seeds: key_set(&asker, sample::seeds(Arc::clone(&entity_keys), times)?)?,

@@ -68,6 +68,15 @@ fn payload_text() -> String {
 }
 
 fn predict_run(version: u32, payload: String, model: &str) -> Result<Run, CoreError> {
+    predict_run_asking(version, payload, model, &["prediction"])
+}
+
+fn predict_run_asking(
+    version: u32,
+    payload: String,
+    model: &str,
+    outputs: &[&str],
+) -> Result<Run, CoreError> {
     let operation = Operation::Predict(Predict {
         state: RequestState {
             version,
@@ -76,6 +85,7 @@ fn predict_run(version: u32, payload: String, model: &str) -> Result<Run, CoreEr
         },
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),
+        outputs: outputs.iter().map(|o| (*o).to_owned()).collect(),
     });
     let attachments = Attachments::from([
         (AttachmentId(1), Attachment::Bytes(payload.into_bytes())),
@@ -567,4 +577,33 @@ fn an_overflowing_prediction_is_an_invalid_response() {
     // The largest double is a prediction like any other.
     let answer = r#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.7976931348623157e308},{"id":"3","row_index":1,"prediction":1.0}]}"#;
     assert!(answered(200, answer.as_bytes()).1.is_ok());
+}
+
+/// The outputs asked for pass through the host to the core (T1.24, decision
+/// E61): any list but a regression's default is refused by name, `outputs`,
+/// before the state is read or the model called; the default is predicted.
+#[test]
+fn outputs_other_than_the_default_are_refused_by_name() {
+    for outputs in [
+        &[][..],
+        &["prediction", "explanation"],
+        &["explanation"],
+        &["prediction", "prediction"],
+    ] {
+        let mut run = predict_run_asking(
+            REQUEST_STATE_VERSION,
+            payload_text(),
+            "kumo-relational",
+            outputs,
+        )
+        .unwrap();
+        let Err(err) = run.next() else {
+            panic!("{outputs:?} is refused before any step");
+        };
+        assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{outputs:?}");
+        assert_eq!(err.fields["operation"], Detail::text("predict"));
+        assert_eq!(err.fields["rule"], Detail::text("outputs"));
+    }
+    let mut run = predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-relational").unwrap();
+    let _ = call(&mut run);
 }

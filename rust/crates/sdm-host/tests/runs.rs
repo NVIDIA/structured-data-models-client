@@ -645,6 +645,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             state,
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
+            outputs: vec!["prediction".into()],
         }),
         vec![],
     );
@@ -690,6 +691,10 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             indices: Some(AttachmentId(3)),
             anchor_time: None,
             seed: None,
+            unseeded: false,
+            anchor_entity: false,
+            num_context_samples: None,
+            options: vec![],
         }),
         vec![],
     );

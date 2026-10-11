@@ -2,14 +2,15 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the option refusals (T1.24), are deleted in Phase 1 by that task; building
-# today's Schema from the description stays the host's. Frozen meanwhile
-# (E50).
+# the live object's edit semantics that building today's Schema re-runs
+# (T1.24b), are deleted in Phase 1 by that task; building the Schema from
+# the description stays the host's. Frozen meanwhile (E50).
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 
-``Schema.from_source`` comes here on the core route, for a DuckDB source
-and no tables named. The core's ``describe_source`` reads the source through
+``Schema.from_source`` comes here on the core route, for a DuckDB source,
+with tables named or none (T1.24). The core's ``describe_source`` reads the
+source through
 the DuckDB provider (:mod:`.providers.duckdb`) and infers each table, its
 columns' data and semantic types, its key and its time column, by the
 reference's rules, with the source's declared foreign keys; from T1.21d it
@@ -29,11 +30,15 @@ materializer, which a query still takes
 until T1.11c, reads the source itself later; the schema hands it an empty
 store of engine tables (``EngineTables``), which it fills then.
 
-As built at T1.11b the core describes every table of the source with no
-overrides, and refuses with ``UNSUPPORTED_REQUEST`` an input whose
-description takes a rule it does not hold yet (register entry P1B-2);
-relationships passed in are refused here, before the core runs, for the
-same reason.
+The call's arguments pass through to the core as the contract's
+``SourceSpec``: the tables named beside their source names, the keys, the
+time columns (``None`` clearing one, contract version 13) and the
+relationships given; the core takes or refuses each by name, and this
+module refuses none of its own (decision E61). It converts only its own
+values: a relationship that is not a :class:`~sdm_client.Relationship` is
+refused as the reference refuses it, since the contract cannot carry one.
+The core refuses with ``UNSUPPORTED_REQUEST`` an input whose description
+takes a rule it does not hold yet (register entry P1B-2).
 """
 
 from __future__ import annotations
@@ -55,41 +60,53 @@ if TYPE_CHECKING:
 def from_source(
     cls: type[Schema],
     source: Any,
+    tables: Mapping[str, str] | None,
     *,
     primary_keys: Mapping[str, str | Sequence[str]] | None,
     time_columns: Mapping[str, str | None] | None,
     relationships: Sequence[Relationship] | None,
     check_keys: bool,
 ) -> Schema:
-    r"""The schema of every table of the DuckDB ``source``, described on the
-    core.
+    r"""The schema of the tables named, or of every table, of the DuckDB
+    ``source``, described on the core.
 
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for an input it does not
-            describe yet.
+            describe yet; ``INVALID_REQUEST`` for a relationship that is not
+            a ``Relationship``, which the contract cannot carry.
     """
-    if relationships is not None:
-        raise StructuredDataError(
-            'Schema.from_source on the core does not take relationships yet',
-            code='UNSUPPORTED_REQUEST',
-            details={'rule': 'relationships', 'field': 'relationships'},
-        )
-    if any(column is None for column in (time_columns or {}).values()):
-        raise StructuredDataError(
-            'Schema.from_source on the core does not take a time column '
-            'cleared yet',
-            code='UNSUPPORTED_REQUEST',
-            details={'rule': 'time_column_cleared', 'field': 'time_columns'},
-        )
-    spec = {
-        'tables': [],
+    from sdm_client.schema import Relationship
+
+    spec: dict[str, Any] = {
+        'tables': [
+            {'name': name, 'source': named}
+            for name, named in (tables or {}).items()
+        ],
         'primary_keys': {
             table: [key] if isinstance(key, str) else list(key)
             for table, key in (primary_keys or {}).items()
         },
         'time_columns': dict(time_columns or {}),
     }
+    if relationships is not None:
+        links = list(relationships)
+        for link in links:
+            if not isinstance(link, Relationship):
+                raise StructuredDataError(
+                    f'a relationship must be a Relationship, got '
+                    f'{type(link).__name__}: {link!r}. Build one with '
+                    f'Relationship(source_table, source_column, '
+                    f'target_table, target_column)',
+                    code='INVALID_REQUEST',
+                )
+        spec['relationships'] = [
+            [
+                {'table': link.source_table, 'column': link.source_column},
+                {'table': link.target_table, 'column': link.target_column},
+            ]
+            for link in links
+        ]
     operation = {
         'op': 'describe_source',
         'provider': {'provider': 'sql', 'dialect': 'duckdb'},

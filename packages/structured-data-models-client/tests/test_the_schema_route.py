@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""``Schema.from_source`` on the core route (T1.11b).
+"""``Schema.from_source`` on the core route (T1.11b; tables named, T1.24).
 
-For a DuckDB source with no tables named, the core's ``describe_source``
+For a DuckDB source, with tables named or none, the core's ``describe_source``
 reads the source through the Python host's DuckDB provider and the schema
 bridge builds today's ``Schema``: on ``base.regression``'s base it is the
 reference's. The relational engine is not imported on the route, which a
 test-only import hook in a process of its own shows, and a core route
 running leaves another thread's old-route call as it is alone. The providers import no pandas, which an AST scan
 of ``_rust/providers`` and a run with pandas unimportable show. What the
-core does not describe yet is refused by name (register entry P1B-2).
+core does not describe yet is refused by name (register entry P1B-2); the
+call's arguments all pass through to it, the bridge refusing none of its
+own (decision E61).
 """
 
 from __future__ import annotations
@@ -30,12 +32,18 @@ import duckdb
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import Schema, StructuredDataError, _routing
+from sdm_client import Relationship, Schema, StructuredDataError, _routing
 from sdm_client._rust import providers
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB)
+#: Both of Schema.from_source's DuckDB routes: every table, or tables named.
+CORE_ANY = ','.join(
+    dict.fromkeys(
+        _routing.FROM_SOURCE_DUCKDB + _routing.FROM_SOURCE_DUCKDB_TABLES
+    )
+)
 PROVIDERS = Path(providers.__file__).resolve().parent
 
 
@@ -130,14 +138,29 @@ def test_the_route_takes_every_table_and_the_catalog_s_keys_together(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     assert set(_routing.FROM_SOURCE_DUCKDB) <= _routing.CORE_ROUTED
-    assert not set(_routing.FROM_SOURCE_DUCKDB_TABLES) <= _routing.CORE_ROUTED
+    assert set(_routing.FROM_SOURCE_DUCKDB_TABLES) <= _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, _routing.FROM_SOURCE_DUCKDB[0])
     with pytest.raises(_routing.RouteError, match='one route'):
         Schema.from_source(DuckDBSource(_connection()))
-    # Tables named have no core route yet: forcing the keys path fails them.
+    # Tables named take the keys path with their own (T1.24): forcing one
+    # without the other fails the call.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(_routing.RouteError, match='one route'):
         Schema.from_source(DuckDBSource(_connection()), {'users': 'users'})
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT, _routing.FROM_SOURCE_DUCKDB_TABLES[0]
+    )
+    with pytest.raises(_routing.RouteError, match='one route'):
+        Schema.from_source(DuckDBSource(_connection()), {'users': 'users'})
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT, ','.join(_routing.FROM_SOURCE_DUCKDB_TABLES)
+    )
+    schema = Schema.from_source(
+        DuckDBSource(_connection()), {'people': 'users'}
+    )
+    assert list(schema.tables) == ['people']
+    assert schema['people'].source_name == 'users'
+    assert schema._core_description is not None
 
 
 def test_base_regression_s_schema_on_the_core_is_the_reference_s(
@@ -453,14 +476,34 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
             Schema.from_source(DuckDBSource(build()), **arguments)
         assert refused.value.code == 'UNSUPPORTED_REQUEST'
         assert refused.value.details['rule'] == rule
-    for arguments, rule in (
-        ({'relationships': []}, 'relationships'),
-        ({'time_columns': {'orders': None}}, 'time_column_cleared'),
-    ):
-        with pytest.raises(StructuredDataError) as refused:
-            Schema.from_source(DuckDBSource(_connection()), **arguments)
-        assert refused.value.code == 'UNSUPPORTED_REQUEST'
-        assert refused.value.details['rule'] == rule
+
+
+def test_the_bridge_refuses_none_of_the_call_s_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Until T1.24 the schema bridge refused relationships given and a time
+    # column cleared before the core ran (`relationships`,
+    # `time_column_cleared`); both pass through now (decision E61), and
+    # the core takes them: no relationship at all, and orders with no time
+    # column, whose column still means a timestamp. A relationship that is
+    # not a Relationship, which the contract cannot carry, is refused as
+    # the reference refuses it.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    schema = Schema.from_source(
+        DuckDBSource(_connection()),
+        relationships=[],
+        time_columns={'orders': None},
+    )
+    assert schema.relationships == []
+    assert schema['orders'].time_column is None
+    assert schema['orders']['ts'].stype == 'timestamp'
+    with pytest.raises(StructuredDataError) as refused:
+        Schema.from_source(
+            DuckDBSource(_connection()),
+            relationships=[('orders', 'user_id', 'users', 'user_id')],
+        )
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'must be a Relationship' in str(refused.value)
 
 
 #: Sources whose schema takes the rules the core holds from T1.21d
@@ -803,6 +846,47 @@ NAMED = {
             'time_columns': {'orders': 'ts'},
         },
     ),
+    # T1.24: the arguments the schema bridge refused until then, and tables
+    # named, each now on the core (decision E61): a time column cleared,
+    # beside a key and among several; the relationships given, none or
+    # one; tables named otherwise than the source names them, with keys,
+    # time columns and relationships by the schema's names.
+    'a time column cleared': ((), {'time_columns': {'orders': None}}),
+    'a time column cleared among several': (
+        (
+            'CREATE OR REPLACE TABLE orders AS SELECT *, ts + INTERVAL 1 DAY '
+            'AS shipped FROM orders',
+        ),
+        {'time_columns': {'orders': None}, 'primary_keys': {'users': 'age'}},
+    ),
+    'no relationships': ((), {'relationships': []}),
+    'a relationship given': (
+        (),
+        {
+            'relationships': [
+                Relationship('orders', 'user_id', 'users', 'user_id')
+            ]
+        },
+    ),
+    'tables named': (
+        (),
+        {'tables': {'buyers': 'users', 'purchases': 'orders'}},
+    ),
+    'tables named, with everything': (
+        (
+            'CREATE OR REPLACE TABLE orders AS SELECT *, ts + INTERVAL 1 DAY '
+            'AS shipped FROM orders',
+        ),
+        {
+            'tables': {'purchases': 'orders', 'buyers': 'users'},
+            'primary_keys': {'buyers': 'user_id'},
+            'time_columns': {'purchases': 'shipped', 'buyers': None},
+            'relationships': [
+                Relationship('purchases', 'user_id', 'buyers', 'user_id')
+            ],
+        },
+    ),
+    'tables named, a subset': ((), {'tables': {'users': 'users'}}),
 }
 
 
@@ -838,12 +922,14 @@ def test_keys_and_time_columns_named_are_applied_as_the_old_route_does(
     monkeypatch: pytest.MonkeyPatch, name: str
 ) -> None:
     setup, arguments = NAMED[name]
-    core, said, schema = _from_source(monkeypatch, setup, CORE, arguments)
+    core, said, schema = _from_source(monkeypatch, setup, CORE_ANY, arguments)
+    assert schema._core_description is not None
     for table, key in arguments.get('primary_keys', {}).items():
         assert schema[table].primary_key == key
     for table, column in arguments.get('time_columns', {}).items():
         assert schema[table].time_column == column
-        assert schema[table][column].stype == 'timestamp'
+        if column is not None:
+            assert schema[table][column].stype == 'timestamp'
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
     old, old_said, old_schema = _from_source(monkeypatch, setup, '', arguments)
@@ -863,13 +949,25 @@ def test_keys_and_time_columns_named_are_applied_as_the_old_route_does(
         {'time_columns': {'orders': 'nothing'}},
         {'time_columns': {'orders': 'order_id'}},
         {'time_columns': {'orders': 'price'}},
+        # T1.24: a time column cleared on a table not the schema's, and the
+        # relationships given wrongly, which the bridge refused unread.
+        {'time_columns': {'nowhere': None}},
+        {'relationships': [Relationship('orders', 'gone', 'users', 'user_id')]},
+        {'relationships': [Relationship('orders', 'user_id', 'users', 'age')]},
+        {'relationships': [Relationship('orders', 'ts', 'users', 'user_id')]},
+        {
+            'tables': {'buyers': 'users'},
+            'relationships': [
+                Relationship('orders', 'user_id', 'users', 'user_id')
+            ],
+        },
     ],
 )
 def test_a_key_or_time_column_named_wrongly_is_refused_as_the_old_route_does(
     monkeypatch: pytest.MonkeyPatch, arguments: dict[str, Any]
 ) -> None:
     with pytest.raises(StructuredDataError) as core:
-        _from_source(monkeypatch, (), CORE, arguments)
+        _from_source(monkeypatch, (), CORE_ANY, arguments)
     assert core.value.code == 'INVALID_REQUEST'
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
@@ -898,32 +996,33 @@ def _failing(provider: Any, table: str | None) -> Any:
 def _named_on_the_core(
     connection: Any, tables: dict[str, str], fail_columns_of: str | None = None
 ) -> tuple[dict[str, Any], list[tuple[str, str]]]:
-    r"""The core's ``describe_source`` over ``tables`` named (T1.23), built
-    into today's ``Schema`` by the schema bridge, as T1.24's route will:
-    the public call with tables named has no core route yet."""
-    from sdm_client._rust import codec
-    from sdm_client._rust import schema as bridge
-    from sdm_client._rust.run import run
+    r"""``Schema.from_source`` over ``tables`` named, on the core route
+    (T1.24), its provider failing the reading of ``fail_columns_of``'s
+    columns when named."""
+    from unittest import mock
 
-    spec = {
-        'tables': [{'name': n, 'source': s} for n, s in tables.items()],
-        'primary_keys': {},
-        'time_columns': {},
-    }
-    with warnings.catch_warnings(record=True) as shown:
-        warnings.simplefilter('always')
-        finished = run(
+    from sdm_client._rust import schema as bridge
+
+    provider = bridge.DuckDBProvider
+    with (
+        mock.patch.dict(
+            'os.environ',
             {
-                'op': 'describe_source',
-                'provider': {'provider': 'sql', 'dialect': 'duckdb'},
-                'source': 1,
-                'check_keys': True,
+                _routing.ENVIRONMENT: ','.join(
+                    _routing.FROM_SOURCE_DUCKDB_TABLES
+                )
             },
-            {1: codec.attachment(spec)},
-            provider=_failing(DuckDBProvider(connection), fail_columns_of),
-        )
-        described = json.loads(finished.take(finished.result['description']))
-        schema = bridge.build(Schema, DuckDBSource(connection), described)
+        ),
+        mock.patch.object(
+            bridge,
+            'DuckDBProvider',
+            lambda held: _failing(provider(held), fail_columns_of),
+        ),
+        warnings.catch_warnings(record=True) as shown,
+    ):
+        warnings.simplefilter('always')
+        schema = Schema.from_source(DuckDBSource(connection), tables)
+        assert schema._core_description is not None
     said = [
         (type(w.message).__name__, str(w.message).split('] ', 1)[1])
         for w in _said(shown)
@@ -1174,3 +1273,78 @@ def test_a_listed_table_is_held_to_the_schema_s_rule_on_names(
         )
     assert core.value.code == 'INVALID_REQUEST'
     assert core.value.details['field'] == 'tables'
+
+
+#: System views named as tables, over a source of one table and over the
+#: shop base: the core's rule and the reference's outcome, as measured at
+#: T1.24 (None: described). Each view's rows are the database's catalog,
+#: so which rule the core meets first depends on what the source holds.
+SYSTEM_VIEWS = [
+    # Register entry P1B-10 (proposed): a view holding a MAP column, which
+    # the reference fails unnamed, reading the map as text.
+    ('one table', 'duckdb_tables', 'text_time', 'RuntimeError'),
+    ('shop', 'duckdb_tables', 'column_type', 'RuntimeError'),
+    # Register entry P1B-11 (proposed): a view whose preview holds no row.
+    ('one table', 'duckdb_views', 'empty_table', 'RuntimeError'),
+    # Register entry P1B-2 (proposed): views the reference describes, whose
+    # text the core refuses as text that could hold dates.
+    ('one table', 'duckdb_columns', 'text_time', None),
+    ('one table', 'pg_class', 'text_time', None),
+    ('shop', 'pg_class', 'text_time', None),
+    ('shop', 'duckdb_columns', None, None),
+]
+
+
+def _system_view_source(base: str) -> Any:
+    if base == 'shop':
+        return _connection()
+    connection = duckdb.connect()
+    connection.execute('CREATE TABLE t (a INTEGER)')
+    connection.execute('INSERT INTO t VALUES (1)')
+    return connection
+
+
+def _named_view(
+    monkeypatch: pytest.MonkeyPatch, routes: str, base: str, view: str
+) -> Schema:
+    if routes:
+        monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+    else:
+        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return Schema.from_source(
+            DuckDBSource(_system_view_source(base)), {'x': view}
+        )
+
+
+@pytest.mark.parametrize(('base', 'view', 'core_rule', 'old'), SYSTEM_VIEWS)
+def test_a_system_view_named_as_a_table_is_pinned_on_both_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    base: str,
+    view: str,
+    core_rule: str | None,
+    old: str | None,
+) -> None:
+    # Reached through the public call from T1.24, whose route takes tables
+    # named; T1.23's review carried it here. Pinned, naming both outcomes,
+    # so a divergence fails this test the day either changes.
+    tables = ','.join(_routing.FROM_SOURCE_DUCKDB_TABLES)
+    if core_rule is None:
+        assert list(_named_view(monkeypatch, tables, base, view).tables) == [
+            'x'
+        ]
+    else:
+        with pytest.raises(StructuredDataError) as refused:
+            _named_view(monkeypatch, tables, base, view)
+        assert type(refused.value).__name__ == 'UnsupportedRequestError'
+        assert refused.value.details['rule'] == core_rule
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    if old is None:
+        assert list(_named_view(monkeypatch, '', base, view).tables) == ['x']
+        return
+    with pytest.raises(Exception) as failed:  # noqa: PT011 - the reference's own
+        _named_view(monkeypatch, '', base, view)
+    assert type(failed.value).__name__ == old
+    assert not isinstance(failed.value, StructuredDataError)

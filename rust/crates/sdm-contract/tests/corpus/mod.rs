@@ -130,11 +130,16 @@ pub fn messages() -> Vec<ControlMessage> {
             indices: Some(AttachmentId(3)),
             anchor_time: None,
             seed: Some(Seed::from(1_u128 << 70)),
+            unseeded: false,
+            anchor_entity: false,
+            num_context_samples: Some(500),
+            options: vec!["num_neighbors".into()],
         })),
         start(Operation::Predict(Predict {
             state: state.clone(),
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
+            outputs: vec!["prediction".into()],
         })),
         ControlMessage::Step(Step::Fetch {
             requests: vec![FetchStep {

@@ -188,11 +188,11 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
 }
 
 /// What the caller gave beside the tables: the tables whose time column
-/// was named, which the choice's settling and its warning pass over, and
-/// the relationships, in place of the declared and inferred ones.
+/// was named or cleared, which the choice's settling and its warning pass
+/// over, and the relationships, in place of the declared and inferred ones.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Given<'a> {
-    pub time_columns: Option<&'a BTreeMap<String, String>>,
+    pub time_columns: Option<&'a BTreeMap<String, Option<String>>>,
     pub relationships: Option<&'a [Link]>,
 }
 
@@ -347,12 +347,14 @@ fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
 /// than one column is refused by name (`composite_key`), as composite keys
 /// are elsewhere. Naming a key marks its column an identifier, what it
 /// meant kept, and gives the table's other columns back what they meant;
-/// naming a time column makes it a timestamp. Refusals are
+/// naming a time column makes it a timestamp; a time column cleared
+/// (`None`) leaves the table none, its columns meaning what they meant, as
+/// the reference's setter takes `None` (decision E61). Refusals are
 /// `INVALID_REQUEST`, naming the field.
 pub fn apply_keys_and_times(
     tables: &mut [InferredTable],
     primary_keys: &BTreeMap<String, Vec<String>>,
-    time_columns: &BTreeMap<String, String>,
+    time_columns: &BTreeMap<String, Option<String>>,
 ) -> Result<(), CoreError> {
     let find =
         |tables: &mut [InferredTable], name: &str, field: &str| -> Result<usize, CoreError> {
@@ -424,6 +426,10 @@ pub fn apply_keys_and_times(
     for (name, column) in time_columns {
         let at = find(tables, name, "time_columns")?;
         let table = &mut tables[at];
+        let Some(column) = column else {
+            table.time_column = None;
+            continue;
+        };
         if table.column(column).is_none() {
             return Err(no_column(name, column, "time_columns"));
         }

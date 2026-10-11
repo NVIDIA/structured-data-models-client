@@ -2,9 +2,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the outputs refusal (T1.24) and the adapter's _preflight (T1.28b), are
-# deleted in Phase 1 by those tasks; the transport and the result's objects
-# stay the host's. Frozen meanwhile (E50).
+# the adapter's _preflight (T1.28b), are deleted in Phase 1 by that task;
+# the transport and the result's objects stay the host's. Frozen meanwhile
+# (E50).
 
 r"""``predict`` on the core: the model call and its answer (T1.11d).
 
@@ -50,8 +50,8 @@ error of the transport keeps its code and gets a fixed sentence.
 
 As built at T1.11d the core predicts a regression asked for its default
 output; the rest is refused with ``UNSUPPORTED_REQUEST`` naming the rule
-(register entry P1B-4), here for the outputs and in the core for the rest.
-Nothing here imports the relational engine.
+(register entry P1B-4), in the core: from T1.24 the outputs asked for pass
+through to it (decision E61). Nothing here imports the relational engine.
 """
 
 from __future__ import annotations
@@ -69,14 +69,6 @@ if TYPE_CHECKING:
     from sdm_client.client import SDMClient
     from sdm_client.request import Request
     from sdm_client.result import PredictionResult
-
-
-def _not_taken(rule: str) -> StructuredDataError:
-    return StructuredDataError(
-        'predict on the core does not take this yet',
-        code='UNSUPPORTED_REQUEST',
-        details={'operation': 'predict', 'rule': rule},
-    )
 
 
 def _rows(stream: Any) -> list[dict[str, Any]]:
@@ -218,8 +210,6 @@ def predict(
         raise RouteError(
             'predict on the core needs a request materialize built on the core'
         )
-    if tuple(fields) != ('prediction',):
-        raise _not_taken('outputs')
     # The adapter's own checks of what the call sends, which its
     # prediction_plan makes before building any call.
     payloads = adapter._payloads(request)
@@ -261,6 +251,7 @@ def predict(
             'state': {'version': state['version'], 'payload': 1, 'query': 2},
             'model': adapter.spec.model_id,
             'request_id': _request_id(),
+            'outputs': list(fields),
         }
         attachments = {1: _payload(payload), 2: codec.attachment(request.query)}
         finished = run(operation, attachments, model=model)
