@@ -441,7 +441,10 @@ fn the_rust_host_run_is_held_to_the_map() {
     .unwrap();
     assert_eq!(map["probes"][0]["rust-host"]["core"], case["core"]);
     let observed = observed();
-    assert!(observed.len() >= 10, "{observed:?}");
+    // From T1.24 the probes keep the notebook's inputs whose rules have
+    // landed, so the ladder is five rust-host probes: the notebook's call,
+    // the text dates dropped, and the three past materialize's refusals.
+    assert!(observed.len() >= 5, "{observed:?}");
     assert_eq!(check(&map, observed), Vec::<String>::new());
     // The ladder ends at predict's result.
     assert!(

@@ -107,7 +107,9 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
             if case['id'] == observation['case']
         )
         # A case that forces no route (base.adventureworks, whose journey
-        # has no core route yet, T1.21b) runs on the old route throughout.
+        # had no core route at T1.21b, E51(c); from T1.24 its refusal map's
+        # probes force it and the case is unchanged, so its reference line
+        # stands) runs on the old route throughout.
         wanted = operations[case['slice']] if case['routes'] else []
         assert observation['identity']['operations'] == wanted, case['id']
         assert observation['identity']['native'] is not None

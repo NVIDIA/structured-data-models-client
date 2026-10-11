@@ -219,7 +219,7 @@ def test_the_runners_hold_each_core_schema_to_its_description() -> None:
         for p in spec.load(
             ROOT / 'contract/refusal-maps/base.adventureworks.json'
         )['probes']
-        if p['id'] == 'one-order-time'
+        if p['id'] == 'no-text-dates'
     )
     previous = os.environ.get('SDM_CORE_ROUTES')
     os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])

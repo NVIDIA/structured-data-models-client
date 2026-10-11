@@ -556,8 +556,12 @@ def _python_step(
     rename = _rename(case)
     [(op, value)] = step.items()
     if op == 'rename_tables':
+        # Each table the case names, named as the source names it: the
+        # case's subset of the source's tables kept (T1.24, whose route
+        # takes tables named).
         source = given.get('from_source', {})
         names = source.pop('tables')
+        source['tables'] = {table: table for table in names.values()}
         local = names.get
         for key in ('primary_keys', 'time_columns'):
             if key in source:
@@ -609,11 +613,22 @@ def _python_step(
             )
         given['edits'] = [*edits, *given.get('edits', [])]
     elif op == 'drop_relationship':
-        for edit in given['edits']:
+        # From the relationships Schema.from_source is given (T1.24) or
+        # those an edit sets.
+        source = given.get('from_source', {})
+        found = value in source.get('relationships', [])
+        if 'relationships' in source:
+            source['relationships'] = [
+                link for link in source['relationships'] if link != value
+            ]
+        for edit in given.get('edits', []):
             if edit['op'] == 'set_relationships':
+                found = found or value in edit['relationships']
                 edit['relationships'] = [
                     link for link in edit['relationships'] if link != value
                 ]
+        if not found:
+            raise MapFailure('a probe drops a relationship nothing gives')
     elif op == 'delete_column':
         table, column = value
         given['edits'] = [
@@ -628,15 +643,14 @@ def _python_step(
 def _rust_step(core: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     r"""``core`` with one removal of a rust-host probe's ``derive``, on
     describe_source's source: a field emptied (``clear``), the
-    relationships left out (``remove``), or the tables' names given up
-    (``rename_tables``), each table then named as the source names it, in
-    the keys, time columns and relationships too, as the python-core step
-    of the same name renames them (T1.23, whose ``SourceSpec`` names
-    tables and carries relationships). Like that step, it takes every
-    table of the source, not the case's subset: python-core's call with
-    no tables named is the only one with a core route until T1.24, and
-    the two runners' inputs must be one; the same as the case only where
-    the case names every table of its source, as AdventureWorks does."""
+    relationships left out (``remove``) or one of them
+    (``drop_relationship``, as the python-core step of that name drops it),
+    or the tables' names given up (``rename_tables``), each table then
+    named as the source names it, in the keys, time columns and
+    relationships too, as the python-core step of the same name renames
+    them (T1.23, whose ``SourceSpec`` names tables and carries
+    relationships). Like that step, it keeps the case's subset of the
+    source's tables (T1.24, whose route takes tables named)."""
     core = copy.deepcopy(core)
     [(op, value)] = step.items()
     source = core['describe_source']['source']
@@ -644,9 +658,22 @@ def _rust_step(core: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
         source[value] = [] if isinstance(source[value], list) else {}
     elif op == 'remove' and value == 'relationships':
         del source['relationships']
+    elif op == 'drop_relationship':
+        dropped = [
+            {'table': value['source_table'], 'column': value['source_column']},
+            {'table': value['target_table'], 'column': value['target_column']},
+        ]
+        if dropped not in source.get('relationships', []):
+            raise MapFailure('a probe drops a relationship nothing gives')
+        source['relationships'] = [
+            link for link in source['relationships'] if link != dropped
+        ]
     elif op == 'rename_tables' and value is True:
         local = {table['name']: table['source'] for table in source['tables']}
-        source['tables'] = []
+        source['tables'] = [
+            {'name': table['source'], 'source': table['source']}
+            for table in source['tables']
+        ]
         for key in ('primary_keys', 'time_columns'):
             source[key] = {local.get(t, t): v for t, v in source[key].items()}
         if 'relationships' in source:

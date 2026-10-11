@@ -272,11 +272,11 @@ def test_a_probe_without_its_derivation_fails() -> None:
     del document['probes'][3]['python-core']['derive']
     failures = refusal_map.bound(_case(), document)
     # And every probe after it, which derives from it, fails too.
-    assert failures[0] == 'no-table-names/python-core: no derive'
-    assert 'no-relationships/python-core: derives from no probe' in failures
+    assert failures[0] == 'no-inference-config/python-core: no derive'
+    assert 'one-hop/python-core: derives from no probe' in failures
     document = _map()
     document['probes'][4]['python-core']['input']['setup'] = ['SELECT 1']
-    assert 'no-relationships/python-core: not its derived input' in (
+    assert 'one-hop/python-core: not its derived input' in (
         refusal_map.bound(_case(), document)
     )
 
@@ -406,7 +406,7 @@ def test_a_refusal_the_map_does_not_list_fails() -> None:
     ]
     failures = refusal_map.check(document, 'python-core', _observed())
     assert any(
-        failure.startswith('no-time-columns: a refusal the map does not list')
+        failure.startswith('notebook: a refusal the map does not list')
         for failure in failures
     ), failures
 
@@ -425,7 +425,7 @@ def test_an_entry_no_probe_hits_fails() -> None:
 @pytest.mark.parametrize('retyped', [7, None, '', ['text_time'], {'x': 1}])
 def test_retyped_evidence_fails(retyped: Any) -> None:
     observed = _observed()
-    observed['no-time-columns']['rule'] = retyped
+    observed['notebook']['rule'] = retyped
     assert refusal_map.check(_map(), 'python-core', observed) != []
 
 
@@ -435,15 +435,15 @@ def test_missing_or_empty_evidence_fails() -> None:
         'python-core: nothing was observed'
     ]
     observed = _observed()
-    del observed['no-table-names']
+    del observed['notebook-schema']
     failures = refusal_map.check(document, 'python-core', observed)
-    assert 'no-table-names: not observed' in failures
+    assert 'notebook-schema: not observed' in failures
     assert (
-        'from_source/relationships: listed for python-core and not hit'
+        'materialize/inference_config: listed for python-core and not hit'
         in failures
     )
     observed = _observed()
-    del observed['no-table-names']['rule']
+    del observed['notebook-schema']['rule']
     assert refusal_map.check(document, 'python-core', observed) != []
     observed = _observed()
     observed['not-a-probe'] = refusal_map.success('predict')
@@ -462,10 +462,10 @@ def test_missing_or_empty_evidence_fails() -> None:
 def test_a_probe_that_succeeds_or_hits_another_entry_fails() -> None:
     document = _map()
     observed = _observed()
-    observed['no-table-names'] = copy.deepcopy(observed['no-time-columns'])
+    observed['notebook-schema'] = copy.deepcopy(observed['notebook'])
     assert (
-        'no-table-names: hit describe_source/text_time, where the map has '
-        'from_source/relationships'
+        'notebook-schema: hit describe_source/text_time, where the map has '
+        'materialize/inference_config'
     ) in refusal_map.check(document, 'python-core', observed)
     observed = _observed()
     observed['one-hop'] = refusal_map.success('predict')
@@ -1184,3 +1184,63 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     )
     loaded['probes'] = loaded['probes'][1:]
     assert refusal_map.bound(_of(loaded), loaded) != []
+
+
+def test_the_deriver_keeps_the_case_s_tables_and_drops_a_given_link() -> None:
+    # T1.24: with a core route for tables named, rename_tables keeps the
+    # case's subset of the source's tables, each named as the source names
+    # it, on both runners; drop_relationship drops one of the relationships
+    # Schema.from_source is given (python-core) or describe_source's source
+    # carries (rust-host), and a probe dropping one nothing gives fails.
+    case = {
+        'input': {
+            'from_source': {
+                'tables': {'buyers': 'users'},
+                'primary_keys': {'buyers': 'user_id'},
+                'relationships': [
+                    {
+                        'source_table': 'buyers',
+                        'source_column': 'ref',
+                        'target_table': 'buyers',
+                        'target_column': 'user_id',
+                    }
+                ],
+            },
+            'pql': 'PREDICT COUNT(buyers.*, 0, 1, days) FOR EACH buyers.user_id',
+        }
+    }
+    renamed = refusal_map._python_step(
+        case['input'], {'rename_tables': True}, case
+    )
+    assert renamed['from_source']['tables'] == {'users': 'users'}
+    assert renamed['from_source']['primary_keys'] == {'users': 'user_id'}
+    link = case['input']['from_source']['relationships'][0]
+    dropped = refusal_map._python_step(
+        case['input'], {'drop_relationship': link}, case
+    )
+    assert dropped['from_source']['relationships'] == []
+    with pytest.raises(refusal_map.MapFailure):
+        refusal_map._python_step(dropped, {'drop_relationship': link}, case)
+    core = {
+        'describe_source': {
+            'source': {
+                'tables': [{'name': 'buyers', 'source': 'users'}],
+                'primary_keys': {'buyers': ['user_id']},
+                'time_columns': {},
+                'relationships': [
+                    [
+                        {'table': 'buyers', 'column': 'ref'},
+                        {'table': 'buyers', 'column': 'user_id'},
+                    ]
+                ],
+            }
+        }
+    }
+    rust = refusal_map._rust_step(core, {'rename_tables': True})
+    assert rust['describe_source']['source']['tables'] == [
+        {'name': 'users', 'source': 'users'}
+    ]
+    rust = refusal_map._rust_step(core, {'drop_relationship': link})
+    assert rust['describe_source']['source']['relationships'] == []
+    with pytest.raises(refusal_map.MapFailure):
+        refusal_map._rust_step(rust, {'drop_relationship': link})
