@@ -962,7 +962,13 @@ entries:
     source of one table, which the core describes over the shop base),
     which the reference describes, is refused by text_time, as any text
     whose values could be dates is (measured at T1.24, pinned by the
-    client's tests/test_the_schema_route.py). The default route is
+    client's tests/test_the_schema_route.py). A key of one column given as
+    a sequence (['user_id'] or ('user_id',)), which the reference keeps as
+    a tuple and infers no link to by name, is the column's name on the core
+    route, whose description says no key's form, and a link to it is
+    inferred (from T1.23 with every table, from T1.24 with tables named too;
+    measured at T1.24's review, pinned with the materialize that follows by
+    the client's tests/test_the_materialize_route.py). The default route is
     unchanged.
   affected_inputs: >-
     Schema.from_source over DuckDB under a forced core route, with any of the
@@ -1071,7 +1077,11 @@ entries:
     Schema.from_source, edits, materialize and predict: every refusal of
     materialize's on the core named its rule (text_column, keyless_neighbors,
     num_neighbors, num_context_samples, unseeded) where the reference
-    succeeded, and nothing else differed.
+    succeeded, and nothing else differed. Found at T1.24's review: over a
+    key of one column given as a sequence (P1B-2), the reference refuses
+    the question's entity as no primary key (INVALID_REQUEST) and the core
+    route materializes it; the fix gives the description the key's form, a
+    contract change for the owner's queue, not T1.24's fix round.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1388,6 +1398,44 @@ entries:
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
     T1.32d. The two-fault outcome is pinned, both routes', by the client's
     tests/test_the_schema_route.py. Never self-approved.
+
+- id: P1B-12
+  title: Schema.from_source's keys and time columns of the wrong type are read otherwise on the core route than by the reference
+  kind: change
+  old_behavior: >-
+    The reference reads each key it is given with _as_key_tuple: None names
+    no column, refused as an empty key; a name, one column; an ordered
+    iterable of names, its columns; anything else (a number, a set, a
+    mapping, a nested list) is refused, all StructuredDataError
+    INVALID_REQUEST. A time column that is not a name is refused as a
+    column the table lacks (a number, INVALID_REQUEST), or fails unnamed (a
+    list, TypeError).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    schema bridge writes each key as a list of its names before the core
+    reads it (since T1.23, on the route for tables named from T1.24): a key
+    of None or a number fails with a raw TypeError; a set or a mapping is
+    read as its members or keys and taken; a nested list, and any time
+    column that is not a name (a number or a list), reach the contract's
+    decoder, which refuses them INVALID_MESSAGE. Measured at T1.24's fix
+    round 1, pinned both routes' by the client's
+    tests/test_the_schema_route.py. The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source under a forced core route, with
+    primary_keys or time_columns holding a value of another type than a
+    name or a sequence of names.
+  cases: [T1.23, T1.24, T1.24b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.24's round-1 review (subagent P3-3), pre-existing from
+    T1.23. The fix is the reference's own reading in the bridge, a host's
+    reading of its own argument (stays host): reading each key as
+    _as_key_tuple does and a time column's type before the core runs. It
+    grows frozen bridge code (E50(c)), so it waits for an owner-approved
+    allowance, which T1.24b's row asks for its setters' routing too.
+    Never self-approved.
 
 # --- The host layer -------------------------------------------------------------
 
