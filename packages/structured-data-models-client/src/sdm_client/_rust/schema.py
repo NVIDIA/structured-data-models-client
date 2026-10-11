@@ -78,7 +78,7 @@ def from_source(
     """
     from sdm_client.schema import Relationship
 
-    spec: dict[str, Any] = {
+    spec = {
         'tables': [
             {'name': name, 'source': named}
             for name, named in (tables or {}).items()
@@ -100,13 +100,14 @@ def from_source(
                     f'target_table, target_column)',
                     code='INVALID_REQUEST',
                 )
-        spec['relationships'] = [
+        given: Any = [
             [
                 {'table': link.source_table, 'column': link.source_column},
                 {'table': link.target_table, 'column': link.target_column},
             ]
             for link in links
         ]
+        spec['relationships'] = given
     operation = {
         'op': 'describe_source',
         'provider': {'provider': 'sql', 'dialect': 'duckdb'},

@@ -263,7 +263,7 @@ def gather(
         'schema': 1,
         'query': 2,
         'indices': 3,
-        'anchor_time': _anchor(anchor),
+        'anchor_time': _anchor(options.get('anchor_time')),
         'seed': None if seed is None else codec.seed(int(seed)),
         # A seed given as None asks for an unseeded sample, a new one each
         # call, never the default; the core says whether it takes it.

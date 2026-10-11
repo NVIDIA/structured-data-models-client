@@ -1331,9 +1331,11 @@ def freeze_cases(results: list[Result]) -> None:
         declare={from_source: {'refactor': 'the local renamed again'}},
     )
     # Round 3: counts per entry; only entries declared moved net.
+    # A rule of _anchor's to move: from T1.24 the zoned anchor's
+    # conversion, the anchor_entity refusal having moved into the core.
     anchor_rule = (
-        "    if isinstance(value, str) and value == 'entity':\n"
-        "        raise _not_taken('anchor_entity')\n"
+        '    if value.tzinfo is not None:\n'
+        "        value = value.tz_convert('UTC').tz_localize(None)\n"
     )
     big = "    if len(indices) > 5:\n        raise _not_taken('big')\n"
     case(

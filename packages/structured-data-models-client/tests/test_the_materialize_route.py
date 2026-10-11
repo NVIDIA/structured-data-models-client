@@ -265,9 +265,9 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
     payload = core._payloads[0]
     assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
     assert core.entity_table == 'buyers'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
-    monkeypatch.delenv(_routing.ENVIRONMENT)
     old, _ = _named()
     assert json.loads(json.dumps(payload)) == json.loads(
         json.dumps(old._payloads[0], default=str)
