@@ -1,0 +1,949 @@
+{
+  "format": "sdm-refusal-map/1",
+  "family": "keys",
+  "cases": [
+    "key.decimal-18-0",
+    "key.decimal-38-10",
+    "key.declared-int32",
+    "key.hugeint",
+    "key.uint64-above-int64-max",
+    "key.uint64-small",
+    "key.uint8",
+    "key.varchar-large-buffers",
+    "key.varchar",
+    "null.some-foreign-keys"
+  ],
+  "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. The integer, unsigned and text keys reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-1); the uint64 keys past int64 are refused as the reference refuses them; the decimal keys are described on both runners and refused by the bridge's cast on python-core, rust-host not carrying their entities (gap).",
+  "gaps": [
+    {
+      "input": "a decimal key's entities (key.hugeint, key.decimal-18-0, key.decimal-38-10)",
+      "contract": "materialize's indices are one integer or text type (case.schema.json), so these cases' core is describe_source alone, which succeeds on rust-host",
+      "owner": "T1.32a"
+    }
+  ],
+  "entries": [
+    {
+      "id": "materialize/key_type",
+      "operation": "materialize (the bridge)",
+      "rule": "key_type",
+      "owner": "T1.32a",
+      "register": "P1B-3",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:195",
+      "holds": "raise _not_taken('key_type')",
+      "why": "The bridge's cast of the entities knows no Arrow type for a decimal key (HUGEINT as decimal128(38, 0), DECIMAL(18, 0), DECIMAL(38, 10)), which Schema.from_source described on the core; the reference fails INTERNAL_ERROR there (P1B-1). T1.32a moves the entities' cast into the core and widens the key types",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "key_type"
+        }
+      }
+    },
+    {
+      "id": "materialize/int64_range",
+      "operation": "materialize (the payload)",
+      "rule": "INVALID_REQUEST: a value is outside the range int64 holds",
+      "owner": "T1.32a",
+      "register": "none",
+      "reference": "same",
+      "where": "rust/crates/sdm-request/src/payload.rs:131",
+      "holds": "a value is outside the range int64 holds",
+      "why": "The reference's own refusal of uint64 keys past int64's maximum, on both runners; T1.32a admits the case with it",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
+          "code": "INVALID_REQUEST",
+          "operation": null,
+          "rule": null
+        },
+        "rust-host": {
+          "code": "INVALID_REQUEST",
+          "operation": null,
+          "rule": null
+        }
+      }
+    }
+  ],
+  "probes": [
+    {
+      "id": "key.decimal-18-0",
+      "case": "key.decimal-18-0",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE DECIMAL(18, 0)",
+            "ALTER TABLE orders ALTER user_id TYPE DECIMAL(18, 0)"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              "0",
+              "1"
+            ],
+            "indices_as": "decimal",
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/key_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE DECIMAL(18, 0)",
+          "ALTER TABLE orders ALTER user_id TYPE DECIMAL(18, 0)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          }
+        },
+        "until": "from_source",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.decimal-38-10",
+      "case": "key.decimal-38-10",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5",
+            "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              "0.5",
+              "1.5"
+            ],
+            "indices_as": "decimal",
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/key_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5",
+          "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          }
+        },
+        "until": "from_source",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.declared-int32",
+      "case": "key.declared-int32",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "declared",
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": null,
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i32",
+                "v": "0"
+              },
+              {
+                "t": "i32",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.hugeint",
+      "case": "key.hugeint",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE HUGEINT",
+            "ALTER TABLE orders ALTER user_id TYPE HUGEINT"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/key_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE HUGEINT",
+          "ALTER TABLE orders ALTER user_id TYPE HUGEINT"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          }
+        },
+        "until": "from_source",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.uint64-above-int64-max",
+      "case": "key.uint64-above-int64-max",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT",
+            "ALTER TABLE orders ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              9223372036854775808,
+              9223372036854775809
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/int64_range"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT",
+          "ALTER TABLE orders ALTER user_id TYPE UBIGINT USING user_id::UBIGINT + 9223372036854775808::UBIGINT"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "u64",
+                "v": "9223372036854775808"
+              },
+              {
+                "t": "u64",
+                "v": "9223372036854775809"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "materialize/int64_range"
+      }
+    },
+    {
+      "id": "key.uint64-small",
+      "case": "key.uint64-small",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE UBIGINT",
+            "ALTER TABLE orders ALTER user_id TYPE UBIGINT"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE UBIGINT",
+          "ALTER TABLE orders ALTER user_id TYPE UBIGINT"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "u64",
+                "v": "0"
+              },
+              {
+                "t": "u64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.uint8",
+      "case": "key.uint8",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE UTINYINT",
+            "ALTER TABLE orders ALTER user_id TYPE UTINYINT"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE UTINYINT",
+          "ALTER TABLE orders ALTER user_id TYPE UTINYINT"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "u8",
+                "v": "0"
+              },
+              {
+                "t": "u8",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.varchar-large-buffers",
+      "case": "key.varchar-large-buffers",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "SET arrow_large_buffer_size = true",
+            "ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id",
+            "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              "u0",
+              "u1"
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "SET arrow_large_buffer_size = true",
+          "ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id",
+          "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "utf8",
+                "v": "u0"
+              },
+              {
+                "t": "utf8",
+                "v": "u1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "key.varchar",
+      "case": "key.varchar",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id",
+            "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              "u0",
+              "u1"
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id",
+          "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "utf8",
+                "v": "u0"
+              },
+              {
+                "t": "utf8",
+                "v": "u1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "null.some-foreign-keys",
+      "case": "null.some-foreign-keys",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "UPDATE orders SET user_id = NULL WHERE order_id % 10 = 0"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "UPDATE orders SET user_id = NULL WHERE order_id % 10 = 0"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    }
+  ]
+}

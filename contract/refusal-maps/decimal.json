@@ -1,0 +1,465 @@
+{
+  "format": "sdm-refusal-map/1",
+  "family": "decimal",
+  "cases": [
+    "decimal.class-target-38-18",
+    "decimal.feature-38-0-wide",
+    "decimal.target-38-18"
+  ],
+  "reading": "The first refusal of each probe; each case of the decimal family probed as it is, and the wide decimal feature's case without its column, which reaches predict's result on both runners. The decimal target and the static decimal target are the questions their cases ask, so nothing is removed from them.",
+  "gaps": [],
+  "entries": [
+    {
+      "id": "materialize/static_target",
+      "operation": "materialize",
+      "rule": "static_target",
+      "owner": "T1.27",
+      "register": "P1B-3",
+      "where": "rust/crates/sdm-core/src/materialize.rs:221",
+      "why": "decimal.class-target-38-18 asks for users.tier, a static target, refused before its DECIMAL(38, 18) type is read, which the reference fails INTERNAL_ERROR on (P1B-1)",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "static_target"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "static_target"
+        }
+      }
+    },
+    {
+      "id": "materialize/wire_dtype",
+      "operation": "materialize",
+      "rule": "wire_dtype",
+      "owner": "T1.28",
+      "register": "P1B-3",
+      "where": "rust/crates/sdm-request/src/payload.rs:123",
+      "why": "A DECIMAL(38, 0) feature past float64's and int64's precision has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "wire_dtype"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "wire_dtype"
+        }
+      }
+    },
+    {
+      "id": "materialize/target_type",
+      "operation": "materialize",
+      "rule": "target_type",
+      "owner": "T1.27",
+      "register": "P1B-3",
+      "where": "rust/crates/sdm-core/src/materialize.rs:352",
+      "why": "A SUM over a DECIMAL(38, 18) column is a label type materialize does not compute yet; the reference sums it as float64",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "target_type"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "target_type"
+        }
+      }
+    }
+  ],
+  "probes": [
+    {
+      "id": "decimal.class-target-38-18",
+      "case": "decimal.class-target-38-18",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (0.1 + (user_id % 3) * 0.1)::DECIMAL(38, 18) AS tier FROM users"
+          ],
+          "pql": "PREDICT users.tier FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        },
+        "expect": "materialize/static_target"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (0.1 + (user_id % 3) * 0.1)::DECIMAL(38, 18) AS tier FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "materialize/static_target"
+      }
+    },
+    {
+      "id": "decimal.feature-38-0-wide",
+      "case": "decimal.feature-38-0-wide",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (12345678901234567890123456789::DECIMAL(38, 0) + user_id) AS f FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/wire_dtype"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (12345678901234567890123456789::DECIMAL(38, 0) + user_id) AS f FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "materialize/wire_dtype"
+      }
+    },
+    {
+      "id": "decimal.feature-38-0-wide/no-f",
+      "case": "decimal.feature-38-0-wide",
+      "removes": "the decimal feature users.f, from the probe before",
+      "python-core": {
+        "derive": {
+          "from": "decimal.feature-38-0-wide",
+          "steps": [
+            {
+              "drop_columns": [
+                [
+                  "users",
+                  "f"
+                ]
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (12345678901234567890123456789::DECIMAL(38, 0) + user_id) AS f FROM users",
+            "ALTER TABLE users DROP COLUMN \"f\""
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "decimal.feature-38-0-wide",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (12345678901234567890123456789::DECIMAL(38, 0) + user_id) AS f FROM users",
+          "ALTER TABLE users DROP COLUMN \"f\""
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "decimal.target-38-18",
+      "case": "decimal.target-38-18",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE orders ALTER price TYPE DECIMAL(38, 18) USING price + 0.000000000000000001"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/target_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "ALTER TABLE orders ALTER price TYPE DECIMAL(38, 18) USING price + 0.000000000000000001"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "materialize/target_type"
+      }
+    }
+  ]
+}

@@ -1,0 +1,835 @@
+{
+  "format": "sdm-refusal-map/1",
+  "family": "nested",
+  "cases": [
+    "nested.fixed-array",
+    "nested.list-int",
+    "nested.map",
+    "nested.struct"
+  ],
+  "reading": "The first refusal of each probe; each case of the nested family probed as it is and then without its nested column, which reaches predict's result on both runners. describe_source refuses all four columns, so what materialize and the payload make of nested values is masked until T1.23 describes them.",
+  "gaps": [],
+  "entries": [
+    {
+      "id": "describe_source/column_type",
+      "operation": "describe_source",
+      "rule": "column_type",
+      "owner": "T1.23",
+      "register": "P1B-2",
+      "where": "rust/crates/sdm-schema/src/infer.rs:259",
+      "why": "describe_source infers no semantic type for a list, fixed-size list, struct or map column; the reference takes the list (nested.list-int) and refuses the other three with an unnamed RuntimeError naming the wrong type (P1B-1). Each probe without the column reaches predict's result on both runners; what materialize and the payload make of a nested column shows only once T1.23 describes it",
+      "observed": {
+        "python-core": {
+          "stage": "from_source",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "column_type"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "column_type"
+        }
+      }
+    }
+  ],
+  "probes": [
+    {
+      "id": "nested.fixed-array",
+      "case": "nested.fixed-array",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[2] AS f FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "describe_source/column_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[2] AS f FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "describe_source/column_type"
+      }
+    },
+    {
+      "id": "nested.fixed-array/no-f",
+      "case": "nested.fixed-array",
+      "removes": "the fixed-size list feature users.f, from the probe before",
+      "python-core": {
+        "derive": {
+          "from": "nested.fixed-array",
+          "steps": [
+            {
+              "drop_columns": [
+                [
+                  "users",
+                  "f"
+                ]
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[2] AS f FROM users",
+            "ALTER TABLE users DROP COLUMN \"f\""
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "nested.fixed-array",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[2] AS f FROM users",
+          "ALTER TABLE users DROP COLUMN \"f\""
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "nested.list-int",
+      "case": "nested.list-int",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS f FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "describe_source/column_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS f FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "describe_source/column_type"
+      }
+    },
+    {
+      "id": "nested.list-int/no-f",
+      "case": "nested.list-int",
+      "removes": "the list feature users.f, from the probe before",
+      "python-core": {
+        "derive": {
+          "from": "nested.list-int",
+          "steps": [
+            {
+              "drop_columns": [
+                [
+                  "users",
+                  "f"
+                ]
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS f FROM users",
+            "ALTER TABLE users DROP COLUMN \"f\""
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "nested.list-int",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS f FROM users",
+          "ALTER TABLE users DROP COLUMN \"f\""
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "nested.map",
+      "case": "nested.map",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [user_id::INTEGER]) AS f FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "describe_source/column_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [user_id::INTEGER]) AS f FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "describe_source/column_type"
+      }
+    },
+    {
+      "id": "nested.map/no-f",
+      "case": "nested.map",
+      "removes": "the map feature users.f, from the probe before",
+      "python-core": {
+        "derive": {
+          "from": "nested.map",
+          "steps": [
+            {
+              "drop_columns": [
+                [
+                  "users",
+                  "f"
+                ]
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [user_id::INTEGER]) AS f FROM users",
+            "ALTER TABLE users DROP COLUMN \"f\""
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "nested.map",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [user_id::INTEGER]) AS f FROM users",
+          "ALTER TABLE users DROP COLUMN \"f\""
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "nested.struct",
+      "case": "nested.struct",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "describe_source/column_type"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "describe_source/column_type"
+      }
+    },
+    {
+      "id": "nested.struct/no-f",
+      "case": "nested.struct",
+      "removes": "the struct feature users.f, from the probe before",
+      "python-core": {
+        "derive": {
+          "from": "nested.struct",
+          "steps": [
+            {
+              "drop_columns": [
+                [
+                  "users",
+                  "f"
+                ]
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users",
+            "ALTER TABLE users DROP COLUMN \"f\""
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "nested.struct",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users",
+          "ALTER TABLE users DROP COLUMN \"f\""
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    }
+  ]
+}

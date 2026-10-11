@@ -36,6 +36,25 @@ its input exactly, so a change to the case alone fails the map.
 the runner is observed, as the entry it names or as success; a refusal the
 map does not list fails, and so does an entry no probe of a runner it
 lists reaches.
+
+A map is of one case (``case``, T1.21b's AdventureWorks map) or of a family
+of the Phase 1b inventory (``family``, the inventory's seam, and ``cases``,
+every case of it, T1.21e), whose probes each name their ``case``. An entry
+whose refusal is the reference's own (``reference: same``: the same stage,
+class and code as the case's reference observation) is no departure and
+names no register entry (``register: none``).
+
+:func:`write` makes a map from its skeleton: what a person writes (the
+entries' rule, owner, register entry and citation; each probe's id, case,
+derivation and routes) stays, and what a run decides is recomputed: each
+probe's input from its derivation, what each runner observed of it and the
+entry it hits. Run as a script it rewrites a map in place::
+
+    python -I contract/runners/refusal_map.py write MAP [--rust-observed FILE]
+
+where FILE is what ``sdm-testkit``'s ``tests/refusal_map.rs`` writes of
+the rust-host probes (its ignored test ``write_observed``); without it the
+map's rust-host observations are kept.
 """
 
 from __future__ import annotations
@@ -57,9 +76,20 @@ FIELDS = {
     'rust-host': ('code', 'operation', 'rule'),
 }
 STAGES = ('from_source', 'materialize', 'predict')
-#: The tasks a refusal of T1.21b's map may name as its owner: T1.21c and
-#: T1.21d (E50, added at T1.10e) and T1.22 to T1.28.
-OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-8])$')
+#: The tasks a refusal of a map may name as its owner: T1.21c and T1.21d
+#: (E50, added at T1.10e), T1.22 to T1.28 (T1.28a and T1.28b, its halves
+#: from T1.12b) and the inventory's families, T1.32a to T1.32e (T1.21e).
+OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-7]|28[ab]?|32[a-e])$')
+#: The family maps' families: the inventory's seams.
+FAMILIES = (
+    'keys',
+    'decimal',
+    'nested',
+    'empty-null',
+    'time',
+    'refusal',
+    'baseline',
+)
 
 
 class MapFailure(Exception):
@@ -98,12 +128,28 @@ def shape(document: Any) -> str | None:
     if set(document) - {
         'format',
         'case',
+        'family',
+        'cases',
         'reading',
         'gaps',
         'entries',
         'probes',
     }:
         return 'keys a refusal map does not have'
+    family = 'family' in document or 'cases' in document
+    if family == ('case' in document):
+        return 'neither of one case nor of a family'
+    if family:
+        cases = document.get('cases')
+        if document.get('family') not in FAMILIES:
+            return 'not a family of the inventory'
+        if (
+            not isinstance(cases, list)
+            or not cases
+            or not all(_strings(case) for case in cases)
+            or len(set(cases)) != len(cases)
+        ):
+            return 'cases are not each a case, once'
     gaps = document.get('gaps', [])
     if not isinstance(gaps, list) or not all(
         isinstance(gap, dict)
@@ -113,7 +159,7 @@ def shape(document: Any) -> str | None:
         for gap in gaps
     ):
         return 'gaps are not each an input, its contract and an owner'
-    if not _strings(document.get('case')):
+    if not family and not _strings(document.get('case')):
         return 'no case'
     entries = document.get('entries')
     probes = document.get('probes')
@@ -148,8 +194,15 @@ def shape(document: Any) -> str | None:
             return f'probes/{at}/id repeats'
         names.add(probe['id'])
         given = [runner for runner in RUNNERS if runner in probe]
-        if not given or set(probe) - {'id', 'removes', *RUNNERS}:
+        if not given or set(probe) - {'id', 'case', 'removes', *RUNNERS}:
             return f'probes/{at} has no runner, or keys it should not'
+        if family and probe.get('case') not in document['cases']:
+            return f'probes/{at} names no case of the family'
+        if (
+            not family
+            and probe.get('case', document['case']) != (document['case'])
+        ):
+            return f"probes/{at} names another case than the map's"
         for runner in given:
             spec = probe[runner]
             if not isinstance(spec, dict):
@@ -545,24 +598,34 @@ def _rust_step(core: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     return core
 
 
-def bound(case: dict[str, Any], document: dict[str, Any]) -> list[str]:
-    r"""Each way the map's probes are not the case's journey with the
-    removals each names: empty when every probe's input is what its
-    ``derive`` makes of the case.
+def _cases(given: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    r"""``given`` as the cases by id: one case, or a mapping of them."""
+    if given.get('format') == 'sdm-case/1':
+        return {given['id']: given}
+    return given
 
-    The first probe of each runner derives from the case with no removal,
-    so it is the case itself (python-core: its input and the stage it stops
-    at; rust-host: its core operations); every other probe derives from an
-    earlier one by the removals it names. A rust-host probe's setup is its
-    python-core twin's, and so are the edits it makes to its own
-    description before materialize samples it, the probe naming no schema
-    (T1.21d); its other materialize and predict inputs, which python-core
-    captures, are held to that twin's at run time.
-    """
+
+def _probe_case(document: dict[str, Any], probe: dict[str, Any]) -> Any:
+    return probe.get('case', document.get('case'))
+
+
+def derive(
+    given: dict[str, Any], document: dict[str, Any]
+) -> tuple[list[str], dict[str, dict[str, Any]]]:
+    r"""Each probe's input as its ``derive`` makes it of its case, by
+    runner and probe id (python-core: its input; rust-host: its core
+    operations), and each way a probe's derivation does not apply.
+    ``given`` is the map's case, or a family map's cases by id."""
+    cases = _cases(given)
     failures: list[str] = []
     derived: dict[str, dict[str, Any]] = {runner: {} for runner in RUNNERS}
+    owner: dict[str, Any] = {}
     for probe in document['probes']:
         name = probe['id']
+        case = cases.get(_probe_case(document, probe))
+        if case is None:
+            failures.append(f'{name}: names no case given')
+            continue
         for runner in RUNNERS:
             spec = probe.get(runner)
             if spec is None:
@@ -581,9 +644,7 @@ def bound(case: dict[str, Any], document: dict[str, Any]) -> list[str]:
                 base = (
                     case['input'] if runner == 'python-core' else case['core']
                 )
-                if runner == 'python-core' and spec['until'] != case['until']:
-                    failures.append(f"{name}/{runner}: not the case's until")
-            elif start in derived[runner]:
+            elif start in derived[runner] and owner[start] == case['id']:
                 base = derived[runner][start]
             else:
                 failures.append(f'{name}/{runner}: derives from no probe')
@@ -600,32 +661,349 @@ def bound(case: dict[str, Any], document: dict[str, Any]) -> list[str]:
                 failures.append(f'{name}/{runner}: its steps do not apply')
                 continue
             derived[runner][name] = made
+            owner[name] = case['id']
+    return failures, derived
+
+
+def bound(given: dict[str, Any], document: dict[str, Any]) -> list[str]:
+    r"""Each way the map's probes are not their case's journey with the
+    removals each names: empty when every probe's input is what its
+    ``derive`` makes of its case. ``given`` is the map's case, or a family
+    map's cases by id, every case of the family among them.
+
+    The first probe of each case and runner derives from the case with no
+    removal, so it is the case itself (python-core: its input and the stage
+    it stops at; rust-host: its core operations); every other probe derives
+    from an earlier one of the same case by the removals it names. A
+    rust-host probe's setup is its python-core twin's, and so are the edits
+    it makes to its own description before materialize samples it, the
+    probe naming no schema (T1.21d); where its case names materialize and
+    predict, they are the case's, and otherwise, as on the AdventureWorks
+    case, which names describe_source alone, its other inputs, which
+    python-core captures, are held to that twin's at run time.
+    """
+    cases = _cases(given)
+    failures, derived = derive(cases, document)
+    if 'cases' in document and set(document['cases']) != set(cases):
+        failures.append("the family's cases are not the cases given")
+    started: set[tuple[str, str]] = set()
+    for probe in document['probes']:
+        name = probe['id']
+        case = cases.get(_probe_case(document, probe))
+        if case is None:
+            continue
+        for runner in RUNNERS:
+            spec = probe.get(runner)
+            if spec is None or name not in derived[runner]:
+                continue
+            made = derived[runner][name]
+            if spec['derive'].get('from') == 'case':
+                started.add((case['id'], runner))
+                if runner == 'python-core' and spec['until'] != case['until']:
+                    failures.append(f"{name}/{runner}: not the case's until")
             if runner == 'python-core':
                 if spec['input'] != made:
                     failures.append(f'{name}/{runner}: not its derived input')
-            else:
-                held = spec['core']
-                if set(held) == {'describe_source'}:
-                    if held != made:
-                        failures.append(
-                            f'{name}/{runner}: not its derived core'
-                        )
-                elif held.get('describe_source') != made['describe_source']:
-                    failures.append(f'{name}/{runner}: not its derived core')
-                twin = probe.get('python-core')
-                if twin is None or spec.get('setup') != twin['input'].get(
-                    'setup'
-                ):
-                    failures.append(f"{name}/{runner}: not its twin's setup")
-                # materialize samples rust-host's own description with its
-                # twin's edits made; the probe names no schema (T1.21d).
-                if 'materialize' in held and (
-                    twin is None
-                    or spec.get('edits', []) != twin['input'].get('edits', [])
-                ):
-                    failures.append(f"{name}/{runner}: not its twin's edits")
-                if 'schema' in held.get('materialize', {}):
-                    failures.append(
-                        f'{name}/{runner}: names the schema materialize samples'
-                    )
+                continue
+            held = spec['core']
+            if held != made and not (
+                set(made) == {'describe_source'}
+                and held.get('describe_source') == made['describe_source']
+            ):
+                failures.append(f'{name}/{runner}: not its derived core')
+            twin = probe.get('python-core')
+            if twin is None or spec.get('setup') != twin['input'].get('setup'):
+                failures.append(f"{name}/{runner}: not its twin's setup")
+            # materialize samples rust-host's own description with its
+            # twin's edits made; the probe names no schema (T1.21d).
+            if 'materialize' in held and (
+                twin is None
+                or spec.get('edits', []) != twin['input'].get('edits', [])
+            ):
+                failures.append(f"{name}/{runner}: not its twin's edits")
+            if 'schema' in held.get('materialize', {}):
+                failures.append(
+                    f'{name}/{runner}: names the schema materialize samples'
+                )
+    # Every case of a family is probed from itself, on each runner the
+    # family's map runs.
+    if 'cases' in document:
+        for runner in RUNNERS:
+            if not any(runner in probe for probe in document['probes']):
+                continue
+            for case_id in document['cases']:
+                if (case_id, runner) not in started:
+                    failures.append(f'{case_id}/{runner}: no probe of the case')
     return failures
+
+
+# --- the writer -----------------------------------------------------------------------
+
+#: The stage whose result each core operation gives.
+STAGE_OF = {
+    'describe_source': 'from_source',
+    'materialize': 'materialize',
+    'predict': 'predict',
+}
+#: The fields a person writes in an entry; :func:`write` keeps them.
+WRITTEN = ('id', 'operation', 'rule', 'owner', 'register', 'where')
+UNSET = 'UNSET'
+
+
+def _key(seen: dict[str, Any]) -> tuple[Any, ...] | None:
+    r"""What both runners observe of a refusal the core names by rule."""
+    if seen.get('operation') is None or seen.get('rule') is None:
+        return None
+    return (seen.get('code'), seen['operation'], seen['rule'])
+
+
+def write(
+    document: dict[str, Any],
+    given: dict[str, Any],
+    observe: Any,
+    rust_observed: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    r"""The map ``document`` describes, its run recomputed, and what a
+    person must still write.
+
+    Kept as written: the map's own fields, each entry's written fields and
+    any others but ``observed``, and each probe's id, case, ``removes``,
+    derivation, python-core routes and stopping stage. Recomputed: each
+    probe's input from its derivation (rust-host's setup and edits its
+    twin's, its stopping stage its last operation's), each runner's
+    observation (python-core's by ``observe(spec)``, rust-host's from
+    ``rust_observed``, by probe id; without it the map's rust-host
+    observations stay), the entry each probe hits, and each entry's
+    ``observed``. A refusal no entry lists becomes an entry whose written
+    fields read ``UNSET``, and an entry no probe hits any more is dropped;
+    both are reported.
+    """
+    document = copy.deepcopy(document)
+    failures, derived = derive(given, document)
+    if failures:
+        return document, failures
+    report: list[str] = []
+    entries = document['entries']
+    for entry in entries:
+        entry.setdefault('observed', {})
+    # What each entry was observed as before this run, which a refusal is
+    # matched against; its observations are this run's.
+    before = {e['id']: copy.deepcopy(e['observed']) for e in entries}
+    runners = ['python-core'] + (['rust-host'] if rust_observed else [])
+    for entry in entries:
+        for runner in runners:
+            entry['observed'].pop(runner, None)
+    hit: set[str] = set()
+    this_probe: dict[str, dict[str, Any]] = {}
+    for probe in document['probes']:
+        name = probe['id']
+        twin = probe.get('python-core')
+        rust = probe.get('rust-host')
+        if twin is not None:
+            twin['input'] = derived['python-core'][name]
+        if rust is not None:
+            core = derived['rust-host'][name]
+            if set(core) == {'describe_source'}:
+                # A case naming describe_source alone (the AdventureWorks
+                # case): the probe's later inputs are held to its twin's
+                # at run time, not derived, so they stay as written.
+                core = {**rust.get('core', {}), **core}
+            rust['setup'] = twin['input'].get('setup') if twin else None
+            rust['core'] = core
+            edits = twin['input'].get('edits') if twin else None
+            if 'materialize' in core and edits:
+                rust['edits'] = edits
+            else:
+                rust.pop('edits', None)
+            rust['until'] = STAGE_OF[list(core)[-1]]
+        for runner in RUNNERS:
+            spec = probe.get(runner)
+            if spec is None:
+                continue
+            if runner == 'rust-host' and not rust_observed:
+                if spec.get('expect', 'success') != 'success':
+                    hit.add(spec['expect'])
+                continue
+            seen = (
+                observe(spec)
+                if runner == 'python-core'
+                else (rust_observed or {}).get(name)
+            )
+            if seen is None:
+                report.append(f'{name}/{runner}: not observed')
+                continue
+            if seen == success(spec['until']):
+                spec['expect'] = 'success'
+                continue
+            problem = _observation(seen, runner)
+            if problem is not None:
+                report.append(f'{name}/{runner}: {problem}')
+                continue
+            entry = next(
+                (
+                    e
+                    for e in entries
+                    if e['observed'].get(runner) == seen
+                    or before.get(e['id'], {}).get(runner) == seen
+                ),
+                None,
+            )
+            twin_entry = this_probe.get(name)
+            if (
+                entry is None
+                and twin_entry is not None
+                and runner not in twin_entry['observed']
+                and all(
+                    other.get(field) == seen.get(field)
+                    for other in twin_entry['observed'].values()
+                    for field in ('code', 'operation', 'rule')
+                )
+            ):
+                # The same probe's refusal as the other runner saw it: one
+                # refusal, the same code, rule and operation or neither.
+                entry = twin_entry
+            if entry is None and _key(seen) is not None:
+                # The other runner's entry for the same rule.
+                entry = next(
+                    (
+                        e
+                        for e in entries
+                        if runner not in before.get(e['id'], {})
+                        and runner not in e['observed']
+                        and any(
+                            _key(other) == _key(seen)
+                            for other in [
+                                *e['observed'].values(),
+                                *before.get(e['id'], {}).values(),
+                            ]
+                        )
+                    ),
+                    None,
+                )
+            if entry is None and _key(seen) is not None:
+                # An entry written for a rule, not yet observed.
+                entry = next(
+                    (
+                        e
+                        for e in entries
+                        if not e['observed']
+                        and not before.get(e['id'])
+                        and (e['operation'], e['rule'])
+                        == (seen['operation'], seen['rule'])
+                    ),
+                    None,
+                )
+            if entry is None:
+                entry = {
+                    'id': '/'.join(
+                        str(seen.get(k) or seen.get('code'))
+                        for k in ('operation', 'rule')
+                    ),
+                    **{key: UNSET for key in WRITTEN[1:]},
+                    'observed': {},
+                }
+                entries.append(entry)
+                report.append(f'{name}/{runner}: a refusal no entry lists')
+            entry['observed'][runner] = seen
+            this_probe[name] = entry
+            spec['expect'] = entry['id']
+            hit.add(entry['id'])
+    kept = []
+    for entry in entries:
+        if entry['id'] in hit or entry['observed']:
+            kept.append(entry)
+        else:
+            report.append(f'{entry["id"]}: no probe hits it; dropped')
+    document['entries'] = kept
+    report += [
+        f'{entry["id"]}: {key} is not written'
+        for entry in kept
+        for key in WRITTEN
+        if entry.get(key) == UNSET
+    ]
+    return document, report
+
+
+def _read(path: Path) -> Any:
+    r"""The JSON at ``path``, refused by name when it is not JSON or is
+    nested past what the reader takes."""
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except RecursionError:
+        raise MapFailure(f'{path.name}: nested too deeply') from None
+    except ValueError:
+        raise MapFailure(f'{path.name}: not JSON') from None
+
+
+def _main(argv: list[str] | None = None) -> int:
+    import argparse
+    import importlib.util
+    import sys
+
+    parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    parser.add_argument('action', choices=['write'])
+    parser.add_argument('map', type=Path)
+    parser.add_argument('--rust-observed', type=Path)
+    arguments = parser.parse_args(argv)
+    here = Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location(
+        'run_python', here / 'run_python.py'
+    )
+    assert spec is not None and spec.loader is not None
+    runner = importlib.util.module_from_spec(spec)
+    sys.modules['run_python'] = runner
+    spec.loader.exec_module(runner)
+    document = _read(arguments.map)
+    if (
+        not isinstance(document, dict)
+        or document.get('format') != FORMAT
+        or not isinstance(document.get('probes'), list)
+        or not isinstance(document.get('entries'), list)
+    ):
+        raise MapFailure(f'{arguments.map.name}: not a map or its skeleton')
+    every = {
+        case['id']: case
+        for case, _ in runner.load_cases([here.parent / 'cases'])
+    }
+    wanted = document.get('cases', [document.get('case')])
+    given = {case_id: every[case_id] for case_id in wanted}
+    rust = None
+    if arguments.rust_observed is not None:
+        rust = _read(arguments.rust_observed)
+        rust = rust.get(arguments.map.name) if isinstance(rust, dict) else None
+        if not isinstance(rust, dict):
+            raise MapFailure(
+                f'{arguments.rust_observed.name}: no observations of '
+                f'{arguments.map.name}'
+            )
+    bases = runner.load_bases()
+    try:
+        written, report = write(
+            document,
+            given,
+            lambda spec: observe_python_core(runner, spec, bases)[0],
+            rust,
+        )
+    except RecursionError:
+        raise MapFailure(f'{arguments.map.name}: nested too deeply') from None
+    except (KeyError, TypeError, AttributeError, ValueError):
+        raise MapFailure(
+            f'{arguments.map.name}: not a map or its skeleton'
+        ) from None
+    arguments.map.write_text(
+        json.dumps(written, indent=2, ensure_ascii=False) + '\n',
+        encoding='utf-8',
+    )
+    for line in report:
+        print(line)
+    problem = shape(written)
+    if problem is not None:
+        print(f'not yet a map: {problem}')
+    return 1 if report or problem else 0
+
+
+if __name__ == '__main__':
+    try:
+        raise SystemExit(_main())
+    except MapFailure as failure:
+        raise SystemExit(f'not a map: {failure}') from None

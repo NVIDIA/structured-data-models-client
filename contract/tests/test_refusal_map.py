@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """E27's AdventureWorks case: its fixture, and its refusal map on python-core
-(T1.21b).
+(T1.21b); and the Phase 1b inventory's family maps (T1.21e).
 
 Run where the contract tests run (CI's ``engine`` job until T1.18):
 
@@ -30,6 +30,16 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
   missing, empty or retyped, and for an unlisted refusal and an entry
   nothing hits; the map's reader refuses JSON nested past what it reads,
   and a wide object, by name.
+- The family maps (``contract/refusal-maps/<seam>.json``, T1.21e): one per
+  seam of the inventory, its cases every committed case of that seam;
+  every entry owned (T1.21d to T1.28, T1.32a to T1.32e), its line cited,
+  and either under a proposed register entry or the reference's own
+  refusal, held to the case's reference observation (seeded); every probe
+  bound to its case (seeded: a case changed alone, a case left without a
+  probe, a probe of another family's case); each map held on python-core
+  (seeded: an unlisted refusal, a stale entry, retyped evidence) and
+  ``refusal_map.write``'s output from that run, so no map is edited by
+  hand; the writer reports a new refusal and drops a lifted entry.
 """
 
 from __future__ import annotations
@@ -487,9 +497,426 @@ def test_the_reader_refuses_deep_and_wide_maps_by_name(tmp_path: Path) -> None:
 
 
 def test_the_owners_a_map_may_name() -> None:
-    # E50 (T1.10e): T1.21c and T1.21d join T1.22 to T1.28; their
+    # E50 (T1.10e): T1.21c and T1.21d join T1.22 to T1.28; T1.21e adds the
+    # inventory's families, T1.32a to T1.32e, and T1.28's halves; their
     # neighbours, a landed package and a later one stay refused.
-    for task in ('T1.21c', 'T1.21d', 'T1.22', 'T1.28'):
+    for task in (
+        'T1.21c',
+        'T1.21d',
+        'T1.22',
+        'T1.28',
+        'T1.28a',
+        'T1.28b',
+        'T1.32a',
+        'T1.32e',
+    ):
         assert refusal_map.OWNER.match(task), task
-    for task in ('T1.21', 'T1.21b', 'T1.21e', 'T1.21cd', 'T1.29', 'T1.2', ''):
+    for task in (
+        'T1.21',
+        'T1.21b',
+        'T1.21e',
+        'T1.21cd',
+        'T1.28c',
+        'T1.29',
+        'T1.32',
+        'T1.32f',
+        'T1.2',
+        '',
+    ):
         assert not refusal_map.OWNER.match(task), task
+
+
+# --- the inventory's family maps (T1.21e) ------------------------------------------
+
+MAPS = ROOT / 'contract/refusal-maps'
+REFERENCE = ROOT / 'contract/reference'
+
+
+def _family_maps() -> dict[str, dict[str, Any]]:
+    return {
+        path.stem: refusal_map.load(path)
+        for path in sorted(MAPS.glob('*.json'))
+        if path != MAP
+    }
+
+
+def _cases() -> dict[str, dict[str, Any]]:
+    return {
+        case['id']: case
+        for case, _ in run_python.load_cases([ROOT / 'contract/cases'])
+    }
+
+
+def _of(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    every = _cases()
+    return {case_id: every[case_id] for case_id in document['cases']}
+
+
+def test_one_family_map_per_seam_holds_every_inventory_case() -> None:
+    # Each of the inventory's seams has its map, whose cases are the
+    # committed cases of that seam, the inventory's 40 among them, and
+    # AdventureWorks has its own.
+    maps = _family_maps()
+    assert set(maps) == set(refusal_map.FAMILIES)
+    inventory = {entry['id'] for entry in run_python.load_inventory()['cases']}
+    held: list[str] = []
+    for name, document in maps.items():
+        assert document['family'] == name
+        seam = {
+            case_id
+            for case_id, case in _cases().items()
+            if case.get('seam') == name and case_id != 'base.adventureworks'
+        }
+        assert set(document['cases']) == seam, name
+        held += document['cases']
+    assert sorted(held) == sorted(inventory) and len(held) == 40
+
+
+def _cited(entry: dict[str, Any]) -> list[str]:
+    path, _, lines = entry['where'].partition(':')
+    assert (ROOT / path).is_file(), entry['id']
+    first, last = re.match(r'(\d+)(?:-(\d+))?', lines).groups()
+    text: list[str] = (
+        (ROOT / path)
+        .read_text()
+        .splitlines()[int(first) - 1 : int(last or first)]
+    )
+    return text
+
+
+def _reference_outcomes() -> dict[str, dict[str, Any]]:
+    [reference] = sorted(REFERENCE.glob('*.jsonl'))
+    return {
+        observation['case']: observation['outcome']
+        for observation in map(json.loads, reference.read_text().splitlines())
+    }
+
+
+def _not_the_reference_s(
+    document: dict[str, Any],
+    entry: dict[str, Any],
+    reference: dict[str, dict[str, Any]],
+) -> list[str]:
+    r"""Each way an entry marked the reference's own refusal is not: it
+    names a register entry, no probe hits it on python-core, or a case
+    whose probe hits it was not refused by the reference at the same
+    stage, with the same class and code."""
+    problems = []
+    if entry['register'] != 'none':
+        problems.append('names a register entry')
+    seen = entry['observed'].get('python-core')
+    hitting = [
+        probe['case']
+        for probe in document['probes']
+        if probe.get('python-core', {}).get('expect') == entry['id']
+    ]
+    if seen is None or not hitting:
+        problems.append('no python-core probe hits it')
+    for case_id in hitting:
+        outcome = reference.get(case_id)
+        if outcome is None or outcome.get('result') != 'refusal':
+            problems.append(f'{case_id}: the reference did not refuse it')
+        elif any(
+            outcome.get(key) != (seen or {}).get(key)
+            for key in ('stage', 'error', 'code')
+        ):
+            problems.append(f"{case_id}: not the reference's refusal")
+    return problems
+
+
+def test_an_entry_called_the_reference_s_is_held_to_it_fail_closed() -> None:
+    document = _family_maps()['keys']
+    entry = next(e for e in document['entries'] if e.get('reference'))
+    reference = _reference_outcomes()
+    assert _not_the_reference_s(document, entry, reference) == []
+    case_id = 'key.uint64-above-int64-max'
+    for change, problem in (
+        (lambda r: r.pop(case_id), 'the reference did not refuse it'),
+        (
+            lambda r: r[case_id].__setitem__('result', 'success'),
+            'the reference did not refuse it',
+        ),
+        (
+            lambda r: r[case_id].__setitem__('code', 'INTERNAL_ERROR'),
+            "not the reference's refusal",
+        ),
+        (
+            lambda r: r[case_id].__setitem__('stage', None),
+            "not the reference's refusal",
+        ),
+    ):
+        changed = copy.deepcopy(reference)
+        change(changed)
+        assert _not_the_reference_s(document, entry, changed) == [
+            f'{case_id}: {problem}'
+        ]
+    named = copy.deepcopy(entry)
+    named['register'] = 'P1B-3'
+    assert _not_the_reference_s(document, named, reference) == [
+        'names a register entry'
+    ]
+    unhit = copy.deepcopy(entry)
+    unhit['id'] = 'materialize/unhit'
+    assert _not_the_reference_s(document, unhit, reference) == [
+        'no python-core probe hits it'
+    ]
+
+
+def test_every_family_entry_is_owned_cited_and_registered_or_the_reference_s() -> (
+    None
+):
+    register = {
+        entry['id']: entry
+        for entry in yaml.safe_load(REGISTER.read_text(encoding='utf-8'))[
+            'entries'
+        ]
+    }
+    reference = _reference_outcomes()
+    validate = run_python.validator('case')
+    for name, document in _family_maps().items():
+        cases = _of(document)
+        for entry in document['entries']:
+            where = f'{name}: {entry["id"]}'
+            assert refusal_map.OWNER.match(entry['owner']), where
+            cited = _cited(entry)
+            if 'holds' in entry:
+                assert any(entry['holds'] in text for text in cited), where
+            else:
+                assert any(
+                    f'not_yet("{entry["rule"]}")' in text for text in cited
+                ), where
+            if entry.get('reference') == 'same':
+                assert _not_the_reference_s(document, entry, reference) == [], (
+                    where
+                )
+            else:
+                # Never self-approved: the entry the refusal is under
+                # waits for the owner.
+                assert register[entry['register']]['status'] == 'proposed', (
+                    where
+                )
+        for gap in document['gaps']:
+            assert refusal_map.OWNER.match(gap['owner']), name
+        for probe in document['probes']:
+            if 'python-core' in probe:
+                case = refusal_map.probe_input(
+                    cases[probe['case']], probe['python-core']
+                )
+                assert run_python._invalid(validate, case) is None, probe['id']
+
+
+def test_the_family_maps_probes_are_their_cases_with_the_removals_named() -> (
+    None
+):
+    for name, document in _family_maps().items():
+        assert refusal_map.bound(_of(document), document) == [], name
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        lambda case: case['input']['setup'].pop(),
+        lambda case: case['input'].__setitem__(
+            'pql', case['input']['pql'] + ' '
+        ),
+        lambda case: case['input']['from_source']['time_columns'].clear(),
+        lambda case: case.__setitem__('until', 'materialize'),
+        lambda case: case['core']['materialize']['indices'].pop(),
+        lambda case: case['core'].pop('predict'),
+    ],
+)
+def test_a_change_to_a_family_case_alone_fails_its_map(change: Any) -> None:
+    document = _family_maps()['time']
+    cases = _of(document)
+    change(cases['time.text-declared'])
+    assert refusal_map.bound(cases, document) != []
+
+
+def test_a_family_map_without_a_case_s_probe_or_with_a_stranger_fails() -> None:
+    document = _family_maps()['nested']
+    cases = _of(document)
+    dropped = copy.deepcopy(document)
+    dropped['probes'] = [
+        probe for probe in dropped['probes'] if probe['case'] != 'nested.map'
+    ]
+    failures = refusal_map.bound(cases, dropped)
+    assert 'nested.map/python-core: no probe of the case' in failures
+    assert 'nested.map/rust-host: no probe of the case' in failures
+    stranger = copy.deepcopy(document)
+    stranger['probes'][0]['case'] = 'base.regression'
+    assert refusal_map.shape(stranger) == 'probes/0 names no case of the family'
+    for broken, problem in (
+        ({'family': 'no-such-seam'}, 'not a family of the inventory'),
+        ({'cases': []}, 'cases are not each a case, once'),
+        (
+            {'cases': ['nested.map', 'nested.map']},
+            'cases are not each a case, once',
+        ),
+        ({'case': 'nested.map'}, 'neither of one case nor of a family'),
+    ):
+        assert refusal_map.shape({**document, **broken}) == problem, problem
+    single = _map()
+    single['probes'][0]['case'] = 'base.regression'
+    assert refusal_map.shape(single) == (
+        "probes/0 names another case than the map's"
+    )
+
+
+def _python_core_run(
+    document: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    r"""Each python-core probe of ``document`` run: what it observed, and
+    its observation by its input, routes and stage."""
+    bases = run_python.load_bases()
+    observed: dict[str, Any] = {}
+    by_input: dict[str, Any] = {}
+    for probe in document['probes']:
+        spec = probe.get('python-core')
+        if spec is None:
+            continue
+        seen, capture = refusal_map.observe_python_core(run_python, spec, bases)
+        observed[probe['id']] = seen
+        by_input[_spec_key(spec)] = seen
+        rust = probe.get('rust-host')
+        if rust is None:
+            continue
+        # Where python-core reached the core, it started the operations the
+        # rust-host probe starts, with the same inputs.
+        started = {each['op']: each for each in capture.inputs}
+        assert set(started) <= set(rust['core']), probe['id']
+        for op, given in started.items():
+            wanted = rust['core'][op]
+            assert {key: given[key] for key in wanted} == wanted, probe['id']
+    return observed, by_input
+
+
+def _spec_key(spec: dict[str, Any]) -> str:
+    return json.dumps(
+        [spec['input'], spec['routes'], spec['until']], sort_keys=True
+    )
+
+
+@pytest.mark.parametrize('family', refusal_map.FAMILIES)
+def test_the_family_map_holds_on_python_core_and_is_the_writer_s(
+    family: str,
+) -> None:
+    document = _family_maps()[family]
+    observed, by_input = _python_core_run(document)
+    assert refusal_map.check(document, 'python-core', observed) == []
+    # Generated, not edited: the writer, given this run, makes the map as
+    # committed, its rust-host observations kept.
+    written, report = refusal_map.write(
+        document, _of(document), lambda spec: by_input[_spec_key(spec)]
+    )
+    assert report == []
+    assert written == document
+
+
+def test_a_family_map_fails_on_an_unlisted_refusal_and_a_stale_entry() -> None:
+    # Seeded on python-core's run of the time family: the entry a probe
+    # hits removed, and an entry no probe hits added.
+    document = _family_maps()['time']
+    entries = {entry['id']: entry for entry in document['entries']}
+    observed = {
+        probe['id']: (
+            refusal_map.success(probe['python-core']['until'])
+            if probe['python-core']['expect'] == 'success'
+            else copy.deepcopy(
+                entries[probe['python-core']['expect']]['observed'][
+                    'python-core'
+                ]
+            )
+        )
+        for probe in document['probes']
+    }
+    assert refusal_map.check(document, 'python-core', observed) == []
+    unlisted = copy.deepcopy(document)
+    unlisted['entries'] = [
+        entry
+        for entry in unlisted['entries']
+        if entry['id'] != 'describe_source/time_of_day'
+    ]
+    failures = refusal_map.check(unlisted, 'python-core', observed)
+    assert any(
+        failure.startswith(
+            'time.feature-time-of-day: a refusal the map does not list'
+        )
+        for failure in failures
+    ), failures
+    stale = copy.deepcopy(document)
+    seeded = copy.deepcopy(stale['entries'][0])
+    seeded['id'] = 'materialize/stale'
+    seeded['observed']['python-core']['rule'] = 'stale'
+    stale['entries'].append(seeded)
+    assert refusal_map.check(stale, 'python-core', observed) == [
+        'materialize/stale: listed for python-core and not hit'
+    ]
+    for retyped in (7, None, '', ['time_of_day']):
+        changed = copy.deepcopy(observed)
+        changed['time.feature-time-of-day']['rule'] = retyped
+        assert refusal_map.check(document, 'python-core', changed) != []
+
+
+def test_the_writer_lists_a_new_refusal_and_drops_a_lifted_entry() -> None:
+    # The writer over a seeded run: a refusal no entry lists becomes an
+    # entry whose written fields read UNSET, reported; an entry nothing
+    # hits any more is dropped, reported.
+    document = _family_maps()['nested']
+    entries = {entry['id']: entry for entry in document['entries']}
+    runs = {}
+    for probe in document['probes']:
+        spec = probe['python-core']
+        runs[_spec_key(spec)] = (
+            refusal_map.success(spec['until'])
+            if spec['expect'] == 'success'
+            else entries[spec['expect']]['observed']['python-core']
+        )
+    new = {
+        'stage': 'materialize',
+        'error': 'UnsupportedRequestError',
+        'code': 'UNSUPPORTED_REQUEST',
+        'operation': 'materialize',
+        'rule': 'seeded',
+    }
+    first = document['probes'][0]['python-core']
+    runs[_spec_key(first)] = new
+    written, report = refusal_map.write(
+        document, _of(document), lambda spec: runs[_spec_key(spec)]
+    )
+    assert (
+        f'{document["probes"][0]["id"]}/python-core: a refusal no entry lists'
+        in report
+    )
+    added = next(
+        e for e in written['entries'] if e['id'] == 'materialize/seeded'
+    )
+    assert added['owner'] == refusal_map.UNSET
+    assert 'materialize/seeded: owner is not written' in report
+    for probe in document['probes']:
+        if probe['python-core']['expect'] != 'success':
+            runs[_spec_key(probe['python-core'])] = refusal_map.success(
+                probe['python-core']['until']
+            )
+    written, report = refusal_map.write(
+        document, _of(document), lambda spec: runs[_spec_key(spec)]
+    )
+    # The rust-host observations stay, so the entry is kept for rust-host
+    # alone; with rust-host's run lifted too, it is dropped.
+    assert 'python-core' not in written['entries'][0]['observed']
+    rust = {
+        probe['id']: refusal_map.success(probe['rust-host']['until'])
+        for probe in document['probes']
+    }
+    written, report = refusal_map.write(
+        document, _of(document), lambda spec: runs[_spec_key(spec)], rust
+    )
+    assert written['entries'] == []
+    assert 'describe_source/column_type: no probe hits it; dropped' in report
+    # Evidence that is not an observation is reported, never taken.
+    name = document['probes'][0]['id']
+    for retyped in (None, 7, [], {'code': 'X'}, {**new, 'rule': ''}):
+        runs[_spec_key(first)] = retyped
+        _, report = refusal_map.write(
+            document, _of(document), lambda spec: runs[_spec_key(spec)]
+        )
+        assert any(line.startswith(f'{name}/python-core: ') for line in report)

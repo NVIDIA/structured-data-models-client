@@ -2,19 +2,27 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The AdventureWorks case's refusal map on the pure-Rust host (T1.21b).
+//! The refusal maps on the pure-Rust host: the AdventureWorks case's
+//! (T1.21b) and the Phase 1b inventory's families' (T1.21e).
 //!
 //! `contract/refusal-maps/base.adventureworks.json` lists each refusal the
 //! core route hits on E27's AdventureWorks journey and the probes that reach
-//! them, each probe the case with the features refused before it removed.
-//! This host runs every probe the map gives it, starting the core
-//! operations the probe names over the case's base and the probe's setup,
+//! them, each probe the case with the features refused before it removed;
+//! each family map (`keys.json` to `baseline.json`) does the same for every
+//! case of one of the inventory's families, each probe naming its case.
+//! This host runs every probe a map gives it, starting the core
+//! operations the probe names over its case's base and the probe's setup,
 //! and holds the run to the map: a refusal the map does not list fails, and
 //! so does an entry for this host no probe reaches. The same check on
 //! `python-core` is `contract/tests/test_refusal_map.py`'s, through
 //! `contract/runners/refusal_map.py`, whose rules this file's [`check`]
 //! follows. The seeded faults below show the check failing when the map or
 //! the evidence is missing, empty or retyped, not only when it differs.
+//!
+//! With `SDM_REFUSAL_MAP_OBSERVED` naming a file, the family maps' test
+//! writes there what this host observed of every map's probes, by map and
+//! probe, before it checks them: what `refusal_map.py write
+//! --rust-observed` reads to regenerate a map.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -34,13 +42,62 @@ fn contract() -> PathBuf {
 }
 
 fn map() -> Value {
-    let bytes = std::fs::read(contract().join("refusal-maps/base.adventureworks.json")).unwrap();
+    read_map("base.adventureworks.json")
+}
+
+fn read_map(name: &str) -> Value {
+    let bytes = std::fs::read(contract().join("refusal-maps").join(name)).unwrap();
     serde_json::from_slice(&bytes).unwrap()
 }
 
+/// The family maps, by file name: every map but the AdventureWorks case's.
+fn family_maps() -> Vec<(String, Value)> {
+    let mut names: Vec<String> = std::fs::read_dir(contract().join("refusal-maps"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".json") && name != "base.adventureworks.json")
+        .collect();
+    names.sort();
+    names
+        .into_iter()
+        .map(|name| {
+            let map = read_map(&name);
+            (name, map)
+        })
+        .collect()
+}
+
+/// Every contract case by id, as the case loader reads it, and as JSON.
+fn cases() -> &'static BTreeMap<String, (Case, Value)> {
+    static CASES: OnceLock<BTreeMap<String, (Case, Value)>> = OnceLock::new();
+    CASES.get_or_init(|| {
+        let loaded = case::load(&[contract().join("cases")]).unwrap();
+        loaded
+            .into_iter()
+            .map(|each| {
+                let path = contract()
+                    .join("cases")
+                    .join(each.case.slice.to_lowercase())
+                    .join(format!("{}.json", each.case.id));
+                let raw: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+                (each.case.id.clone(), (each.case, raw))
+            })
+            .collect()
+    })
+}
+
+/// The case `probe` of `map` runs: its own `case`, or the map's.
+fn case_of<'a>(map: &'a Value, probe: &'a Value) -> &'static (Case, Value) {
+    let id = probe
+        .get("case")
+        .or_else(|| map.get("case"))
+        .and_then(Value::as_str)
+        .unwrap();
+    &cases()[id]
+}
+
 fn the_case(map: &Value) -> Case {
-    let loaded = case::load(&[contract().join("cases/s1/base.adventureworks.json")]).unwrap();
-    let case = loaded.into_iter().next().unwrap().case;
+    let case = cases()["base.adventureworks"].0.clone();
     assert_eq!(map["case"], json!(case.id));
     case
 }
@@ -97,7 +154,6 @@ fn digest(value: &Value) -> String {
 /// probe's id, and the digests of its core operations where it reached
 /// `describe_source`.
 fn run_with_digests(map: &Value) -> (BTreeMap<String, Value>, Digests) {
-    let case = the_case(map);
     let bases: Bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let mut observed = BTreeMap::new();
     let mut digests = Digests::new();
@@ -105,7 +161,7 @@ fn run_with_digests(map: &Value) -> (BTreeMap<String, Value>, Digests) {
         let Some(spec) = probe.get(RUNNER) else {
             continue;
         };
-        let mut given = case.clone();
+        let mut given = case_of(map, probe).0.clone();
         given.input.setup = serde_json::from_value(spec["setup"].clone()).unwrap();
         // materialize's query is the case's text, here the query the
         // probe's python-core run sent the core.
@@ -142,7 +198,22 @@ fn observed() -> &'static BTreeMap<String, Value> {
 
 fn ran() -> &'static (BTreeMap<String, Value>, Digests) {
     static RAN: OnceLock<(BTreeMap<String, Value>, Digests)> = OnceLock::new();
-    RAN.get_or_init(|| run_with_digests(&map()))
+    RAN.get_or_init(|| {
+        let map = map();
+        the_case(&map);
+        run_with_digests(&map)
+    })
+}
+
+/// What this host observed of each family map's probes, by file name.
+fn families_observed() -> &'static BTreeMap<String, BTreeMap<String, Value>> {
+    static RAN: OnceLock<BTreeMap<String, BTreeMap<String, Value>>> = OnceLock::new();
+    RAN.get_or_init(|| {
+        family_maps()
+            .into_iter()
+            .map(|(name, map)| (name, run_with_digests(&map).0))
+            .collect()
+    })
 }
 
 fn pin() -> Value {
@@ -464,4 +535,95 @@ fn a_probe_that_succeeds_or_hits_another_entry_fails() {
         ),
         "{failures:?}"
     );
+}
+
+#[test]
+fn the_family_maps_are_held_on_the_rust_host() {
+    let maps = family_maps();
+    let families: Vec<&str> = maps.iter().map(|(_, map)| map["family"].as_str().unwrap()).collect();
+    assert_eq!(
+        families.iter().copied().collect::<BTreeSet<_>>(),
+        BTreeSet::from(["baseline", "decimal", "empty-null", "keys", "nested", "refusal", "time"])
+    );
+    let observed = families_observed();
+    // What refusal_map.py write --rust-observed reads, every map's probes
+    // by map and probe, written before the check so a map can be made from
+    // a run it does not yet hold.
+    if let Ok(path) = std::env::var("SDM_REFUSAL_MAP_OBSERVED") {
+        let mut every: BTreeMap<String, BTreeMap<String, Value>> = observed.clone();
+        every.insert("base.adventureworks.json".into(), self::observed().clone());
+        std::fs::write(path, serde_json::to_vec_pretty(&every).unwrap()).unwrap();
+    }
+    for (name, map) in &maps {
+        let seen = &observed[name];
+        assert_eq!(check(map, seen), Vec::<String>::new(), "{name}");
+        // Each case's first probe is the case's own core operations; the
+        // Python test binds every later one to its case (refusal_map.bound).
+        let mut started = BTreeSet::new();
+        for probe in map["probes"].as_array().unwrap() {
+            let Some(spec) = probe.get(RUNNER) else {
+                continue;
+            };
+            if spec["derive"]["from"] == "case" {
+                let (case, raw) = case_of(map, probe);
+                assert_eq!(spec["core"], raw["core"], "{name}: {}", probe["id"]);
+                started.insert(case.id.clone());
+            }
+        }
+        let wanted: BTreeSet<String> = map["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|id| id.as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(started, wanted, "{name}");
+    }
+}
+
+/// A family map with one of its refused probes, and what this host saw.
+fn a_family_refusal() -> (String, Value, String, String) {
+    for (name, map) in family_maps() {
+        for probe in map["probes"].as_array().unwrap() {
+            if let Some(expect) = probe
+                .get(RUNNER)
+                .and_then(|spec| spec["expect"].as_str())
+                .filter(|expect| *expect != "success")
+            {
+                let id = probe["id"].as_str().unwrap().to_owned();
+                return (name, map.clone(), id, expect.to_owned());
+            }
+        }
+    }
+    panic!("no family map has a refusal on this host")
+}
+
+#[test]
+fn a_family_map_fails_on_an_unlisted_refusal_and_a_stale_entry() {
+    // Seeded: the entry a probe hits removed, so its refusal is one the
+    // map does not list; and an entry no probe hits added.
+    let (name, map, probe, expect) = a_family_refusal();
+    let seen = &families_observed()[&name];
+    assert_eq!(check(&map, seen), Vec::<String>::new());
+    let mut unlisted = map.clone();
+    unlisted["entries"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|entry| entry["id"] != expect.as_str());
+    let failures = check(&unlisted, seen);
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.starts_with(&format!("{probe}: a refusal the map does not list"))),
+        "{failures:?}"
+    );
+    let mut stale = map.clone();
+    stale["entries"].as_array_mut().unwrap().push(json!({
+        "id": "materialize/stale",
+        "observed": {"rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "stale"}},
+    }));
+    assert_eq!(
+        check(&stale, seen),
+        ["materialize/stale: listed for rust-host and not hit"]
+    );
+    assert_eq!(check(&map, &BTreeMap::new()), ["nothing was observed"]);
 }
