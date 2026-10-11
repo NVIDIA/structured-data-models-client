@@ -1098,13 +1098,23 @@ entries:
     reference's PRAGMA text. A name holding a dot is refused by the
     schema's rule on names, INVALID_REQUEST as on the reference: from
     T1.23 the core holds a table's name in the schema to that rule
-    (E59(b)), before the client's own does. Before
+    (E59(b)), before the client's own does. With tables named (T1.23, a
+    rust-host case until T1.24's route), measured at T1.23's fix round 2: a
+    plain name over a source table named with a dot is described on the
+    core, where the reference refuses it (INVALID_REQUEST, its pragma
+    reading the name as another); a source name qualified or quoted
+    (main.users, "users") over a table the source holds is refused
+    INVALID_REQUEST on the core, which reads it by name and finds nothing,
+    where the reference fails in its engine, unnamed
+    (GraphConstructionError). Before
     T1.22 the core refused the double-quoted name with PROVIDER_ERROR
     (DuckDB's parser error as the provider's), against PK-6. The default
     route is unchanged.
   affected_inputs: >-
     Schema.from_source, and what follows it, over a DuckDB source holding a
-    table named with a double quote, under a forced core route.
+    table named with a double quote, under a forced core route; and, from
+    T1.23, a table named in the schema over a source name holding a dot or
+    a double quote, or qualified by its schema.
   cases: [T1.21d, T1.22]
   status: proposed
   approved_by: null
@@ -1281,8 +1291,13 @@ entries:
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     same call is refused at from_source with UnsupportedRequestError, code
     UNSUPPORTED_REQUEST, fields operation describe_source and rule
-    empty_table, naming no table (decision H17). The default route is
-    unchanged.
+    empty_table, naming no table (decision H17). An input with a second
+    fault the core checks first is refused for that one: an empty table
+    the source lists under a name the schema may not give (a backtick, a
+    dot) is INVALID_REQUEST naming the field tables, where the reference
+    reads the table first and raises its RuntimeError (measured at T1.23's
+    fix round 2; the core checks every table's name before reading any).
+    The default route is unchanged.
   affected_inputs: >-
     Schema.from_source over a DuckDB source holding a table with no rows,
     under a forced core route.
@@ -1298,7 +1313,8 @@ entries:
     does not take the input yet, where the reference refuses it for good;
     INVALID_REQUEST, which the reference gives a table it cannot read,
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
-    T1.32d. Never self-approved.
+    T1.32d. The two-fault outcome is pinned, both routes', by the client's
+    tests/test_the_schema_route.py. Never self-approved.
 
 # --- The host layer -------------------------------------------------------------
 
