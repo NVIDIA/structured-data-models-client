@@ -866,14 +866,14 @@ entries:
     mixed-offset cases among them.
   cases: [T1.25]
   refs: [DT-7]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured at T1.25 over sources built from the T0.6 column cases: the
     reference refuses each with the RuntimeError above, the core with the
     named refusal. A refusal for a refusal, in another class and code, so
-    for the owner beside P1B-11's like case (an empty table).
+    for the owner beside P1B-11's like case (an empty table). Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
 
 - id: DT-12
   title: A text time column the source's CAST cannot read, refused as the provider's error
@@ -891,15 +891,15 @@ entries:
     dates and the source's CAST to TIMESTAMP does not.
   cases: [time.text-us-date, time.text-one-bad-value]
   refs: [P1B-1, DT-7]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured at T1.25 on python-core and rust-host; until T1.25 the core
     refused both at describe_source (text_time, P1B-2). The time family's
     map lists it (materialize/text_time_cast, owner T1.32e, which settles
     the code when it admits the cases). A refusal for a refusal under
-    another code, so for the owner, beside P1B-1.
+    another code, so for the owner, beside P1B-1. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
 
 - id: DT-13
   title: A zoned time column read in the fetching cursor's zone, as the reference reads it
@@ -925,9 +925,9 @@ entries:
     the machine's.
   cases: [time.timestamptz]
   refs: [DT-2]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Settles the T1.23 note (subagent P3-4) at T1.25: the reference does not
     read in the session's zone either, so a session zone given to the core
@@ -935,7 +935,7 @@ entries:
     the owner: whether the core should read a zoned column in the source
     session's zone (a change, which would make the answer machine-
     independent) rather than keep the reference's machine dependence.
-    Recommendation: keep for Phase 1.
+    Recommendation: keep for Phase 1. Approved by the owner on 2026-10-11 (E66(d)), relayed by the orchestrator: the machine's zone kept.
 
 - id: DT-14
   title: Time values past what a nanosecond count holds, refused as out of range
@@ -1042,7 +1042,13 @@ entries:
     time, times before 1970, several seeds reaching one row, a TIMESTAMPTZ
     column under a session zone of America/New_York), which the core's own
     requests (tests/neighbor-requests.json, held to sdm_engine::sample's
-    builders) return on DuckDB, by neighbors.rs.
+    builders) return on DuckDB, by neighbors.rs. Rows tying on the whole
+    order (their time and their key, which a key that repeats allows) are
+    in no order the reference fixes, and the rows kept at the cut, and so
+    the request, differ from run to run on both routes (measured at
+    T1.26b's review: three runs, three payloads, on each route); a
+    differential compares such sources only where times or keys are
+    unique.
   affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
   cases: [T1.26, T1.26b]
   status: proposed
@@ -1167,8 +1173,9 @@ entries:
     route, whose description says no key's form, and a link to it is
     inferred (from T1.23 with every table, from T1.24 with tables named too;
     measured at T1.24's review, pinned with the materialize that follows by
-    the client's tests/test_the_materialize_route.py). The default route is
-    unchanged.
+    the client's tests/test_the_materialize_route.py); that reading is
+    P1B-15's from T1.26b, approved by the owner for now. The default route
+    is unchanged.
   affected_inputs: >-
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
@@ -1301,7 +1308,7 @@ entries:
     description carries the key's form and the core matches the reference,
     linking nothing to a one-column sequence key; (b) it carries a flag and
     the core refuses a one-column sequence key by name; (c) approve reading
-    it as a plain name.
+    it as a plain name. The owner chose (c), for now, on 2026-10-11: P1B-15.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1467,15 +1474,15 @@ entries:
   affected_inputs: >-
     A DuckDB source holding a UNION column, under a forced core route.
   cases: [nested.union, T1.21e, T1.32c]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured at T1.21e: the reference observation of the diagnostic case
     contract/cases/s1/nested.union.json, and the entry admission/union of
     contract/refusal-maps/refusal.json, on python-core and rust-host. Both
     refuse; the class and code change. T1.32c resolves it when it admits
-    the case. Never self-approved.
+    the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
 
 - id: P1B-8
   title: time.feature-interval is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -1495,15 +1502,15 @@ entries:
   affected_inputs: >-
     A DuckDB source holding an INTERVAL column, under a forced core route.
   cases: [time.feature-interval, T1.21e, T1.32e]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured at T1.21e: the reference observation of the diagnostic case
     contract/cases/s1/time.feature-interval.json, and the entry
     admission/interval of contract/refusal-maps/time.json, on python-core and
     rust-host. Both refuse; the class and code change. T1.32e resolves it
-    when it admits the case. Never self-approved.
+    when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
 
 - id: P1B-9
   title: nested.fixed-array is described on the core route where the reference fails with an unnamed RuntimeError
@@ -1566,9 +1573,9 @@ entries:
     text_time over a source of one table, column_type over the shop
     base.
   cases: [nested.map, nested.struct, T1.21e, T1.23, T1.24, T1.32c]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured at T1.21e and kept at T1.23: the reference observations of the
     diagnostic cases and the entry describe_source/column_type of
@@ -1578,7 +1585,7 @@ entries:
     admits the cases. The system view (T1.23's review, carried to T1.24,
     which first reaches it through the public call with tables named) is
     pinned, both routes' outcomes, by the client's
-    tests/test_the_schema_route.py. Never self-approved.
+    tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
 
 - id: P1B-11
   title: empty.fact-table is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -1605,9 +1612,9 @@ entries:
     fails with its RuntimeError (pinned by the client's
     tests/test_the_schema_route.py).
   cases: [empty.fact-table, T1.21e, T1.23, T1.24, T1.32d]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Kept refused at T1.23, as the reference refuses it, and owned by T1.32d
     from T1.23 (it was T1.23's, under P1B-2): the entry
@@ -1617,7 +1624,7 @@ entries:
     INVALID_REQUEST, which the reference gives a table it cannot read,
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
     T1.32d. The two-fault outcome is pinned, both routes', by the client's
-    tests/test_the_schema_route.py. Never self-approved.
+    tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
 
 - id: P1B-12
   title: Schema.from_source's keys and time columns of the wrong type are read otherwise on the core route than by the reference
@@ -1663,7 +1670,7 @@ entries:
     Never self-approved.
 
 - id: P1B-13
-  title: materialize on the core route refuses a null where the sampler's walk tells rows apart
+  title: A null where the sampler's walk tells rows apart is no link on the core route
   kind: change
   old_behavior: >-
     The reference's SQL sampler numbers each row it reaches by its key and
@@ -1677,37 +1684,42 @@ entries:
     rows to rows of other examples (measured at T1.26b on generated DuckDB
     sources: of 4 with a null foreign key, every one sends rows of the
     table referred to that no row refers to, and one links 3,690 rows
-    across examples; of 6 with a null key, 5 link rows across examples;
-    the client's tests/test_the_materialize_route.py holds a crossing link
-    on the old route for each rule).
+    across examples; of 6 with a null key, 5 link rows across examples).
+    Where its numbering does not go astray it is clean: every foreign key
+    it looks up null, for one, it looks up no key (one statement of no
+    row) and sends each as null.
   new_behavior: >-
-    On the core route, which only SDM_CORE_ROUTES forces in this build,
-    materialize refuses with UNSUPPORTED_REQUEST naming the rule: a foreign
-    key the walk looks up holding a null among the rows it expands
-    (null_foreign_key), and a key of a table it reads by foreign key
-    holding a null (null_key). A foreign key whose key no row of the table
-    referred to holds is taken as the reference takes it: no row is added,
-    and the row's foreign key is sent as null (an integer key column
-    holding one as float64, as pandas types it). The default route is
-    unchanged.
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    null is no link: a null foreign key the walk looks up adds no row and
+    is sent as null (an integer key column holding one as float64, as
+    pandas types it), the lookup still made, of the keys that are not null
+    (of none when every one is null), as the reference makes it; and a row
+    of a table read by foreign key whose key is null is no other row's,
+    reached anew and never merged. Measured at T1.26b's fix round 1: on
+    the 112 generated sources the core's request is the reference's with
+    its null handling corrected (null dropped before its factorize, each
+    null key read as a key of its own) on every call, statements included,
+    and the reference's own where it is clean (every foreign key looked up
+    null); held by the client's tests/test_the_materialize_route.py
+    (test_a_null_key_the_walk_reaches_links_nothing, the old route's
+    crossing links against none on the core, for both;
+    test_every_foreign_key_looked_up_null_is_the_reference_s_request).
+    The default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route whose sampled tables hold a null foreign key reached
     at the second hop or a null key in a table referring to a sampled one.
   cases: [T1.26b]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
-    Found by T1.26b's old-against-core differential (E49). Refusing is the
-    conservative choice: porting the reference's numbering would reproduce
-    a request whose links name rows of other examples; taking a null as no
-    key, which a correct walk would, is a change of a payload, and the
-    owner's. Some inputs the reference answers without crossing links are
-    refused too (a null foreign key where the last key looked up was not
-    found; a null key reached for one example once). Recommendation:
-    approve the refusal for Phase 1 and decide the null's reading with S3
-    in Phase 4. Never self-approved.
+    Found by T1.26b's old-against-core differential (E49); proposed as a
+    refusal by name (null_foreign_key, null_key) at T1.26b. The owner's
+    decision (b) of 2026-10-11, relayed by the orchestrator (E66(a)): a
+    null is no link, in place of the refusals, conditional on all cases
+    passing and model accuracy holding; benchmark before Phase 1
+    acceptance (T1.29).
 
 - id: P1B-14
   title: A schema's keys, links or time column edited between two materialize calls is followed on the core route
@@ -1733,7 +1745,10 @@ entries:
     its first request; the core's request equal to a fresh old-route
     materializer's of the edited schema each time). A column's type or
     meaning edited is not in the state's fingerprint and changes nothing of
-    this. The default route is unchanged.
+    this. Of the two halves, the payload differs from before T1.26b (the
+    core has always read the schema as it is at the call), and the second
+    check and warning are T1.26b's (until it, the bridge's once-flag kept
+    the second call quiet). The default route is unchanged.
   affected_inputs: >-
     Two or more materialize calls of one PredictiveQuery over a DuckDB
     source under a forced core route, the schema's keys, relationships or a
@@ -1753,6 +1768,34 @@ entries:
     test_a_schema_edited_between_two_calls_is_sampled_as_edited, on both
     routes. Never self-approved.
 
+
+- id: P1B-15
+  title: A key of one column given as a sequence is read as the column's name on the core route
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source keeps a key of one column given as
+    a sequence (['user_id'] or ('user_id',)) as a tuple: it infers no link
+    to it by name, and a question whose entity is that table is refused as
+    having no primary key (INVALID_REQUEST).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    key is the column's name: a link to it is inferred, and the question is
+    materialized (measured at T1.24's review; pinned by the client's
+    tests/test_the_materialize_route.py and tests/test_the_schema_route.py).
+    Split from P1B-2 and P1B-3, which recorded it, at T1.26b. The default
+    route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source under a forced core route with
+    a key of one column given as a sequence, and the materialize after it.
+  cases: [T1.24, T1.25]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    The owner's answer of 2026-10-11, relayed by the orchestrator (E66(c)):
+    option (c), approved for now, of the three recorded at T1.25 in P1B-3's
+    notes (the key's form carried and the reference matched; a flag and a
+    named refusal; the plain name).
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
