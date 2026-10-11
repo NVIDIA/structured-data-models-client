@@ -73,7 +73,7 @@
       "rule": "text_time",
       "owner": "T1.25",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:532",
+      "where": "rust/crates/sdm-schema/src/infer.rs:534",
       "why": "Text whose values could be dates (seven AdventureWorks columns of codes with digits, such as AccountNumber), which reading dates (DT-7, text_shapes) decides",
       "observed": {
         "rust-host": {

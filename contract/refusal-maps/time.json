@@ -70,7 +70,7 @@
       "rule": "text_time",
       "owner": "T1.25",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:532",
+      "where": "rust/crates/sdm-schema/src/infer.rs:534",
       "why": "Text that holds dates: ISO dates, US dates and ISO dates with one unreadable value. The reference infers each as the time column, and its sampling SQL's CAST then fails the US dates and the bad value (INTERNAL_ERROR, P1B-1), which the core's refusal masks; T1.25 reads text dates by date-rules.md and DT-7",
       "observed": {
         "python-core": {
