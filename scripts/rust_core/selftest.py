@@ -2981,8 +2981,11 @@ def scan_cases(results: list[Result]) -> None:
     )
     skips(
         "the contract cases' step allowed to fail",
-        ci('engine', '          python -m pytest contract/tests -q'),
-        f'`{ALLOWED_TO_FAIL}` in job engine',
+        ci(
+            'contract-python-ref-pandas3',
+            '        run: python -m pytest contract/tests -q',
+        ),
+        f'`{ALLOWED_TO_FAIL}` in job contract-python-ref-pandas3',
     )
     skips(
         'control: a step allowed to fail outside the Rust and contract jobs',

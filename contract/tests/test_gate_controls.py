@@ -417,3 +417,27 @@ def test_an_approved_outcome_change_passes_contract_tests_comparison(
     else:
         assert done.returncode == 1, done.stdout
         assert 'against its effective expectation: outcome.stage' in done.stdout
+
+
+def test_a_bootstrap_the_checkpoint_s_tree_contradicts_is_refused(
+    repo: Path, tmp_path: Path, observed: dict[str, list[dict[str, Any]]]
+) -> None:
+    r"""A candidate whose ratchet.py claims the bootstrap for a checkpoint
+    holding ratchet.py does not get to run its own harness: the outer
+    gate.sh reads the checkpoint's tree and refuses (T1.18)."""
+    landed = git(repo, 'rev-parse', 'HEAD')
+
+    def claim(r: Path) -> None:
+        path = r / 'scripts/rust_core/ratchet.py'
+        text = path.read_text()
+        old = "'bootstrap' if found.bootstrap else 'harness'"
+        assert old in text
+        path.write_text(text.replace(old, "'bootstrap'"))
+
+    commit(repo, edit=claim)
+    done = gate(repo, '--base', landed, *files(observed, tmp_path))
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'holds ratchet.py, so its harness judges, not the bootstrap' in (
+        done.stderr
+    )
+    assert 'gate: judged by bootstrap' not in done.stdout

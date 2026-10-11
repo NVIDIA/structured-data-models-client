@@ -165,15 +165,27 @@ def _git(work: Path, *args: str) -> str:
 
 @pytest.mark.parametrize(
     'seed',
-    ['comparator', 'ratchet-too', 'rule-held', 'unreadable', 'other-cell'],
+    [
+        'comparator',
+        'renamed',
+        'ratchet-too',
+        'not-warnings',
+        'landed',
+        'after-landing',
+        'unreadable',
+        'other-cell',
+    ],
 )
-def test_the_floor_cell_reports_only_a_comparator_before_the_cell_rule(
+def test_the_floor_cell_reports_only_a_comparator_before_t1_18_landed(
     tmp_path: Path, seed: str
 ) -> None:
     r"""T1.18's own run (E65(c)): the floor job reports a gate whose one
-    failing step is the comparator, while the checkpoint's ``compare.py``
-    has no cell rule, and says so; a failing ratchet, a checkpoint holding
-    the rule, a checkpoint git cannot read, or another cell's job gates."""
+    failing step is the comparator while the checkpoint's history holds no
+    landing of T1.18, whatever its comparator's text, and says so; a
+    checkpoint that is T1.18's landing or descends from it gates, its
+    comparator's constant renamed or not, as do a failing ratchet beside
+    the comparator, a difference other than ``warnings``, a checkpoint git
+    cannot read, and another cell's job."""
     job = (
         'contract-python-dbr17-pandas2'
         if seed == 'other-cell'
@@ -183,18 +195,28 @@ def test_the_floor_cell_reports_only_a_comparator_before_the_cell_rule(
     work = tmp_path / 'work'
     (work / 'scripts/rust_core').mkdir(parents=True)
     _git(work, 'init', '-q')
-    (work / 'scripts/rust_core/compare.py').write_text(
-        'REFERENCE_CELL = 1\n' if seed == 'rule-held' else '# no cells\n'
-    )
-    _git(work, 'add', '.')
-    _git(
-        work, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'c'
-    )
+    identity = ('-c', 'user.name=t', '-c', 'user.email=t@t')
+
+    def landing(subject: str, comparator: str) -> None:
+        (work / 'scripts/rust_core/compare.py').write_text(comparator)
+        _git(work, 'add', '.')
+        _git(work, *identity, 'commit', '-qm', subject)
+
+    landing('Land T1.26a: the one before', '# no cells\n')
+    if seed == 'renamed':
+        landing('Land T1.26b: a rename', 'REFERENCE_RUNTIME_CELL = 1\n')
+    if seed in ('landed', 'after-landing'):
+        landing('Land T1.18: L2 in CI', 'REFERENCE_RUNTIME_CELL = 1\n')
+    if seed == 'after-landing':
+        landing('Land T1.19: the next', 'REFERENCE_RUNTIME_CELL = 2\n')
     checkpoint = (
         'f' * 40 if seed == 'unreadable' else _git(work, 'rev-parse', 'HEAD')
     )
     failed = ['compare'] + (['ratchet'] if seed == 'ratchet-too' else [])
-    summary = ''.join(f'echo "  FAIL {name}"\n' for name in failed)
+    differs = ['warnings'] + (['result'] if seed == 'not-warnings' else [])
+    summary = ''.join(
+        f'echo "    | DIFFERS {rule}: a case: differs"\n' for rule in differs
+    ) + ''.join(f'echo "  FAIL {name}"\n' for name in failed)
     _executable(
         work / 'scripts/rust_core/gate.sh',
         '#!/usr/bin/env bash\n'
@@ -222,7 +244,7 @@ def test_the_floor_cell_reports_only_a_comparator_before_the_cell_rule(
         text=True,
         check=False,
     )
-    if seed == 'comparator':
+    if seed in ('comparator', 'renamed'):
         assert done.returncode == 0, done.stdout + done.stderr
         assert 'gate: REPORT-ONLY in floor-pandas2.2' in done.stdout
     else:
