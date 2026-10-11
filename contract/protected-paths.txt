@@ -17,6 +17,7 @@ contract/bases.yaml
 contract/fixtures/**
 contract/*.schema.json
 contract/*-vectors.json
+contract/request-kinds.json
 contract/scripted-endpoint.json
 contract/pinned/**
 contract/refusal-maps/**
