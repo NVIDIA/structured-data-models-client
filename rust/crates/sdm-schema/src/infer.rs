@@ -7,8 +7,10 @@
 //! and the preview's values, the primary key from the catalog or, where it
 //! declares none, from names and values, and the time column among the
 //! timestamps, those named as a load, an edit or a birth passed over
-//! (T1.21d). Every path these rules take that this build does not port is
-//! refused by name ([`crate::not_yet`]).
+//! (T1.21d), and from T1.23 those whose values say nothing, then the one
+//! left, the creation stamp or the earliest; a list column left out.
+//! Every path these rules take that this build does not port is refused
+//! by name ([`crate::not_yet`]).
 
 use std::collections::BTreeSet;
 

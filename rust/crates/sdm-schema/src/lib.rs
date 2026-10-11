@@ -24,7 +24,10 @@
 //! a timestamp passed over by its name, links inferred by name and kept
 //! where they join, a lone edit stamp settled by them, the columns joined
 //! on marked, the warnings, and the consistency check of the schema
-//! `materialize` is handed.
+//! `materialize` is handed. From T1.23 (decision E59) it holds the rest of
+//! the time column's choice, a list column left out, and the keys, time
+//! columns and relationships a caller names; its warnings are codes and
+//! fields, which each host words.
 //!
 //! - [`catalog`] reads the key counts.
 //! - [`infer`] infers one table: each column's data and semantic types,

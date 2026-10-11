@@ -11,15 +11,18 @@
 //! declared foreign keys of every table (one step); and, when keys are
 //! checked, one count over every key the source does not enforce. Each
 //! catalog answer is read by the run's data layer, in no dialect's shape
-//! (decision E54), before anything here reads it. As built
-//! at T1.11b the operation is thin: it describes every table of the source
-//! with no overrides, and refuses by name ([`sdm_schema::not_yet`]) the
-//! inputs whose description takes a rule it does not port yet (register
-//! entry P1B-2). From T1.21d the description is the schema as the
-//! reference's client assembles it ([`sdm_schema::assemble`], decision
-//! E55): a keyless table keyed by the column foreign keys refer to before
-//! the count, then the links, the edit stamps, the columns joined on, and
-//! the warnings, which the run gives the host.
+//! (decision E54), before anything here reads it. It refuses by name
+//! ([`sdm_schema::not_yet`]) an input whose description takes a rule it
+//! does not port yet (register entry P1B-2). From T1.21d the description
+//! is the schema as the reference's client assembles it
+//! ([`sdm_schema::assemble`], decision E55): a keyless table keyed by the
+//! column foreign keys refer to before the count, then the links, the edit
+//! stamps, the columns joined on, and the warnings, which the run gives the
+//! host as codes and fields. From T1.23 (decision E59) it takes tables
+//! named, each read by its source name with no listing of the source's
+//! tables, the keys and time columns named, applied between the reading and
+//! the count, and the relationships given, in place of the declared and
+//! inferred ones.
 
 use std::future::Future;
 use std::pin::Pin;
