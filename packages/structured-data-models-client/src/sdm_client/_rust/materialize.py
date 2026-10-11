@@ -158,9 +158,10 @@ def description(schema: Schema) -> dict[str, Any]:
 
 
 def _anchor(value: Any) -> dict[str, Any] | None:
-    r"""The anchor time as the contract's ``ts`` scalar, in nanoseconds with
-    no zone; a zoned one read at its UTC wall clock, as the engine reads it.
-    The literal ``'entity'`` is carried as ``anchor_entity``, beside it.
+    r"""The anchor time as the contract's ``ts`` scalar, in nanoseconds; a
+    zoned one as its UTC instant with its zone, which the core reads at its
+    UTC wall clock, as the engine reads it (T1.25). The literal ``'entity'``
+    is carried as ``anchor_entity``, beside it.
     """
     import pandas as pd
 
@@ -172,9 +173,8 @@ def _anchor(value: Any) -> dict[str, Any] | None:
             f"'entity' (got {type(value).__name__})",
             code='INVALID_REQUEST',
         )
-    if value.tzinfo is not None:
-        value = value.tz_convert('UTC').tz_localize(None)
-    return codec.timestamp(int(value.as_unit('ns').value), 'ns', None)
+    zone = None if value.tzinfo is None else str(value.tzinfo)
+    return codec.timestamp(int(value.as_unit('ns').value), 'ns', zone)
 
 
 def _indices(indices: Sequence[Any], schema: Schema, entity: str) -> Any:

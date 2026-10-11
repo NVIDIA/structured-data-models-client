@@ -418,6 +418,23 @@ pub enum Determinism {
     Unseeded,
 }
 
+/// How a provider's source reads a time it stores as text: which of the
+/// reference's two readings the core applies to the text it fetches from
+/// the provider (register DT-7). The provider declares it; the core picks
+/// its reader by it, never by a dialect.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TextTimes {
+    /// Each value on its own, as the reference's engine reads a SQL
+    /// source's text time column (`to_datetime(values, unit='ns')`).
+    ValueByValue,
+    /// The column by the client's rules (`date-rules.md`, "The client
+    /// rules"), as the reference reads a frame's time column.
+    ClientRules,
+}
+
 /// What a provider answers: a host provider declares it, and the data
 /// layer gives it for each SQL dialect it renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -433,6 +450,10 @@ pub struct ProviderCapabilities {
     /// sample is planned; which seeds a provider takes is the provider's
     /// to declare, never a name the core matches.
     pub max_seed: Option<u64>,
+    /// How the source reads a time it stores as text (register DT-7);
+    /// `None` declares no reading, and the core refuses to read text times
+    /// from it (`UNSUPPORTED_REQUEST`, rule `text_times`).
+    pub text_times: Option<TextTimes>,
 }
 
 /// A built-in SQL dialect, by the name the host gives it. The contract

@@ -1479,6 +1479,7 @@ dependencies = [
  "arrow-schema",
  "jiff",
  "sdm-contract",
+ "sdm-schema",
  "serde_json",
 ]
 

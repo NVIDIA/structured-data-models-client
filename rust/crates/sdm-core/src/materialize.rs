@@ -31,16 +31,16 @@ use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
-    Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, TimestampMicrosecondType,
-    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type,
-    UInt32Type, UInt64Type,
+    Date32Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type,
+    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
-use arrow_array::{Array, ArrayRef, RecordBatch, UInt32Array};
+use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32Array};
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, KeySet, MATCHES_COLUMN,
-    SeedBound, TableColumn, Window,
+    SeedBound, TableColumn, TextTimes, Window,
 };
 use sdm_contract::ops::{
     ColumnRef, Materialized, OperationResult, ProfileName, ProfileSpec, QueryColumn, QuerySchema,
@@ -56,6 +56,8 @@ use sdm_engine::keys::{self, Key};
 use sdm_engine::not_yet;
 use sdm_engine::random::{Entropy, default_rng};
 use sdm_engine::sample::{self, Values};
+use sdm_engine::time::Instant;
+use sdm_engine::time::text::{Reader, Unread};
 use sdm_request::payload::{self, Sampled, SampledLink, SampledTable};
 
 use crate::describe::{ask, describe};
@@ -314,6 +316,156 @@ fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreErro
             .transpose()
         })
         .collect()
+}
+
+/// How `materialize` reads the times a source returns as anything but a
+/// zone-less timestamp, as the reference's engine reads every column a
+/// fetch returns whose meaning is a timestamp (`Table._sanitize`, its
+/// `to_datetime`): a timestamp with a zone at its UTC instants, the zone
+/// dropped; a date at its midnight; text by the reading the provider
+/// declares (`ProviderCapabilities::text_times`, register DT-7), never by
+/// a dialect, each value read as no time dropped and warned of
+/// (`TIME_VALUES_UNREAD`), as the reference drops it and warns.
+struct Times {
+    reader: Reader,
+    text: Option<TextTimes>,
+}
+
+impl Times {
+    /// `batch`, fetched from `table`, with each column whose meaning is a
+    /// timestamp read so.
+    fn read(
+        &self,
+        asker: &Asker,
+        table: &Table,
+        batch: RecordBatch,
+    ) -> Result<RecordBatch, CoreError> {
+        let schema = batch.schema();
+        let mut fields = Vec::with_capacity(schema.fields().len());
+        let mut columns = Vec::with_capacity(schema.fields().len());
+        let mut read_any = false;
+        for (field, array) in schema.fields().iter().zip(batch.columns()) {
+            let timestamp = table
+                .column(field.name())
+                .is_some_and(|c| c.stype == sdm_contract::ops::Stype::Timestamp);
+            match timestamp
+                .then(|| self.column(asker, table, field.name(), array))
+                .transpose()?
+                .flatten()
+            {
+                Some(read) => {
+                    read_any = true;
+                    fields.push(arrow_schema::Field::new(
+                        field.name(),
+                        read.data_type().clone(),
+                        field.is_nullable(),
+                    ));
+                    columns.push(read);
+                }
+                None => {
+                    fields.push(field.as_ref().clone());
+                    columns.push(Arc::clone(array));
+                }
+            }
+        }
+        if !read_any {
+            return Ok(batch);
+        }
+        RecordBatch::try_new(Arc::new(arrow_schema::Schema::new(fields)), columns)
+            .map_err(|_| internal("a fetch's times do not read back into its rows"))
+    }
+
+    /// Column `name` of `table` read to a zone-less timestamp, or `None`
+    /// when it is one already or of a type no reading takes.
+    fn column(
+        &self,
+        asker: &Asker,
+        table: &Table,
+        name: &str,
+        array: &ArrayRef,
+    ) -> Result<Option<ArrayRef>, CoreError> {
+        macro_rules! unzoned {
+            ($t:ty) => {
+                Arc::new(
+                    array
+                        .as_primitive::<$t>()
+                        .clone()
+                        .with_timezone_opt::<Arc<str>>(None),
+                ) as ArrayRef
+            };
+        }
+        Ok(Some(match array.data_type() {
+            DataType::Timestamp(_, None) => return Ok(None),
+            DataType::Timestamp(ArrowUnit::Second, Some(_)) => unzoned!(TimestampSecondType),
+            DataType::Timestamp(ArrowUnit::Millisecond, Some(_)) => {
+                unzoned!(TimestampMillisecondType)
+            }
+            DataType::Timestamp(ArrowUnit::Microsecond, Some(_)) => {
+                unzoned!(TimestampMicrosecondType)
+            }
+            DataType::Timestamp(ArrowUnit::Nanosecond, Some(_)) => {
+                unzoned!(TimestampNanosecondType)
+            }
+            DataType::Date32 => {
+                let days = array.as_primitive::<Date32Type>();
+                let nanos = days
+                    .iter()
+                    .map(|d| {
+                        d.map(|d| Instant::from_days(d).to_count(ArrowUnit::Nanosecond, name))
+                            .transpose()
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Arc::new(TimestampNanosecondArray::from(nanos))
+            }
+            DataType::Utf8 => {
+                let text = array.as_string::<i32>();
+                let values: Vec<Option<&str>> = text.iter().collect();
+                let read = match self.text {
+                    Some(TextTimes::ValueByValue) => self.reader.each(&values),
+                    Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
+                    None => return Err(not_yet("text_times")),
+                }
+                .map_err(|unread| match unread {
+                    Unread::Undecided => not_yet("text_time"),
+                    Unread::MixedZones => not_yet("text_time_zones"),
+                })?;
+                let mut unread = 0;
+                let mut examples: Vec<Scalar> = Vec::new();
+                for (value, at) in values.iter().zip(&read) {
+                    if let (Some(value), None) = (value, at) {
+                        unread += 1;
+                        let example = Scalar::Utf8((*value).to_owned());
+                        if examples.len() < 3 && !examples.contains(&example) {
+                            examples.push(example);
+                        }
+                    }
+                }
+                if unread > 0 {
+                    asker.warn(CoreWarning {
+                        code: sdm_schema::assemble::TIME_VALUES_UNREAD.into(),
+                        message: "a time column's values were read as no time and dropped".into(),
+                        fields: [
+                            ("table".to_owned(), Detail::text(&table.name)),
+                            ("column".to_owned(), Detail::text(name)),
+                            ("unread".to_owned(), count(unread)),
+                            ("rows".to_owned(), count(values.len())),
+                            ("examples".to_owned(), Detail::List(examples)),
+                        ]
+                        .into(),
+                    });
+                }
+                let nanos = read
+                    .iter()
+                    .map(|at| {
+                        at.map(|at| at.to_count(ArrowUnit::Nanosecond, name))
+                            .transpose()
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Arc::new(TimestampNanosecondArray::from(nanos))
+            }
+            _ => return Ok(None),
+        }))
+    }
 }
 
 /// The batch positions a `neighbors` or `lookup` answer names.
@@ -757,6 +909,13 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         }
     }
 
+    // The times every fetch below returns, read as the reference's engine
+    // reads them.
+    let read_times = Times {
+        reader: crate::describe::text_reader(&facts)?,
+        text: asker.capabilities()?.text_times,
+    };
+
     // The anchor, and the times it is checked against.
     let mut bounds: Option<Bounds> = None;
     let anchor = match anchor_time {
@@ -766,17 +925,15 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             bounds = Some(read);
             max
         }
-        Some(Scalar::Timestamp {
-            unit,
-            zone: None,
-            value,
-        }) => match unit {
+        // A zoned anchor counts its UTC instant, the zone only how it is
+        // shown: read at its UTC wall clock, as the reference's engine
+        // reads one (`to_naive_utc`).
+        Some(Scalar::Timestamp { unit, value, .. }) => match unit {
             Unit::Ns => value,
             Unit::Us => value
                 .checked_mul(1_000)
                 .ok_or_else(|| sample::out_of_range("anchor_time"))?,
         },
-        Some(Scalar::Timestamp { .. }) => return Err(not_yet("anchor_zone")),
         Some(_) => {
             return Err(invalid("an anchor time is a ts scalar", "anchor_time"));
         }
@@ -833,19 +990,23 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             column: time.clone(),
         });
     }
-    let sampled = one_batch(
-        &ask(
-            &asker,
-            DataRequest::SampleEntities {
-                table: entity.source.clone(),
-                key: vec![key.clone()],
-                n: trials as u64,
-                seed: seed_value,
-                columns: entity.ordered(&entity_columns),
-                filters,
-            },
-        )
-        .await?,
+    let sampled = read_times.read(
+        &asker,
+        entity,
+        one_batch(
+            &ask(
+                &asker,
+                DataRequest::SampleEntities {
+                    table: entity.source.clone(),
+                    key: vec![key.clone()],
+                    n: trials as u64,
+                    seed: seed_value,
+                    columns: entity.ordered(&entity_columns),
+                    filters,
+                },
+            )
+            .await?,
+        )?,
     )?;
     if sampled.num_rows() == 0 {
         return Err(invalid("the entity table holds no row to sample", "query"));
@@ -895,30 +1056,34 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .ok_or_else(|| internal("the aggregated table has no time column"))?;
     let label_columns = BTreeSet::from([asked.column.clone(), time_column.clone()]);
     let seeds = sample::seeds(example_keys, vec![(SEED_END, ends), (SEED_START, starts)])?;
-    let labelled = one_batch(
-        &ask(
-            &asker,
-            DataRequest::Neighbors {
-                table: aggregated.source.clone(),
-                key: edge.fkey.clone(),
-                columns: aggregated.ordered(&label_columns),
-                seeds: key_set(&asker, seeds)?,
-                window: Some(Window {
-                    column: time_column.clone(),
-                    lower: Some(SeedBound {
-                        seed_column: SEED_START.into(),
-                        inclusive: false,
+    let labelled = read_times.read(
+        &asker,
+        aggregated,
+        one_batch(
+            &ask(
+                &asker,
+                DataRequest::Neighbors {
+                    table: aggregated.source.clone(),
+                    key: edge.fkey.clone(),
+                    columns: aggregated.ordered(&label_columns),
+                    seeds: key_set(&asker, seeds)?,
+                    window: Some(Window {
+                        column: time_column.clone(),
+                        lower: Some(SeedBound {
+                            seed_column: SEED_START.into(),
+                            inclusive: false,
+                        }),
+                        upper: Some(SeedBound {
+                            seed_column: SEED_END.into(),
+                            inclusive: true,
+                        }),
                     }),
-                    upper: Some(SeedBound {
-                        seed_column: SEED_END.into(),
-                        inclusive: true,
-                    }),
-                }),
-                per_seed: None,
-                order: None,
-            },
-        )
-        .await?,
+                    per_seed: None,
+                    order: None,
+                },
+            )
+            .await?,
+        )?,
     )?;
     let labels = sample::sum_labels(
         examples.index.len(),
@@ -963,17 +1128,21 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .map(|(name, _)| name)
         .collect();
     entity_names.insert(key.clone());
-    let looked_up = one_batch(
-        &ask(
-            &asker,
-            DataRequest::Lookup {
-                table: entity.source.clone(),
-                key: key.clone(),
-                columns: entity.ordered(&entity_names),
-                seeds: key_set(&asker, sample::seeds(all_keys, vec![])?)?,
-            },
-        )
-        .await?,
+    let looked_up = read_times.read(
+        &asker,
+        entity,
+        one_batch(
+            &ask(
+                &asker,
+                DataRequest::Lookup {
+                    table: entity.source.clone(),
+                    key: key.clone(),
+                    columns: entity.ordered(&entity_names),
+                    seeds: key_set(&asker, sample::seeds(all_keys, vec![])?)?,
+                },
+            )
+            .await?,
+        )?,
     )?;
     let positions = batches(&looked_up, examples_total)?;
     let matches = named(&looked_up, MATCHES_COLUMN)?
@@ -1043,20 +1212,24 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             ),
             None => (vec![], None),
         };
-        let neighbors = one_batch(
-            &ask(
-                &asker,
-                DataRequest::Neighbors {
-                    table: table.source.clone(),
-                    key: fkey.clone(),
-                    columns: columns.clone(),
-                    seeds: key_set(&asker, sample::seeds(Arc::clone(&entity_keys), times)?)?,
-                    window,
-                    per_seed: Some(NEIGHBORS[0]),
-                    order: Some(sample::tie_break(table)?),
-                },
-            )
-            .await?,
+        let neighbors = read_times.read(
+            &asker,
+            table,
+            one_batch(
+                &ask(
+                    &asker,
+                    DataRequest::Neighbors {
+                        table: table.source.clone(),
+                        key: fkey.clone(),
+                        columns: columns.clone(),
+                        seeds: key_set(&asker, sample::seeds(Arc::clone(&entity_keys), times)?)?,
+                        window,
+                        per_seed: Some(NEIGHBORS[0]),
+                        order: Some(sample::tie_break(table)?),
+                    },
+                )
+                .await?,
+            )?,
         )?;
         if neighbors.num_rows() == 0 {
             continue;

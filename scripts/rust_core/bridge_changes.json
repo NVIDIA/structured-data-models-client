@@ -57,7 +57,7 @@
       "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor": {
-      "moved": "T1.24 (E61): the anchor_entity refusal moved into the core; 'entity' is carried as Materialize.anchor_entity"
+      "moved": "T1.25: the ledger's zoned anchor time moved into sdm-core's materialize, which reads a zoned ts scalar at its UTC instant; the bridge sends the instant with its zone"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T1.24 (E61): the outputs refusal moved into the core; _not_taken, which only it called, removed"

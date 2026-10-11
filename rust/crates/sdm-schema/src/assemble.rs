@@ -42,6 +42,9 @@ pub const TWO_WAYS_TO_A_TABLE: &str = "TWO_WAYS_TO_A_TABLE";
 pub const COLUMNS_LEFT_OUT: &str = "COLUMNS_LEFT_OUT";
 /// The warning that a time of day's values were read as no time.
 pub const TIME_VALUES_UNREAD: &str = "TIME_VALUES_UNREAD";
+/// The warning that text was read as dates by a format that puts the day
+/// first.
+pub const DATES_READ_DAY_FIRST: &str = "DATES_READ_DAY_FIRST";
 
 /// The schema's warnings, each with the variants it gives (none: one
 /// sentence), which a host words (decision E59(d)); `tests/assemble.rs`
@@ -66,6 +69,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     (TWO_WAYS_TO_A_TABLE, &[]),
     (COLUMNS_LEFT_OUT, &[]),
     (TIME_VALUES_UNREAD, &[]),
+    (DATES_READ_DAY_FIRST, &[]),
 ];
 
 /// A schema assembled: its description and the warnings given, in order.
@@ -758,6 +762,28 @@ pub fn unread_times(table: &InferredTable) -> Vec<CoreWarning> {
                     ("unread", count(unread.unread)),
                     ("rows", count(unread.rows)),
                     ("examples", Detail::List(unread.examples.clone())),
+                ],
+            )
+        })
+        .collect()
+}
+
+/// The warnings of the text columns whose dates the reference's engine
+/// read by a format that puts the day first, which pandas warns of as it
+/// guesses the format: one a column, naming the table, the column and the
+/// format, as pandas writes it.
+pub fn day_first(table: &InferredTable) -> Vec<CoreWarning> {
+    table
+        .day_first
+        .iter()
+        .map(|(column, format)| {
+            warning(
+                DATES_READ_DAY_FIRST,
+                "text was read as dates by a format that puts the day first",
+                vec![
+                    ("table", Detail::text(&table.name)),
+                    ("column", Detail::text(column)),
+                    ("format", Detail::text(format)),
                 ],
             )
         })

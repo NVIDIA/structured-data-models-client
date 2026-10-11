@@ -44,7 +44,7 @@ use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
     Filter, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, SEED_BATCH, SEED_KEY, SqlParam,
-    SqlStatement, TableColumn, TableKey, TieBreak, TieTerm, Window, field,
+    SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm, Window, field,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -128,6 +128,9 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         // DuckDB's reservoir sampling repeats under a seed (REPEATABLE).
         sampling: Determinism::SeededStable,
         max_seed: Some(MAX_SEED),
+        // The reference's engine reads a SQL source's text times one by
+        // one (register DT-7).
+        text_times: Some(TextTimes::ValueByValue),
     }
 }
 

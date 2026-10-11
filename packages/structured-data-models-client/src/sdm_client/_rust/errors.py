@@ -142,6 +142,7 @@ WARNINGS: dict[str, type[Warning]] = {
     'CONTEXT_BEFORE_DATA': UserWarning,
     'ANCHOR_AFTER_DATA': UserWarning,
     'TIME_VALUES_UNREAD': UserWarning,
+    'DATES_READ_DAY_FIRST': UserWarning,
 }
 
 #: The words of a link that does not refer to its table's key, around
@@ -161,7 +162,8 @@ _NOT_THE_KEY = (
 #: the core meant. A template is ``str.format``'s, over the warning's
 #: fields decoded, with ``!l`` for a list of names as the reference's
 #: ``_and_list`` writes them, ``!t`` for a date or timestamp as pandas
-#: writes one, and ``!T`` for a list of times of day as Python writes it.
+#: writes one (text a time column holds as the reference names it), and
+#: ``!T`` for a list of times of day, or of text, as Python writes it.
 #: A code this table does not hold is shown with the core's own sentence.
 SAID: dict[str, dict[str | None, str]] = {
     'TIME_COLUMNS_GUESSED': {
@@ -214,6 +216,13 @@ SAID: dict[str, dict[str | None, str]] = {
         None: (
             'Could not parse {unread:,} of {rows:,} value(s) of time column '
             "'{column}' (for example {examples!T}); they were dropped as 'NaT'"
+        )
+    },
+    'DATES_READ_DAY_FIRST': {
+        None: (
+            'Parsing dates in {format} format when dayfirst=False (the '
+            'default) was specified. Pass `dayfirst=True` or specify a format '
+            'to silence this warning.'
         )
     },
     'LINK_CANNOT_JOIN': {
@@ -307,9 +316,16 @@ class _Words(string.Formatter):
                 return ' and '.join(quoted)
             return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
         if conversion == 't':
+            if isinstance(value, str):
+                return str(_as_timestamp(value))
             return str(_timestamp(value))
         if conversion == 'T':
-            return repr([_time_of_day(item) for item in value])
+            return repr(
+                [
+                    item if isinstance(item, str) else _time_of_day(item)
+                    for item in value
+                ]
+            )
         return super().convert_field(value, conversion)
 
 
@@ -326,6 +342,18 @@ def _timestamp(value: codec.Temporal) -> Any:
     if value.zone is None:
         return pd.Timestamp(value.value, unit=unit)
     return pd.Timestamp(value.value, unit=unit, tz='UTC').tz_convert(value.zone)
+
+
+def _as_timestamp(value: str) -> Any:
+    r"""Text a time column holds, as the reference names it in a warning
+    (``time_columns._as_timestamp``): a timestamp where pandas reads it as
+    one, else the text."""
+    import pandas as pd
+
+    try:
+        return pd.Timestamp(value)
+    except ValueError:
+        return value
 
 
 def _time_of_day(value: codec.Temporal) -> datetime.time:

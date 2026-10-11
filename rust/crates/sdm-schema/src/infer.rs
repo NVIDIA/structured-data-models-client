@@ -28,6 +28,34 @@ use sdm_contract::catalog::{CatalogColumn, CatalogKey, KeyKind};
 /// rows unread, which the reference then reads the whole table for.
 pub const PREVIEW_ROWS: u64 = 1_000;
 
+/// How inference reads text as times: the reference's engine reading,
+/// `pd.to_datetime(values, errors='coerce')`, or its `utc=True` form, each
+/// value's instant in nanoseconds since the epoch, in UTC, or `None`.
+/// `sdm-engine::time::text` holds it (T1.25), above this crate; `sdm-core`
+/// hands it in.
+pub trait TextTimes {
+    fn read(&self, values: &[Option<&str>], utc: bool) -> Result<Vec<Option<i128>>, TextUnread>;
+
+    /// How many of `values` read as no time whichever way the reference
+    /// reads them, or `None` when the reading might be refused for offsets
+    /// mixed: what bounds the share a reading that does not decide reads.
+    fn never_read(&self, values: &[Option<&str>]) -> Option<usize>;
+
+    /// The format the reference guesses from `values` when it puts the day
+    /// before the month, which the reference warns of as it reads them.
+    fn day_first_format(&self, values: &[Option<&str>]) -> Option<String>;
+}
+
+/// Why text does not read as times.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextUnread {
+    /// A value's reading takes a rule the reader does not port.
+    Undecided,
+    /// Offsets mixed where the reading is not to UTC: the reference's
+    /// reading raises, and its inference refuses the source.
+    MixedZones,
+}
+
 /// One column, inferred.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredColumn {
@@ -176,6 +204,9 @@ pub struct InferredTable {
     pub left_out: Vec<LeftOut>,
     /// The times of day the engine's reading drops, in table order.
     pub unread_times: Vec<UnreadTimes>,
+    /// The text columns whose dates the engine's reading guessed a format
+    /// for that puts the day first, with the format, in table order.
+    pub day_first: Vec<(String, String)>,
     pub primary_key: Option<String>,
     /// How inference chose the time column, before the links settle a
     /// lone edit stamp (`crate::assemble`).
@@ -211,9 +242,10 @@ impl InferredTable {
 
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
-/// admitted), which holds the catalog's columns in order. Inference reads
-/// the table by the name the schema gives it, as the reference's engine
-/// does (its key's guess is by that name).
+/// admitted), which holds the catalog's columns in order, reading text as
+/// times by `times`. Inference reads the table by the name the schema
+/// gives it, as the reference's engine does (its key's guess is by that
+/// name).
 pub fn table(
     name: &str,
     source: &str,
@@ -221,6 +253,7 @@ pub fn table(
     constraints: &[CatalogKey],
     schema: &Schema,
     batches: &[RecordBatch],
+    times: &dyn TextTimes,
 ) -> Result<InferredTable, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
@@ -245,9 +278,11 @@ pub fn table(
     let mut columns = Vec::with_capacity(catalog.len());
     let mut samples = Vec::with_capacity(catalog.len());
     let mut instants = Vec::with_capacity(catalog.len());
+    let mut presence = Vec::with_capacity(catalog.len());
     let mut firsts = Vec::with_capacity(catalog.len());
     let mut left_out = Vec::new();
     let mut unread_times = Vec::new();
+    let mut day_first = Vec::new();
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
@@ -275,7 +310,11 @@ pub fn table(
                 });
             }
         }
-        let stype = stype_of(&declared.name, dtype, &sample)?;
+        let mut guessed = None;
+        let stype = stype_of(&declared.name, dtype, &sample, times, &mut guessed)?;
+        if let Some(format) = guessed {
+            day_first.push((declared.name.clone(), format));
+        }
         let is_primary = declared.primary_key || declared_primary.contains(&declared.name);
         if is_primary {
             primary.push(declared.name.clone());
@@ -289,14 +328,44 @@ pub fn table(
             nullable: !is_primary && !declared.not_null,
             unique: declared_unique.contains(&declared.name),
         });
-        samples.push(sample);
+        let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {
             // Dropped by the engine's reading: none is held.
-            vec![None; rows]
+            Ok(vec![None; rows])
+        } else if text_time {
+            // Read as the time column's choice reads them, to UTC; only
+            // where they start is asked of them, and a reading that does
+            // not decide is refused there.
+            let text: Vec<Option<&str>> = sample
+                .iter()
+                .map(|v| match v {
+                    Some(Value::Text(t)) => Some(t.as_str()),
+                    _ => None,
+                })
+                .collect();
+            times.read(&text, true)
         } else {
-            values::instants(batches, index)
+            Ok(values::instants(batches, index))
         });
-        firsts.push(values::first_temporal(batches, index));
+        // What a timestamp held in each row: text as it is written, any
+        // other as its instant (a time of day as none, as above).
+        presence.push(if text_time {
+            sample.clone()
+        } else {
+            match instants.last() {
+                Some(Ok(read)) => read.iter().map(|v| v.map(Value::Int)).collect(),
+                _ => vec![None; rows],
+            }
+        });
+        firsts.push(if text_time {
+            sample.iter().flatten().next().and_then(|v| match v {
+                Value::Text(t) => Some(Scalar::Utf8(t.clone())),
+                _ => None,
+            })
+        } else {
+            values::first_temporal(batches, index)
+        });
+        samples.push(sample);
     }
 
     // The catalog's key, when it declares exactly one single-column one,
@@ -330,6 +399,7 @@ pub fn table(
         &columns,
         &Read {
             instants: &instants,
+            presence: &presence,
             firsts: &firsts,
         },
         rows,
@@ -341,6 +411,7 @@ pub fn table(
         columns,
         left_out,
         unread_times,
+        day_first,
         primary_key: key,
         time_column: time.column.clone(),
         time,
@@ -390,14 +461,22 @@ fn is_numeric(dtype: Dtype) -> bool {
 /// The semantic type: an identifier by its name, a timestamp by its type,
 /// then a category by its name and how many distinct values the first
 /// 1,000 rows hold, else the type's default.
-fn stype_of(name: &str, dtype: Dtype, sample: &[Option<Value>]) -> Result<Stype, CoreError> {
+fn stype_of(
+    name: &str,
+    dtype: Dtype,
+    sample: &[Option<Value>],
+    times: &dyn TextTimes,
+    day_first: &mut Option<String>,
+) -> Result<Stype, CoreError> {
     if matches!(dtype, Dtype::Int | Dtype::Float | Dtype::String) && names::says_id(name) {
         return Ok(Stype::Id);
     }
     match dtype {
         Dtype::Date | Dtype::Time => return Ok(Stype::Timestamp),
         Dtype::String => {
-            text_holds_no_dates(name, sample)?;
+            if text_holds_dates(name, sample, times, day_first)? {
+                return Ok(Stype::Timestamp);
+            }
             text_holds_single_values(sample)?;
         }
         _ => {}
@@ -427,111 +506,47 @@ fn stype_of(name: &str, dtype: Dtype, sample: &[Option<Value>]) -> Result<Stype,
     })
 }
 
-/// The words the reference's date reader knows, which a value without a
-/// digit must hold only of to read as a date: its jump words, weekdays,
-/// months, units, meridians, UTC names, and the relative days.
-const DATE_WORDS: [&str; 61] = [
-    "at",
-    "on",
-    "and",
-    "ad",
-    "m",
-    "t",
-    "of",
-    "st",
-    "nd",
-    "rd",
-    "th",
-    "mon",
-    "monday",
-    "tue",
-    "tuesday",
-    "wed",
-    "wednesday",
-    "thu",
-    "thursday",
-    "fri",
-    "friday",
-    "sat",
-    "saturday",
-    "sun",
-    "sunday",
-    "jan",
-    "january",
-    "feb",
-    "february",
-    "mar",
-    "march",
-    "apr",
-    "april",
-    "may",
-    "jun",
-    "june",
-    "jul",
-    "july",
-    "aug",
-    "august",
-    "sep",
-    "sept",
-    "september",
-    "oct",
-    "october",
-    "nov",
-    "november",
-    "dec",
-    "december",
-    "h",
-    "hour",
-    "hours",
-    "minute",
-    "minutes",
-    "s",
-    "second",
-    "seconds",
-    "am",
-    "pm",
-    "utc",
-    "gmt",
-];
-
-/// Whether `value` cannot read as a date: it holds no digit, and a word
-/// the date reader does not know.
-fn cannot_be_a_date(value: &str) -> bool {
-    if value.chars().any(char::is_numeric) {
-        return false;
-    }
-    let lowered = value.to_lowercase();
-    lowered
-        .split(|c: char| !c.is_alphabetic())
-        .filter(|word| !word.is_empty())
-        .any(|word| {
-            !DATE_WORDS.contains(&word)
-                && !["a", "p", "z", "now", "today", "tomorrow", "yesterday"].contains(&word)
-        })
-}
-
-/// Text is a timestamp to the reference when its first 100 values hold
-/// one and, if its name says time, most of them read as dates, or, if it
-/// does not, every one does. Reading dates is not ported (T1.25, DT-7):
-/// text is taken as no timestamp when those values hold none, or when its
-/// name does not say time and one of them cannot be a date.
-fn text_holds_no_dates(name: &str, sample: &[Option<Value>]) -> Result<(), CoreError> {
-    let first: Vec<&str> = sample
+/// Text is a timestamp to the reference (`contains_timestamp`) when its
+/// first 100 values hold one, and a name that says time is worth 0.3 and
+/// the share of those values its engine reads as dates (`times`, without
+/// `utc`) the rest, scoring 1.0 or more, summed as the reference sums them
+/// in floating point. Where the reading does not decide, the values that
+/// never read bound the share: below the score, the text is no timestamp;
+/// otherwise it is refused (`text_time`, register P1B-2). Offsets mixed,
+/// which the reference refuses unnamed, are refused by name
+/// (`text_time_zones`, register DT-11).
+fn text_holds_dates(
+    name: &str,
+    sample: &[Option<Value>],
+    times: &dyn TextTimes,
+    day_first: &mut Option<String>,
+) -> Result<bool, CoreError> {
+    let first: Vec<Option<&str>> = sample
         .iter()
         .take(100)
         .flatten()
         .filter_map(|v| match v {
-            Value::Text(text) if !text.is_empty() => Some(text.as_str()),
+            Value::Text(text) if !text.is_empty() => Some(Some(text.as_str())),
             _ => None,
         })
         .collect();
     if first.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
-    if !names::says_time(name) && first.iter().any(|v| cannot_be_a_date(v)) {
-        return Ok(());
+    // The format its reading guesses, if day first, which it warns of.
+    *day_first = times.day_first_format(&first);
+    let named = if names::says_time(name) { 0.3 } else { 0.0 };
+    let score = |held: usize| named + held as f64 / first.len() as f64;
+    match times.read(&first, false) {
+        Ok(read) => Ok(score(read.iter().flatten().count()) >= 1.0),
+        Err(TextUnread::MixedZones) => Err(not_yet("text_time_zones")),
+        // A reading that does not decide still says the share it reads
+        // can be no more than the values that never read leave.
+        Err(TextUnread::Undecided) => match times.never_read(&first) {
+            Some(never) if score(first.len() - never) < 1.0 => Ok(false),
+            _ => Err(not_yet("text_time")),
+        },
     }
-    Err(not_yet("text_time"))
 }
 
 /// Text holding a separator (`;`, `:`, `|` or a tab) in its first 500
@@ -721,9 +736,12 @@ fn snake_case(name: &str) -> String {
 
 /// What the preview holds of each column inferred, for the time column's
 /// choice: its values as instants (`values::instants`, a time of day's as
-/// none, since the engine's reading drops them) and its first value held.
+/// none, since the engine's reading drops them; text as the engine reads
+/// it, which may not decide), what each row holds (text as written), and
+/// its first value held.
 struct Read<'a> {
-    instants: &'a [Vec<Option<i128>>],
+    instants: &'a [Result<Vec<Option<i128>>, TextUnread>],
+    presence: &'a [Vec<Option<Value>>],
     firsts: &'a [Option<Scalar>],
 }
 
@@ -774,7 +792,7 @@ fn choose_time_column(
             refused.push((name.clone(), PassedOver::BirthDate));
             continue;
         }
-        if let Some(why) = refused_for_values(&read.instants[i], read.firsts[i].as_ref(), rows) {
+        if let Some(why) = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows) {
             refused.push((name.clone(), why));
             continue;
         }
@@ -830,7 +848,7 @@ fn choose_time_column(
             names_of(&among),
         ));
     }
-    let earliest = earliest(&among, read);
+    let earliest = earliest(&among, read)?;
     Ok(chosen(
         Some(columns[earliest].name.clone()),
         Some(Taken::Earliest),
@@ -841,13 +859,14 @@ fn choose_time_column(
 /// Why a column is passed over for its values (`_refused_for_values`),
 /// read over every row: none held; more than half missing; or, in a table
 /// of more than one row, one value in every row that holds one, which is
-/// named.
+/// named. Text is compared as it is written, as the reference compares the
+/// rows it read.
 fn refused_for_values(
-    instants: &[Option<i128>],
+    presence: &[Option<Value>],
     first: Option<&Scalar>,
     rows: usize,
 ) -> Option<PassedOver> {
-    let held: Vec<i128> = instants.iter().flatten().copied().collect();
+    let held: Vec<&Value> = presence.iter().flatten().collect();
     let missing = rows - held.len();
     if held.is_empty() {
         return Some(PassedOver::Constant {
@@ -871,11 +890,15 @@ fn refused_for_values(
 
 /// The column of `among` whose values start earliest (`_earliest`), the
 /// first in table order on a tie or when none holds a real value: a value
-/// before 1901 or the epoch's midnight is a placeholder, no start.
-fn earliest(among: &[usize], read: &Read<'_>) -> usize {
+/// before 1901 or the epoch's midnight is a placeholder, no start. Text
+/// whose reading does not decide is refused (`text_time`).
+fn earliest(among: &[usize], read: &Read<'_>) -> Result<usize, CoreError> {
     let mut best: Option<(i128, usize)> = None;
     for &i in among {
-        let start = read.instants[i]
+        let instants = read.instants[i]
+            .as_ref()
+            .map_err(|_| not_yet("text_time"))?;
+        let start = instants
             .iter()
             .flatten()
             .copied()
@@ -887,7 +910,7 @@ fn earliest(among: &[usize], read: &Read<'_>) -> usize {
             best = Some((start, i));
         }
     }
-    best.map_or(among[0], |(_, i)| i)
+    Ok(best.map_or(among[0], |(_, i)| i))
 }
 
 #[cfg(test)]
@@ -907,16 +930,5 @@ mod tests {
         assert_eq!(snake_case("UserInfo"), "User_Info");
         assert_eq!(snake_case("HTTPRequest2Go"), "HTTP_Request2_Go");
         assert_eq!(snake_case("already_snake"), "already_snake");
-    }
-
-    #[test]
-    fn a_value_without_digits_or_known_words_cannot_be_a_date() {
-        assert!(cannot_be_a_date("US"));
-        assert!(cannot_be_a_date("in"));
-        assert!(!cannot_be_a_date("March"));
-        assert!(!cannot_be_a_date("now"));
-        assert!(!cannot_be_a_date("2024-01-01"));
-        assert!(!cannot_be_a_date("a"));
-        assert!(!cannot_be_a_date(" "));
     }
 }

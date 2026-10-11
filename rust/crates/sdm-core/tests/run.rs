@@ -47,6 +47,7 @@ where
             optional: BTreeSet::new(),
             max_keys_per_request: None,
             max_seed: None,
+            text_times: None,
             sampling: Determinism::Unseeded,
         },
     };

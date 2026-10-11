@@ -21,7 +21,7 @@ use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataLayer, DataRequest, DescribePart, Determinism, Dialect,
-    FetchPlan, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, ProviderChoice,
+    FetchPlan, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, ProviderChoice, TextTimes,
     catalog_columns,
 };
 use sdm_contract::facts::PlatformFacts;
@@ -153,6 +153,7 @@ fn host() -> ProviderChoice {
             ]),
             max_keys_per_request: None,
             max_seed: None,
+            text_times: None,
             sampling: Determinism::SeededStable,
         },
     }
@@ -906,4 +907,270 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         assert_eq!(refused(&|m| m.options = vec![name.into()]), name);
     }
     assert!(matches!(with(&|_| {}), Ok(Step::Fetch { .. })));
+}
+
+// --- the times a source returns (T1.25) -------------------------------------
+
+/// The shop with orders' time column received as `received` (`dtype`), and
+/// a host provider declaring `text_times`.
+fn shop_with_times(received: ColumnType, dtype: Dtype) -> SourceDescription {
+    let mut shop = shop();
+    let ts = shop.tables[0]
+        .columns
+        .iter_mut()
+        .find(|c| c.name == "ts")
+        .unwrap();
+    ts.received = received;
+    ts.dtype = dtype;
+    shop
+}
+
+fn host_reading(text_times: Option<TextTimes>) -> ProviderChoice {
+    let ProviderChoice::Host { mut capabilities } = host() else {
+        unreachable!()
+    };
+    capabilities.text_times = text_times;
+    ProviderChoice::Host { capabilities }
+}
+
+/// Runs `run` to its end over the shop, answering every request: the
+/// catalog as [`catalog`] does, four users, each label window and first
+/// hop with orders 0 and 1 of the first seed's entity, their times
+/// `ts(2)`, and the lookup with one row per seed; the result or the
+/// error, and the warnings given.
+fn times_to_the_end(
+    run: &mut Run,
+    ts: &dyn Fn(usize) -> ArrayRef,
+) -> (Result<Vec<u8>, CoreError>, Vec<sdm_contract::CoreWarning>) {
+    let mut warnings = Vec::new();
+    loop {
+        let step = match run.next() {
+            Ok(step) => step,
+            Err(err) => return (Err(err), warnings),
+        };
+        warnings.extend(run.take_warnings());
+        let requests = match step {
+            Step::Fetch { requests } => requests,
+            Step::Done { result } => {
+                let sdm_contract::ops::OperationResult::Materialize(done) = result else {
+                    panic!("not a materialize result");
+                };
+                let Some(Attachment::Bytes(payload)) = run.take_attachment(done.state.payload)
+                else {
+                    panic!("the payload is attached");
+                };
+                return (Ok(payload), warnings);
+            }
+            other => panic!("{other:?}"),
+        };
+        for asked in requests {
+            // Two orders of the first seed's entity, 0 and 1, in its batch.
+            let rows = |columns: &[String], key: ArrayRef| -> FetchResult {
+                let n = 2;
+                let mut answer: Vec<(&str, ArrayRef)> = columns
+                    .iter()
+                    .map(|c| {
+                        let column: ArrayRef = match c.as_str() {
+                            "order_id" => Arc::new(Int64Array::from(vec![0_i64, 1])),
+                            "user_id" => Arc::clone(&key),
+                            "price" => Arc::new(arrow_array::Float64Array::from(vec![1.5; n])),
+                            "ts" => ts(n),
+                            _ => shop_column(c, n, None),
+                        };
+                        (c.as_str(), column)
+                    })
+                    .collect();
+                answer.push((
+                    BATCH_COLUMN,
+                    Arc::new(Int64Array::from(vec![0_i64; n])) as ArrayRef,
+                ));
+                data(answer)
+            };
+            let answer = match &asked.request {
+                DataRequest::Describe { .. } => indexes(&[]),
+                DataRequest::TimeBounds { .. } => catalog(&asked.request).unwrap(),
+                DataRequest::SampleEntities { columns, .. } => {
+                    let keys: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2, 3]));
+                    data(
+                        columns
+                            .iter()
+                            .map(|c| {
+                                let given = (c == "user_id").then(|| Arc::clone(&keys));
+                                (c.as_str(), shop_column(c, 4, given))
+                            })
+                            .collect(),
+                    )
+                }
+                DataRequest::Neighbors { columns, seeds, .. } => {
+                    let Some(Attachment::Arrow(seeds)) = run.take_attachment(seeds.attachment)
+                    else {
+                        panic!("the neighbors' seeds are attached");
+                    };
+                    let first = seeds.batches[0].column(0).slice(0, 1);
+                    let key =
+                        arrow_select::concat::concat(&[first.as_ref(), first.as_ref()]).unwrap();
+                    rows(columns, key)
+                }
+                DataRequest::Lookup { columns, seeds, .. } => {
+                    let Some(Attachment::Arrow(seeds)) = run.take_attachment(seeds.attachment)
+                    else {
+                        panic!("the lookup's seeds are attached");
+                    };
+                    let seeds = &seeds.batches[0];
+                    let n = seeds.num_rows();
+                    let mut answer: Vec<(&str, ArrayRef)> = columns
+                        .iter()
+                        .map(|c| {
+                            let given = (c == "user_id").then(|| Arc::clone(seeds.column(0)));
+                            (c.as_str(), shop_column(c, n, given))
+                        })
+                        .collect();
+                    answer.push((
+                        BATCH_COLUMN,
+                        Arc::new(Int64Array::from((0..n as i64).collect::<Vec<_>>())),
+                    ));
+                    answer.push((MATCHES_COLUMN, Arc::new(Int64Array::from(vec![1_i64; n]))));
+                    data(answer)
+                }
+                other => panic!("{other:?}"),
+            };
+            run.submit_fetch(asked.id, answer).unwrap();
+        }
+    }
+}
+
+/// A column of `n` rows a fetch answers with.
+type Column = Box<dyn Fn(usize) -> ArrayRef>;
+
+/// The wire text of 2024-01-05T00:00Z, which the payload writes its
+/// order's time as.
+const SENT: &str = "2024-01-05T00:00:00.000000Z";
+
+fn sends(payload: &[u8], text: &str) -> bool {
+    String::from_utf8_lossy(payload).contains(text)
+}
+
+#[test]
+fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
+    // Until T1.25, materialize read a zone-less timestamp time column only
+    // (`time_type`); the reference's engine reads every column meaning a
+    // timestamp to a zone-less UTC one as it fetches it.
+    let day = 19_727; // 2024-01-05
+    let cases: Vec<(ColumnType, Dtype, Column)> = vec![
+        (
+            ColumnType::Date32,
+            Dtype::Date,
+            Box::new(move |n| Arc::new(arrow_array::Date32Array::from(vec![day; n])) as ArrayRef),
+        ),
+        (
+            ColumnType::Timestamp {
+                unit: Unit::Us,
+                zone: Some("America/New_York".into()),
+            },
+            Dtype::Date,
+            Box::new(|n| {
+                Arc::new(
+                    TimestampMicrosecondArray::from(vec![1_704_412_800_000_000; n])
+                        .with_timezone("America/New_York"),
+                ) as ArrayRef
+            }),
+        ),
+        (
+            ColumnType::Utf8,
+            Dtype::String,
+            Box::new(|n| Arc::new(StringArray::from(vec!["2024-01-05"; n])) as ArrayRef),
+        ),
+    ];
+    for (received, dtype, ts) in cases {
+        let mut run = materialize(
+            host_reading(Some(TextTimes::ValueByValue)),
+            &shop_with_times(received.clone(), dtype),
+            QUERY,
+            None,
+        )
+        .unwrap();
+        let (payload, warnings) = times_to_the_end(&mut run, ts.as_ref());
+        let payload = payload.unwrap_or_else(|err| panic!("{received:?}: {err:?}"));
+        assert!(sends(&payload, SENT), "{received:?}");
+        assert!(!sends(&payload, "America/New_York"), "{received:?}");
+        assert!(
+            warnings.iter().all(|w| w.code != "TIME_VALUES_UNREAD"),
+            "{received:?}"
+        );
+    }
+}
+
+#[test]
+fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() {
+    let text = || shop_with_times(ColumnType::Utf8, Dtype::String);
+    let days = |n: usize| Arc::new(StringArray::from(vec!["2024-01-05"; n])) as ArrayRef;
+    // No reading declared, the client's rules (not ported), a value whose
+    // reading takes a rule outside the shapes, and offsets mixed: each by
+    // its rule's name, before any text is read as a time.
+    for (provider, ts, wanted) in [
+        (host_reading(None), Box::new(days) as Column, "text_times"),
+        (
+            host_reading(Some(TextTimes::ClientRules)),
+            Box::new(days),
+            "text_time_rules",
+        ),
+        (
+            host_reading(Some(TextTimes::ValueByValue)),
+            Box::new(|n| Arc::new(StringArray::from(vec!["March 5 2024"; n])) as ArrayRef),
+            "text_time",
+        ),
+        (
+            host_reading(Some(TextTimes::ValueByValue)),
+            Box::new(|n| {
+                let values: Vec<&str> = (0..n)
+                    .map(|i| {
+                        if i % 2 == 0 {
+                            "2024-01-05 10:00+01:00"
+                        } else {
+                            "2024-01-05 10:00"
+                        }
+                    })
+                    .collect();
+                Arc::new(StringArray::from(values)) as ArrayRef
+            }),
+            "text_time_zones",
+        ),
+    ] {
+        let mut run = materialize(provider, &text(), QUERY, None).unwrap();
+        let (result, _) = times_to_the_end(&mut run, ts.as_ref());
+        let err = result.unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{wanted}");
+        assert_eq!(rule(&err), wanted);
+    }
+}
+
+#[test]
+fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
+    // The reference's engine drops a value its reading takes as no time and
+    // warns of it, with how many of how many and three examples.
+    let mut run = materialize(
+        host_reading(Some(TextTimes::ValueByValue)),
+        &shop_with_times(ColumnType::Utf8, Dtype::String),
+        QUERY,
+        None,
+    )
+    .unwrap();
+    let (payload, warnings) = times_to_the_end(&mut run, &|n| {
+        Arc::new(StringArray::from(vec!["not a date"; n])) as ArrayRef
+    });
+    payload.unwrap();
+    let unread: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.code == "TIME_VALUES_UNREAD")
+        .collect();
+    assert!(!unread.is_empty());
+    for warning in unread {
+        assert_eq!(warning.fields["column"], Detail::text("ts"));
+        assert_eq!(warning.fields["table"], Detail::text("orders"));
+        assert_eq!(warning.fields["unread"], warning.fields["rows"]);
+        assert_eq!(
+            warning.fields["examples"],
+            Detail::List(vec![Scalar::Utf8("not a date".into())])
+        );
+    }
 }

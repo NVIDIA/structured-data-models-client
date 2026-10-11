@@ -12,7 +12,9 @@
 //! exactly ([`keys`]); and the sampler's examples, labels, seeds and
 //! neighbor order ([`sample`]). What those rules decide by a path not
 //! ported yet is refused by name ([`not_yet`], register entry P1B-3);
-//! T1.22, T1.25, T1.26 and T1.27 complete them.
+//! T1.22, T1.25, T1.26a, T1.26b and T1.27 complete them. From T1.25
+//! [`time`] holds the core's instant and span, civil arithmetic, zones to
+//! the range ends and the readings of text times (E62).
 
 #![forbid(unsafe_code)]
 

@@ -23,7 +23,57 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::catalog::CatalogColumn;
 use sdm_contract::ops::Stype;
 use sdm_contract::{Detail, Scalar};
-use sdm_schema::infer::{self, LeftOut, PassedOver, Taken};
+use sdm_schema::infer::{self, LeftOut, PassedOver, Taken, TextTimes, TextUnread};
+
+/// A reading of text as times for these tests, standing in for the
+/// engine's (`sdm-engine::time::text`, held to pandas there): `YYYY-MM-DD`
+/// reads as that day's midnight, `no date` reads as no time, an offset
+/// (`+01`) is held against offsets mixed, and anything else is undecided.
+struct Days;
+
+impl TextTimes for Days {
+    fn read(&self, values: &[Option<&str>], utc: bool) -> Result<Vec<Option<i128>>, TextUnread> {
+        let mut offsets = std::collections::BTreeSet::new();
+        let read = values
+            .iter()
+            .map(|value| {
+                let Some(value) = value else { return Ok(None) };
+                if *value == "no date" {
+                    return Ok(None);
+                }
+                let (date, offset) = match value.split_once('+') {
+                    Some((date, offset)) => (date, Some(offset)),
+                    None => (*value, None),
+                };
+                offsets.insert(offset.map(str::to_owned));
+                let parts: Vec<i64> = date
+                    .split('-')
+                    .map(|p| p.parse().map_err(|_| TextUnread::Undecided))
+                    .collect::<Result<_, _>>()?;
+                let [y, m, d] = parts[..] else {
+                    return Err(TextUnread::Undecided);
+                };
+                // Days from 2024-01-01 within 2024's January, enough here.
+                if y != 2024 || m != 1 {
+                    return Err(TextUnread::Undecided);
+                }
+                Ok(Some(i128::from(day(d - 1)) * 1_000))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if !utc && offsets.len() > 1 {
+            return Err(TextUnread::MixedZones);
+        }
+        Ok(read)
+    }
+
+    fn never_read(&self, values: &[Option<&str>]) -> Option<usize> {
+        Some(values.iter().flatten().filter(|v| **v == "no date").count())
+    }
+
+    fn day_first_format(&self, _: &[Option<&str>]) -> Option<String> {
+        None
+    }
+}
 
 /// A table `things` of the columns given, in order, after its key.
 fn of(columns: Vec<(&str, ArrayRef)>) -> Result<infer::InferredTable, String> {
@@ -48,9 +98,16 @@ fn of(columns: Vec<(&str, ArrayRef)>) -> Result<infer::InferredTable, String> {
             primary_key: false,
         })
         .collect();
-    infer::table("things", "src_things", &catalog, &[], &schema, &[batch]).map_err(|err| match &err
-        .fields["rule"]
-    {
+    infer::table(
+        "things",
+        "src_things",
+        &catalog,
+        &[],
+        &schema,
+        &[batch],
+        &Days,
+    )
+    .map_err(|err| match &err.fields["rule"] {
         Detail::Scalar(Scalar::Utf8(rule)) => rule.clone(),
         other => panic!("{other:?}"),
     })
@@ -93,7 +150,7 @@ fn things(stamps: &[&str], rows: i64, constant: bool) -> Result<infer::InferredT
             primary_key: false,
         })
         .collect();
-    infer::table("things", "things", &catalog, &[], &schema, &[batch]).map_err(|err| {
+    infer::table("things", "things", &catalog, &[], &schema, &[batch], &Days).map_err(|err| {
         match &err.fields["rule"] {
             Detail::Scalar(Scalar::Utf8(rule)) => rule.clone(),
             other => panic!("{other:?}"),
@@ -365,4 +422,134 @@ fn what_the_choice_does_not_port_stays_refused_by_name() {
         things(&["updated_at"], 1_000, false).unwrap_err(),
         "time_whole_table"
     );
+}
+
+fn texts(values: &[Option<&str>]) -> ArrayRef {
+    Arc::new(arrow_array::StringArray::from(values.to_vec()))
+}
+
+fn stype(table: &infer::InferredTable, name: &str) -> Stype {
+    table.column(name).unwrap().stype
+}
+
+#[test]
+fn text_is_a_timestamp_by_its_name_and_the_share_its_values_read() {
+    // Every value reads: a timestamp whatever the name, and the time
+    // column, the one left.
+    let days = texts(&[Some("2024-01-02"), Some("2024-01-03"), Some("2024-01-04")]);
+    let table = of(vec![("happened", Arc::clone(&days))]).unwrap();
+    assert_eq!(stype(&table, "happened"), Stype::Timestamp);
+    assert_eq!(table.time_column.as_deref(), Some("happened"));
+    // One of three does not: 0.67 alone is no timestamp, and with a name
+    // that says time (0.3), 0.97 is not either.
+    let some = texts(&[Some("2024-01-02"), Some("no date"), Some("2024-01-04")]);
+    assert_ne!(
+        stype(
+            &of(vec![("happened", Arc::clone(&some))]).unwrap(),
+            "happened"
+        ),
+        Stype::Timestamp
+    );
+    assert_ne!(
+        stype(&of(vec![("ts", Arc::clone(&some))]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
+    // Seven of ten with the name's 0.3 reaches 1.0, summed in floating
+    // point as the reference sums it; six of ten does not.
+    let mut seven: Vec<Option<&str>> = vec![Some("2024-01-02"); 7];
+    seven.extend([Some("no date"); 3]);
+    assert_eq!(
+        stype(&of(vec![("ts", texts(&seven))]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
+    let mut six: Vec<Option<&str>> = vec![Some("2024-01-02"); 6];
+    six.extend([Some("no date"); 4]);
+    assert_ne!(
+        stype(&of(vec![("ts", texts(&six))]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
+    // Empty text and missing values are not counted.
+    let sparse = texts(&[Some("2024-01-02"), Some(""), None, Some("2024-01-04")]);
+    assert_eq!(
+        stype(&of(vec![("happened", sparse)]).unwrap(), "happened"),
+        Stype::Timestamp
+    );
+}
+
+#[test]
+fn a_text_time_column_is_passed_over_for_its_text_and_chosen_by_its_instants() {
+    // One value written in every row: passed over, the value its text.
+    let same = texts(&[Some("2024-01-02"); 3]);
+    let table = of(vec![("happened", same)]).unwrap();
+    assert_eq!(table.time_column, None);
+    assert_eq!(
+        table.time.refused,
+        [(
+            "happened".to_owned(),
+            PassedOver::Constant {
+                value: Some(Scalar::Utf8("2024-01-02".into())),
+                missing: 0,
+                rows: 3
+            }
+        )]
+    );
+    // Of a text and a typed timestamp, the one starting earliest.
+    let table = of(vec![
+        ("later", stamps(&[Some(day(5)), Some(day(6)), Some(day(7))])),
+        (
+            "sooner",
+            texts(&[Some("2024-01-02"), Some("2024-01-03"), Some("2024-01-09")]),
+        ),
+    ])
+    .unwrap();
+    assert_eq!(table.time_column.as_deref(), Some("sooner"));
+    assert_eq!(table.time.how, Some(Taken::Earliest));
+}
+
+#[test]
+fn text_the_reading_does_not_decide_is_refused_by_name_unless_it_cannot_be_one() {
+    // A value the reading does not decide.
+    let undecided = texts(&[Some("2024-02-02"), Some("2024-01-03")]);
+    assert_eq!(of(vec![("happened", undecided)]).unwrap_err(), "text_time");
+    // Offsets mixed, which the reference refuses.
+    let mixed = texts(&[Some("2024-01-02+01"), Some("2024-01-03+02")]);
+    assert_eq!(
+        of(vec![("happened", mixed)]).unwrap_err(),
+        "text_time_zones"
+    );
+    // Undecided, but one value never reads and the name does not say time:
+    // no timestamp, decided.
+    let bounded = texts(&[Some("2024-02-02"), Some("no date")]);
+    assert_ne!(
+        stype(
+            &of(vec![("happened", Arc::clone(&bounded))]).unwrap(),
+            "happened"
+        ),
+        Stype::Timestamp
+    );
+    // With the name's 0.3, one in two never reading cannot reach 1.0.
+    assert_ne!(
+        stype(&of(vec![("ts", bounded)]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
+    // But one in ten never reading can: still refused.
+    let mut close: Vec<Option<&str>> = vec![Some("2024-02-02"); 9];
+    close.push(Some("no date"));
+    assert_eq!(of(vec![("ts", texts(&close))]).unwrap_err(), "text_time");
+    // A text time column whose first 100 values read, and whose later
+    // ones the reading does not decide: refused only when the choice asks
+    // where it starts, among several.
+    let mut long: Vec<Option<&str>> = vec![Some("2024-01-02"); 100];
+    long.push(Some("2024-02-02"));
+    let later = stamps(&(0..101).map(|i| Some(day(5 + i))).collect::<Vec<_>>());
+    assert_eq!(
+        of(vec![
+            ("a_date", Arc::clone(&later)),
+            ("b_date", texts(&long))
+        ])
+        .unwrap_err(),
+        "text_time"
+    );
+    let alone = of(vec![("b_date", texts(&long))]).unwrap();
+    assert_eq!(alone.time_column.as_deref(), Some("b_date"));
 }

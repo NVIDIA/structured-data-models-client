@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/13",
+  "$id": "sdm-contract/14",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -2336,6 +2336,17 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "text_times": {
+          "description": "How the source reads a time it stores as text (register DT-7);\n`None` declares no reading, and the core refuses to read text times\nfrom it (`UNSUPPORTED_REQUEST`, rule `text_times`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextTimes"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -2370,6 +2381,21 @@
           "description": "The same seed gives the same rows on this provider.",
           "type": "string",
           "const": "seeded_stable"
+        }
+      ]
+    },
+    "TextTimes": {
+      "description": "How a provider's source reads a time it stores as text: which of the\nreference's two readings the core applies to the text it fetches from\nthe provider (register DT-7). The provider declares it; the core picks\nits reader by it, never by a dialect.",
+      "oneOf": [
+        {
+          "description": "Each value on its own, as the reference's engine reads a SQL\nsource's text time column (`to_datetime(values, unit='ns')`).",
+          "type": "string",
+          "const": "value_by_value"
+        },
+        {
+          "description": "The column by the client's rules (`date-rules.md`, \"The client\nrules\"), as the reference reads a frame's time column.",
+          "type": "string",
+          "const": "client_rules"
         }
       ]
     },

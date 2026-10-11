@@ -46,6 +46,7 @@ fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> Inferre
         columns,
         left_out: Vec::new(),
         unread_times: Vec::new(),
+        day_first: Vec::new(),
         primary_key: key.map(Into::into),
         time: TimeChoice::default(),
         time_column: None,
@@ -891,6 +892,12 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     }
     given.extend(assemble::left_out(&refused));
     given.extend(assemble::unread_times(&refused));
+    let mut day_first = refused.clone();
+    day_first.day_first = vec![("seen".into(), "%d/%m/%Y".into())];
+    let said = assemble::day_first(&day_first);
+    assert_eq!(said[0].fields["format"], Detail::text("%d/%m/%Y"));
+    assert_eq!(said[0].fields["column"], Detail::text("seen"));
+    given.extend(said);
     let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
     for warning in &given {
         let variant = warning.fields.get("variant").map(|v| match v {

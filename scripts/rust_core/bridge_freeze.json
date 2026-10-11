@@ -50,14 +50,12 @@
         "calls": []
       },
       "_anchor": {
-        "fingerprint": "5a4d1d7bd21d873ea41258383192a52341ecb5eeb0717f9ad328da9908fcf078",
+        "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f",
         "raise": 1,
         "warn": 0,
         "branch": 5,
         "calls": [
           ".as_unit",
-          ".tz_convert",
-          ".tz_localize",
           "sdm_client._rust.codec.timestamp",
           "sdm_client.errors.StructuredDataError"
         ]

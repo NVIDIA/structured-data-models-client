@@ -28,7 +28,9 @@ use std::task::{Context, Poll, Waker};
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use sdm_contract::catalog::CatalogAnswer;
-use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderError};
+use sdm_contract::data::{
+    AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
+};
 use sdm_contract::ops::OperationResult;
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
@@ -163,6 +165,15 @@ impl Asker {
         };
         let plan = data.plan(&request)?;
         Ok(self.ask_planned(request, plan))
+    }
+
+    /// What the run's provider declared it answers, for an operation that
+    /// names one.
+    pub fn capabilities(&self) -> Result<&ProviderCapabilities, CoreError> {
+        self.data
+            .as_ref()
+            .map(DataAccess::capabilities)
+            .ok_or_else(|| internal("the operation asked what its provider answers and names none"))
     }
 
     /// The catalog answer `data` holds, the admitted answer to `request`,

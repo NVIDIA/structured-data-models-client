@@ -822,3 +822,61 @@ def test_a_key_of_one_column_as_a_sequence_is_pinned_on_both_routes(
     assert schema['users'].primary_key == ('user_id',)
     assert schema.relationships == []
     assert outcome == 'INVALID_REQUEST'
+
+
+#: Orders' time column as each type the reference reads (T1.25): a date, a
+#: zoned timestamp under a session zone, and text dates; and a users'
+#: feature of text dates.
+TIME_TYPES = {
+    'date': ['ALTER TABLE orders ALTER ts TYPE DATE'],
+    'timestamptz': [
+        "SET TimeZone = 'America/New_York'",
+        'ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ',
+    ],
+    'text': [
+        "ALTER TABLE orders ALTER ts TYPE VARCHAR USING strftime(ts, '%Y-%m-%d')"
+    ],
+    'text feature': [
+        'CREATE OR REPLACE TABLE users AS SELECT *, '
+        "strftime(DATE '2020-01-01' + user_id::INTEGER, '%Y-%m-%d') "
+        'AS signup_date FROM users'
+    ],
+}
+
+
+@pytest.mark.parametrize('kind', sorted(TIME_TYPES))
+def test_a_time_of_any_type_the_reference_reads_materializes_on_the_core(
+    monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    # Until T1.25 the core read a zone-less timestamp time column only
+    # (time_type) and refused text that could hold dates at describe
+    # (text_time); it reads each as the reference's engine does, the
+    # payload the old route's.
+    payload = _both_routes(monkeypatch, *TIME_TYPES[kind])
+    assert payload['context']['instance_table']['rows']
+
+
+def _anchored(anchor: pd.Timestamp) -> dict[str, Any]:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+        request = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=anchor
+        )
+    return json.loads(json.dumps(request._payloads[0], default=str))
+
+
+def test_a_zoned_anchor_time_is_read_at_its_utc_instant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The ledger's row moved into the core at T1.25: the bridge sends the
+    # zoned anchor's instant with its zone, and the core reads it at its
+    # UTC wall clock, as the engine reads one (to_naive_utc).
+    zoned = pd.Timestamp('2024-03-01 05:00', tz='America/New_York')
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _anchored(zoned)
+    assert core == _anchored(pd.Timestamp('2024-03-01 10:00'))
+    assert codec.timestamp(1, 'ns', 'UTC')['zone'] == 'UTC'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        assert core == _anchored(zoned)

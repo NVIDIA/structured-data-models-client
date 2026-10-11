@@ -28,10 +28,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
 use sdm_contract::data::{DataRequest, DescribePart, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_engine::time::Instant;
+use sdm_engine::time::text::Reader;
 use sdm_schema::assemble::{self, Assembled, Given};
 use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
@@ -41,12 +44,28 @@ use crate::run::{
     ArrowData, Ask, Asker, Attachment, FetchResult, Reply, internal, schema_mismatch,
 };
 
+/// The reader of text times for a run whose clock is `facts.now`: its
+/// year, in UTC, places a two-digit year, as the date literals' reader
+/// places one (`pql::clock_year`).
+pub(crate) fn text_reader(facts: &HostFacts) -> Result<Reader, CoreError> {
+    let Scalar::Timestamp { unit, value, .. } = &facts.now else {
+        return Err(internal("the host's clock is not a ts scalar"));
+    };
+    let unit = match unit {
+        Unit::Ns => TimeUnit::Nanosecond,
+        Unit::Us => TimeUnit::Microsecond,
+    };
+    Ok(Reader::new(Instant::from_count(*value, unit).civil(0).year))
+}
+
 /// The body of a `describe_source` run.
 pub(crate) async fn run(
     asker: Asker,
     spec: SourceSpec,
     check_keys: bool,
+    facts: HostFacts,
 ) -> Result<OperationResult, CoreError> {
+    let reader = text_reader(&facts)?;
     // The tables named, each under the schema's name and read by the
     // source's (`_require_table_names`); none named, every table the
     // source lists, under its own name.
@@ -158,10 +177,15 @@ pub(crate) async fn run(
             &constraints,
             &preview.schema,
             &preview.batches,
+            &reader,
         )?;
-        // The engine says what it dropped as it reads each table, before
+        // The engine says what it dropped as it reads each table, and the
+        // day-first formats it guessed as it typed its columns, before
         // anything later can refuse.
-        for warning in assemble::unread_times(&inferred) {
+        for warning in assemble::unread_times(&inferred)
+            .into_iter()
+            .chain(assemble::day_first(&inferred))
+        {
             asker.warn(warning);
         }
         tables.push(inferred);

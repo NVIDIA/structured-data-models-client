@@ -79,7 +79,7 @@ pub fn start(
             let access = root.data_access(&request.provider)?;
             let check_keys = request.check_keys;
             Run::with_data(access, move |asker| {
-                crate::describe::run(asker, source, check_keys)
+                crate::describe::run(asker, source, check_keys, facts)
             })
         }
         Operation::Materialize(request) => {

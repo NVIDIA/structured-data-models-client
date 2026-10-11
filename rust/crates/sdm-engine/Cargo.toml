@@ -17,6 +17,7 @@ arrow-array.workspace = true
 arrow-schema.workspace = true
 jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
+sdm-schema = { path = "../sdm-schema" }
 
 [dev-dependencies]
 serde_json.workspace = true
