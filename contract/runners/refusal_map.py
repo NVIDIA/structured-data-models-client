@@ -632,7 +632,11 @@ def _rust_step(core: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
     (``rename_tables``), each table then named as the source names it, in
     the keys, time columns and relationships too, as the python-core step
     of the same name renames them (T1.23, whose ``SourceSpec`` names
-    tables and carries relationships)."""
+    tables and carries relationships). Like that step, it takes every
+    table of the source, not the case's subset: python-core's call with
+    no tables named is the only one with a core route until T1.24, and
+    the two runners' inputs must be one; the same as the case only where
+    the case names every table of its source, as AdventureWorks does."""
     core = copy.deepcopy(core)
     [(op, value)] = step.items()
     source = core['describe_source']['source']

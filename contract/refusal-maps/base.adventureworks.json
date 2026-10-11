@@ -115,7 +115,7 @@
       "rule": "deeper_hop",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:671",
+      "where": "rust/crates/sdm-core/src/materialize.rs:692",
       "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
       "observed": {
         "python-core": {
@@ -138,7 +138,7 @@
       "rule": "text_column",
       "owner": "T1.26",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:685",
+      "where": "rust/crates/sdm-core/src/materialize.rs:706",
       "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
       "observed": {
         "python-core": {

@@ -23,7 +23,7 @@
       "rule": "time_type",
       "owner": "T1.25",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:259",
+      "where": "rust/crates/sdm-core/src/materialize.rs:281",
       "why": "materialize reads a zone-less timestamp time column only: a DATE (time.date, and users.f_date once f_ts is dropped) and a TIMESTAMPTZ under a New York session zone (time.timestamptz) are refused; the reference takes both",
       "observed": {
         "python-core": {
