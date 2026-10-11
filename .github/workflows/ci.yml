@@ -159,7 +159,11 @@ jobs:
       run:
         working-directory: rust
     steps:
+      # Every branch, for the gate's checkpoint (the merge base with the
+      # phase branch) and its worktree.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -196,6 +200,30 @@ jobs:
       - run: |
           pip install jsonschema pyyaml
           python scripts/rust_core/compare.py --cases contract/cases --reference contract/reference/*.jsonl rust-host.jsonl
+        working-directory: .
+      # The gate (T1.14): the candidate judged by its checkpoint's harness,
+      # from the checkpoint's own worktree (design, "Reference observations
+      # and the gate"; H2): rust-host's observations made with the
+      # checkpoint's case loader and observation writer, the checkpoint's
+      # ratchet (protected paths, reference immutability, cases, register,
+      # relaxations, KNOWN_DIFFERING, baselines and availability), its
+      # comparator and its L0 scripts. On a push to the phase branch the
+      # checkpoint is the push's previous tip, and the push lands exactly
+      # one package; on a lane or topic branch, the merge base with the
+      # phase branch's tip, a landing commit judged against its own
+      # recorded base. Before T1.14 lands, the bootstrap: the candidate's
+      # harness runs.
+      - name: gate (rust-host)
+        if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'rust-core-phase-1') }}
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$GITHUB_REF_NAME" = rust-core-phase-1 ]; then
+            where=(--phase-push "$BEFORE")
+          else
+            where=(--base origin/rust-core-phase-1)
+          fi
+          scripts/rust_core/gate.sh "${where[@]}" --run rust-host
         working-directory: .
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
@@ -449,7 +477,10 @@ jobs:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
+      # Every branch, for the gate's checkpoint and its worktree.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -511,6 +542,21 @@ jobs:
       - run: |
           pip install duckdb==1.5.6
           python -m pytest contract/tests -q
+      # The gate (T1.14) on the Python runners, as in rust-test: python-core
+      # and python-old observed with the checkpoint's runner, judged by the
+      # checkpoint's ratchet and comparator; rust-test runs the L0 scripts.
+      - name: gate (python-core, python-old)
+        if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'rust-core-phase-1') }}
+        env:
+          BEFORE: ${{ github.event.before }}
+          PYTHON: python
+        run: |
+          if [ "$GITHUB_REF_NAME" = rust-core-phase-1 ]; then
+            where=(--phase-push "$BEFORE")
+          else
+            where=(--base origin/rust-core-phase-1)
+          fi
+          scripts/rust_core/gate.sh "${where[@]}" --run python-core,python-old --no-l0
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
