@@ -171,7 +171,7 @@ def shape(document: Any) -> str | None:
     ):
         return 'gaps are not each an input, its contract and an owner'
     for at, gap in enumerate(gaps):
-        if not OWNER.match(gap['owner']):
+        if not OWNER.fullmatch(gap['owner']):
             return f'gaps/{at}/owner is not a task a map may name'
     if not family and not _strings(document.get('case')):
         return 'no case'
@@ -190,7 +190,7 @@ def shape(document: Any) -> str | None:
         for key in ('id', 'operation', 'rule', 'owner', 'register', 'where'):
             if not _strings(entry.get(key)):
                 return f'entries/{at}/{key} is not text'
-        if not OWNER.match(entry['owner']):
+        if not OWNER.fullmatch(entry['owner']):
             return f'entries/{at}/owner is not a task a map may name'
         if entry['id'] in ids:
             return f'entries/{at}/id repeats'

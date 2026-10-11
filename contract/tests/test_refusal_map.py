@@ -154,7 +154,7 @@ def test_every_entry_names_its_rule_operation_owner_and_proposed_entry() -> (
         ]
     }
     for entry in document['entries']:
-        assert refusal_map.OWNER.match(entry['owner']), entry['id']
+        assert refusal_map.OWNER.fullmatch(entry['owner']), entry['id']
         # Never self-approved: the entry the refusal is under waits for the
         # owner.
         assert register[entry['register']]['status'] == 'proposed', entry['id']
@@ -177,7 +177,7 @@ def test_every_entry_names_its_rule_operation_owner_and_proposed_entry() -> (
             assert entry['holds'], entry['id']
             assert any(entry['holds'] in text for text in cited), entry['id']
     for gap in document['gaps']:
-        assert refusal_map.OWNER.match(gap['owner'])
+        assert refusal_map.OWNER.fullmatch(gap['owner'])
     # Each probe's python-core input is a case input, but for the edits
     # only a probe makes (a key or the relationships set).
     validate = run_python.validator('case')
@@ -513,7 +513,7 @@ def test_the_owners_a_map_may_name() -> None:
         'T1.32a',
         'T1.32e',
     ):
-        assert refusal_map.OWNER.match(task), task
+        assert refusal_map.OWNER.fullmatch(task), task
     for task in (
         'T1.21',
         'T1.21b',
@@ -527,7 +527,7 @@ def test_the_owners_a_map_may_name() -> None:
         'T1.2',
         '',
     ):
-        assert not refusal_map.OWNER.match(task), task
+        assert not refusal_map.OWNER.fullmatch(task), task
 
 
 # --- the inventory's family maps (T1.21e) ------------------------------------------
@@ -681,7 +681,7 @@ def test_every_family_entry_is_owned_cited_and_registered_or_the_reference_s() -
         cases = _of(document)
         for entry in document['entries']:
             where = f'{name}: {entry["id"]}'
-            assert refusal_map.OWNER.match(entry['owner']), where
+            assert refusal_map.OWNER.fullmatch(entry['owner']), where
             cited = _cited(entry)
             if 'holds' in entry:
                 assert any(entry['holds'] in text for text in cited), where
@@ -700,7 +700,7 @@ def test_every_family_entry_is_owned_cited_and_registered_or_the_reference_s() -
                     where
                 )
         for gap in document['gaps']:
-            assert refusal_map.OWNER.match(gap['owner']), name
+            assert refusal_map.OWNER.fullmatch(gap['owner']), name
         for probe in document['probes']:
             if 'python-core' in probe:
                 case = refusal_map.probe_input(
@@ -1092,6 +1092,13 @@ def test_the_writer_s_script_refuses_an_owner_no_map_may_name(
     gapped['gaps'] = [{'input': 'x', 'contract': 'y', 'owner': 'T1.28'}]
     assert refusal_map.shape(gapped) == (
         'gaps/0/owner is not a task a map may name'
+    )
+    # An owner with a trailing newline is not the task (subagent Nit-1,
+    # fix round 1): the whole text is matched.
+    trailing = copy.deepcopy(document)
+    trailing['entries'][0]['owner'] = document['entries'][0]['owner'] + '\n'
+    assert refusal_map.shape(trailing) == (
+        'entries/0/owner is not a task a map may name'
     )
 
 

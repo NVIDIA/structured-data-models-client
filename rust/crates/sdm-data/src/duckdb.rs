@@ -628,7 +628,11 @@ fn describe(
 /// columns, types and rows those the pragma gives for a table of an
 /// ordinary name. Where the reference refuses (its `TableNotFoundError`,
 /// `INVALID_REQUEST`), the core now describes the table: register entry
-/// P1B-5, proposed.
+/// P1B-5, proposed. A name no table holds (in its exact case) gives no
+/// rows where the pragma raises DuckDB's catalog error; no caller asks for
+/// one today (`describe_source` reads the names the table list gives), and
+/// the core refuses a table with no columns, `INVALID_REQUEST`, the code
+/// the reference gives a table its pragma cannot read.
 fn columns(table: &str) -> String {
     if !table.contains(['"', '.']) {
         return format!("PRAGMA table_info({})", identifier(table));
