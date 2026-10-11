@@ -2,22 +2,22 @@
  "description": "The refusal map's probes of base.adventureworks (contract/refusal-maps) on which both core hosts reach describe_source, each with the SHA-256 of describe_source's SourceDescription and, where it starts materialize, of the schema materialize samples (python-core's built from its Schema, rust-host's its own description with the probe's edits made), each as canonical JSON: keys sorted, no whitespace, UTF-8. contract/tests/test_refusal_map.py holds python-core to it and sdm-testkit's tests/refusal_map.rs holds rust-host to it, so CI gates that the two hosts' descriptions are identical wherever both reach describe_source (T1.21d, the AdventureWorks exit); a probe either host reaches describe_source on that the pin does not list, or one it lists that a host does not reach, fails. From T1.23 each probe also pins the digest of the core's warnings, each its code and fields (warnings), which each host words itself.",
  "probes": {
   "no-inference-config": {
-   "described": "aa88eff84316e659c5809d0cb4aa85c2bf003457f98b2340083c4369082f282c",
-   "materialize_schema": "aa88822801543c15eba621c56af228f36f553aa455c5a38da5c08d75163baef6",
+   "described": "2bc4502b361db202106a821404f45c960d3d9d5b10baa55b2a133802724d3b68",
+   "materialize_schema": "a610f81eb5b18d30eb422ec894944000992e31bca9fddbaf1fedcd20f69a31dd",
    "warnings": "ad3102c0c5b148387b2796b7b6808fa88b3c66540877ea00df28503e34d362a2"
   },
   "no-text": {
-   "described": "8185f74e2ecd3760cd890f27f8cc9aef19e536a02f6b22e51581304c703a167e",
-   "materialize_schema": "b5e08f8f538cd380cb3a6136c44bc99de5376496b28bceb9892999e91b83d3a7",
+   "described": "9f78f106cc7fb412f0d5e328dc583566dadc6f8b4709a0dda5e686e5926f73da",
+   "materialize_schema": "5fd65c17e84068c90f2b5e50d74bcabd6895fc027fc5a4b4350ecf09c8e728c6",
    "warnings": "e92cdc4ce03451e4f631996146e6f0d98c4f282e8837526780277a1924803aaa"
   },
-  "no-text-dates": {
-   "described": "aa88eff84316e659c5809d0cb4aa85c2bf003457f98b2340083c4369082f282c",
+  "notebook": {
+   "described": "2bc4502b361db202106a821404f45c960d3d9d5b10baa55b2a133802724d3b68",
    "warnings": "a37d3c712e75c2073c5dc73422bff84975b266534c30c4f8864a04b6094b1b1c"
   },
   "one-hop": {
-   "described": "8185f74e2ecd3760cd890f27f8cc9aef19e536a02f6b22e51581304c703a167e",
-   "materialize_schema": "f46e929041ad8acca946dee5a381dc4d25fd035db809ecf38557f67252105b57",
+   "described": "9f78f106cc7fb412f0d5e328dc583566dadc6f8b4709a0dda5e686e5926f73da",
+   "materialize_schema": "f54fb05ef8ecf85ea2a7f141795d3d3b8b4b53b215ef939b3e65290985ddcc81",
    "warnings": "e92cdc4ce03451e4f631996146e6f0d98c4f282e8837526780277a1924803aaa"
   }
  }

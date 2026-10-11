@@ -14,32 +14,9 @@
     "time.timestamp-s",
     "time.timestamptz"
   ],
-  "reading": "The first refusal of each probe; each case of the time family probed as it is, and where the refused column is not the question's time column, without it: the time-of-day and interval features, the second of users' two time candidates, and the time column passed in. The ns and s timestamps reach predict's result on both runners; the text time columns are refused at describe_source, masking the reference's own CAST failures.",
+  "reading": "The first refusal of each probe; each case of the time family probed as it is, and where the refused column is not the question's time column, without it: the time-of-day and interval features, the second of users' two time candidates, and the time column passed in. From T1.25 the date, zoned and text time columns reach predict's result on both runners, as the ns and s timestamps do; the US dates and the one unreadable value are read as dates by inference, as the reference reads them, and fail the time bounds' CAST in the source, as the reference's same statement fails, under another code (DT-12).",
   "gaps": [],
   "entries": [
-    {
-      "id": "materialize/time_type",
-      "operation": "materialize",
-      "rule": "time_type",
-      "owner": "T1.25",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:285",
-      "why": "materialize reads a zone-less timestamp time column only: a DATE (time.date, and users.f_date once f_ts is dropped) and a TIMESTAMPTZ under a New York session zone (time.timestamptz) are refused; the reference takes both",
-      "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "time_type"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "time_type"
-        }
-      }
-    },
     {
       "id": "admission/interval",
       "operation": "admission (the host layer, before inference)",
@@ -65,29 +42,6 @@
       }
     },
     {
-      "id": "describe_source/text_time",
-      "operation": "describe_source",
-      "rule": "text_time",
-      "owner": "T1.25",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:534",
-      "why": "Text that holds dates: ISO dates, US dates and ISO dates with one unreadable value. The reference infers each as the time column, and its sampling SQL's CAST then fails the US dates and the bad value (INTERNAL_ERROR, P1B-1), which the core's refusal masks; T1.25 reads text dates by date-rules.md and DT-7",
-      "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "text_time"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "text_time"
-        }
-      }
-    },
-    {
       "id": "materialize/wire_dtype",
       "operation": "materialize",
       "rule": "wire_dtype",
@@ -107,6 +61,30 @@
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "wire_dtype"
+        }
+      }
+    },
+    {
+      "id": "materialize/text_time_cast",
+      "operation": "materialize (the provider's statement)",
+      "rule": "PROVIDER_ERROR: the time bounds' CAST of text the source cannot read as a timestamp",
+      "owner": "T1.32e",
+      "register": "DT-12",
+      "where": "rust/crates/sdm-data/src/duckdb.rs:762",
+      "holds": "let time = format!(\"CAST({} AS TIMESTAMP)\", identifier(&at.column));",
+      "why": "Text read as dates by inference (US dates; ISO dates with one unreadable value) that DuckDB's CAST in the time bounds cannot read: the reference's same statement fails and its client reports INTERNAL_ERROR, the core's provider error is PROVIDER_ERROR, a code proposed in register DT-12, which T1.32e settles when it admits the cases",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
+          "code": "PROVIDER_ERROR",
+          "operation": null,
+          "rule": null
+        },
+        "rust-host": {
+          "code": "PROVIDER_ERROR",
+          "operation": null,
+          "rule": null
         }
       }
     }
@@ -152,7 +130,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/time_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -203,7 +181,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/time_type"
+        "expect": "success"
       }
     },
     {
@@ -246,7 +224,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/time_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -297,7 +275,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/time_type"
+        "expect": "success"
       }
     },
     {
@@ -350,7 +328,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/time_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -402,7 +380,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/time_type"
+        "expect": "success"
       }
     },
     {
@@ -849,7 +827,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/text_time"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -903,7 +881,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/text_time"
+        "expect": "success"
       }
     },
     {
@@ -951,7 +929,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/text_time"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -1007,7 +985,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/text_time"
+        "expect": "success"
       }
     },
     {
@@ -1050,7 +1028,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/text_time"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -1101,7 +1079,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/text_time"
+        "expect": "success"
       }
     },
     {
@@ -1145,7 +1123,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/text_time"
+        "expect": "materialize/text_time_cast"
       },
       "rust-host": {
         "derive": {
@@ -1197,7 +1175,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/text_time"
+        "expect": "materialize/text_time_cast"
       }
     },
     {
@@ -1240,7 +1218,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/text_time"
+        "expect": "materialize/text_time_cast"
       },
       "rust-host": {
         "derive": {
@@ -1291,7 +1269,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/text_time"
+        "expect": "materialize/text_time_cast"
       }
     },
     {
@@ -1523,7 +1501,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/time_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -1575,7 +1553,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/time_type"
+        "expect": "success"
       }
     }
   ]

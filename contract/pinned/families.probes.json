@@ -175,6 +175,26 @@
      "described": "4764cc290aeea17056619b318a288de39f8dab241bcf3c8d559b584c47b822de",
      "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
     },
+    "time.text-declared": {
+     "described": "9fb328bb7980e5a9bb0b2f88f06e7873982891882a17e596f637ac591f87c2f1",
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
+    },
+    "time.text-declared/no-time-columns": {
+     "described": "9fb328bb7980e5a9bb0b2f88f06e7873982891882a17e596f637ac591f87c2f1",
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
+    },
+    "time.text-iso-date": {
+     "described": "972ee4c0858e4671a03ce361540dbc00569d1162fd6b3a1aad3b6944a11adf1a",
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
+    },
+    "time.text-one-bad-value": {
+     "described": "972ee4c0858e4671a03ce361540dbc00569d1162fd6b3a1aad3b6944a11adf1a",
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
+    },
+    "time.text-us-date": {
+     "described": "972ee4c0858e4671a03ce361540dbc00569d1162fd6b3a1aad3b6944a11adf1a",
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
+    },
     "time.timestamp-ns": {
      "described": "504798de635e5a201a682339d412c9c76258ac6f6b9fd7a3ffa8dddefe41ed6b",
      "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"

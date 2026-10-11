@@ -87,10 +87,11 @@ FIELDS = {
 }
 STAGES = ('from_source', 'materialize', 'predict')
 #: The tasks a refusal of a map may name as its owner: T1.21c and T1.21d
-#: (E50, added at T1.10e), T1.22 to T1.27, T1.28a and T1.28b (T1.28's
-#: halves from T1.12b, which leave no T1.28) and the inventory's families,
-#: T1.32a to T1.32e (T1.21e).
-OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-7]|28[ab]|32[a-e])$')
+#: (E50, added at T1.10e), T1.22 to T1.25, T1.26a and T1.26b (T1.26's
+#: halves from T1.25, which leave no T1.26), T1.27, T1.28a and T1.28b
+#: (T1.28's halves from T1.12b, which leave no T1.28) and the inventory's
+#: families, T1.32a to T1.32e (T1.21e).
+OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-5]|26[ab]|27|28[ab]|32[a-e])$')
 #: The family maps' families: the inventory's seams.
 FAMILIES = (
     'keys',
@@ -345,7 +346,8 @@ def digest(value: Any) -> str:
 
 #: What a description's zoned column says of its zone, in the family pin:
 #: DuckDB hands a ``TIMESTAMPTZ`` over in the database's zone, the
-#: machine's, so the zone is the host machine's, not the case's.
+#: machine's, so the zone is the host machine's, not the case's. Kept at
+#: T1.25: the reference reads in the machine's zone too (register DT-13).
 DATABASE_ZONE = '<the database zone>'
 
 

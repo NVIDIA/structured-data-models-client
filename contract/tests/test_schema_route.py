@@ -214,13 +214,18 @@ def test_the_runners_hold_each_core_schema_to_its_description() -> None:
     [(case, _)] = runner.load_cases([CASES / 'base.regression.json'])
     case = copy.deepcopy(case)
     case['until'] = 'from_source'
-    probe = next(
-        p['python-core']
-        for p in spec.load(
-            ROOT / 'contract/refusal-maps/base.adventureworks.json'
-        )['probes']
-        if p['id'] == 'no-text-dates'
+    # The notebook's probe, which describes the source from T1.25, run to
+    # its description.
+    probe = copy.deepcopy(
+        next(
+            p['python-core']
+            for p in spec.load(
+                ROOT / 'contract/refusal-maps/base.adventureworks.json'
+            )['probes']
+            if p['id'] == 'notebook'
+        )
     )
+    probe['until'] = 'from_source'
     previous = os.environ.get('SDM_CORE_ROUTES')
     os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
     honest = runner.presented

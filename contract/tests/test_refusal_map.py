@@ -269,13 +269,13 @@ def test_a_change_to_the_case_alone_fails_the_map(change: Any) -> None:
 
 def test_a_probe_without_its_derivation_fails() -> None:
     document = _map()
-    del document['probes'][3]['python-core']['derive']
+    del document['probes'][1]['python-core']['derive']
     failures = refusal_map.bound(_case(), document)
     # And every probe after it, which derives from it, fails too.
     assert failures[0] == 'no-inference-config/python-core: no derive'
     assert 'one-hop/python-core: derives from no probe' in failures
     document = _map()
-    document['probes'][4]['python-core']['input']['setup'] = ['SELECT 1']
+    document['probes'][2]['python-core']['input']['setup'] = ['SELECT 1']
     assert 'one-hop/python-core: not its derived input' in (
         refusal_map.bound(_case(), document)
     )
@@ -303,17 +303,29 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
                 'described': refusal_map.digest(capture.described),
                 'warnings': refusal_map.digest(capture.warnings),
             }
+            # The schema materialize samples, where both hosts start it.
             for each in capture.inputs:
-                if each['op'] == 'materialize':
+                if (
+                    each['op'] == 'materialize'
+                    and 'materialize' in rust['core']
+                ):
                     agreed['materialize_schema'] = refusal_map.digest(
                         each['schema']
                     )
             digests[probe['id']] = agreed
         # Where python-core reached the core, it started the operations the
-        # rust-host probe starts, with the same inputs.
+        # rust-host probe starts, with the same inputs; past them only on
+        # the probe of the case itself, whose core operations the case
+        # names (describe_source alone), the notebook's materialize carrying
+        # what the case format cannot (the gap, inference_config).
         started = {each['op']: each for each in capture.inputs}
-        assert set(started) <= set(rust['core']), probe['id']
+        assert set(started) <= set(rust['core']) or (
+            rust['derive'] == {'from': 'case', 'steps': []}
+            and set(rust['core']) == {'describe_source'}
+        ), probe['id']
         for op, given in started.items():
+            if op not in rust['core']:
+                continue
             wanted = rust['core'][op]
             assert {key: given[key] for key in wanted} == wanted, probe['id']
             if op == 'materialize':
@@ -402,7 +414,7 @@ def test_a_refusal_the_map_does_not_list_fails() -> None:
     document['entries'] = [
         entry
         for entry in document['entries']
-        if entry['id'] != 'describe_source/text_time'
+        if entry['id'] != 'materialize/inference_config'
     ]
     failures = refusal_map.check(document, 'python-core', _observed())
     assert any(
@@ -422,7 +434,9 @@ def test_an_entry_no_probe_hits_fails() -> None:
     ]
 
 
-@pytest.mark.parametrize('retyped', [7, None, '', ['text_time'], {'x': 1}])
+@pytest.mark.parametrize(
+    'retyped', [7, None, '', ['inference_config'], {'x': 1}]
+)
 def test_retyped_evidence_fails(retyped: Any) -> None:
     observed = _observed()
     observed['notebook']['rule'] = retyped
@@ -435,15 +449,15 @@ def test_missing_or_empty_evidence_fails() -> None:
         'python-core: nothing was observed'
     ]
     observed = _observed()
-    del observed['notebook-schema']
+    del observed['notebook']
     failures = refusal_map.check(document, 'python-core', observed)
-    assert 'notebook-schema: not observed' in failures
+    assert 'notebook: not observed' in failures
     assert (
         'materialize/inference_config: listed for python-core and not hit'
         in failures
     )
     observed = _observed()
-    del observed['notebook-schema']['rule']
+    del observed['notebook']['rule']
     assert refusal_map.check(document, 'python-core', observed) != []
     observed = _observed()
     observed['not-a-probe'] = refusal_map.success('predict')
@@ -462,10 +476,10 @@ def test_missing_or_empty_evidence_fails() -> None:
 def test_a_probe_that_succeeds_or_hits_another_entry_fails() -> None:
     document = _map()
     observed = _observed()
-    observed['notebook-schema'] = copy.deepcopy(observed['notebook'])
+    observed['no-inference-config'] = copy.deepcopy(observed['notebook'])
     assert (
-        'notebook-schema: hit describe_source/text_time, where the map has '
-        'materialize/inference_config'
+        'no-inference-config: hit materialize/inference_config, where the '
+        'map has materialize/deeper_hop'
     ) in refusal_map.check(document, 'python-core', observed)
     observed = _observed()
     observed['one-hop'] = refusal_map.success('predict')
@@ -504,12 +518,16 @@ def test_the_reader_refuses_deep_and_wide_maps_by_name(tmp_path: Path) -> None:
 def test_the_owners_a_map_may_name() -> None:
     # E50 (T1.10e): T1.21c and T1.21d join T1.22 to T1.28; T1.21e adds the
     # inventory's families, T1.32a to T1.32e, and T1.28's halves, which
-    # replace it (T1.12b); their neighbours, a landed package, a later one
-    # and the T1.28 the split left behind stay refused.
+    # replace it (T1.12b), and T1.25 T1.26's (E62); their neighbours, a
+    # landed package, a later one and the T1.26 and T1.28 the splits left
+    # behind stay refused.
     for task in (
         'T1.21c',
         'T1.21d',
         'T1.22',
+        'T1.25',
+        'T1.26a',
+        'T1.26b',
         'T1.27',
         'T1.28a',
         'T1.28b',
@@ -522,6 +540,8 @@ def test_the_owners_a_map_may_name() -> None:
         'T1.21b',
         'T1.21e',
         'T1.21cd',
+        'T1.26',
+        'T1.26c',
         'T1.28',
         'T1.28c',
         'T1.29',
