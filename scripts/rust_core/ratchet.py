@@ -11,6 +11,7 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
     ratchet.py check [--repo DIR] --checkpoint SHA [--protected-paths TEXT]
         [--observations FILE]...
     ratchet.py accept [--repo DIR] --observations FILE...
+    ratchet.py where
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
 ``HEAD``: ``git merge-base CANDIDATE BASE``, never read from evidence.
@@ -74,6 +75,10 @@ runner given: each case whose projection equals the committed reference's
 on every one of them, the first baselines (T1.14) included; it is the
 package's to commit and the reviewer's to review (H3).
 
+``where`` prints the gate's ``--base`` or ``--phase-push`` for the CI run
+it is in, from GitHub's environment, or nothing outside the phase branch and
+its lanes (:func:`ci_base`).
+
 Exit status 1 on any problem. Each problem names its rule and its case;
 input values are never printed.
 """
@@ -85,6 +90,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -1183,6 +1189,33 @@ def accept(
     return found
 
 
+def ci_base(environ: dict[str, str]) -> str:
+    r"""The gate's base for a CI run, from GitHub's environment: on a push
+    to the phase branch, ``--phase-push`` and the push's previous tip (from
+    the event file); on a push to a lane or another branch under it, or with
+    no CI environment (a local replay), ``--base`` the phase branch's
+    remote tip; elsewhere nothing, since there is no ratchet to run."""
+    ref = environ.get('GITHUB_REF_NAME')
+    if ref is None:
+        return '--base origin/rust-core-phase-1'
+    if environ.get('GITHUB_EVENT_NAME') != 'push':
+        return ''
+    if ref == 'rust-core-phase-1':
+        event = _json(
+            Path(environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'),
+            'the event',
+        )
+        before = event.get('before') if isinstance(event, dict) else None
+        if not isinstance(before, str) or not re.fullmatch(
+            r'[0-9a-f]{40}', before
+        ):
+            raise Unreadable('the push event names no previous tip')
+        return f'--phase-push {before}'
+    if ref.startswith('rust-core-phase-1-'):
+        return '--base origin/rust-core-phase-1'
+    return ''
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     commands = parser.add_subparsers(dest='command', required=True)
@@ -1197,6 +1230,7 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--protected-paths')
     judge.add_argument('--bootstrap', action='store_true')
     judge.add_argument('--observations', type=Path, action='append', default=[])
+    commands.add_parser('where')
     take = commands.add_parser('accept')
     take.add_argument('--repo', type=Path, default=Path('.'))
     take.add_argument(
@@ -1204,6 +1238,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
     try:
+        if arguments.command == 'where':
+            print(ci_base(dict(os.environ)))
+            return 0
         if arguments.command == 'checkpoint':
             found, problems = resolve(
                 arguments.repo, arguments.base, arguments.phase_push

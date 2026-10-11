@@ -1208,3 +1208,28 @@ def test_an_observation_file_nested_too_deep_or_empty_is_refused_by_name(
     ):
         found = check(repo, landed, (path,))
         assert any(w in p for p in found for w in wanted), found
+
+
+def test_ci_judges_a_phase_push_from_its_previous_tip_and_a_lane_from_the_phase_tip(
+    tmp_path: Path,
+) -> None:
+    event = tmp_path / 'event.json'
+    before = 'a' * 40
+    event.write_text(json.dumps({'before': before}))
+    push = {'GITHUB_EVENT_NAME': 'push', 'GITHUB_EVENT_PATH': str(event)}
+    base = '--base origin/rust-core-phase-1'
+    assert ratchet.ci_base(
+        {**push, 'GITHUB_REF_NAME': 'rust-core-phase-1'}
+    ) == (f'--phase-push {before}')
+    lane = {**push, 'GITHUB_REF_NAME': 'rust-core-phase-1-lane-1a'}
+    assert ratchet.ci_base(lane) == base
+    # A local replay has no CI environment and judges against the phase tip.
+    assert ratchet.ci_base({}) == base
+    # No ratchet runs elsewhere, nor on another event.
+    assert ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'main'}) == ''
+    assert ratchet.ci_base({**lane, 'GITHUB_EVENT_NAME': 'pull_request'}) == ''
+    # A phase push whose event names no previous tip is refused by name.
+    for broken in ('{}', '{"before": 7}', '[' * 100_000 + ']' * 100_000):
+        event.write_text(broken)
+        with pytest.raises(ratchet.Unreadable):
+            ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'rust-core-phase-1'})

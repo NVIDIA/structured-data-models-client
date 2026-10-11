@@ -213,17 +213,14 @@ jobs:
       # phase branch's tip, a landing commit judged against its own
       # recorded base. Before T1.14 lands, the bootstrap: the candidate's
       # harness runs.
+      # The branch decides the checkpoint's base, in the step itself so a
+      # local replay runs it too (replay_jobs.py takes no conditions):
+      # elsewhere than the phase branch and its lanes there is no ratchet.
       - name: gate (rust-host)
-        if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'rust-core-phase-1') }}
-        env:
-          BEFORE: ${{ github.event.before }}
         run: |
-          if [ "$GITHUB_REF_NAME" = rust-core-phase-1 ]; then
-            where=(--phase-push "$BEFORE")
-          else
-            where=(--base origin/rust-core-phase-1)
-          fi
-          scripts/rust_core/gate.sh "${where[@]}" --run rust-host
+          where=$(python scripts/rust_core/ratchet.py where)
+          [ -n "$where" ] || exit 0
+          scripts/rust_core/gate.sh $where --run rust-host
         working-directory: .
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
@@ -546,17 +543,12 @@ jobs:
       # and python-old observed with the checkpoint's runner, judged by the
       # checkpoint's ratchet and comparator; rust-test runs the L0 scripts.
       - name: gate (python-core, python-old)
-        if: ${{ github.event_name == 'push' && startsWith(github.ref_name, 'rust-core-phase-1') }}
         env:
-          BEFORE: ${{ github.event.before }}
           PYTHON: python
         run: |
-          if [ "$GITHUB_REF_NAME" = rust-core-phase-1 ]; then
-            where=(--phase-push "$BEFORE")
-          else
-            where=(--base origin/rust-core-phase-1)
-          fi
-          scripts/rust_core/gate.sh "${where[@]}" --run python-core,python-old --no-l0
+          where=$(python scripts/rust_core/ratchet.py where)
+          [ -n "$where" ] || exit 0
+          scripts/rust_core/gate.sh $where --run python-core,python-old --no-l0
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
