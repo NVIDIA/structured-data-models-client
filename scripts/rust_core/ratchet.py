@@ -81,7 +81,6 @@ input values are never printed.
 from __future__ import annotations
 
 import argparse
-import copy
 import functools
 import hashlib
 import importlib.util
@@ -163,29 +162,50 @@ def git(repo: Path, *args: str) -> str:
     return done.stdout
 
 
-@dataclass
 class Tree:
-    r"""A commit's files, read from git."""
+    r"""A commit's files, read from git through one ``git cat-file --batch``
+    process."""
 
-    repo: Path
-    sha: str
+    def __init__(self, repo: Path, sha: str) -> None:
+        self.repo, self.sha = repo, sha
+        self._cache: dict[str, str | None] = {}
+        self._batch: subprocess.Popen[bytes] | None = None
 
     def read(self, path: str) -> str | None:
-        done = subprocess.run(
-            ['git', '-C', str(self.repo), 'show', f'{self.sha}:{path}'],
-            capture_output=True,
-            check=False,
-        )
-        if done.returncode != 0:
-            return None
-        try:
-            return done.stdout.decode('utf-8')
-        except UnicodeDecodeError:
-            raise Unreadable(f'{path}: not UTF-8') from None
+        if path in self._cache:
+            return self._cache[path]
+        if self._batch is None:
+            self._batch = subprocess.Popen(
+                ['git', '-C', str(self.repo), 'cat-file', '--batch'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+        assert self._batch.stdin is not None and self._batch.stdout is not None
+        self._batch.stdin.write(f'{self.sha}:{path}\n'.encode())
+        self._batch.stdin.flush()
+        header = self._batch.stdout.readline().split()
+        text: str | None = None
+        if len(header) == 3 and header[1] == b'blob':
+            data = self._batch.stdout.read(int(header[2]))
+            self._batch.stdout.read(1)
+            try:
+                text = data.decode('utf-8')
+            except UnicodeDecodeError:
+                raise Unreadable(f'{path}: not UTF-8') from None
+        elif len(header) == 3:
+            # Not a file (a tree): its contents are skipped.
+            self._batch.stdout.read(int(header[2]) + 1)
+        self._cache[path] = text
+        return text
 
     def files(self, prefix: str) -> list[str]:
         out = git(self.repo, 'ls-tree', '-r', '--name-only', self.sha, prefix)
         return sorted(line for line in out.splitlines() if line)
+
+    def __del__(self) -> None:
+        if self._batch is not None:
+            self._batch.kill()
+            self._batch.wait()
 
 
 def trailers(repo: Path, sha: str) -> dict[str, str]:
@@ -252,7 +272,7 @@ def resolve(
             problems.append(
                 'a push to the phase branch lands exactly one package, as '
                 f'its tip: it holds {len(landings)} landing commits'
-                + ('' if candidate in landings else ', its tip none')
+                + ('' if candidate in landings else ', and its tip is none')
             )
         elif trailers(repo, candidate).get('Base-SHA') != before:
             problems.append(
@@ -348,10 +368,18 @@ def baselines(tree: Tree) -> dict[str, dict[str, dict[str, Any]]]:
         lines = jsonl(tree.read(path), path)
         by_case = {}
         for line in lines:
-            if set(line) != {'case', 'runner', 'cell', 'projection', 'digest'}:
+            if (
+                set(line) != {'case', 'runner', 'cell', 'projection', 'digest'}
+                or not isinstance(line['case'], str)
+                or line['runner'] != runner
+                or line['cell'] != CELL
+                or not isinstance(line['projection'], dict)
+            ):
                 raise Unreadable(f'{path}: a line is not a baseline')
             if line['digest'] != digest(line['projection']):
                 raise Unreadable(f'{path}: {line["case"]}: digest differs')
+            if line['case'] in by_case:
+                raise Unreadable(f'{path}: {line["case"]} twice')
             by_case[line['case']] = line
         if by_case:
             found[runner] = by_case
@@ -429,7 +457,7 @@ def semantic(
     payload's SHA-256 (integrity only), the value of ``metadata.request_id``
     (E35), and a statement's in-order digest where its rows compare as a
     multiset (``ordered`` names the others)."""
-    line = copy.deepcopy(observation)
+    line = json.loads(json.dumps(observation))
     line.pop('identity', None)
     driver = line.get('driver') or {}
     capture = driver.get('capture') or {}
@@ -622,10 +650,15 @@ def check_reference(
     ordered = policy.get('ordered') if isinstance(policy, dict) else None
     for path in before:
         old = {
-            line['case']: line for line in jsonl(checkpoint.read(path), path)
+            line.get('case'): line
+            for line in jsonl(checkpoint.read(path), path)
         }
-        new = {line['case']: line for line in jsonl(candidate.read(path), path)}
+        new = {
+            line.get('case'): line for line in jsonl(candidate.read(path), path)
+        }
         for case, line in old.items():
+            if new.get(case) == line:
+                continue
             if case not in new:
                 if case not in removed:
                     report.fail('reference', f'{case}: its line removed')
@@ -636,7 +669,7 @@ def check_reference(
                         f'{case}: its line changed, and no approved entry '
                         'names the case on python-ref',
                     )
-            elif line != new[case]:
+            else:
                 report.note('reference', f'{case}: re-recorded, identity only')
 
 
@@ -767,6 +800,16 @@ def availability_relaxations(old: Any, new: Any) -> list[str]:
         for name, value in (fields or {}).items():
             if value != 'available' and name not in (theirs.get(runner) or {}):
                 found.append(f'{runner} {name}: added as {value}')
+    return found
+
+
+def relaxations(read: Any, old: Any, new: Any, path: str) -> list[str]:
+    r"""``read``'s relaxations of ``path``, a file of another shape refused
+    by name."""
+    try:
+        found: list[str] = read(old, new)
+    except (AttributeError, TypeError):
+        raise Unreadable(f'{path}: not a file of its format') from None
     return found
 
 
@@ -1022,7 +1065,7 @@ def check(
             report,
             'policy',
             POLICY,
-            policy_relaxations(old_policy, new_policy),
+            relaxations(policy_relaxations, old_policy, new_policy, POLICY),
             (new_policy or {}).get('relaxations')
             if isinstance(new_policy, dict)
             else None,
@@ -1037,7 +1080,9 @@ def check(
                 report,
                 'availability',
                 AVAILABILITY,
-                availability_relaxations(old_marks, new_marks),
+                relaxations(
+                    availability_relaxations, old_marks, new_marks, AVAILABILITY
+                ),
                 (new_marks or {}).get('relaxations')
                 if isinstance(new_marks, dict)
                 else None,
@@ -1062,8 +1107,12 @@ def check(
                     [str(f) for f in found] if isinstance(found, list) else []
                 )
 
-            if not held and not bootstrap:
-                report.fail('baselines', 'the checkpoint holds no baselines')
+            for runner in sorted(observed):
+                if runner not in held and not bootstrap:
+                    report.fail(
+                        'baselines',
+                        f'the checkpoint holds no baselines of {runner}',
+                    )
             check_baselines(
                 report,
                 held,
@@ -1077,6 +1126,12 @@ def check(
             )
     except Unreadable as error:
         report.fail('read', str(error))
+    except (AttributeError, TypeError, KeyError) as error:
+        # A file of another shape than its format's, whichever rule met it.
+        report.fail(
+            'read',
+            f'a file not of its format ({type(error).__name__}: {error})',
+        )
     return report
 
 
