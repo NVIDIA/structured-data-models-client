@@ -4,7 +4,7 @@
 # Bridge code: on the core route, the host-held rules around _gather (design,
 # "Host-held semantics"): the empty and reserved-name refusals, the statistic,
 # the context that answers the question and the notices, deleted in Phase 1
-# by T1.28, and the missing-index flag (:110), by T1.26; the old route's own
+# by T1.28a, and the missing-index flag (:110), by T1.26; the old route's own
 # goes with the old engine in Phase 5.
 
 r"""Gather and encode relational requests with the relational engine."""
