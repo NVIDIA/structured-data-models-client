@@ -215,7 +215,10 @@ def reference_problems(
         except (ValueError, RecursionError):
             problems.append(f'{where}: not JSON it reads')
             continue
-        invalid = run_python._invalid(validate, observation)
+        try:
+            invalid = run_python._invalid(validate, observation)
+        except RecursionError:
+            invalid = 'nested past what the validator reads'
         if invalid is not None:
             problems.append(f'{where}: not a valid observation: {invalid}')
         problems.extend(
@@ -404,11 +407,16 @@ def test_a_line_nested_past_the_parser_s_depth_is_refused_by_name(
     text[2] = '{"format": '
     path.write_text('\n'.join(text) + '\n')
     problems = reference_problems(reference, environment)
+    # Refused by name, never a RecursionError: by the parser where it stops
+    # at its depth, and by the schema where it reads the line (Python 3.14's
+    # parser reads 100,000 levels).
     for number in (1, 2, 3):
         assert any(
-            problem.endswith(f'.jsonl:{number}: not JSON it reads')
+            f'.jsonl:{number}: not JSON it reads' in problem
+            or f'.jsonl:{number}: not a valid observation' in problem
             for problem in problems
         ), problems
+    assert any('.jsonl:3: not JSON it reads' in p for p in problems)
 
 
 def _file_fault(
