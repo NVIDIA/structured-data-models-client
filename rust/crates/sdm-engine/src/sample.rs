@@ -6,14 +6,18 @@
 //! the examples' entities and anchor times (`sample_target`'s temporal
 //! walk), their labels (a windowed `SUM`, as the reference's pandas
 //! executor computes it), the seeds a `neighbors` or `lookup` request
-//! carries, and the order `_by_fkey` keeps neighbors in. It holds no SQL:
-//! what it asks for is typed requests, which `sdm-data` plans.
+//! carries, the order `_by_fkey` keeps neighbors in, and, from T1.26b, the
+//! sampler's three reads as typed requests ([`by_pkey`], [`by_fkey`],
+//! [`by_time`]). It holds no SQL: what it asks for is typed requests,
+//! which `sdm-data` plans.
 
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit as ArrowUnit};
-use sdm_contract::data::{NullOrder, SEED_BATCH, SEED_KEY, TieBreak, TieTerm};
+use sdm_contract::data::{
+    DataRequest, KeySet, NullOrder, SEED_BATCH, SEED_KEY, SeedBound, TieBreak, TieTerm,
+};
 use sdm_contract::pql::TimeUnit;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -21,6 +25,13 @@ use crate::graph::Table;
 use crate::random::Pcg64;
 
 const NANOS_PER_SECOND: i128 = 1_000_000_000;
+
+/// The seed time columns the sampler's requests carry: each seed's anchor
+/// (`_by_fkey`'s `__kumo_time__`), and the start and end of its window
+/// (`_by_time`'s `__kumo_start__` and `__kumo_end__`).
+pub const SEED_TIME: &str = "time";
+pub const SEED_START: &str = "start";
+pub const SEED_END: &str = "end";
 
 /// `count` units as a fixed span in nanoseconds, as `pd.DateOffset` adds it
 /// to a time with no zone; `None` for months, which are calendar
@@ -239,6 +250,102 @@ pub fn tie_break(table: &Table, nulls: NullOrder) -> Result<TieBreak, CoreError>
         nulls_last,
     });
     Ok(TieBreak(terms))
+}
+
+/// `_by_fkey`'s request: the rows of `table` whose foreign key `fkey` is a
+/// seed's key, `columns` in order; where the table has a time column, those
+/// whose time is not after the seed's anchor (the seeds' [`SEED_TIME`]);
+/// the first `per_seed` of each seed in the reference's order
+/// ([`tie_break`], nulls as the provider declares), the result in that
+/// order. A row whose time is null is not returned (register ORD-2).
+pub fn by_fkey(
+    table: &Table,
+    fkey: &str,
+    columns: Vec<String>,
+    seeds: KeySet,
+    per_seed: u64,
+    nulls: NullOrder,
+) -> Result<DataRequest, CoreError> {
+    Ok(DataRequest::Neighbors {
+        table: table.source.clone(),
+        key: fkey.to_owned(),
+        columns,
+        seeds,
+        window: table
+            .time_column
+            .as_ref()
+            .map(|time| sdm_contract::data::Window {
+                column: time.clone(),
+                lower: None,
+                upper: Some(SeedBound {
+                    seed_column: SEED_TIME.into(),
+                    inclusive: true,
+                }),
+            }),
+        per_seed: Some(per_seed),
+        order: Some(tie_break(table, nulls)?),
+    })
+}
+
+/// `_by_time`'s request: every row of `table` whose foreign key `fkey` is
+/// a seed's key and whose time is after the seed's start ([`SEED_START`],
+/// when `start`) and not after its end ([`SEED_END`]), `columns` in order,
+/// unordered.
+pub fn by_time(
+    table: &Table,
+    fkey: &str,
+    columns: Vec<String>,
+    seeds: KeySet,
+    start: bool,
+) -> Result<DataRequest, CoreError> {
+    let time = table.time_column.clone().ok_or_else(|| {
+        CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a windowed read names a table without a time column",
+        )
+    })?;
+    Ok(DataRequest::Neighbors {
+        table: table.source.clone(),
+        key: fkey.to_owned(),
+        columns,
+        seeds,
+        window: Some(sdm_contract::data::Window {
+            column: time,
+            lower: start.then(|| SeedBound {
+                seed_column: SEED_START.into(),
+                inclusive: false,
+            }),
+            upper: Some(SeedBound {
+                seed_column: SEED_END.into(),
+                inclusive: true,
+            }),
+        }),
+        per_seed: None,
+        order: None,
+    })
+}
+
+/// `_by_pkey`'s request: one row of `table` for each seed whose key is the
+/// table's key, `columns` in order, with how many rows hold it.
+pub fn by_pkey(
+    table: &Table,
+    columns: Vec<String>,
+    seeds: KeySet,
+) -> Result<DataRequest, CoreError> {
+    let key = table.primary_key.clone().ok_or_else(|| {
+        CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a lookup names a table without a key",
+        )
+    })?;
+    Ok(DataRequest::Lookup {
+        table: table.source.clone(),
+        key,
+        columns,
+        seeds,
+    })
 }
 
 #[cfg(test)]

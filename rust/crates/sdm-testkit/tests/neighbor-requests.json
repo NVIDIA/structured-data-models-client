@@ -1,0 +1,162 @@
+{
+ "description": "The core's two neighbor reads of the tables neighbors.json holds, as sdm_engine::sample builds them (by_fkey with DuckDB's declared null order, by_time with and without a start), which neighbors.rs runs on DuckDB and sdm-engine's tests hold its builders to; per_seed is the case's",
+ "requests": {
+  "fkey/ev": {
+   "request": "neighbors",
+   "table": "ev",
+   "key": "uid",
+   "columns": [
+    "eid",
+    "uid",
+    "ts",
+    "val"
+   ],
+   "seeds": {
+    "attachment": 0,
+    "columns": []
+   },
+   "window": {
+    "column": "ts",
+    "lower": null,
+    "upper": {
+     "seed_column": "time",
+     "inclusive": true
+    }
+   },
+   "per_seed": 32,
+   "order": [
+    {
+     "column": "ts",
+     "as_timestamp": true,
+     "descending": true,
+     "nulls_last": true
+    },
+    {
+     "column": "eid",
+     "as_timestamp": false,
+     "descending": false,
+     "nulls_last": true
+    }
+   ]
+  },
+  "fkey/evtz": {
+   "request": "neighbors",
+   "table": "evtz",
+   "key": "uid",
+   "columns": [
+    "eid",
+    "uid",
+    "ts",
+    "val"
+   ],
+   "seeds": {
+    "attachment": 0,
+    "columns": []
+   },
+   "window": {
+    "column": "ts",
+    "lower": null,
+    "upper": {
+     "seed_column": "time",
+     "inclusive": true
+    }
+   },
+   "per_seed": 32,
+   "order": [
+    {
+     "column": "ts",
+     "as_timestamp": true,
+     "descending": true,
+     "nulls_last": true
+    },
+    {
+     "column": "eid",
+     "as_timestamp": false,
+     "descending": false,
+     "nulls_last": true
+    }
+   ]
+  },
+  "time/ev": {
+   "request": "neighbors",
+   "table": "ev",
+   "key": "uid",
+   "columns": [
+    "eid",
+    "uid",
+    "ts",
+    "val"
+   ],
+   "seeds": {
+    "attachment": 0,
+    "columns": []
+   },
+   "window": {
+    "column": "ts",
+    "lower": {
+     "seed_column": "start",
+     "inclusive": false
+    },
+    "upper": {
+     "seed_column": "end",
+     "inclusive": true
+    }
+   },
+   "per_seed": null,
+   "order": null
+  },
+  "time/ev/no-start": {
+   "request": "neighbors",
+   "table": "ev",
+   "key": "uid",
+   "columns": [
+    "eid",
+    "uid",
+    "ts",
+    "val"
+   ],
+   "seeds": {
+    "attachment": 0,
+    "columns": []
+   },
+   "window": {
+    "column": "ts",
+    "lower": null,
+    "upper": {
+     "seed_column": "end",
+     "inclusive": true
+    }
+   },
+   "per_seed": null,
+   "order": null
+  },
+  "time/evtz": {
+   "request": "neighbors",
+   "table": "evtz",
+   "key": "uid",
+   "columns": [
+    "eid",
+    "uid",
+    "ts",
+    "val"
+   ],
+   "seeds": {
+    "attachment": 0,
+    "columns": []
+   },
+   "window": {
+    "column": "ts",
+    "lower": {
+     "seed_column": "start",
+     "inclusive": false
+    },
+    "upper": {
+     "seed_column": "end",
+     "inclusive": true
+    }
+   },
+   "per_seed": null,
+   "order": null
+  }
+ }
+}

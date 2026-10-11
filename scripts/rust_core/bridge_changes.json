@@ -9,7 +9,7 @@
       "moved": "T1.24 (E61): a table named otherwise than its source is the core's to sample (the core's table_source refusal lifted); the table's source name is held to the one the description gave, the schema_edited refusal staying for T1.24b"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T1.24 (E61): the option, unseeded and num_context_samples refusals moved into the core; each option passes through, by name or in its field (contract version 13)"
+      "moved": "T1.26b (E52): the index once-flag moved into the core's sampler state value; the run is handed the materializer's state and leaves its own there, done or failed, through _rust/run.py's pass-through, and the core skips the index read and the time bounds it has made"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_infer_relationships": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: links inferred by name, no longer reached on the core route"
@@ -76,6 +76,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
       "moved": "T1.24 (E61): a call naming its tables routes to the core (schema.from-source/tables/duckdb), the tables passed to the schema bridge"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.__init__": {
+      "moved": "T1.26b (E52): the index once-flag gone; the materializer holds the core's sampler state value, opaque, which the core reads"
     }
   }
 }

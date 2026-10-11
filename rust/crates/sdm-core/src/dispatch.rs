@@ -7,7 +7,8 @@
 use std::sync::Arc;
 
 use sdm_contract::ops::{
-    Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION, SourceDescription, SourceSpec,
+    Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION, SAMPLER_STATE_VERSION,
+    SamplerMemo, SourceDescription, SourceSpec,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
@@ -105,8 +106,33 @@ pub fn start(
                 )
                 .with_field("field", Detail::text("seed")));
             }
+            // The sampler state's version first, by name, before anything of
+            // the state is read, as a request state's (decision H23); then
+            // its memo, which a run reads only if it was made under this
+            // provider and description (decision E52).
+            let memo = match &request.sampler_state {
+                None => None,
+                Some(state) => {
+                    if state.version != SAMPLER_STATE_VERSION {
+                        return Err(CoreError::new(
+                            ErrorKind::InvalidRequest,
+                            ErrorCode::InvalidRequest,
+                            "the sampler state is of a version this core does not read",
+                        )
+                        .with_field("field", Detail::text("sampler_state.version"))
+                        .with_field("version", Detail::Scalar(Scalar::UInt32(state.version))));
+                    }
+                    let memo: SamplerMemo = take_json(&mut attachments, state.memo)
+                        .map_err(|e| e.with_field("field", Detail::text("sampler_state")))?;
+                    crate::materialize::check_memo(&memo)?;
+                    Some(memo)
+                }
+            };
+            let source = crate::materialize::fingerprint(&request.provider, &description)?;
             let access = root.data_access(&request.provider)?;
             let inputs = crate::materialize::Inputs {
+                memo: memo.filter(|memo| memo.source == source),
+                source,
                 description,
                 query,
                 indices,

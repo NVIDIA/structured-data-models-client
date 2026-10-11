@@ -16,6 +16,7 @@ pub mod pql;
 mod predict;
 pub mod profiles;
 pub mod run;
+mod subgraph;
 #[cfg(feature = "test-ops")]
 mod test_ops;
 

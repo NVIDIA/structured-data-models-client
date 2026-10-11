@@ -723,3 +723,17 @@ def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
             'the data',
         )
     ]
+    # T1.26b: a context collected short, in the reference's words; the
+    # host gives it once in a process (sdm-host, decision E52).
+    assert _shown(
+        _warning('CONTEXT_COVERAGE', examples=1000, candidates=10000)
+    ) == [
+        (
+            'UserWarning',
+            '[CONTEXT_COVERAGE] Failed to collect 1,000 context examples '
+            'within 10,000 candidates. To improve coverage, consider '
+            'increasing the number of PQ iterations using the '
+            "'max_pq_iterations' option. This warning will not be shown "
+            'again in this run.',
+        )
+    ]

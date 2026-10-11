@@ -698,6 +698,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             anchor_entity: false,
             num_context_samples: None,
             options: vec![],
+            sampler_state: None,
         }),
         vec![],
     );

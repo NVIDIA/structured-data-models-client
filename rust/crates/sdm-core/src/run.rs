@@ -31,7 +31,7 @@ use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
 };
-use sdm_contract::ops::OperationResult;
+use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
 
@@ -134,6 +134,9 @@ struct Shared {
     /// host.
     attachments: BTreeMap<AttachmentId, Attachment>,
     warnings: Vec<CoreWarning>,
+    /// The sampler memo the operation leaves for the host (decision E52),
+    /// as it last kept it.
+    memo: Option<SamplerMemo>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
 }
@@ -230,6 +233,13 @@ impl Asker {
     /// Gives a warning, after every warning given before it.
     pub fn warn(&self, warning: CoreWarning) {
         lock(&self.shared).warnings.push(warning);
+    }
+
+    /// Keeps `memo` as what the run leaves the host, in place of any kept
+    /// before: what a `materialize` run has read of its source, which the
+    /// host takes once the run ends, done or failed (decision E52).
+    pub fn keep(&self, memo: SamplerMemo) {
+        lock(&self.shared).memo = Some(memo);
     }
 }
 
@@ -609,6 +619,24 @@ impl Run {
     /// Takes an attachment a step names (a key set, a model call's body).
     pub fn take_attachment(&mut self, id: AttachmentId) -> Option<Attachment> {
         lock(&self.shared).attachments.remove(&id)
+    }
+
+    /// Takes the sampler state the run left (decision E52), its memo
+    /// attached as JSON under the run's next id, for the host to take; none
+    /// when the run kept none, or it was taken. A host takes it once the
+    /// run has ended, whether it finished or failed.
+    pub fn take_sampler_state(&mut self) -> Result<Option<SamplerState>, CoreError> {
+        let mut shared = lock(&self.shared);
+        let Some(memo) = shared.memo.take() else {
+            return Ok(None);
+        };
+        let bytes =
+            serde_json::to_vec(&memo).map_err(|_| internal("a sampler memo does not serialize"))?;
+        let id = attach(&mut shared, Attachment::Bytes(bytes))?;
+        Ok(Some(SamplerState {
+            version: SAMPLER_STATE_VERSION,
+            memo: id,
+        }))
     }
 }
 

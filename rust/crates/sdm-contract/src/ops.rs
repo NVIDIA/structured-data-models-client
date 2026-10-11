@@ -79,6 +79,7 @@ impl Operation {
             Operation::Materialize(m) => {
                 let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
                 named.extend(m.indices.map(|id| (id, Arrow)));
+                named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
                 named
             }
             Operation::Predict(p) => vec![(p.state.payload, Bytes), (p.state.query, Bytes)],
@@ -452,6 +453,57 @@ pub struct Materialize {
     /// passes each the call gave, so it refuses none of its own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
+    /// The sampler state the materializer's last run left, which the host
+    /// hands back as it took it (decision E52); none for a materializer's
+    /// first run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampler_state: Option<SamplerState>,
+}
+
+/// The version of [`SamplerState`]'s format this build writes and reads;
+/// it is independent of the contract's. A state of another version is
+/// refused by name before anything of it is read.
+pub const SAMPLER_STATE_VERSION: u32 = 1;
+
+/// What a materializer's runs have read of its source, so a later run
+/// skips a read the reference's sampler makes once (decision E52): the
+/// core holds no state across runs. A `materialize` run leaves it, done or
+/// failed, and the host takes it after the run ends (a `sampler_state`
+/// message), keeps it on its materializer as it is, opaque, and hands it
+/// back with that materializer's next `materialize`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SamplerState {
+    /// The version of this state's format, independent of the contract's.
+    pub version: u32,
+    /// A bytes attachment of a [`SamplerMemo`] as JSON.
+    pub memo: AttachmentId,
+}
+
+/// [`SamplerState`]'s memo: what the runs read, and of what.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SamplerMemo {
+    /// A fingerprint of the provider and source description the memo was
+    /// made under; a memo of another is not read.
+    pub source: String,
+    /// Whether the sampler's check of the indexes its reads would use was
+    /// made (and its warning given, if any).
+    pub indexes_checked: bool,
+    /// The time bounds read, at most one entry per table.
+    pub bounds: Vec<MemoBounds>,
+}
+
+/// The smallest and largest time of one table's time column, as read, in
+/// nanoseconds since the epoch; none where no row holds a time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MemoBounds {
+    /// The table, as the schema names it.
+    pub table: String,
+    pub column: String,
+    pub min: Option<i64>,
+    pub max: Option<i64>,
 }
 
 /// An integer of any size, as signed hexadecimal text with no leading
@@ -635,6 +687,8 @@ pub struct Attachments {
     pub materialize_schema: SourceDescription,
     #[schemars(rename = "Materialize.query")]
     pub materialize_query: String,
+    #[schemars(rename = "SamplerState.memo")]
+    pub sampler_state_memo: SamplerMemo,
     #[schemars(rename = "RequestState.payload")]
     pub request_state_payload: StatePayload,
     #[schemars(rename = "RequestState.query")]

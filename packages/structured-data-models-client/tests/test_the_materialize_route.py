@@ -402,6 +402,9 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
                 'max_keys_per_request': None,
                 'sampling': 'seeded_stable',
                 'max_seed': None,
+                # Declared, so the sampler is not refused before it fetches
+                # (T1.26b).
+                'null_order': 'last',
             },
         },
         'schema': 1,
@@ -927,3 +930,220 @@ def test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code(
         with pytest.raises(StructuredDataError) as old:
             _materialize(setup)
         assert old.value.code == old_code
+
+
+# --- T1.26b: the sampler's walk and its state ----------------------------------
+
+
+def _logged(connection: Any) -> int:
+    r"""How many statements DuckDB logged since its query log was turned
+    on, the log's own reads left out."""
+    rows = connection.execute(
+        "SELECT message FROM duckdb_logs WHERE type = 'QueryLog'"
+    ).fetchall()
+    return sum(1 for (text,) in rows if text and 'duckdb_logs' not in text)
+
+
+def _calls(
+    queries: list[PredictiveQuery], connection: Any, **arguments: Any
+) -> list[tuple[int, int]]:
+    r"""Each query of ``queries`` materialized in turn: the statements each
+    call ran and the missing-index warnings it showed."""
+    made = []
+    for query in queries:
+        before = _logged(connection)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            try:
+                query.materialize(anchor_time=ANCHOR, **arguments)
+            except StructuredDataError:
+                pass
+        warned = sum('Missing' in str(w.message) for w in caught)
+        made.append((_logged(connection) - before, warned))
+    return made
+
+
+def _on_both_routes(
+    monkeypatch: pytest.MonkeyPatch, made: Any
+) -> list[list[tuple[int, int]]]:
+    r"""What ``made`` gives on the core, then on the old route where the
+    engine is installed (CI's ``engine`` job); where it is not, the old
+    route's refusal is held instead."""
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    found = [made()]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        with pytest.raises(MissingExtraError):
+            made()
+    else:
+        found.append(made())
+    return found
+
+
+def _shop_logged() -> tuple[Any, Schema]:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        connection = _connection()
+        schema = Schema.from_source(DuckDBSource(connection))
+    connection.execute("CALL enable_logging('QueryLog')")
+    return connection, schema
+
+
+def test_a_second_call_runs_the_reference_s_statements(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # H9's counts on a repeated call (decision E52): the reference checks
+    # the indexes once, building its sampler, and keeps the time bounds it
+    # read, so its second call runs 4 statements where its first ran 6; the
+    # core is handed the state its first run left and skips the same two.
+    def made() -> list[tuple[int, int]]:
+        connection, schema = _shop_logged()
+        query = PredictiveQuery(QUERY, schema)
+        return _calls([query] * 3, connection, indices=[0, 1])
+
+    for found in _on_both_routes(monkeypatch, made):
+        assert found == [(6, 1), (4, 0), (4, 0)]
+
+
+def test_two_materializers_each_check_their_source_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Each query holds its own materializer, and each materializer its own
+    # state: each checks the indexes, and warns, once.
+    def made() -> list[tuple[int, int]]:
+        connection, schema = _shop_logged()
+        one = PredictiveQuery(QUERY, schema)
+        two = PredictiveQuery(QUERY, schema)
+        return _calls([one, two, one, two], connection, indices=[0, 1])
+
+    for found in _on_both_routes(monkeypatch, made):
+        assert found == [(6, 1), (6, 1), (4, 0), (4, 0)]
+
+
+def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An option the core does not take is refused before anything is read
+    # (P1B-3): the state that run leaves says nothing was read, so the next
+    # call checks the indexes and warns; one refused after the check (an
+    # entity missing, refused before the time bounds are read) keeps it,
+    # and the next call skips it, reading the bounds.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    connection, schema = _shop_logged()
+    query = PredictiveQuery(QUERY, schema)
+    assert _calls([query], connection, indices=[0, 1], num_hops=1) == [(0, 0)]
+    assert _calls([query], connection, indices=[0, 1]) == [(6, 1)]
+    other = PredictiveQuery(QUERY, schema)
+    assert _calls([other], connection, indices=[None, 1]) == [(1, 1)]
+    assert _calls([other], connection, indices=[0, 1]) == [(5, 0)]
+
+
+#: A source whose order lines refer to items as well as users, the items
+#: with a text feature: the walk's second hop and the sampler's words.
+_DEEPER = (
+    "CREATE TABLE items AS SELECT i::BIGINT AS item_id, 'Item ' || i || "
+    "' (the BEST<br>one)!' AS title, (i * 2.5)::DOUBLE AS cost FROM range(5) t(i)",
+    'ALTER TABLE orders ADD COLUMN item_id BIGINT',
+    'UPDATE orders SET item_id = order_id % 5',
+)
+
+
+def _deeper(*setup: str, edit: bool = True) -> Request:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        connection = _connection(*_DEEPER, *setup)
+        schema = Schema.from_source(
+            DuckDBSource(connection),
+            primary_keys={
+                'users': 'user_id',
+                'orders': 'order_id',
+                'items': 'item_id',
+            },
+            check_keys=False,
+        )
+        if edit:
+            schema['items']['title'].stype = 'text'
+        return PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=ANCHOR
+        )
+
+
+def test_a_second_hop_and_a_text_feature_are_sampled_as_the_old_route_samples_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The order lines' items are reached at the second hop, looked up by
+    # key for each example, and their titles sent as the reference's
+    # words; the request is the old route's, payload for payload.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _deeper()._payloads[0]
+    items = core['context']['related_tables']['items']
+    title = items['columns'].index('title')
+    assert items['rows'][0][title][:3] == ['item', '0', 'the']
+    assert core['schema']['related_tables']['items']['columns']['title'] == {
+        'dtype': 'stringlist',
+        'stype': 'text',
+    }
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        old = _deeper()._payloads[0]
+        assert json.loads(json.dumps(core)) == json.loads(
+            json.dumps(old, default=str)
+        )
+
+
+def _crossing(payload: dict[str, Any]) -> int:
+    r"""How many foreign keys of ``payload`` name no row of their own
+    example in the table they refer to."""
+    crossing = 0
+    for half in ('context', 'predict'):
+        tables = payload[half]['related_tables']
+        held = set()
+        for name, table in tables.items():
+            columns = table['columns']
+            key = '__node_id' if '__node_id' in columns else columns[1]
+            at = columns.index(key)
+            held.update((name, row[at], row[0]) for row in table['rows'])
+        for link in payload['schema']['relationships']:
+            if 'source_table' not in link or link['source_table'] not in tables:
+                continue
+            table = tables[link['source_table']]
+            at = table['columns'].index(link['source_columns'][0])
+            for row in table['rows']:
+                if row[at] is None:
+                    continue
+                value = int(row[at]) if isinstance(row[at], float) else row[at]
+                crossing += (link['target_table'], value, row[0]) not in held
+    return crossing
+
+
+@pytest.mark.parametrize(
+    ('setup', 'rule'),
+    [
+        # A foreign key the walk looks up, null in some rows.
+        (
+            ('UPDATE orders SET item_id = NULL WHERE order_id % 3 = 0',),
+            'null_foreign_key',
+        ),
+        # A key of a table the walk samples, null in some rows.
+        (
+            ('UPDATE orders SET order_id = NULL WHERE order_id % 13 = 6',),
+            'null_key',
+        ),
+    ],
+)
+def test_a_null_key_the_walk_reaches_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...], rule: str
+) -> None:
+    # Register P1B-13: the reference numbers such rows out of step (a null
+    # foreign key taken for the last key it looked up, every null key as
+    # one row), so the request it builds links rows across examples; the
+    # core refuses by name. Diagnostic: the old route's crossing links are
+    # held where the engine is installed.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _deeper(*setup, edit=False)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['rule'] == rule
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        assert _crossing(_deeper(*setup, edit=False)._payloads[0]) > 0

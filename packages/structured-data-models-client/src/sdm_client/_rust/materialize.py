@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
 # the schema_edited refusal (T1.24b), the zoned anchor's conversion (T1.25), the
-# run mode, entity count, shape, limits and capped-context notice (T1.28a),
-# the index once-flag (T1.26, by E52) and the entities' cast to the key's
-# type (T1.32a, checkpoint 4), are deleted in Phase 1 by those tasks.
+# run mode, entity count, shape, limits and capped-context notice (T1.28a)
+# and the entities' cast to the key's type (T1.32a, checkpoint 4), are
+# deleted in Phase 1 by those tasks.
 # Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request's gathering (T1.11c).
@@ -280,26 +280,15 @@ def gather(
         3: _indices(indices, schema, entity),
     }
     source: Any = schema.source
-    # The reference checks the source's indexes once per materializer, when
-    # it builds its sampler, and warns of missing ones then; the core reads
-    # them on every run, so the warning is shown once per materializer here
-    # (decision E41(j)).
-    # Checked means a run gave the warning or finished, so read the
-    # indexes; a run refused before its index read leaves it unchecked.
-    checked = materializer._core_indexes_checked
-    given: set[str] = set()
-    try:
-        finished = run(
-            operation,
-            attachments,
-            provider=DuckDBProvider(source.connection),
-            quiet=frozenset({'MISSING_INDICES'}) if checked else frozenset(),
-            given=given,
-        )
-    finally:
-        if 'MISSING_INDICES' in given:
-            materializer._core_indexes_checked = True
-    materializer._core_indexes_checked = True
+    # The sampler state the core's last run on this materializer left,
+    # handed back, so a run skips what the reference's sampler reads once
+    # (decision E52); the run leaves its own in its place, done or failed.
+    finished = run(
+        operation,
+        attachments,
+        provider=DuckDBProvider(source.connection),
+        state=materializer._core_sampler_state,
+    )
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
     finished.take(state['query'])

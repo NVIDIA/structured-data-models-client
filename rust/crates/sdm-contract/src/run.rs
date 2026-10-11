@@ -161,6 +161,12 @@ pub enum ControlMessage {
     Warnings {
         warnings: Vec<CoreWarning>,
     },
+    /// The sampler state a `materialize` run left, which the host takes
+    /// once the run has ended, done or failed, and hands back with the
+    /// materializer's next `materialize` (decision E52).
+    SamplerState {
+        state: crate::ops::SamplerState,
+    },
     /// A message the core wrote whose encoding would pass the control cap:
     /// it travels whole as a bytes attachment of its UTF-8 JSON, named here
     /// (decision H7). Nothing the core writes is truncated, refused or

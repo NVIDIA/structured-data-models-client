@@ -135,12 +135,14 @@ class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
 #: code is shown as :class:`~sdm_client.core.warnings.SDMWarning`. From
 #: T1.11c ``materialize`` gives the reference's sampler warnings, which the
 #: reference shows as ``UserWarning``: indices missing for its reads, a
-#: context reaching back before the data, an anchor after it; this client's
-#: own :class:`UserWarning`, so their provenance shows.
+#: context reaching back before the data, an anchor after it, and from
+#: T1.26b a context collected short, once in a process; this client's own
+#: :class:`UserWarning`, so their provenance shows.
 WARNINGS: dict[str, type[Warning]] = {
     'MISSING_INDICES': UserWarning,
     'CONTEXT_BEFORE_DATA': UserWarning,
     'ANCHOR_AFTER_DATA': UserWarning,
+    'CONTEXT_COVERAGE': UserWarning,
     'TIME_VALUES_UNREAD': UserWarning,
     'DATES_READ_DAY_FIRST': UserWarning,
 }
@@ -269,6 +271,15 @@ SAID: dict[str, dict[str | None, str]] = {
     },
     'ANCHOR_AFTER_DATA': {
         None: 'the anchor time is after the latest time in the data'
+    },
+    'CONTEXT_COVERAGE': {
+        None: (
+            'Failed to collect {examples:,} context examples within '
+            '{candidates:,} candidates. To improve coverage, consider '
+            'increasing the number of PQ iterations using the '
+            "'max_pq_iterations' option. This warning will not be shown "
+            'again in this run.'
+        )
     },
     'TWO_WAYS_TO_A_TABLE': {
         None: (

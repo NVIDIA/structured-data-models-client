@@ -46,6 +46,24 @@ const NO_ANCHOR: i64 = -9_223_372_036_854_775_807;
 /// The largest integer a JSON number carries exactly in every reader.
 const JSON_SAFE: i128 = 9_007_199_254_740_991;
 
+/// One column of a sampled table: as sampled, or a text feature as the
+/// reference's sampler sends it, each value its words
+/// (`sdm_engine::words`), written as a `stringlist` column.
+#[derive(Debug, Clone)]
+pub enum SampledColumn {
+    Arrow(ArrayRef),
+    Words(Vec<Vec<String>>),
+}
+
+impl SampledColumn {
+    fn len(&self) -> usize {
+        match self {
+            SampledColumn::Arrow(array) => array.len(),
+            SampledColumn::Words(words) => words.len(),
+        }
+    }
+}
+
 /// One table of the sampled subgraph: its rows in the order sampled, each
 /// with the example it was sampled for.
 #[derive(Debug, Clone)]
@@ -57,13 +75,16 @@ pub struct SampledTable {
     pub batch: Vec<usize>,
     /// The columns sent, in order, each as sampled, its rows aligned with
     /// `batch`.
-    pub columns: Vec<(String, ArrayRef)>,
+    pub columns: Vec<(String, SampledColumn)>,
     /// The semantic type of each feature column the table sends.
     pub stypes: Vec<(String, Stype)>,
 }
 
 /// A foreign key between two sampled tables: for each row of `src`, the
-/// row of `dst` it refers to, if any.
+/// row of `dst` it refers to, if any. The links of one foreign key may come
+/// more than once, as the reference's sampled edge types of both
+/// directions; the first that gives a row a key is written, as the
+/// reference's payload writes it (`_populate_relationship_columns`).
 #[derive(Debug, Clone)]
 pub struct SampledLink {
     pub src: String,
@@ -238,6 +259,21 @@ pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Json, CoreErro
     }
 }
 
+/// An integer key cell as the float a column of keys and nulls holds it
+/// at: its value rounded to the nearest double, as pandas reads such a
+/// column.
+fn float_key(cell: &Json) -> Result<Json, CoreError> {
+    let value = match cell {
+        Json::Int(value) => *value as f64,
+        Json::Text(digits) => digits
+            .parse::<i128>()
+            .map_err(|_| internal("an integer key's digits do not read"))?
+            as f64,
+        _ => return Err(internal("an integer key is not an integer")),
+    };
+    Ok(Json::Float(value))
+}
+
 /// `prefix`, or `prefix_1`, `prefix_2` and on, whichever `occupied` does not
 /// hold first.
 fn unique_name(occupied: &[String], prefix: &str) -> String {
@@ -319,6 +355,31 @@ fn arrow_column(name: &str, array: &ArrayRef, rows: &[usize]) -> Result<FrameCol
     })
 }
 
+/// A column of `rows`: as sampled, or, for words, a `stringlist` of them,
+/// as the reference types a column holding lists (`_list_dtype_name`;
+/// a column of no rows holds no list, and is `string`).
+fn sampled_column(
+    name: &str,
+    column: &SampledColumn,
+    rows: &[usize],
+) -> Result<FrameColumn, CoreError> {
+    match column {
+        SampledColumn::Arrow(array) => arrow_column(name, array, rows),
+        SampledColumn::Words(words) => Ok(FrameColumn {
+            name: name.to_owned(),
+            dtype: if rows.is_empty() {
+                "string"
+            } else {
+                "stringlist"
+            },
+            cells: rows
+                .iter()
+                .map(|&row| Json::texts(words[row].iter().map(String::as_str)))
+                .collect(),
+        }),
+    }
+}
+
 fn stype_name(stype: Stype) -> &'static str {
     match stype {
         Stype::Numerical => "numerical",
@@ -381,8 +442,10 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
     let key_array = entity
         .columns
         .iter()
-        .find(|(n, _)| n == key)
-        .map(|(_, a)| a)
+        .find_map(|(n, column)| match column {
+            SampledColumn::Arrow(array) if n == key => Some(array),
+            _ => None,
+        })
         .ok_or_else(|| internal("the entity table's key was not sampled"))?;
     let mut first = vec![None; examples];
     for (row, &instance) in entity.batch.iter().enumerate() {
@@ -446,11 +509,11 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             columns: vec![int_column(INSTANCE_ID, table.batch.iter().copied())],
             rows: rows.len(),
         };
-        for (name, array) in &table.columns {
-            if array.len() != rows.len() {
+        for (name, column) in &table.columns {
+            if column.len() != rows.len() {
                 return Err(internal("a sampled column does not align with its rows"));
             }
-            frame.columns.push(arrow_column(name, array, &rows)?);
+            frame.columns.push(sampled_column(name, column, &rows)?);
         }
         let mut stypes = vec![(INSTANCE_ID.to_owned(), Stype::Id)];
         stypes.extend(table.stypes.iter().cloned());
@@ -481,7 +544,15 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             ("target_columns", Json::texts([target_column.as_str()])),
         ]));
     }
+    // Each foreign key once, from the first of its links that gives a row
+    // a key; a row given none is null, and an integer key column holding a
+    // null is written as float64, as pandas types such a column.
+    let mut written: Vec<(&str, &str, &str)> = Vec::new();
     for link in &sampled.links {
+        let edge = (link.src.as_str(), link.fkey.as_str(), link.dst.as_str());
+        if written.contains(&edge) {
+            continue;
+        }
         let (Some(src), Some(dst)) = (
             frames.iter().position(|(n, ..)| *n == link.src),
             frames.iter().position(|(n, ..)| *n == link.dst),
@@ -509,13 +580,18 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         if values.iter().all(Option::is_none) {
             continue;
         }
+        let as_float = key_dtype == "int64" && values.iter().any(Option::is_none);
         let cells = values
             .into_iter()
-            .map(|v| v.unwrap_or(Json::Null))
-            .collect();
+            .map(|v| match v {
+                Some(cell) if as_float => float_key(&cell),
+                Some(cell) => Ok(cell),
+                None => Ok(Json::Null),
+            })
+            .collect::<Result<_, _>>()?;
         let column = FrameColumn {
             name: link.fkey.clone(),
-            dtype: key_dtype,
+            dtype: if as_float { "float64" } else { key_dtype },
             cells,
         };
         let frame = &mut frames[src].1;
@@ -530,6 +606,7 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             ("target_table", Json::text(&link.dst)),
             ("target_columns", Json::texts([dst_key.as_str()])),
         ]));
+        written.push(edge);
     }
 
     let num_train = sampled.num_train;

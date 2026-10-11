@@ -16,7 +16,7 @@ use sdm_contract::facts::{LocalZone, PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::{
     Capability, DescribeSource, DescribedSource, Materialize, Materialized, Operation,
     OperationResult, PqlDiagnostic, Predict, Predicted, ProfileName, ProfileSpec, QueryValidation,
-    RequestState, Seed, Severity, Span, ValidateQuery,
+    RequestState, SamplerState, Seed, Severity, Span, ValidateQuery,
 };
 use sdm_contract::run::{
     Endpoint, FetchOutcome, FetchReply, FetchStep, ModelCall, ModelOutcome, ModelReply, ReplyId,
@@ -134,6 +134,10 @@ pub fn messages() -> Vec<ControlMessage> {
             anchor_entity: false,
             num_context_samples: Some(500),
             options: vec!["num_neighbors".into()],
+            sampler_state: Some(SamplerState {
+                version: 1,
+                memo: AttachmentId(4),
+            }),
         })),
         start(Operation::Predict(Predict {
             state: state.clone(),
@@ -379,6 +383,12 @@ pub fn messages() -> Vec<ControlMessage> {
                     Detail::List(vec![Scalar::Utf8("a".into()), Scalar::Utf8("b".into())]),
                 )]),
             }],
+        },
+        ControlMessage::SamplerState {
+            state: SamplerState {
+                version: 1,
+                memo: AttachmentId(7),
+            },
         },
     ]
 }

@@ -94,10 +94,10 @@
         ]
       },
       "gather": {
-        "fingerprint": "b767099f23a637a910b7f39dc78170f235b02439af8ebee719f5c690a492137c",
+        "fingerprint": "d6d8c5014c4607b163e1a93ae1a4157f29f5b832b26d9054d3aa7e67856e0c2c",
         "raise": 0,
         "warn": 0,
-        "branch": 5,
+        "branch": 3,
         "calls": [
           "._check_entity_count",
           "._check_limits",
@@ -418,7 +418,7 @@
         "calls": []
       },
       "RelationalMaterializer.__init__": {
-        "fingerprint": "cd8dfca0163cfd54302c2393ed77745b9be332465c7f0726c3a567ed67ebb74d",
+        "fingerprint": "b8acd9ec661ff4d7b255782d879dddc5222d4e261886ecc99dd9ffab1c37a612",
         "raise": 0,
         "warn": 0,
         "branch": 0,

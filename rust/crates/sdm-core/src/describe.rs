@@ -496,7 +496,7 @@ fn foreign_keys(answer: CatalogAnswer) -> Result<Vec<CatalogForeignKey>, CoreErr
     }
 }
 
-async fn ask_all_vec(
+pub(crate) async fn ask_all_vec(
     asker: &Asker,
     requests: Vec<DataRequest>,
 ) -> Result<Vec<ArrowData>, CoreError> {

@@ -34,7 +34,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Arc, Mutex, MutexGuard, Once, TryLockError};
+use std::sync::{Arc, Mutex, MutexGuard, Once, PoisonError, TryLockError};
 
 use arrow_schema::Schema;
 use sdm_contract::data::AttachmentId;
@@ -436,10 +436,18 @@ impl HostRun {
     }
 
     /// The warnings given since the last call, in order, as one `warnings`
-    /// control message, whole; none when there are none.
+    /// control message, whole; none when there are none. A warning the
+    /// reference gives once in a process
+    /// (`sdm_core::materialize::ONCE_PER_PROCESS`) is given here the first
+    /// time a run of this process gives it, and dropped after (decision
+    /// E52): every binding takes its warnings here, so each inherits it.
     pub fn take_warnings(&self) -> Result<Option<Outgoing>, Outgoing> {
         self.enter(|run| {
-            let warnings = run.take_warnings();
+            let warnings: Vec<_> = run
+                .take_warnings()
+                .into_iter()
+                .filter(|w| first_in_process(&w.code))
+                .collect();
             if warnings.is_empty() {
                 return Ok(None);
             }
@@ -447,6 +455,21 @@ impl HostRun {
                 self.ids.reserve()
             })
             .map(Some)
+        })
+    }
+
+    /// The sampler state the run left, as one `sampler_state` control
+    /// message, its memo attached (decision E52); none when it left none.
+    /// A host takes it once the run has ended, done or failed, keeps it on
+    /// the materializer the run was for, and hands it back with that
+    /// materializer's next `materialize`.
+    pub fn take_sampler_state(&self) -> Result<Option<Outgoing>, Outgoing> {
+        self.enter(|run| match run.take_sampler_state()? {
+            Some(state) => write(&ControlMessage::SamplerState { state }, || {
+                self.ids.reserve()
+            })
+            .map(Some),
+            None => Ok(None),
         })
     }
 
@@ -465,6 +488,23 @@ impl HostRun {
     pub fn zone_sources(&self) -> BTreeMap<String, ZoneSource> {
         self.zones.sources()
     }
+}
+
+/// The codes of the once-a-process warnings this process has given.
+static GIVEN_ONCE: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Whether a warning of `code` is to be given: any warning but one given
+/// once in a process, and that the first time.
+fn first_in_process(code: &str) -> bool {
+    if !sdm_core::materialize::ONCE_PER_PROCESS.contains(&code) {
+        return true;
+    }
+    let mut given = GIVEN_ONCE.lock().unwrap_or_else(PoisonError::into_inner);
+    if given.iter().any(|g| g == code) {
+        return false;
+    }
+    given.push(code.to_owned());
+    true
 }
 
 /// Whether `run` awaits fetch `id`.

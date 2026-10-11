@@ -15,6 +15,9 @@
 //! T1.22, T1.25, T1.26a, T1.26b and T1.27 complete them. From T1.25
 //! [`time`] holds the core's instant and span, civil arithmetic, zones to
 //! the range ends and the readings of text times (E62).
+//! From T1.26b [`sample`] builds the sampler's typed reads (`_by_pkey`,
+//! `_by_fkey`, `_by_time`) and [`words`] is a text feature as the
+//! reference's sampler sends it.
 
 #![forbid(unsafe_code)]
 
@@ -23,6 +26,7 @@ pub mod keys;
 pub mod random;
 pub mod sample;
 pub mod time;
+pub mod words;
 
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 

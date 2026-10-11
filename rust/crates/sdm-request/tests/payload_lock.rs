@@ -23,7 +23,7 @@ use arrow_array::{
 };
 use sdm_contract::ops::Stype;
 use sdm_contract::schema_check::check;
-use sdm_request::payload::{Sampled, SampledLink, SampledTable, regression};
+use sdm_request::payload::{Sampled, SampledColumn, SampledLink, SampledTable, regression};
 use sdm_request::predict::INFERENCE_OPTIONS;
 use serde_json::{Value, json};
 
@@ -31,8 +31,8 @@ const DAY_NS: i64 = 86_400_000_000_000;
 /// `pd.Timestamp.min`: no anchor.
 const NO_ANCHOR: i64 = -9_223_372_036_854_775_807;
 
-fn array<A: arrow_array::Array + 'static>(a: A) -> ArrayRef {
-    Arc::new(a)
+fn array<A: arrow_array::Array + 'static>(a: A) -> SampledColumn {
+    SampledColumn::Arrow(Arc::new(a) as ArrayRef)
 }
 
 /// A sample shaped as `base.regression`'s: users keyed by an integer, the

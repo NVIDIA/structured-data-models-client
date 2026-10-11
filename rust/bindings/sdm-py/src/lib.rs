@@ -347,6 +347,18 @@ impl Run {
             Err(out) => Err(core_error(py, out)),
         }
     }
+
+    /// The sampler state the run left, as one `sampler_state` message
+    /// `(control, attachments)`, or `None` when it left none (decision
+    /// E52); its memo is an attachment the message names.
+    fn take_sampler_state(&self, py: Python<'_>) -> PyResult<Option<(Py<PyBytes>, Py<PyDict>)>> {
+        logging(py);
+        match core_call(py, || self.run.take_sampler_state())? {
+            Ok(Some(out)) => outgoing(py, out).map(Some),
+            Ok(None) => Ok(None),
+            Err(out) => Err(core_error(py, out)),
+        }
+    }
 }
 
 #[pymodule]

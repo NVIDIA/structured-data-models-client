@@ -624,6 +624,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
         anchor_entity: false,
         num_context_samples: None,
         options: vec![],
+        sampler_state: None,
     })
 }
 

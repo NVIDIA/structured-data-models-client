@@ -122,6 +122,7 @@ def run(
     model: Model | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
+    state: dict[str, Any] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -129,12 +130,26 @@ def run(
     it already. ``given`` collects the code of every warning the run gave,
     shown or not.
 
+    ``state``, for a ``materialize``, is where its materializer keeps the
+    sampler state (decision E52): the state held there (``'held'``) is
+    handed to the run as it was taken, and the state the run leaves, done
+    or failed, is put there in its place. This passes the state through and
+    reads nothing of it; what it holds is the core's.
+
     Raises:
         StructuredDataError: The run's error, as :mod:`.errors` maps it.
         RouteError: ``sdm_client._native`` cannot be imported.
     """
     core = native()
     core.reset_log_cache()
+    held = None if state is None else state.get('held')
+    if held is not None:
+        memo = max(attachments, default=0) + 1
+        operation = {
+            **operation,
+            'sampler_state': {'version': held['version'], 'memo': memo},
+        }
+        attachments = {**attachments, memo: held['memo']}
     start = codec.encode(
         {
             'message': 'start',
@@ -147,6 +162,41 @@ def run(
         handle = core.Run.start(start, attachments)
     except core.CoreError as refused:
         errors.raise_from_core(refused.control, refused.attachments)
+    try:
+        return _steps(core, handle, provider, model, quiet, given)
+    finally:
+        if state is not None:
+            _keep(core, handle, state)
+
+
+def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:
+    r"""Puts the sampler state the run left in ``state``, as it was taken:
+    its version and its memo's bytes (decision E52). A state that cannot be
+    taken is lost, and the next run reads again what it would have
+    skipped."""
+    try:
+        taken = handle.take_sampler_state()
+        if taken is None:
+            return
+        message = codec.read(*taken)
+        left = message['state']
+        state['held'] = {
+            'version': left['version'],
+            'memo': handle.take_attachment(left['memo']),
+        }
+    except (core.CoreError, codec.CodecError):
+        return
+
+
+def _steps(
+    core: Any,
+    handle: Any,
+    provider: Provider | None,
+    model: Model | None,
+    quiet: frozenset[str],
+    given: set[str] | None,
+) -> Finished:
+    r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
     while True:
         try:

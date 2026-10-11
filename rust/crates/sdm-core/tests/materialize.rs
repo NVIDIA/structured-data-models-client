@@ -26,8 +26,8 @@ use sdm_contract::data::{
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedTable, Dtype, Materialize, Operation, Seed,
-    SourceDescription, Stype,
+    ColumnRef, DescribedColumn, DescribedTable, Dtype, Materialize, Operation,
+    SAMPLER_STATE_VERSION, SamplerMemo, SamplerState, Seed, SourceDescription, Stype,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
@@ -198,6 +198,7 @@ fn materialize_start(
         anchor_entity: false,
         num_context_samples: None,
         options: vec![],
+        sampler_state: None,
     });
     let indices = RecordBatch::try_new(
         Arc::new(Schema::new(vec![Field::new(
@@ -720,7 +721,7 @@ fn shop_column(name: &str, n: usize, values: Option<ArrayRef>) -> ArrayRef {
     match name {
         "order_id" | "user_id" => Arc::new(Int64Array::from(vec![None::<i64>; n])),
         "price" => Arc::new(arrow_array::Float64Array::from(vec![None::<f64>; n])),
-        "ts" => Arc::new(TimestampMicrosecondArray::from(vec![None::<i64>; n])),
+        "ts" | "born" => Arc::new(TimestampMicrosecondArray::from(vec![None::<i64>; n])),
         _ => Arc::new(StringArray::from(vec![None::<&str>; n])),
     }
 }
@@ -757,6 +758,27 @@ fn steps_to_the_result(run: &mut Run, index_answer: &dyn Fn() -> FetchResult) ->
 
 /// What [`steps_to_the_result`] gives, or the error the run ends with.
 fn try_steps(run: &mut Run, index_answer: &dyn Fn() -> FetchResult) -> Result<Steps, CoreError> {
+    try_steps_sampling(run, index_answer, &|columns| {
+        let keys: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2, 3]));
+        data(
+            columns
+                .iter()
+                .map(|c| {
+                    let given = (c == "user_id").then(|| Arc::clone(&keys));
+                    (c.as_str(), shop_column(c, 4, given))
+                })
+                .collect(),
+        )
+    })
+}
+
+/// [`try_steps`], the sample answered by `sample`, given the columns
+/// asked for.
+fn try_steps_sampling(
+    run: &mut Run,
+    index_answer: &dyn Fn() -> FetchResult,
+    sample: &dyn Fn(&[String]) -> FetchResult,
+) -> Result<Steps, CoreError> {
     let mut seen = Vec::new();
     let mut warnings = Vec::new();
     loop {
@@ -772,18 +794,7 @@ fn try_steps(run: &mut Run, index_answer: &dyn Fn() -> FetchResult) -> Result<St
             let answer = match &asked.request {
                 DataRequest::Describe { .. } => index_answer(),
                 DataRequest::TimeBounds { .. } => catalog(&asked.request).unwrap(),
-                DataRequest::SampleEntities { columns, .. } => {
-                    let keys: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2, 3]));
-                    data(
-                        columns
-                            .iter()
-                            .map(|c| {
-                                let given = (c == "user_id").then(|| Arc::clone(&keys));
-                                (c.as_str(), shop_column(c, 4, given))
-                            })
-                            .collect(),
-                    )
-                }
+                DataRequest::SampleEntities { columns, .. } => sample(columns),
                 DataRequest::Neighbors { columns, .. } => {
                     let mut answer: Vec<(&str, ArrayRef)> = columns
                         .iter()
@@ -1320,9 +1331,9 @@ fn the_sampler_s_null_order_is_the_one_the_provider_declares() {
 #[test]
 fn a_provider_declaring_no_null_order_is_not_asked_for_an_order() {
     // Seeded fault, failing closed: a provider declaring no null order is
-    // refused by name where the sampler would ask it for rows in an order,
-    // never given DuckDB's; the same for DuckDB's rendering with its
-    // declaration forgotten.
+    // refused by name, never given DuckDB's, before anything is fetched
+    // (T1.26b, T1.26a's review P3); the same for DuckDB's rendering with
+    // its declaration forgotten.
     let mut run = materialize(
         host_with(None, Some(IndexAdvice::SingleColumn)),
         &renamed(),
@@ -1330,13 +1341,38 @@ fn a_provider_declaring_no_null_order_is_not_asked_for_an_order() {
         None,
     )
     .unwrap();
-    let err = run_to_error(&mut run, &|| indexes(&[]));
-    assert_eq!(rule(&err), "null_order");
+    assert_eq!(rule(&run.next().unwrap_err()), "null_order");
     let (operation, attachments) = materialize_start(duckdb(), &renamed(), QUERY, None);
     let layer: Arc<dyn DataLayer> = Arc::new(Changed(|c| c.null_order = None));
     let mut run = materialize_on(layer, operation, attachments).unwrap();
-    let err = run_to_error(&mut run, &|| duckdb_indexes(&[]));
-    assert_eq!(rule(&err), "null_order");
+    assert_eq!(rule(&run.next().unwrap_err()), "null_order");
+}
+
+#[test]
+fn a_provider_not_declaring_a_request_the_sampler_asks_is_refused_by_name() {
+    // A provider declaring no `neighbors` (or any other request the sampler
+    // asks) is refused naming the request, before anything is fetched, as
+    // `DataAccess::plan` refuses an undeclared request.
+    for missing in [
+        OptionalRequest::Neighbors,
+        OptionalRequest::Lookup,
+        OptionalRequest::SampleEntities,
+        OptionalRequest::TimeBounds,
+    ] {
+        let ProviderChoice::Host { mut capabilities } = host() else {
+            unreachable!()
+        };
+        capabilities.optional.remove(&missing);
+        let mut run =
+            materialize(ProviderChoice::Host { capabilities }, &shop(), QUERY, None).unwrap();
+        let err = run.next().unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(
+            err.fields.get("request"),
+            Some(&Detail::text(missing.name())),
+            "{missing:?}"
+        );
+    }
 }
 
 /// Runs `run` as [`steps_to_the_result`] does, to the error it ends with.
@@ -1459,4 +1495,308 @@ fn an_index_the_reader_cannot_resolve_covers_nothing() {
     let mut run = materialize(host(), &shop(), QUERY, None).unwrap();
     let (_, warnings) = steps_to_the_result(&mut run, &|| with_null.clone());
     assert_eq!(warnings, ["MISSING_INDICES"]);
+}
+
+// --- the sampler state (T1.26b, decision E52) ---------------------------------
+
+/// The sampler state a run left: its version, and its memo's bytes.
+type Left = (u32, Vec<u8>);
+
+/// Takes the sampler state `run` left, as a host takes it.
+fn left(run: &mut Run) -> Option<Left> {
+    let state = run.take_sampler_state().unwrap()?;
+    let Some(Attachment::Bytes(bytes)) = run.take_attachment(state.memo) else {
+        panic!("the memo is attached");
+    };
+    Some((state.version, bytes))
+}
+
+fn memo(left: &Left) -> SamplerMemo {
+    serde_json::from_slice(&left.1).unwrap()
+}
+
+/// A `materialize` start over `description` handing back `held`, with
+/// `options` passed through and `indices` the entities.
+fn handing_back(
+    description: &SourceDescription,
+    held: Option<&Left>,
+    options: &[&str],
+    indices: Vec<Option<i64>>,
+) -> Result<Run, CoreError> {
+    let (mut operation, mut attachments) = materialize_start(host(), description, QUERY, None);
+    let Operation::Materialize(start) = &mut operation else {
+        unreachable!()
+    };
+    start.options = options.iter().map(|o| (*o).to_owned()).collect();
+    if let Some((version, bytes)) = held {
+        start.sampler_state = Some(SamplerState {
+            version: *version,
+            memo: AttachmentId(4),
+        });
+        attachments.insert(AttachmentId(4), Attachment::Bytes(bytes.clone()));
+    }
+    let entities = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new(
+            "indices",
+            DataType::Int64,
+            true,
+        )])),
+        vec![Arc::new(Int64Array::from(indices)) as ArrayRef],
+    )
+    .unwrap();
+    attachments.insert(
+        AttachmentId(3),
+        Attachment::Arrow(ArrowData::new(entities.schema(), vec![entities])),
+    );
+    materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
+}
+
+/// Each request's kind, in order.
+fn kinds(steps: &Steps) -> Vec<&'static str> {
+    steps.0.iter().map(|(request, _)| request.name()).collect()
+}
+
+#[test]
+fn a_second_call_skips_the_reads_the_first_made() {
+    // The reference checks the indexes once, building its sampler, and
+    // keeps the time bounds it reads (H9's counts on a second call: 6, then
+    // 4); the core skips what its memo says a run of this materializer read,
+    // and the request is the same.
+    let mut first = handing_back(&shop(), None, &[], vec![Some(0), Some(1)]).unwrap();
+    let steps = steps_to_the_result(&mut first, &|| indexes(&[]));
+    assert_eq!(
+        kinds(&steps),
+        [
+            "describe",
+            "time_bounds",
+            "sample_entities",
+            "neighbors",
+            "lookup",
+            "neighbors"
+        ]
+    );
+    assert_eq!(steps.1, ["MISSING_INDICES"]);
+    let first_left = left(&mut first).unwrap();
+    assert_eq!(first_left.0, SAMPLER_STATE_VERSION);
+    let kept = memo(&first_left);
+    assert!(kept.indexes_checked);
+    assert_eq!(kept.bounds.len(), 1);
+    assert_eq!(
+        (
+            kept.bounds[0].table.as_str(),
+            kept.bounds[0].column.as_str()
+        ),
+        ("orders", "ts")
+    );
+    let mut second = handing_back(&shop(), Some(&first_left), &[], vec![Some(0), Some(1)]).unwrap();
+    let again = steps_to_the_result(&mut second, &|| indexes(&[]));
+    assert_eq!(
+        kinds(&again),
+        ["sample_entities", "neighbors", "lookup", "neighbors"]
+    );
+    assert!(again.1.is_empty(), "{:?}", again.1);
+    assert_eq!(memo(&left(&mut second).unwrap()), kept);
+    // The same requests from the sample on, the time bounds the memo kept
+    // standing for those read.
+    assert_eq!(steps.0[2..], again.0[..]);
+}
+
+#[test]
+fn each_materializer_checks_once() {
+    // Two materializers, each with its own state: each checks its indexes
+    // once and warns once, as each reference materializer builds its own
+    // sampler.
+    let mut states = Vec::new();
+    for _ in 0..2 {
+        let mut run = handing_back(&shop(), None, &[], vec![Some(0), Some(1)]).unwrap();
+        let steps = steps_to_the_result(&mut run, &|| indexes(&[]));
+        assert_eq!(steps.0[0].0.name(), "describe");
+        assert_eq!(steps.1, ["MISSING_INDICES"]);
+        states.push(left(&mut run).unwrap());
+    }
+    for held in &states {
+        let mut run = handing_back(&shop(), Some(held), &[], vec![Some(0), Some(1)]).unwrap();
+        let steps = steps_to_the_result(&mut run, &|| indexes(&[]));
+        assert_eq!(steps.0[0].0.name(), "sample_entities");
+        assert!(steps.1.is_empty());
+    }
+}
+
+#[test]
+fn a_failure_before_the_check_leaves_it_to_the_next_run() {
+    // Refused before anything is read (an option it does not take): the
+    // state left says nothing was read, and the next run checks and warns.
+    let mut refused = handing_back(&shop(), None, &["num_hops"], vec![Some(0), Some(1)]).unwrap();
+    let err = refused.next().unwrap_err();
+    assert_eq!(rule(&err), "num_hops");
+    let held = left(&mut refused).unwrap();
+    assert!(!memo(&held).indexes_checked);
+    assert!(memo(&held).bounds.is_empty());
+    let mut next = handing_back(&shop(), Some(&held), &[], vec![Some(0), Some(1)]).unwrap();
+    let steps = steps_to_the_result(&mut next, &|| indexes(&[]));
+    assert_eq!(steps.0[0].0.name(), "describe");
+    assert_eq!(steps.1, ["MISSING_INDICES"]);
+}
+
+#[test]
+fn a_failure_after_the_check_keeps_it() {
+    // Refused after the index read (an entity missing), as the reference
+    // refuses it after building its sampler: the check is kept, and the
+    // next run neither reads the indexes nor warns again; it reads the time
+    // bounds, which the refused run did not.
+    let mut refused = handing_back(&shop(), None, &[], vec![None, Some(1)]).unwrap();
+    let err = run_to_error(&mut refused, &|| indexes(&[]));
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    let held = left(&mut refused).unwrap();
+    assert!(memo(&held).indexes_checked);
+    assert!(memo(&held).bounds.is_empty());
+    let mut next = handing_back(&shop(), Some(&held), &[], vec![Some(0), Some(1)]).unwrap();
+    let steps = steps_to_the_result(&mut next, &|| indexes(&[]));
+    assert_eq!(steps.0[0].0.name(), "time_bounds");
+    assert!(steps.1.is_empty());
+    // And a run refused after the time bounds (an anchor before the data)
+    // keeps them too.
+    let (mut operation, attachments) = materialize_start(host(), &shop(), QUERY, None);
+    let Operation::Materialize(start) = &mut operation else {
+        unreachable!()
+    };
+    start.anchor_time = Some(Scalar::Timestamp {
+        unit: Unit::Ns,
+        zone: None,
+        value: 0,
+    });
+    let mut early =
+        materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+    let err = run_to_error(&mut early, &|| indexes(&[]));
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    let kept = memo(&left(&mut early).unwrap());
+    assert!(kept.indexes_checked);
+    assert_eq!(kept.bounds.len(), 1);
+}
+
+#[test]
+fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
+    let mut first = handing_back(&shop(), None, &[], vec![Some(0), Some(1)]).unwrap();
+    steps_to_the_result(&mut first, &|| indexes(&[]));
+    let (version, bytes) = left(&mut first).unwrap();
+    let field = |err: &CoreError| match err.fields.get("field") {
+        Some(Detail::Scalar(Scalar::Utf8(f))) => f.clone(),
+        other => panic!("{other:?}"),
+    };
+    // Another version, before anything of it is read.
+    let Err(err) = handing_back(
+        &shop(),
+        Some(&(version + 1, bytes.clone())),
+        &[],
+        vec![Some(0)],
+    ) else {
+        panic!("another version was read");
+    };
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(field(&err), "sampler_state.version");
+    // A memo that is not one: not JSON, of another shape, a field more or
+    // retyped, a table's bounds twice, nested past the reader's depth, or
+    // wide past any memo's fields.
+    let mut kept: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut twice = kept.clone();
+    let bound = twice["bounds"][0].clone();
+    twice["bounds"].as_array_mut().unwrap().push(bound);
+    let mut extra = kept.clone();
+    extra["trusted"] = serde_json::json!(true);
+    kept["indexes_checked"] = serde_json::json!("yes");
+    let deep = format!("{}{}", "[".repeat(5_000), "]".repeat(5_000));
+    let wide = serde_json::to_vec(&serde_json::Value::Object(
+        (0..100_000)
+            .map(|i| (format!("k{i}"), serde_json::json!(i)))
+            .collect(),
+    ))
+    .unwrap();
+    for (what, corrupt) in [
+        ("not JSON", b"\xffnot json".to_vec()),
+        ("another shape", b"{}".to_vec()),
+        ("retyped", serde_json::to_vec(&kept).unwrap()),
+        ("a field more", serde_json::to_vec(&extra).unwrap()),
+        ("a table twice", serde_json::to_vec(&twice).unwrap()),
+        ("deep", deep.into_bytes()),
+        ("wide", wide),
+    ] {
+        let Err(err) = handing_back(&shop(), Some(&(version, corrupt)), &[], vec![Some(0)]) else {
+            panic!("{what}: read");
+        };
+        assert_eq!(field(&err), "sampler_state", "{what}");
+    }
+}
+
+#[test]
+fn a_state_made_under_another_source_is_not_read() {
+    // A memo of the renamed source, handed to a run over the shop: made
+    // under another description, it is not read; the run checks and warns
+    // as a first run does, and leaves a memo of its own source.
+    let mut other = materialize(host(), &renamed(), QUERY, None).unwrap();
+    steps_to_the_result(&mut other, &|| indexes(&[]));
+    let foreign = left(&mut other).unwrap();
+    assert!(memo(&foreign).indexes_checked);
+    let mut run = handing_back(&shop(), Some(&foreign), &[], vec![Some(0), Some(1)]).unwrap();
+    let steps = steps_to_the_result(&mut run, &|| indexes(&[]));
+    assert_eq!(steps.0[0].0.name(), "describe");
+    assert_eq!(steps.0[1].0.name(), "time_bounds");
+    assert_eq!(steps.1, ["MISSING_INDICES"]);
+    let own = left(&mut run).unwrap();
+    assert_ne!(memo(&own).source, memo(&foreign).source);
+    // A column's meaning edited since is not another source: the memo is
+    // read, as the reference's sampler, built once, keeps what it read.
+    let mut edited = shop();
+    edited.tables[0].columns[2].stype = Stype::Categorical;
+    let mut run = handing_back(&edited, Some(&own), &[], vec![Some(0), Some(1)]).unwrap();
+    let steps = steps_to_the_result(&mut run, &|| indexes(&[]));
+    assert_eq!(steps.0[0].0.name(), "sample_entities");
+}
+
+/// The shop with the users born: 30 at the epoch, every other one in
+/// 2100, so few are entities at any anchor of the walk back.
+fn shop_born() -> SourceDescription {
+    let mut born = shop();
+    born.tables[1].columns.push(column(
+        "born",
+        ColumnType::Timestamp {
+            unit: Unit::Us,
+            zone: None,
+        },
+        Dtype::Date,
+        Stype::Timestamp,
+        false,
+    ));
+    born.tables[1].time_column = Some("born".into());
+    born
+}
+
+#[test]
+fn the_coverage_warning_is_given_on_every_run_that_meets_it() {
+    // A sample of 10,000 entities giving fewer than 500 context examples:
+    // the reference warns once in a process, which the core, holding no
+    // state across runs, leaves to its host (`sdm-host`); it gives the
+    // warning on every run that meets it, the second included.
+    let sample = |columns: &[String]| -> FetchResult {
+        let n = 10_000_usize;
+        data(
+            columns
+                .iter()
+                .map(|c| {
+                    let column: ArrayRef = match c.as_str() {
+                        "user_id" => Arc::new(Int64Array::from_iter_values(0..n as i64)),
+                        "born" => Arc::new(TimestampMicrosecondArray::from_iter_values(
+                            (0..n).map(|i| if i < 30 { 0 } else { 4_102_444_800_000_000 }),
+                        )),
+                        other => shop_column(other, n, None),
+                    };
+                    (c.as_str(), column)
+                })
+                .collect(),
+        )
+    };
+    for _ in 0..2 {
+        let mut run = materialize(host(), &shop_born(), QUERY, None).unwrap();
+        let (_, warnings) = try_steps_sampling(&mut run, &|| indexes(&[]), &sample).unwrap();
+        assert_eq!(warnings, ["MISSING_INDICES", "CONTEXT_COVERAGE"]);
+    }
 }

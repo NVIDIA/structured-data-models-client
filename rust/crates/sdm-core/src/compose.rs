@@ -104,7 +104,7 @@ impl DataAccess {
 }
 
 /// The refusal of an optional request the provider did not declare.
-fn undeclared(request: &str) -> CoreError {
+pub(crate) fn undeclared(request: &str) -> CoreError {
     CoreError::new(
         ErrorKind::Unsupported,
         ErrorCode::UnsupportedRequest,

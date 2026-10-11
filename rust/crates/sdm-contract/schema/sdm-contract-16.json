@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/15",
+  "$id": "sdm-contract/16",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -208,6 +208,24 @@
       ]
     },
     {
+      "description": "The sampler state a `materialize` run left, which the host takes\nonce the run has ended, done or failed, and hands back with the\nmaterializer's next `materialize` (decision E52).",
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/SamplerState"
+        },
+        "message": {
+          "type": "string",
+          "const": "sampler_state"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "state"
+      ]
+    },
+    {
       "description": "A message the core wrote whose encoding would pass the control cap:\nit travels whole as a bytes attachment of its UTF-8 JSON, named here\n(decision H7). Nothing the core writes is truncated, refused or\ndropped for size.",
       "type": "object",
       "properties": {
@@ -252,6 +270,9 @@
         "Materialize.query": {
           "type": "string"
         },
+        "SamplerState.memo": {
+          "$ref": "#/$defs/SamplerMemo"
+        },
         "RequestState.payload": {
           "$ref": "#/$defs/StatePayload"
         },
@@ -270,6 +291,7 @@
         "DescribedSource.description",
         "Materialize.schema",
         "Materialize.query",
+        "SamplerState.memo",
         "RequestState.payload",
         "RequestState.query",
         "Predicted.metadata"
@@ -1455,6 +1477,65 @@
       "type": "string",
       "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
     },
+    "SamplerMemo": {
+      "description": "[`SamplerState`]'s memo: what the runs read, and of what.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "A fingerprint of the provider and source description the memo was\nmade under; a memo of another is not read.",
+          "type": "string"
+        },
+        "indexes_checked": {
+          "description": "Whether the sampler's check of the indexes its reads would use was\nmade (and its warning given, if any).",
+          "type": "boolean"
+        },
+        "bounds": {
+          "description": "The time bounds read, at most one entry per table.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemoBounds"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "indexes_checked",
+        "bounds"
+      ]
+    },
+    "MemoBounds": {
+      "description": "The smallest and largest time of one table's time column, as read, in\nnanoseconds since the epoch; none where no row holds a time.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "description": "The table, as the schema names it.",
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        },
+        "min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
+    },
     "StatePayload": {
       "type": "object",
       "properties": {
@@ -2137,6 +2218,17 @@
                 "type": "string"
               }
             },
+            "sampler_state": {
+              "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it (decision E52); none for a materializer's\nfirst run.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SamplerState"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "op": {
               "type": "string",
               "const": "materialize"
@@ -2449,6 +2541,27 @@
     "Seed": {
       "type": "string",
       "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"
+    },
+    "SamplerState": {
+      "description": "What a materializer's runs have read of its source, so a later run\nskips a read the reference's sampler makes once (decision E52): the\ncore holds no state across runs. A `materialize` run leaves it, done or\nfailed, and the host takes it after the run ends (a `sampler_state`\nmessage), keeps it on its materializer as it is, opaque, and hands it\nback with that materializer's next `materialize`.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of this state's format, independent of the contract's.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "memo": {
+          "description": "A bytes attachment of a [`SamplerMemo`] as JSON.",
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "memo"
+      ]
     },
     "RequestState": {
       "description": "What `predict` needs of a materialized request: state that outlives the\nrun that made it. `materialize` answers it; the host takes its\nattachments when that run finishes, holds them, and attaches them again\nto the `start` of the `predict` run, under ids it picks for that\nmessage. A version other than [`REQUEST_STATE_VERSION`] is refused by\nname before anything of the state is read.",

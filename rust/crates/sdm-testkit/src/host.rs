@@ -619,6 +619,7 @@ fn materialize(
             anchor_entity: false,
             num_context_samples: None,
             options: vec![],
+            sampler_state: None,
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
