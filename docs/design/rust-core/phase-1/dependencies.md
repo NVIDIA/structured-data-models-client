@@ -36,7 +36,7 @@ A row changes with the dependency, in the same commit.
 
 | Concern | Choice | Where | Reason |
 |---|---|---|---|
-| `SeedSequence`, PCG64, bounded draws and the shuffle (RS-1) | Port a defined algorithm | `sdm-engine`, T1.22; from T1.11c `sdm_engine::random` holds `SeedSequence`, PCG64, `random_interval` and `Generator.shuffle` | A promised stream (PK-1); no Rust crate reproduces numpy's draws; vectors from numpy pin it (F4): `sdm-engine`'s `tests/rs1.json`, recorded from numpy 2.5.3, for eleven seeds from 0 to past 2**200 |
+| `SeedSequence`, PCG64, bounded draws and the shuffle (RS-1) | Port a defined algorithm | `sdm-engine`, from T1.11c; completed at T1.22: `sdm_engine::random` holds `SeedSequence`, PCG64, `random_interval` and `Generator.shuffle` | A promised stream (PK-1); no Rust crate reproduces numpy's draws; vectors from numpy pin it (F4): `sdm-engine`'s `tests/rs1.json`, recorded from numpy 2.5.3, for eleven seeds from 0 to past 2**200, and `tests/rs1-draws.json` (T1.22, `tests/rs1_record.py`), for every seed of T0.6's model and numpy's compiled `random_interval` to a maximum of 2**64 - 1 |
 | float32 Kahan sums in row order (PK-2) | Port a defined algorithm | `sdm-engine`, T1.27; from T1.11c `sdm_engine::sample::sum_labels` for a windowed `SUM` (pandas' `group_sum` at float32) | Promised label arithmetic |
 | `DateOffset` month rules (PK-3) | Port a defined algorithm over `jiff` | `sdm-engine`, T1.27 | Promised; `jiff`'s civil arithmetic gives the dates, the rules come from pandas' definition, checked by the 208 T0.6 answers |
 | PQL date literals D1 to D9 | Port a defined algorithm over `jiff` | `sdm-pql-interim`, T1.6a and T1.6b | Written rules from `date-rules.md`, replacing the archive's 1,695-line clone |

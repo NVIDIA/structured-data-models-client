@@ -516,7 +516,13 @@ entries:
   notes: >-
     Owner decision 30 keeps today's refusals, with no regression and no new
     stream to define. The refusal message changes from pybind11's or pandas'
-    text to a named one.
+    text to a named one. As built at T1.22 (decision E58): the range is the
+    provider's declared capability (max_seed), which sdm-data gives DuckDB
+    (2**31 - 1) and the core reads, refusing a larger seed with
+    INVALID_REQUEST naming the seed and max_seed. Measured at T1.22 on the
+    reference: its client raises DuckDB's parser error for such a seed as
+    INTERNAL_ERROR, so the code moves to the INVALID_REQUEST this entry
+    names.
 
 # --- Dates and time zones (T0.6) ----------------------------------------------
 
