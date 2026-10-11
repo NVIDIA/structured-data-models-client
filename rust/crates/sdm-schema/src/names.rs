@@ -185,6 +185,16 @@ pub(crate) fn is_edit_stamp(name: &str) -> bool {
     )
 }
 
+/// Whether the name says when a row was created (`is_creation_stamp`):
+/// it starts `create`, in any case, which keeps an all-capitals
+/// `CREATEDDATE`, or holds `create`, `created` or `creation` as a word.
+pub(crate) fn is_creation_stamp(name: &str) -> bool {
+    name.to_lowercase().starts_with("create")
+        || tokens(name)
+            .iter()
+            .any(|token| ["create", "created", "creation"].contains(&token.as_str()))
+}
+
 /// Whether the name says a date of birth.
 pub(crate) fn is_birth_date(name: &str) -> bool {
     if is_joined(name) && name.to_lowercase().contains("birth") {
@@ -228,6 +238,11 @@ mod tests {
         assert!(!is_edit_stamp("ts"));
         assert!(!is_birth_date("ts"));
         assert!(!is_edit_stamp("created_at"));
+        assert!(is_creation_stamp("CREATEDDATE"));
+        assert!(is_creation_stamp("row_creation_ts"));
+        assert!(is_creation_stamp("createdAt"));
+        assert!(!is_creation_stamp("recreated"));
+        assert!(!is_creation_stamp("ts"));
     }
 
     #[test]

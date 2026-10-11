@@ -13,8 +13,8 @@ use sdm_contract::data::{
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    Capability, DescribeSource, Materialize, Operation, OperationResult, ProfileName, ProfileSpec,
-    QuerySchema, Seed, SourceDescription, SourceSpec, Span, ValidateQuery,
+    Capability, DescribeSource, Materialize, NamedTable, Operation, OperationResult, ProfileName,
+    ProfileSpec, QuerySchema, Seed, SourceDescription, SourceSpec, Span, ValidateQuery,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
@@ -85,9 +85,13 @@ fn attachments_of(operation: &Operation) -> Attachments {
         Operation::DescribeSource(d) => Attachments::from([(
             d.source,
             json(&SourceSpec {
-                tables: vec!["t".into()],
+                tables: vec![NamedTable {
+                    name: "t".into(),
+                    source: "t".into(),
+                }],
                 primary_keys: BTreeMap::new(),
                 time_columns: BTreeMap::new(),
+                relationships: None,
             }),
         )]),
         Operation::Materialize(m) => Attachments::from([
@@ -211,11 +215,25 @@ fn every_operation_dispatches_to_a_run() {
             sampling: Determinism::Unseeded,
         },
     };
-    // Tables named are an override this core does not take yet (T1.11b):
-    // refused by the rule, before anything is fetched.
-    let err = run_of(&root, describe(host)).unwrap().next().unwrap_err();
-    assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(named(&err, "rule"), "tables_named");
+    // A table named is read by its source name, with no listing of the
+    // source's tables first (T1.23): its columns and keys in one step.
+    let Step::Fetch { requests } = run_of(&root, describe(host)).unwrap().next().unwrap() else {
+        panic!("describe_source did not ask for the table named");
+    };
+    let asked: Vec<&DataRequest> = requests.iter().map(|step| &step.request).collect();
+    assert_eq!(
+        asked,
+        [
+            &DataRequest::Describe {
+                tables: vec!["t".into()],
+                part: DescribePart::Columns,
+            },
+            &DataRequest::Describe {
+                tables: vec!["t".into()],
+                part: DescribePart::Keys,
+            },
+        ]
+    );
 }
 
 /// A data layer that plans every request as one statement, to show that the

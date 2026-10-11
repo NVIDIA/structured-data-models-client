@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
 use sdm_contract::ops::{Dtype, Stype};
-use sdm_contract::{ColumnType, CoreError};
+use sdm_contract::{ColumnType, CoreError, Scalar};
 
 use crate::names;
 use crate::not_yet;
@@ -45,44 +45,67 @@ pub struct InferredColumn {
     pub unique: bool,
 }
 
-/// Why inference passed a timestamp over for the time column by its name,
-/// as the reference's `RejectedTimeColumn` says it: a stamp of a row's
-/// load, of its last edit, or a date of birth.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Why inference passed a timestamp over for the time column, as the
+/// reference's `RejectedTimeColumn` holds it: its values (no row holds
+/// one, or every row that holds one holds the same; more than half the
+/// rows hold none), or its name (a stamp of a row's load, of its last edit,
+/// or a date of birth).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PassedOver {
+    /// No row holds a value (`value` `None`), or the table has more than
+    /// one row and every row that holds one holds `value`; `missing` of
+    /// its `rows` rows hold none.
+    Constant {
+        value: Option<Scalar>,
+        missing: usize,
+        rows: usize,
+    },
+    /// `missing` of its `rows` rows, more than half, hold no value.
+    Sparse {
+        missing: usize,
+        rows: usize,
+    },
     LoadStamp,
     EditStamp,
     BirthDate,
 }
 
 impl PassedOver {
-    /// The reason, said as a clause about the column (`RejectedTimeColumn.why`).
-    pub fn why(self) -> &'static str {
+    /// The reason's name, as the reference's `RejectedTimeColumn.reason`
+    /// gives it.
+    pub fn reason(&self) -> &'static str {
         match self {
-            PassedOver::EditStamp => "it looks like when a row was last changed, not when it began",
-            PassedOver::LoadStamp => "it looks like when a row was loaded, not when it began",
-            PassedOver::BirthDate => "it looks like a date of birth, not when a row began",
+            PassedOver::Constant { .. } => "constant",
+            PassedOver::Sparse { .. } => "sparse",
+            PassedOver::LoadStamp => "load_stamp",
+            PassedOver::EditStamp => "edit_stamp",
+            PassedOver::BirthDate => "birth_date",
         }
     }
 }
 
-/// How the time column was taken: the one timestamp left, or a lone stamp
-/// of the last edit in a table no other links to.
+/// How the time column was taken (`TimeColumnChoice.how`): the one
+/// timestamp left, the one creation stamp among several, the one whose
+/// values start earliest, or a lone stamp of the last edit in a table no
+/// other links to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Taken {
     Only,
+    Created,
+    Earliest,
     EditStamp,
 }
 
 /// The time column inference took and how, and the timestamps it passed
-/// over by name, as the reference's `TimeColumnChoice` holds them for the
-/// paths this build takes.
+/// over, as the reference's `TimeColumnChoice` holds them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimeChoice {
     pub column: Option<String>,
     pub how: Option<Taken>,
-    /// Every timestamp passed over by its name, in table order, the lone
-    /// edit stamp taken as the last resort included.
+    /// The columns it was chosen from, itself included.
+    pub among: Vec<String>,
+    /// Every timestamp passed over, in table order, the lone edit stamp
+    /// taken as the last resort included.
     pub refused: Vec<(String, PassedOver)>,
     /// The lone edit stamp left, when no other timestamp was.
     pub fallback: Option<String>,
@@ -100,6 +123,11 @@ impl TimeChoice {
         TimeChoice {
             column: (!linked).then(|| fallback.clone()),
             how: (!linked).then_some(Taken::EditStamp),
+            among: if linked {
+                vec![]
+            } else {
+                vec![fallback.clone()]
+            },
             refused: self.refused.clone(),
             fallback: self.fallback.clone(),
         }
@@ -114,15 +142,45 @@ impl TimeChoice {
     }
 }
 
+/// A column whose type has no scalar form on the wire, which the schema
+/// leaves out and names (`_describe_source_table`): a list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LeftOut {
+    pub name: String,
+    pub dtype: Dtype,
+}
+
+/// A time of day whose values the reference's engine reads as no time at
+/// all (its `to_datetime` over the preview), which it says it dropped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnreadTimes {
+    pub column: String,
+    /// The values not read: every one the preview holds.
+    pub unread: usize,
+    /// The rows the preview holds.
+    pub rows: usize,
+    /// The first three distinct values, in the order they appear.
+    pub examples: Vec<Scalar>,
+}
+
 /// One table, inferred.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredTable {
     pub name: String,
+    /// The source's name of the table read.
+    pub source: String,
     pub columns: Vec<InferredColumn>,
+    /// The columns left out, in table order.
+    pub left_out: Vec<LeftOut>,
+    /// The times of day the engine's reading drops, in table order.
+    pub unread_times: Vec<UnreadTimes>,
     pub primary_key: Option<String>,
-    /// The time column chosen, before the links settle a lone edit stamp
-    /// (`crate::assemble`); `time.column` is the table's time column.
+    /// How inference chose the time column, before the links settle a
+    /// lone edit stamp (`crate::assemble`).
     pub time: TimeChoice,
+    /// The table's time column: inference's choice until the caller names
+    /// one (`crate::assemble::apply_keys_and_times`).
+    pub time_column: Option<String>,
     /// The column sets the catalog declares a primary or unique key over,
     /// which the source refuses to repeat.
     pub unique: Vec<BTreeSet<String>>,
@@ -149,11 +207,14 @@ impl InferredTable {
     }
 }
 
-/// Infers table `name` from its catalog columns and constraints and its
-/// preview (`schema` and `batches`, as admitted), which holds the catalog's
-/// columns in order.
+/// Infers table `name`, read as `source` in the source, from its catalog
+/// columns and constraints and its preview (`schema` and `batches`, as
+/// admitted), which holds the catalog's columns in order. Inference reads
+/// the table by the name the schema gives it, as the reference's engine
+/// does (its key's guess is by that name).
 pub fn table(
     name: &str,
+    source: &str,
     catalog: &[CatalogColumn],
     constraints: &[CatalogKey],
     schema: &Schema,
@@ -181,11 +242,37 @@ pub fn table(
 
     let mut columns = Vec::with_capacity(catalog.len());
     let mut samples = Vec::with_capacity(catalog.len());
+    let mut instants = Vec::with_capacity(catalog.len());
+    let mut firsts = Vec::with_capacity(catalog.len());
+    let mut left_out = Vec::new();
+    let mut unread_times = Vec::new();
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
         let dtype = dtype_of(field.data_type())?;
+        if matches!(dtype, Dtype::Intlist | Dtype::Floatlist | Dtype::Stringlist) {
+            // No scalar form on the wire: left out and named, as the
+            // reference's schema leaves it out.
+            left_out.push(LeftOut {
+                name: declared.name.clone(),
+                dtype,
+            });
+            continue;
+        }
         let sample = values::column(batches, index)?;
+        if dtype == Dtype::Time {
+            // The engine reads a time of day's values as times, which none
+            // is, and says how many it dropped.
+            let unread = sample.iter().flatten().count();
+            if unread > 0 {
+                unread_times.push(UnreadTimes {
+                    column: declared.name.clone(),
+                    unread,
+                    rows,
+                    examples: values::times_of_day(batches, index, 3),
+                });
+            }
+        }
         let stype = stype_of(&declared.name, dtype, &sample)?;
         let is_primary = declared.primary_key || declared_primary.contains(&declared.name);
         if is_primary {
@@ -201,15 +288,25 @@ pub fn table(
             unique: declared_unique.contains(&declared.name),
         });
         samples.push(sample);
+        instants.push(if dtype == Dtype::Time {
+            // Dropped by the engine's reading: none is held.
+            vec![None; rows]
+        } else {
+            values::instants(batches, index)
+        });
+        firsts.push(values::first_temporal(batches, index));
     }
 
     // The catalog's key, when it declares exactly one single-column one,
     // then its one unique column, then a guess from names and values; each
-    // makes its column an identifier.
+    // makes its column an identifier. A column left out is never the key.
+    let held = |n: &&String| columns.iter().any(|c| &c.name == *n);
+    let primary: Vec<String> = primary.iter().filter(held).cloned().collect();
     let unique_columns: Vec<&String> = catalog
         .iter()
         .map(|c| &c.name)
         .filter(|n| declared_unique.contains(*n))
+        .filter(held)
         .collect();
     let key = match (primary.as_slice(), unique_columns.as_slice()) {
         ([one], _) => Some(one.clone()),
@@ -227,19 +324,31 @@ pub fn table(
         column.stype = Stype::Id;
     }
 
-    let time = choose_time_column(&columns, &samples, rows, key.as_deref())?;
+    let time = choose_time_column(
+        &columns,
+        &Read {
+            instants: &instants,
+            firsts: &firsts,
+        },
+        rows,
+        key.as_deref(),
+    )?;
     Ok(InferredTable {
         name: name.to_owned(),
+        source: source.to_owned(),
         columns,
+        left_out,
+        unread_times,
         primary_key: key,
+        time_column: time.column.clone(),
         time,
         unique,
     })
 }
 
 /// A column's data type from the Arrow type its preview returned, as the
-/// reference's reading of the catalog's types gives it for the plain types;
-/// any other is refused.
+/// reference's reading of the catalog's types gives it for the plain types
+/// and the lists of them; any other is refused.
 fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
     Ok(match data_type {
         DataType::Boolean => Dtype::Bool,
@@ -256,6 +365,18 @@ fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
         DataType::Utf8 => Dtype::String,
         DataType::Date32 | DataType::Timestamp(_, _) => Dtype::Date,
         DataType::Time64(_) => Dtype::Time,
+        // A list of integers, floats or text, as the reference reads a
+        // catalog type ending `[]`; a list of anything else, a list of a
+        // fixed size, a struct and a map stay refused, as the reference
+        // fails them unnamed (register P1B-9).
+        DataType::List(element) | DataType::LargeList(element) => {
+            match dtype_of(element.data_type()) {
+                Ok(Dtype::Int) => Dtype::Intlist,
+                Ok(Dtype::Float) => Dtype::Floatlist,
+                Ok(Dtype::String) => Dtype::Stringlist,
+                _ => return Err(not_yet("column_type")),
+            }
+        }
         _ => return Err(not_yet("column_type")),
     })
 }
@@ -596,20 +717,36 @@ fn snake_case(name: &str) -> String {
     second
 }
 
+/// What the preview holds of each column inferred, for the time column's
+/// choice: its values as instants (`values::instants`, a time of day's as
+/// none, since the engine's reading drops them) and its first value held.
+struct Read<'a> {
+    instants: &'a [Vec<Option<i128>>],
+    firsts: &'a [Option<Scalar>],
+}
+
+/// The first real day: a value before it, such as 0001-01-01 or
+/// 1900-01-01, stands for no date (`_FIRST_REAL_DAY`, 1901-01-01 UTC), in
+/// nanoseconds since the epoch.
+const FIRST_REAL_DAY: i128 = -2_177_452_800 * 1_000_000_000;
+
 /// The time column among the timestamps, as the reference chooses it
-/// (`predictive_query.time_columns.choose_time_column`) where its choice is
-/// plain: a stamp of a load or a date of birth is passed over by its name;
-/// every other timestamp must be held in at least half the rows and not be
-/// one value in every row, read in a preview that holds every row; a stamp
-/// of the last edit is passed over too, and taken only when it is the one
-/// timestamp left (settled by the links, [`TimeChoice::for_links`]); of
-/// the rest, the one left is taken. The key is never the time column. Any
-/// other choice is refused: a timestamp refused for its values
-/// (`time_values`), several left (`time_several`), a time of day, and a
-/// preview that may not hold every row.
+/// (`predictive_query.time_columns.choose_time_column`), over a preview
+/// that holds every row: a stamp of a load or a date of birth is passed
+/// over by its name; any other timestamp held in no row, or in fewer than
+/// half the rows, or holding one value in every row of a table of more
+/// than one, is passed over for its values; a stamp of the last edit is
+/// passed over too, and taken only when it is the one timestamp left
+/// (settled by the links, [`TimeChoice::for_links`]); of the rest, the one
+/// left is taken, else the one creation stamp, else the one whose values
+/// start earliest, placeholders left out, the first in table order on a
+/// tie. A time of day holds no value the engine reads, so it is passed
+/// over as holding none. The key is never the time column. A preview that
+/// may not hold every row is refused (`time_whole_table`): the reference
+/// then asks the whole table, which this build does not port.
 fn choose_time_column(
     columns: &[InferredColumn],
-    samples: &[Vec<Option<Value>>],
+    read: &Read<'_>,
     rows: usize,
     key: Option<&str>,
 ) -> Result<TimeChoice, CoreError> {
@@ -618,11 +755,6 @@ fn choose_time_column(
         .collect();
     if candidates.is_empty() {
         return Ok(TimeChoice::default());
-    }
-    // A time of day: the reference reads none of its values as a time, so
-    // it refuses the column for its values and warns; not ported.
-    if candidates.iter().any(|&i| columns[i].dtype == Dtype::Time) {
-        return Err(not_yet("time_of_day"));
     }
     if rows as u64 >= PREVIEW_ROWS {
         return Err(not_yet("time_whole_table"));
@@ -640,39 +772,120 @@ fn choose_time_column(
             refused.push((name.clone(), PassedOver::BirthDate));
             continue;
         }
-        let held = samples[i].iter().flatten().count();
-        let missing = rows - held;
-        let constant = held == 0 || (rows > 1 && values::distinct(&samples[i]) == 1);
-        if constant || 2 * missing > rows {
-            return Err(not_yet("time_values"));
+        if let Some(why) = refused_for_values(&read.instants[i], read.firsts[i].as_ref(), rows) {
+            refused.push((name.clone(), why));
+            continue;
         }
         if names::is_edit_stamp(name) {
             refused.push((name.clone(), PassedOver::EditStamp));
             edited.push(name.clone());
         } else {
-            plain.push(name.clone());
+            plain.push(i);
         }
     }
-    match (plain.as_slice(), edited.as_slice()) {
-        ([], [one]) => Ok(TimeChoice {
-            column: None,
-            how: None,
-            refused,
-            fallback: Some(one.clone()),
+    let chosen = |column: Option<String>, how: Option<Taken>, among: Vec<String>| TimeChoice {
+        column,
+        how,
+        among,
+        refused: refused.clone(),
+        fallback: None,
+    };
+    let names_of = |indices: &[usize]| -> Vec<String> {
+        indices.iter().map(|&i| columns[i].name.clone()).collect()
+    };
+    if plain.is_empty() {
+        if let [one] = edited.as_slice() {
+            return Ok(TimeChoice {
+                fallback: Some(one.clone()),
+                ..chosen(None, None, vec![])
+            }
+            .for_links(false));
         }
-        .for_links(false)),
-        ([], _) => Ok(TimeChoice {
-            refused,
-            ..TimeChoice::default()
-        }),
-        ([one], _) => Ok(TimeChoice {
-            column: Some(one.clone()),
-            how: Some(Taken::Only),
-            refused,
-            fallback: None,
-        }),
-        _ => Err(not_yet("time_several")),
+        return Ok(chosen(None, None, vec![]));
     }
+    let created: Vec<usize> = plain
+        .iter()
+        .copied()
+        .filter(|&i| names::is_creation_stamp(&columns[i].name))
+        .collect();
+    if let [one] = created.as_slice() {
+        let how = if plain.len() > 1 {
+            Taken::Created
+        } else {
+            Taken::Only
+        };
+        return Ok(chosen(
+            Some(columns[*one].name.clone()),
+            Some(how),
+            names_of(&plain),
+        ));
+    }
+    let among = if created.is_empty() { plain } else { created };
+    if let [one] = among.as_slice() {
+        return Ok(chosen(
+            Some(columns[*one].name.clone()),
+            Some(Taken::Only),
+            names_of(&among),
+        ));
+    }
+    let earliest = earliest(&among, read);
+    Ok(chosen(
+        Some(columns[earliest].name.clone()),
+        Some(Taken::Earliest),
+        names_of(&among),
+    ))
+}
+
+/// Why a column is passed over for its values (`_refused_for_values`),
+/// read over every row: none held; more than half missing; or, in a table
+/// of more than one row, one value in every row that holds one, which is
+/// named.
+fn refused_for_values(
+    instants: &[Option<i128>],
+    first: Option<&Scalar>,
+    rows: usize,
+) -> Option<PassedOver> {
+    let held: Vec<i128> = instants.iter().flatten().copied().collect();
+    let missing = rows - held.len();
+    if held.is_empty() {
+        return Some(PassedOver::Constant {
+            value: None,
+            missing,
+            rows,
+        });
+    }
+    if 2 * missing > rows {
+        return Some(PassedOver::Sparse { missing, rows });
+    }
+    if rows > 1 && held.iter().all(|v| *v == held[0]) {
+        return Some(PassedOver::Constant {
+            value: first.cloned(),
+            missing,
+            rows,
+        });
+    }
+    None
+}
+
+/// The column of `among` whose values start earliest (`_earliest`), the
+/// first in table order on a tie or when none holds a real value: a value
+/// before 1901 or the epoch's midnight is a placeholder, no start.
+fn earliest(among: &[usize], read: &Read<'_>) -> usize {
+    let mut best: Option<(i128, usize)> = None;
+    for &i in among {
+        let start = read.instants[i]
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|&v| v >= FIRST_REAL_DAY && v != 0)
+            .min();
+        if let Some(start) = start
+            && best.is_none_or(|(low, _)| start < low)
+        {
+            best = Some((start, i));
+        }
+    }
+    best.map_or(among[0], |(_, i)| i)
 }
 
 #[cfg(test)]

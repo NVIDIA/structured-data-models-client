@@ -425,12 +425,22 @@ class _Capture:
         self.materialized: dict[str, Any] | None = None
         self.predicted: dict[str, Any] | None = None
         self.error: dict[str, str] | None = None
+        #: The core's warnings, each its code and fields as the
+        #: ``warnings`` control message carries them, in the order given
+        #: (T1.23).
+        self.warnings: list[dict[str, Any]] = []
         self._description: int | None = None
         self._state: dict[str, Any] | None = None
         self._request_id: str | None = None
         self._call: int | None = None
         self._body: dict[str, Any] | None = None
         self._answer: dict[str, Any] | None = None
+
+    def warned(self, message: bytes) -> None:
+        for warning in json.loads(message)['warnings']:
+            self.warnings.append(
+                {'code': warning['code'], 'fields': warning.get('fields', {})}
+            )
 
     def started(self, message: bytes, attachments: Any) -> None:
         operation = json.loads(message)['operation']
@@ -661,6 +671,12 @@ class _Handle:
         value = self._handle.take_attachment(attachment)
         self._capture.taken(attachment, value)
         return value
+
+    def take_warnings(self) -> Any:
+        taken = self._handle.take_warnings()
+        if taken is not None:
+            self._capture.warned(taken[0])
+        return taken
 
     def reply(self, message: bytes, attachments: Any) -> None:
         try:

@@ -426,23 +426,26 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
 ) -> None:
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     refusals = [
+        # An empty table, which the reference refuses unnamed (P1B-10).
         (
             lambda: _connection('CREATE TABLE z (z_id BIGINT)'),
             {},
             'empty_table',
         ),
-        (_connection, {'primary_keys': {'users': 'user_id'}}, 'primary_keys'),
-        (_connection, {'time_columns': {'orders': 'ts'}}, 'time_columns'),
-        # A time of day, which the reference reads as no time and refuses
-        # as a time column, with a warning.
+        # A struct column, which the reference fails unnamed (P1B-9).
         (
             lambda: _connection(
-                'CREATE TABLE things (thing_id BIGINT, tod TIME)',
-                "INSERT INTO things SELECT i, TIME '01:00:00' + INTERVAL (i) "
-                'MINUTE FROM range(30) t(i)',
+                "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 1} AS s "
+                'FROM users'
             ),
             {},
-            'time_of_day',
+            'column_type',
+        ),
+        # A key of two columns, which this core does not hold yet.
+        (
+            _connection,
+            {'primary_keys': {'orders': ['order_id', 'user_id']}},
+            'composite_key',
         ),
     ]
     for build, arguments, rule in refusals:
@@ -536,6 +539,51 @@ SCHEMA_RULES = {
             'to_days(CAST(i AS INTEGER)) FROM range(4) t(i)',
             'CREATE TABLE subs (sub_id BIGINT, plan_id BIGINT)',
             'INSERT INTO subs SELECT i, i % 4 FROM range(8) t(i)',
+        ),
+    ),
+    # T1.23: a timestamp passed over for its values (one value in every
+    # row, mostly empty, empty), several left (the earliest taken, a
+    # creation stamp preferred), a time of day read as no time, and a list
+    # column left out.
+    'time values': (
+        {'TIME_COLUMNS_GUESSED'},
+        (
+            'CREATE TABLE plans (plan_id BIGINT, stamped TIMESTAMP, '
+            'ended DATE, gone TIMESTAMP)',
+            "INSERT INTO plans SELECT i, TIMESTAMP '2024-01-01 10:30:00.25', "
+            "CASE WHEN i % 4 = 0 THEN DATE '2024-03-01' + CAST(i AS INTEGER) "
+            'END, NULL FROM range(9) t(i)',
+            'CREATE TABLE subs (sub_id BIGINT, plan_id BIGINT)',
+            'INSERT INTO subs SELECT i, i % 9 FROM range(12) t(i)',
+        ),
+    ),
+    'several timestamps': (
+        {'TIME_COLUMNS_GUESSED'},
+        (
+            'CREATE TABLE shipments (shipment_id BIGINT, user_id BIGINT, '
+            'shipped TIMESTAMP, ordered DATE)',
+            "INSERT INTO shipments SELECT i, i % 8, TIMESTAMP '2023-02-01' + "
+            "to_days(CAST(i AS INTEGER)), DATE '2023-01-01' + CAST(i AS "
+            'INTEGER) FROM range(9) t(i)',
+            'CREATE TABLE visits (visit_id BIGINT, user_id BIGINT, '
+            'seen TIMESTAMP, created_at TIMESTAMP)',
+            "INSERT INTO visits SELECT i, i % 8, TIMESTAMP '2020-01-01' + "
+            "to_days(CAST(i AS INTEGER)), TIMESTAMP '2024-01-01' + "
+            'to_days(CAST(i AS INTEGER)) FROM range(9) t(i)',
+        ),
+    ),
+    'a time of day': (
+        {'TIME_VALUES_UNREAD', 'TIME_COLUMNS_GUESSED'},
+        (
+            'CREATE OR REPLACE TABLE users AS SELECT *, '
+            'make_time(user_id::BIGINT, 30, 0) AS f FROM users',
+        ),
+    ),
+    'a list left out': (
+        {'COLUMNS_LEFT_OUT'},
+        (
+            'CREATE OR REPLACE TABLE users AS SELECT *, [user_id, 2]::INTEGER[] '
+            "AS f, ['a', country] AS g FROM users",
         ),
     ),
     'a key by reference': (
@@ -698,4 +746,106 @@ def test_a_table_named_with_a_dot_is_refused_on_both_routes(
         return
     with pytest.raises(StructuredDataError) as old:
         _described_with(monkeypatch, '', 'a.b')
+    assert old.value.code == 'INVALID_REQUEST'
+
+
+#: Keys and time columns named in Schema.from_source (T1.23), each beside
+#: the shop base, with what is set up first: a key moved off the column
+#: links name, a time column named among several, text named as a time
+#: column, and both on one table.
+NAMED = {
+    'a key moved': ((), {'primary_keys': {'users': 'age'}}),
+    'a time column among several': (
+        (
+            'CREATE OR REPLACE TABLE orders AS SELECT *, ts + INTERVAL 1 DAY '
+            'AS shipped FROM orders',
+        ),
+        {'time_columns': {'orders': 'shipped'}},
+    ),
+    'text as a time column': (
+        (
+            "CREATE OR REPLACE TABLE users AS SELECT *, 'n' || "
+            'chr(97 + user_id::INTEGER) AS note FROM users',
+        ),
+        {'time_columns': {'users': 'note'}},
+    ),
+    'both': (
+        (),
+        {
+            'primary_keys': {'orders': 'order_id', 'users': 'user_id'},
+            'time_columns': {'orders': 'ts'},
+        },
+    ),
+}
+
+
+def _from_source(
+    monkeypatch: pytest.MonkeyPatch,
+    setup: tuple[str, ...],
+    routes: str,
+    arguments: dict[str, Any],
+) -> tuple[dict[str, Any], list[tuple[str, str]], Schema]:
+    if routes:
+        monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+    else:
+        monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(
+            DuckDBSource(_connection(*setup)), **arguments
+        )
+    said = [
+        (
+            type(w.message).__name__,
+            str(w.message).split('] ', 1)[1]
+            if str(w.message).startswith('[')
+            else str(w.message),
+        )
+        for w in shown
+    ]
+    return _projection(schema), said, schema
+
+
+@pytest.mark.parametrize('name', sorted(NAMED))
+def test_keys_and_time_columns_named_are_applied_as_the_old_route_does(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    setup, arguments = NAMED[name]
+    core, said, schema = _from_source(monkeypatch, setup, CORE, arguments)
+    for table, key in arguments.get('primary_keys', {}).items():
+        assert schema[table].primary_key == key
+    for table, column in arguments.get('time_columns', {}).items():
+        assert schema[table].time_column == column
+        assert schema[table][column].stype == 'timestamp'
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    old, old_said, old_schema = _from_source(monkeypatch, setup, '', arguments)
+    assert core == old
+    assert said == old_said
+    assert _before_key(schema) == _before_key(old_schema)
+    assert _declared(schema) == _declared(old_schema)
+
+
+@pytest.mark.parametrize(
+    'arguments',
+    [
+        {'primary_keys': {'nowhere': 'id'}},
+        {'primary_keys': {'users': 'nothing'}},
+        {'primary_keys': {'orders': 'ts'}},
+        {'time_columns': {'nowhere': 'ts'}},
+        {'time_columns': {'orders': 'nothing'}},
+        {'time_columns': {'orders': 'order_id'}},
+        {'time_columns': {'orders': 'price'}},
+    ],
+)
+def test_a_key_or_time_column_named_wrongly_is_refused_as_the_old_route_does(
+    monkeypatch: pytest.MonkeyPatch, arguments: dict[str, Any]
+) -> None:
+    with pytest.raises(StructuredDataError) as core:
+        _from_source(monkeypatch, (), CORE, arguments)
+    assert core.value.code == 'INVALID_REQUEST'
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    with pytest.raises(StructuredDataError) as old:
+        _from_source(monkeypatch, (), '', arguments)
     assert old.value.code == 'INVALID_REQUEST'

@@ -12,9 +12,11 @@
 //! marking and link checks hold the schema `materialize` is handed
 //! (`Schema.check_consistent`), whatever the host did to it.
 //!
-//! The warnings' texts are the reference client's, word for word, its
-//! overrides included; their codes and fields say the same for a host that
-//! words them itself.
+//! The warnings are codes and fields, the names and values a warning
+//! speaks of; the words, the reference client's with its Python remedies,
+//! are each host's to give from them (decision E59, the design's
+//! presentation rule). A warning's `message` is a sentence that names
+//! nothing, for a host with no words of its own.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,7 +25,7 @@ use sdm_contract::ops::{
 };
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 
-use crate::infer::{InferredTable, Taken, TimeChoice};
+use crate::infer::{InferredTable, PassedOver, Taken, TimeChoice};
 
 /// A link, `[foreign key, referenced key]`, as the contract holds it.
 pub type Link = Vec<ColumnRef>;
@@ -36,6 +38,10 @@ pub const LINK_CANNOT_JOIN: &str = "LINK_CANNOT_JOIN";
 pub const TABLES_NAME_EACH_OTHER: &str = "TABLES_NAME_EACH_OTHER";
 /// The warning that one table reaches another through several columns.
 pub const TWO_WAYS_TO_A_TABLE: &str = "TWO_WAYS_TO_A_TABLE";
+/// The warning that a column with no scalar form was left out.
+pub const COLUMNS_LEFT_OUT: &str = "COLUMNS_LEFT_OUT";
+/// The warning that a time of day's values were read as no time.
+pub const TIME_VALUES_UNREAD: &str = "TIME_VALUES_UNREAD";
 
 /// A schema assembled: its description and the warnings given, in order.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,7 +115,7 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
         if table.primary_key.is_some() {
             continue;
         }
-        let time = table.time.column.clone();
+        let time = table.time_column.clone();
         let Some(keyed) = table.columns.iter_mut().find(|c| c.name == column) else {
             continue;
         };
@@ -134,23 +140,42 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
     Ok(())
 }
 
+/// What the caller gave beside the tables: the tables whose time column
+/// was named, which the choice's settling and its warning pass over, and
+/// the relationships, in place of the declared and inferred ones.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Given<'a> {
+    pub time_columns: Option<&'a BTreeMap<String, String>>,
+    pub relationships: Option<&'a [Link]>,
+}
+
+impl Given<'_> {
+    fn names_time_of(&self, table: &str) -> bool {
+        self.time_columns
+            .is_some_and(|given| given.contains_key(table))
+    }
+}
+
 /// The schema of `tables`, counted, with the `declared` foreign keys: the
 /// links inferred by name beside them, those that cannot join dropped with
-/// a warning, a lone edit stamp settled by the links, the links each once,
-/// the columns joined on marked, and the reference's warnings of a guessed
-/// time column and of two ways between tables. `duplicates` is each
-/// table's count of repeated keys, as the contract's scalar.
+/// a warning, or the relationships `given`, each checked
+/// (`_checked_links`); a lone edit stamp settled by the links, the links
+/// each once, the columns joined on marked, and the reference's warnings
+/// of a guessed time column and of two ways between tables. `duplicates`
+/// is each table's count of repeated keys, as the contract's scalar.
 pub fn assemble(
     tables: Vec<InferredTable>,
     declared: Vec<Link>,
+    given: Given<'_>,
     duplicates: Option<Scalar>,
-) -> Assembled {
+) -> Result<Assembled, CoreError> {
     let mut warnings = Vec::new();
     let mut choices: Vec<TimeChoice> = tables.iter().map(|t| t.time.clone()).collect();
     let mut described: Vec<DescribedTable> = tables
         .into_iter()
         .map(|table| DescribedTable {
             name: table.name,
+            source: table.source,
             columns: table
                 .columns
                 .into_iter()
@@ -165,43 +190,60 @@ pub fn assemble(
                 })
                 .collect(),
             primary_key: table.primary_key.into_iter().collect(),
-            time_column: table.time.column,
-            edit_stamp_refused: None,
+            time_column: table.time_column,
+            time_column_inferred: None,
             duplicate_keys: duplicates.clone(),
         })
         .collect();
 
-    // Links: the declared, then those inferred by name whose foreign key no
-    // declared one covers, each kept only where it can join.
-    let covered: BTreeSet<(&str, &str)> = declared
-        .iter()
-        .filter_map(|link| link.first())
-        .map(|f| (f.table.as_str(), f.column.as_str()))
-        .collect();
-    let by_name: Vec<Link> = by_name(&described)
-        .into_iter()
-        .filter(|link| !covered.contains(&(link[0].table.as_str(), link[0].column.as_str())))
-        .collect();
-    let mut links = Vec::new();
-    for link in declared.iter().cloned().chain(by_name) {
-        match joins(&described, &link) {
-            Ok(()) => links.push(link),
-            // A link inferred or declared names columns the tables hold.
-            Err(Unjoinable::Missing) => {}
-            Err(why) => warnings.push(cannot_join(&described, &link, why)),
+    let links = if let Some(given) = given.relationships {
+        // The caller's, each held to the columns and the join as given.
+        for link in given {
+            checked(&described, link)?;
         }
-    }
+        given.to_vec()
+    } else {
+        // The declared, then those inferred by name whose foreign key no
+        // declared one covers, each kept only where it can join.
+        let covered: BTreeSet<(&str, &str)> = declared
+            .iter()
+            .filter_map(|link| link.first())
+            .map(|f| (f.table.as_str(), f.column.as_str()))
+            .collect();
+        let by_name: Vec<Link> = by_name(&described)
+            .into_iter()
+            .filter(|link| !covered.contains(&(link[0].table.as_str(), link[0].column.as_str())))
+            .collect();
+        let mut links = Vec::new();
+        for link in declared.iter().cloned().chain(by_name) {
+            match joins(&described, &link) {
+                Ok(()) => links.push(link),
+                // A link inferred or declared names columns the tables hold.
+                Err(Unjoinable::Missing) => {}
+                Err(why) => warnings.push(cannot_join(&described, &link, why)),
+            }
+        }
+        links
+    };
 
-    // A lone edit stamp, settled by the links.
+    // A lone edit stamp, settled by the links, unless the caller named the
+    // table's time column.
+    let inferred: Vec<Option<String>> = choices.iter().map(|c| c.column.clone()).collect();
     let linked: BTreeSet<&str> = links.iter().map(|l| l[1].table.as_str()).collect();
     for (table, choice) in described.iter_mut().zip(choices.iter_mut()) {
+        if given.names_time_of(&table.name) {
+            continue;
+        }
         let settled = choice.for_links(linked.contains(table.name.as_str()));
         if settled != *choice {
             table.time_column.clone_from(&settled.column);
-            if settled.column.is_none() {
-                table.edit_stamp_refused.clone_from(&choice.fallback);
-            }
             *choice = settled;
+        }
+    }
+    // What inference took, where the time column is now another or none.
+    for (table, inferred) in described.iter_mut().zip(inferred) {
+        if inferred.is_some() && inferred != table.time_column {
+            table.time_column_inferred = inferred;
         }
     }
 
@@ -210,15 +252,165 @@ pub fn assemble(
         links: once(links),
     };
     mark_keys(&mut description);
-    if let Some(warning) = guessed_time_columns(&description, &choices) {
-        warnings.push(warning);
-    }
+    warnings.extend(guessed_time_columns(&description, &choices, given));
     warnings.extend(name_each_other(&description.links));
     warnings.extend(two_ways(&description.links));
-    Assembled {
+    Ok(Assembled {
         description,
         warnings,
+    })
+}
+
+/// The refusal of a relationship given (`_checked_links`): it names a
+/// table and column the schema holds at each end, and it can join
+/// (`_require_joinable`), each refused as `INVALID_REQUEST` naming the
+/// link.
+fn checked(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), CoreError> {
+    let message = match joins(tables, link) {
+        Ok(()) => return Ok(()),
+        Err(Unjoinable::Missing) => {
+            "a relationship given names a table or column the schema does not hold"
+        }
+        Err(Unjoinable::NotTheKey) => {
+            "a relationship given does not join to its table's primary key of one column"
+        }
+        Err(Unjoinable::Types) => "a relationship given joins two kinds of value that cannot match",
+    };
+    Err(named_link(invalid(message, "relationships"), link))
+}
+
+/// `refused` naming `link` by its four names, when it has both ends.
+fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
+    let [foreign, referenced] = link else {
+        return refused;
+    };
+    refused
+        .with_field("source_table", Detail::text(&foreign.table))
+        .with_field("source_column", Detail::text(&foreign.column))
+        .with_field("target_table", Detail::text(&referenced.table))
+        .with_field("target_column", Detail::text(&referenced.column))
+}
+
+/// The keys and time columns the caller named, applied to the tables
+/// inferred, as the reference's `_apply_keys_and_times` applies them,
+/// between the reading and the key count: each key's table and columns
+/// must be the schema's, each column able to identify a row and not the
+/// table's time column; each time column's table and column the schema's,
+/// not part of its key, and of a type that can hold a time. A key of more
+/// than one column is refused by name (`composite_key`), as composite keys
+/// are elsewhere. Naming a key marks its column an identifier, what it
+/// meant kept, and gives the table's other columns back what they meant;
+/// naming a time column makes it a timestamp. Refusals are
+/// `INVALID_REQUEST`, naming the field.
+pub fn apply_keys_and_times(
+    tables: &mut [InferredTable],
+    primary_keys: &BTreeMap<String, Vec<String>>,
+    time_columns: &BTreeMap<String, String>,
+) -> Result<(), CoreError> {
+    let find =
+        |tables: &mut [InferredTable], name: &str, field: &str| -> Result<usize, CoreError> {
+            tables.iter().position(|t| t.name == name).ok_or_else(|| {
+                invalid("a table named is not the schema's", field)
+                    .with_field("table", Detail::text(name))
+            })
+        };
+    for (name, key) in primary_keys {
+        let at = find(tables, name, "primary_keys")?;
+        let table = &mut tables[at];
+        for column in key {
+            if table.column(column).is_none() {
+                return Err(no_column(name, column, "primary_keys"));
+            }
+        }
+        let [column] = key.as_slice() else {
+            if key.is_empty() {
+                return Err(
+                    invalid("a table was given an empty primary key", "primary_keys")
+                        .with_field("table", Detail::text(name)),
+                );
+            }
+            return Err(crate::not_yet("composite_key"));
+        };
+        let time = table.time_column.clone();
+        let keyed = table
+            .columns
+            .iter_mut()
+            .find(|c| &c.name == column)
+            .expect("the column was found");
+        if !can_identify(keyed.dtype) {
+            return Err(invalid(
+                "a column named as a primary key cannot identify a row",
+                "primary_keys",
+            )
+            .with_field("table", Detail::text(name))
+            .with_field("column", Detail::text(column)));
+        }
+        if time.as_deref() == Some(column.as_str()) {
+            return Err(invalid(
+                "a column named as a primary key is its table's time column",
+                "primary_keys",
+            )
+            .with_field("table", Detail::text(name))
+            .with_field("column", Detail::text(column)));
+        }
+        if keyed.stype != Stype::Id {
+            keyed.stype_before_key = Some(keyed.stype);
+            keyed.stype = Stype::Id;
+        }
+        table.primary_key = Some(column.clone());
+        // The table's other columns, no longer its key, mean again what
+        // they meant; one that meant a timestamp orders the table if
+        // nothing does.
+        for other in &mut table.columns {
+            if &other.name == column {
+                continue;
+            }
+            let Some(before) = other.stype_before_key.take() else {
+                continue;
+            };
+            other.stype = before;
+            if before == Stype::Timestamp && table.time_column.is_none() {
+                table.time_column = Some(other.name.clone());
+            }
+        }
     }
+    for (name, column) in time_columns {
+        let at = find(tables, name, "time_columns")?;
+        let table = &mut tables[at];
+        if table.column(column).is_none() {
+            return Err(no_column(name, column, "time_columns"));
+        }
+        if table.primary_key.as_deref() == Some(column.as_str()) {
+            return Err(invalid(
+                "a column named as a time column is its table's primary key",
+                "time_columns",
+            )
+            .with_field("table", Detail::text(name))
+            .with_field("column", Detail::text(column)));
+        }
+        let timed = table
+            .columns
+            .iter_mut()
+            .find(|c| &c.name == column)
+            .expect("the column was found");
+        if !matches!(timed.dtype, Dtype::Date | Dtype::Time | Dtype::String) {
+            return Err(invalid(
+                "a column named as a time column cannot hold a time",
+                "time_columns",
+            )
+            .with_field("table", Detail::text(name))
+            .with_field("column", Detail::text(column)));
+        }
+        timed.stype = Stype::Timestamp;
+        table.time_column = Some(column.clone());
+    }
+    Ok(())
+}
+
+fn no_column(table: &str, column: &str, field: &str) -> CoreError {
+    invalid("a column named is not its table's", field)
+        .with_field("table", Detail::text(table))
+        .with_field("column", Detail::text(column))
 }
 
 /// Links each column to another table's primary key of the same name
@@ -427,110 +619,6 @@ pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
     Ok(())
 }
 
-/// A name as the reference's messages write it, a Python string literal
-/// (its `repr`), so a remedy the message suggests is valid Python: in
-/// single quotes, or double when the name holds a single quote and no
-/// double one; a backslash and the quote chosen escaped; tab, newline and
-/// carriage return as `\t`, `\n`, `\r`; any other character Python does
-/// not print as itself as `\xhh`, `\uhhhh` or `\Uhhhhhhhh` ([`printed`]).
-pub fn quoted(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push(quote);
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c if c == quote => {
-                out.push('\\');
-                out.push(c);
-            }
-            c if !printed(c) => {
-                let code = u32::from(c);
-                if code < 0x100 {
-                    out.push_str(&format!("\\x{code:02x}"));
-                } else if code < 0x1_0000 {
-                    out.push_str(&format!("\\u{code:04x}"));
-                } else {
-                    out.push_str(&format!("\\U{code:08x}"));
-                }
-            }
-            c => out.push(c),
-        }
-    }
-    out.push(quote);
-    out
-}
-
-/// Whether Python's `str.isprintable` holds of `c`, which its `repr`
-/// writes as itself: every character but the controls (Cc), the format
-/// characters (Cf), the separators other than the space (Zs, Zl, Zp) and
-/// the private use ones (Co), as Unicode 15 assigns them. A code point
-/// unassigned in the interpreter's Unicode database (Cn), which Python
-/// escapes too, is written as itself here: telling one apart takes that
-/// whole database, which differs between Python versions. The remedy still
-/// reads back as the name.
-fn printed(c: char) -> bool {
-    const NOT_PRINTED: &[(u32, u32)] = &[
-        (0x0000, 0x001f),
-        (0x007f, 0x00a0),
-        (0x00ad, 0x00ad),
-        (0x0600, 0x0605),
-        (0x061c, 0x061c),
-        (0x06dd, 0x06dd),
-        (0x070f, 0x070f),
-        (0x0890, 0x0891),
-        (0x08e2, 0x08e2),
-        (0x1680, 0x1680),
-        (0x180e, 0x180e),
-        (0x2000, 0x200f),
-        (0x2028, 0x202f),
-        (0x205f, 0x2064),
-        (0x2066, 0x206f),
-        (0x3000, 0x3000),
-        (0xe000, 0xf8ff),
-        (0xfeff, 0xfeff),
-        (0xfff9, 0xfffb),
-        (0x110bd, 0x110bd),
-        (0x110cd, 0x110cd),
-        (0x13430, 0x1343f),
-        (0x1bca0, 0x1bca3),
-        (0x1d173, 0x1d17a),
-        (0xe0001, 0xe0001),
-        (0xe0020, 0xe007f),
-        (0xf0000, 0xffffd),
-        (0x100000, 0x10fffd),
-    ];
-    let code = u32::from(c);
-    !NOT_PRINTED
-        .iter()
-        .any(|&(low, high)| (low..=high).contains(&code))
-}
-
-/// Names joined as the reference's `_and_list` joins them: each quoted,
-/// the last after "and".
-fn and_list<S: AsRef<str>>(names: &[S]) -> String {
-    let quoted: Vec<String> = names.iter().map(|n| quoted(n.as_ref())).collect();
-    match quoted.as_slice() {
-        [] => String::new(),
-        [one] => one.clone(),
-        [a, b] => format!("{a} and {b}"),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
-    }
-}
-
-/// A list of names as the reference's messages write one.
-fn listed<S: AsRef<str>>(names: &[S]) -> String {
-    let quoted: Vec<String> = names.iter().map(|n| quoted(n.as_ref())).collect();
-    format!("[{}]", quoted.join(", "))
-}
-
 /// The data type a message names, as the client's wire names it.
 fn wire_name(dtype: Dtype) -> &'static str {
     match dtype {
@@ -559,143 +647,236 @@ fn texts<S: AsRef<str>>(names: &[S]) -> Detail {
     )
 }
 
+/// A warning of `code`, saying `message`, a sentence that names nothing,
+/// with `fields`, whose names and values the warning speaks of: the host
+/// words it from these (decision E59).
+fn warning(code: &str, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
+    CoreWarning {
+        code: code.to_owned(),
+        message: message.to_owned(),
+        fields: fields
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    }
+}
+
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(n as u64))
+}
+
+/// The warnings of the columns a table leaves out (`_describe_source_table`),
+/// one a column, in table order, naming the table, the column and its
+/// type (`dtype`, as the contract names it).
+pub fn left_out(table: &InferredTable) -> Vec<CoreWarning> {
+    table
+        .left_out
+        .iter()
+        .map(|column| {
+            warning(
+                COLUMNS_LEFT_OUT,
+                "a column whose values have no scalar form was left out of its table",
+                vec![
+                    ("table", Detail::text(&table.name)),
+                    ("column", Detail::text(&column.name)),
+                    ("dtype", Detail::text(dtype_name(column.dtype))),
+                ],
+            )
+        })
+        .collect()
+}
+
+/// The warnings of the times of day a table's preview holds, which the
+/// reference's engine reads as no time and drops (its `to_datetime`): one
+/// a column, naming the table, the column, how many values were dropped
+/// (`unread`) of how many rows (`rows`), and the first three distinct
+/// (`examples`, the contract's `time64` scalars).
+pub fn unread_times(table: &InferredTable) -> Vec<CoreWarning> {
+    table
+        .unread_times
+        .iter()
+        .map(|unread| {
+            warning(
+                TIME_VALUES_UNREAD,
+                "a time of day's values were read as no time and dropped",
+                vec![
+                    ("table", Detail::text(&table.name)),
+                    ("column", Detail::text(&unread.column)),
+                    ("unread", count(unread.unread)),
+                    ("rows", count(unread.rows)),
+                    ("examples", Detail::List(unread.examples.clone())),
+                ],
+            )
+        })
+        .collect()
+}
+
+/// A data type as the contract names it (`Dtype`'s serialized name).
+fn dtype_name(dtype: Dtype) -> &'static str {
+    match dtype {
+        Dtype::Bool => "bool",
+        Dtype::Int => "int",
+        Dtype::Byte => "byte",
+        Dtype::Int16 => "int16",
+        Dtype::Int32 => "int32",
+        Dtype::Int64 => "int64",
+        Dtype::Float => "float",
+        Dtype::Float32 => "float32",
+        Dtype::Float64 => "float64",
+        Dtype::String => "string",
+        Dtype::Date => "date",
+        Dtype::Time => "time",
+        Dtype::Binary => "binary",
+        Dtype::Timedelta => "timedelta",
+        Dtype::Floatlist => "floatlist",
+        Dtype::Intlist => "intlist",
+        Dtype::Stringlist => "stringlist",
+        Dtype::Unsupported => "unsupported",
+    }
+}
+
 /// The warning of a link dropped because it cannot join
-/// (`_warn_of_a_link_that_cannot_join`).
+/// (`_warn_of_a_link_that_cannot_join`): the link by its four names, the
+/// reason, and either the target table's key (`key`, empty when it has
+/// none) or the two columns' wire types (`source_dtype`, `target_dtype`).
+/// `variant` says which of the reference's sentences: `not_the_key`,
+/// `no_key` or `types`.
 fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -> CoreWarning {
     let (foreign, referenced) = (&link[0], &link[1]);
     let key: &[String] = tables
         .iter()
         .find(|t| t.name == referenced.table)
         .map_or(&[], |t| t.primary_key.as_slice());
-    let fields = BTreeMap::from([
-        ("source_table".to_owned(), Detail::text(&foreign.table)),
-        ("source_column".to_owned(), Detail::text(&foreign.column)),
-        ("target_table".to_owned(), Detail::text(&referenced.table)),
-        ("target_column".to_owned(), Detail::text(&referenced.column)),
-    ]);
-    let message = if why == Unjoinable::NotTheKey {
+    let mut fields = vec![
+        ("source_table", Detail::text(&foreign.table)),
+        ("source_column", Detail::text(&foreign.column)),
+        ("target_table", Detail::text(&referenced.table)),
+        ("target_column", Detail::text(&referenced.column)),
+    ];
+    if why == Unjoinable::NotTheKey {
         // A declared foreign key may name a unique column that is not the
         // key, which is no fault of the types.
-        let has = if key.is_empty() {
-            format!("{} has no primary key", quoted(&referenced.table))
-        } else {
-            format!(
-                "the primary key of {} is {}",
-                quoted(&referenced.table),
-                and_list(key)
-            )
-        };
-        format!(
-            "{}.{} refers to {}.{}, but {has}. A relationship joins to a primary key, so none \
-             was made from it. Pass primary_keys={{{}: {}}} if {} identifies a row of {}.",
-            foreign.table,
-            foreign.column,
-            referenced.table,
-            referenced.column,
-            quoted(&referenced.table),
-            quoted(&referenced.column),
-            quoted(&referenced.column),
-            quoted(&referenced.table),
-        )
+        fields.push(("reason", Detail::text("not_the_key")));
+        fields.push((
+            "variant",
+            Detail::text(if key.is_empty() {
+                "no_key"
+            } else {
+                "not_the_key"
+            }),
+        ));
+        fields.push(("key", texts(key)));
     } else {
         let dtype = |at: &ColumnRef| column(tables, at).map(|c| wire_name(c.dtype)).unwrap_or("");
-        format!(
-            "{}.{} names the key of {} and holds {} where that key holds {}, which cannot \
-             match, so no relationship was made from it. Store the two as one type if they are \
-             the same identifier.",
-            foreign.table,
-            foreign.column,
-            quoted(&referenced.table),
-            quoted(dtype(foreign)),
-            quoted(dtype(referenced)),
-        )
-    };
-    CoreWarning {
-        code: LINK_CANNOT_JOIN.to_owned(),
-        message,
-        fields: fields
-            .into_iter()
-            .chain([(
-                "reason".to_owned(),
-                Detail::text(if why == Unjoinable::NotTheKey {
-                    "not_the_key"
-                } else {
-                    "types"
-                }),
-            )])
-            .collect(),
+        fields.push(("reason", Detail::text("types")));
+        fields.push(("variant", Detail::text("types")));
+        fields.push(("source_dtype", Detail::text(dtype(foreign))));
+        fields.push(("target_dtype", Detail::text(dtype(referenced))));
     }
+    warning(
+        LINK_CANNOT_JOIN,
+        "a relationship declared or inferred cannot join, so none was made from it",
+        fields,
+    )
 }
 
-/// The warning of time columns taken, or refused, on a guess about what a
-/// column holds (`_warn_how_time_columns_were_inferred`), for the paths
-/// this build takes: a lone edit stamp taken, and, for a table left
-/// without a time column, each timestamp passed over by its name. Only
-/// where something could be windowed: two tables or more, or a link.
+/// The warnings of time columns taken, or refused, on a guess about what a
+/// column holds (`_warn_how_time_columns_were_inferred`), one a line of the
+/// reference's warning, tables in name order: a column taken as the
+/// earliest of several (`taken_earliest`, with `among` and the first of
+/// the others, `other`) or as a lone edit stamp (`taken_edit_stamp`); and,
+/// for a table left without a time column, each timestamp passed over,
+/// with its reason (`refused_<reason>`, and for its values `missing`,
+/// `rows` and the one value every row holds, `value`, a `refused_constant`
+/// said differently when no row holds one, `refused_empty`, or when some
+/// hold none, `refused_constant_where_held`). Each names its `table` and
+/// `column`. Only where something could be windowed: two tables or more,
+/// or a link; never for a table whose time column the caller named.
 fn guessed_time_columns(
     description: &SourceDescription,
     choices: &[TimeChoice],
-) -> Option<CoreWarning> {
+    given: Given<'_>,
+) -> Vec<CoreWarning> {
     if description.tables.len() < 2 && description.links.is_empty() {
-        return None;
+        return vec![];
     }
     let mut order: Vec<(&DescribedTable, &TimeChoice)> =
         description.tables.iter().zip(choices).collect();
     order.sort_by(|a, b| a.0.name.cmp(&b.0.name));
-    let mut lines = Vec::new();
-    let mut tables = Vec::new();
+    let message = "a time column was taken, or refused, on a guess about what a column holds";
+    let mut said = Vec::new();
     for (table, choice) in order {
         let name = &table.name;
+        if given.names_time_of(name) {
+            continue;
+        }
+        let at = |column: &str| {
+            vec![
+                ("table", Detail::text(name)),
+                ("column", Detail::text(column)),
+            ]
+        };
         match &table.time_column {
-            Some(column) if Some(column) == choice.column.as_ref() => {
-                if choice.how == Some(Taken::EditStamp) {
-                    tables.push(name.clone());
-                    lines.push(format!(
-                        "{name}.{column} was taken as the time column although it looks like \
-                         when a row was last changed, because the table has no other timestamp \
-                         and no table links to it, so it reads as a log of changes. If it does \
-                         not say when a row became true, clear it: time_columns={{{}: None}}.",
-                        quoted(name)
-                    ));
+            Some(column) if Some(column) == choice.column.as_ref() => match choice.how {
+                Some(Taken::Earliest) => {
+                    let other = choice.among.iter().find(|c| *c != column);
+                    let mut fields = at(column);
+                    fields.push(("variant", Detail::text("taken_earliest")));
+                    fields.push(("among", texts(&choice.among)));
+                    fields.push(("other", Detail::text(other.map_or("", String::as_str))));
+                    said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
                 }
-            }
+                Some(Taken::EditStamp) => {
+                    let mut fields = at(column);
+                    fields.push(("variant", Detail::text("taken_edit_stamp")));
+                    said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
+                }
+                _ => {}
+            },
             Some(_) => {}
             None => {
-                let before = lines.len();
-                lines.extend(
-                    choice
-                        .rejected()
-                        .filter(|(column, _)| table.columns.iter().any(|c| &c.name == column))
-                        .map(|(column, why)| {
-                            format!(
-                                "{name}.{column} was not taken as the time column because {}. If \
-                                 it does say when a row became true, name it: \
-                                 time_columns={{{}: {}}}.",
-                                why.why(),
-                                quoted(name),
-                                quoted(column)
-                            )
-                        }),
-                );
-                if lines.len() > before {
-                    tables.push(name.clone());
+                for (column, why) in choice.rejected() {
+                    if !table.columns.iter().any(|c| &c.name == column) {
+                        continue;
+                    }
+                    let mut fields = at(column);
+                    fields.push(("reason", Detail::text(why.reason())));
+                    let variant = match why {
+                        PassedOver::Constant {
+                            value,
+                            missing,
+                            rows,
+                        } => {
+                            fields.push(("missing", count(*missing)));
+                            fields.push(("rows", count(*rows)));
+                            match value {
+                                None => "refused_empty",
+                                Some(value) => {
+                                    fields.push(("value", Detail::Scalar(value.clone())));
+                                    if *missing > 0 {
+                                        "refused_constant_where_held"
+                                    } else {
+                                        "refused_constant"
+                                    }
+                                }
+                            }
+                        }
+                        PassedOver::Sparse { missing, rows } => {
+                            fields.push(("missing", count(*missing)));
+                            fields.push(("rows", count(*rows)));
+                            "refused_sparse"
+                        }
+                        PassedOver::LoadStamp => "refused_load_stamp",
+                        PassedOver::EditStamp => "refused_edit_stamp",
+                        PassedOver::BirthDate => "refused_birth_date",
+                    };
+                    fields.push(("variant", Detail::text(variant)));
+                    said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
                 }
             }
         }
     }
-    if lines.is_empty() {
-        return None;
-    }
-    let listed: Vec<String> = lines.iter().map(|line| format!("- {line}")).collect();
-    Some(CoreWarning {
-        code: TIME_COLUMNS_GUESSED.to_owned(),
-        message: format!(
-            "Some time columns were inferred, or refused, on a guess about what a column \
-             holds:\n{}",
-            listed.join("\n")
-        ),
-        fields: BTreeMap::from([("tables".to_owned(), texts(&tables))]),
-    })
+    said
 }
 
 /// The warnings of two tables naming each other, once a pair
@@ -716,27 +897,22 @@ fn name_each_other(links: &[Link]) -> Vec<CoreWarning> {
             continue;
         }
         said.insert((source, target));
-        warnings.push(CoreWarning {
-            code: TABLES_NAME_EACH_OTHER.to_owned(),
-            message: format!(
-                "{} and {} name each other, and a relationship is crossed in both directions, \
-                 so this is two ways over one pair and an aggregation between them is refused \
-                 for not having a single one. Declare whichever of the two a question is about \
-                 and leave the other out.",
-                quoted(source),
-                quoted(target)
-            ),
-            fields: BTreeMap::from([
-                ("source_table".to_owned(), Detail::text(source)),
-                ("target_table".to_owned(), Detail::text(target)),
-            ]),
-        });
+        warnings.push(warning(
+            TABLES_NAME_EACH_OTHER,
+            "two tables name each other, so a relationship is crossed in both directions",
+            vec![
+                ("source_table", Detail::text(source)),
+                ("target_table", Detail::text(target)),
+            ],
+        ));
     }
     warnings
 }
 
 /// The warnings of one table reaching another through more than one column
-/// (`_warn_two_ways_to_reach_one_table`), each pair once, in order.
+/// (`_warn_two_ways_to_reach_one_table`), each pair once, in order: the
+/// columns in name order, the one a remedy keeps (`kept`, the first) and
+/// the others (`others`).
 fn two_ways(links: &[Link]) -> Vec<CoreWarning> {
     let mut ways: BTreeMap<(&str, &str), Vec<&str>> = BTreeMap::new();
     for link in links {
@@ -753,31 +929,17 @@ fn two_ways(links: &[Link]) -> Vec<CoreWarning> {
             continue;
         }
         columns.sort_unstable();
-        let (kept, rest) = (columns[0], &columns[1..]);
-        warnings.push(CoreWarning {
-            code: TWO_WAYS_TO_A_TABLE.to_owned(),
-            message: format!(
-                "{} reaches {} through {}, and an aggregation across the two tables has to be \
-                 resolved to one of them, so a query that crosses this pair is refused until it \
-                 is. They are all kept because they are all real, and which one a question means \
-                 is not something this can decide. To keep {}, drop the others: \
-                 schema.relationships = [link for link in schema.relationships if not \
-                 (link.source_table == {} and link.target_table == {} and link.source_column in \
-                 {})].",
-                quoted(source),
-                quoted(target),
-                and_list(&columns),
-                quoted(kept),
-                quoted(source),
-                quoted(target),
-                listed(rest),
-            ),
-            fields: BTreeMap::from([
-                ("source_table".to_owned(), Detail::text(source)),
-                ("target_table".to_owned(), Detail::text(target)),
-                ("columns".to_owned(), texts(&columns)),
-            ]),
-        });
+        warnings.push(warning(
+            TWO_WAYS_TO_A_TABLE,
+            "one table reaches another through more than one column",
+            vec![
+                ("source_table", Detail::text(source)),
+                ("target_table", Detail::text(target)),
+                ("columns", texts(&columns)),
+                ("kept", Detail::text(columns[0])),
+                ("others", texts(&columns[1..])),
+            ],
+        ));
     }
     warnings
 }

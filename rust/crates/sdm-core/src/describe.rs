@@ -27,9 +27,9 @@ use std::task::{Context, Poll};
 
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
 use sdm_contract::data::{DataRequest, DescribePart, TableKey};
-use sdm_contract::ops::{ColumnRef, DescribedSource, OperationResult, SourceSpec};
+use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
-use sdm_schema::assemble::{self, Assembled};
+use sdm_schema::assemble::{self, Assembled, Given};
 use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
 use sdm_schema::not_yet;
@@ -44,41 +44,43 @@ pub(crate) async fn run(
     spec: SourceSpec,
     check_keys: bool,
 ) -> Result<OperationResult, CoreError> {
-    // Tables named, and keys and time columns given, are the caller's
-    // overrides, which the reference applies between inference and the key
-    // count; not ported yet.
-    if !spec.tables.is_empty() {
-        return Err(not_yet("tables_named"));
-    }
-    if !spec.primary_keys.is_empty() {
-        return Err(not_yet("primary_keys"));
-    }
-    if !spec.time_columns.is_empty() {
-        return Err(not_yet("time_columns"));
-    }
-
-    let names = table_names(
-        describe(
-            &asker,
-            DataRequest::Describe {
-                tables: vec![],
-                part: DescribePart::Tables,
-            },
-        )
-        .await?,
-    )?;
-    if names.is_empty() {
-        return Err(CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            "the source holds no table to describe",
-        )
-        .with_field("field", Detail::text("tables")));
-    }
+    // The tables named, each under the schema's name and read by the
+    // source's (`_require_table_names`); none named, every table the
+    // source lists, under its own name.
+    let named = named_tables(&spec)?;
+    let names: Vec<NamedTable> = if named.is_empty() {
+        let listed = table_names(
+            describe(
+                &asker,
+                DataRequest::Describe {
+                    tables: vec![],
+                    part: DescribePart::Tables,
+                },
+            )
+            .await?,
+        )?;
+        if listed.is_empty() {
+            return Err(CoreError::new(
+                ErrorKind::InvalidRequest,
+                ErrorCode::InvalidRequest,
+                "the source holds no table to describe",
+            )
+            .with_field("field", Detail::text("tables")));
+        }
+        listed
+            .into_iter()
+            .map(|name| NamedTable {
+                source: name.clone(),
+                name,
+            })
+            .collect()
+    } else {
+        named
+    };
 
     let mut tables = Vec::with_capacity(names.len());
-    for name in &names {
-        let one = || vec![name.clone()];
+    for table in &names {
+        let one = || vec![table.source.clone()];
         let [columns, keys] = describe_all(
             &asker,
             [
@@ -95,10 +97,12 @@ pub(crate) async fn run(
         .await?;
         let declared = declared_columns(columns)?;
         if declared.is_empty() {
+            // A table the source does not hold, or holds with no columns,
+            // as the reference refuses one it cannot read.
             return Err(CoreError::new(
                 ErrorKind::InvalidRequest,
                 ErrorCode::InvalidRequest,
-                "a table the source lists has no columns",
+                "a table to describe has no columns in the source",
             )
             .with_field("field", Detail::text("tables")));
         }
@@ -107,7 +111,7 @@ pub(crate) async fn run(
         let preview = ask(
             &asker,
             DataRequest::Preview {
-                table: name.clone(),
+                table: table.source.clone(),
                 columns: column_names.clone(),
                 limit: PREVIEW_ROWS,
             },
@@ -123,21 +127,34 @@ pub(crate) async fn run(
                 "a preview's columns are not the ones it asked for",
             ));
         }
-        tables.push(infer::table(
-            name,
+        let inferred = infer::table(
+            &table.name,
+            &table.source,
             &declared,
             &constraints,
             &preview.schema,
             &preview.batches,
-        )?);
+        )?;
+        // The engine says what it dropped as it reads each table, before
+        // anything later can refuse.
+        for warning in assemble::unread_times(&inferred) {
+            asker.warn(warning);
+        }
+        tables.push(inferred);
+    }
+    // The columns each table leaves out, said as the tables are described.
+    for table in &tables {
+        for warning in assemble::left_out(table) {
+            asker.warn(warning);
+        }
     }
 
     let foreign = describe_vec(
         &asker,
         names
             .iter()
-            .map(|name| DataRequest::Describe {
-                tables: vec![name.clone()],
+            .map(|table| DataRequest::Describe {
+                tables: vec![table.source.clone()],
                 part: DescribePart::ForeignKeys,
             })
             .collect(),
@@ -147,9 +164,14 @@ pub(crate) async fn run(
     for (table, answer) in tables.iter().zip(foreign) {
         declared.extend(declared_links(table, &foreign_keys(answer)?, &tables));
     }
-    // A keyless table keyed by the one column the declared foreign keys
-    // refer to, before the keys are counted, as the reference keys it.
-    assemble::key_by_reference(&mut tables, &declared)?;
+    let given = spec.relationships.as_deref();
+    if given.is_none() {
+        // A keyless table keyed by the one column the declared foreign keys
+        // refer to, before the keys are counted, as the reference keys it.
+        assemble::key_by_reference(&mut tables, &declared)?;
+    }
+    // The keys and time columns named, between the reading and the count.
+    assemble::apply_keys_and_times(&mut tables, &spec.primary_keys, &spec.time_columns)?;
 
     let duplicates = if check_keys {
         count_keys(&asker, &tables).await?;
@@ -164,7 +186,15 @@ pub(crate) async fn run(
     let Assembled {
         description,
         warnings,
-    } = assemble::assemble(tables, declared, duplicates);
+    } = assemble::assemble(
+        tables,
+        declared,
+        Given {
+            time_columns: Some(&spec.time_columns),
+            relationships: given,
+        },
+        duplicates,
+    )?;
     for warning in warnings {
         asker.warn(warning);
     }
@@ -176,12 +206,40 @@ pub(crate) async fn run(
     }))
 }
 
+/// The tables `spec` names, checked as the reference checks a mapping of
+/// them (`_require_table_names`): each name and source name non-empty, no
+/// name twice. Refusals are `INVALID_REQUEST` naming the field.
+fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
+    let refuse = |message: &'static str| {
+        CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            message,
+        )
+        .with_field("field", Detail::text("tables"))
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    for table in &spec.tables {
+        if table.name.is_empty() {
+            return Err(refuse("a table's name is empty"));
+        }
+        if table.source.is_empty() {
+            return Err(refuse("a table's name in the source is empty"));
+        }
+        if !seen.insert(table.name.as_str()) {
+            return Err(refuse("a table is named twice"));
+        }
+    }
+    Ok(spec.tables.clone())
+}
+
 /// The foreign keys `table` declares to tables of the source, as links
-/// `[foreign key, referenced key]`: a constraint of one column pair whose
-/// referenced table is a table described, by its exact name or, failing
-/// that, by the one name equal to it in any case, and whose columns both
-/// tables hold. A column declared twice keeps its first place and its last
-/// constraint, as the reference's mapping by column does.
+/// `[foreign key, referenced key]` by the schema's names: a constraint of
+/// one column pair whose referenced table, a name in the source, is a
+/// table described, by its exact source name or, failing that, by the one
+/// source name equal to it in any case (`_table_named`), and whose columns
+/// both tables hold. A column declared twice keeps its first place and its
+/// last constraint, as the reference's mapping by column does.
 fn declared_links(
     table: &InferredTable,
     parts: &[CatalogForeignKey],
@@ -206,16 +264,15 @@ fn declared_links(
     for (column, part) in keys {
         let folded: Vec<&InferredTable> = tables
             .iter()
-            .filter(|t| t.name.to_lowercase() == part.referenced_table.to_lowercase())
+            .filter(|t| t.source.to_lowercase() == part.referenced_table.to_lowercase())
             .collect();
-        let target =
-            tables
-                .iter()
-                .find(|t| t.name == part.referenced_table)
-                .or(match folded.as_slice() {
-                    [one] => Some(*one),
-                    _ => None,
-                });
+        let target = tables
+            .iter()
+            .find(|t| t.source == part.referenced_table)
+            .or(match folded.as_slice() {
+                [one] => Some(*one),
+                _ => None,
+            });
         let Some(target) = target else { continue };
         let referenced = &part.referenced_columns[0];
         if table.column(column).is_none() || target.column(referenced).is_none() {
@@ -244,7 +301,7 @@ async fn count_keys(asker: &Asker, tables: &[InferredTable]) -> Result<(), CoreE
         .filter_map(|table| {
             let key = vec![table.primary_key.clone()?];
             (!table.enforces(&key)).then(|| TableKey {
-                table: table.name.clone(),
+                table: table.source.clone(),
                 columns: key,
             })
         })

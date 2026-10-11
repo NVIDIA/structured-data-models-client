@@ -172,6 +172,7 @@ fn description_of(size: usize) -> Vec<u8> {
     let make = |pad: usize| SourceDescription {
         tables: vec![DescribedTable {
             name: "t".repeat(pad + 1),
+            source: "t".into(),
             columns: vec![DescribedColumn {
                 name: "c".into(),
                 received: ColumnType::Int64,
@@ -183,7 +184,7 @@ fn description_of(size: usize) -> Vec<u8> {
             }],
             primary_key: vec![],
             time_column: None,
-            edit_stamp_refused: None,
+            time_column_inferred: None,
             duplicate_keys: None,
         }],
         links: vec![vec![ColumnRef {

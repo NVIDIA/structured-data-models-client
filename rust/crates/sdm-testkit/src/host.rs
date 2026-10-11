@@ -60,6 +60,10 @@ pub struct Observed {
     /// the answer, which a later `predict` replaces.
     pub materialized: Option<Value>,
     pub answer: Answer,
+    /// The core's warnings, in the order given, each its code and fields
+    /// as the `warnings` control message carries them (T1.23): what the
+    /// hosts are held to agree on, each wording them itself.
+    pub warnings: Vec<Value>,
     /// What the DuckDB provider ran, and DuckDB's query log, for a case
     /// whose operations read data (the observation's `driver`, T1.11e).
     pub driver: Option<Value>,
@@ -248,6 +252,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         described: None,
         materialized: None,
         answer,
+        warnings: vec![],
         driver: None,
     })
 }
@@ -266,6 +271,26 @@ fn database(case: &Case, bases: &Bases) -> Result<duckdb::Connection> {
     Ok(connection)
 }
 
+/// The warnings `handle` has given since they were last taken, each its
+/// code and fields, added to `into`.
+fn take_warnings(handle: &HostRun, into: &mut Vec<Value>) -> Result<()> {
+    let Some(out) = handle
+        .take_warnings()
+        .map_err(|_| anyhow!("the run's warnings could not be taken"))?
+    else {
+        return Ok(());
+    };
+    let ControlMessage::Warnings { warnings } =
+        read(&out).map_err(|_| anyhow!("unreadable warnings"))?
+    else {
+        bail!("the run's warnings are another message");
+    };
+    for warning in warnings {
+        into.push(json!({"code": warning.code, "fields": warning.fields}));
+    }
+    Ok(())
+}
+
 /// Runs a started operation to its result, answering each fetch with the
 /// DuckDB provider and the key sets the step names, and recording each
 /// fetch in `fetches`: the result and the run, or the core's error.
@@ -273,11 +298,13 @@ fn drive(
     case: &Case,
     handle: HostRun,
     connection: &duckdb::Connection,
-    fetches: &mut Vec<Value>,
+    observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<(OperationResult, HostRun), Answer>> {
     loop {
-        let out = match handle.next() {
+        let next = handle.next();
+        take_warnings(&handle, &mut observed.warnings)?;
+        let out = match next {
             Ok(out) => out,
             Err(failed) => return Ok(Err(error_of(&failed)?)),
         };
@@ -285,7 +312,9 @@ fn drive(
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok((result, handle))),
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
-                    fetches.push(json!({"request": step.request, "plan": step.plan}));
+                    observed
+                        .fetches
+                        .push(json!({"request": step.request, "plan": step.plan}));
                     let mut keys = BTreeMap::new();
                     if let FetchPlan::Sql { statements, .. } = &step.plan {
                         for param in statements.iter().flat_map(|s| &s.params) {
@@ -410,6 +439,7 @@ fn describe_on(
         described: None,
         materialized: None,
         answer: Answer::Validated(false),
+        warnings: Vec::new(),
         driver: None,
     };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
@@ -420,7 +450,7 @@ fn describe_on(
         }
     };
     log.stage = "from_source";
-    let described = match drive(case, handle, connection, &mut observed.fetches, log)? {
+    let described = match drive(case, handle, connection, &mut observed, log)? {
         Err(answer) => {
             observed.answer = answer;
             return Ok(observed);
@@ -603,7 +633,7 @@ fn materialize(
             return Ok(None);
         }
     };
-    match drive(case, handle, connection, &mut observed.fetches, log)? {
+    match drive(case, handle, connection, observed, log)? {
         Err(answer) => {
             observed.answer = answer;
             Ok(None)
@@ -727,7 +757,9 @@ fn predict(
             return Ok(());
         }
     };
-    let call = match handle.next() {
+    let next = handle.next();
+    take_warnings(&handle, &mut observed.warnings)?;
+    let call = match next {
         Err(failed) => {
             observed.answer = error_of(&failed)?;
             return Ok(());
@@ -769,7 +801,9 @@ fn predict(
         observed.answer = error_of(&failed)?;
         return Ok(());
     }
-    observed.answer = match handle.next() {
+    let next = handle.next();
+    take_warnings(&handle, &mut observed.warnings)?;
+    observed.answer = match next {
         Err(failed) => error_of(&failed)?,
         Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
             ControlMessage::Step(Step::Done {

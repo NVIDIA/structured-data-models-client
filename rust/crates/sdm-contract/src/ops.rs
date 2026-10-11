@@ -312,12 +312,29 @@ pub struct DescribeSource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SourceSpec {
-    /// The tables to describe, in order.
-    pub tables: Vec<String>,
-    /// Declared primary keys, by table.
+    /// The tables to describe, in order, each by the name the schema gives
+    /// it and the name the source holds it under; empty, every table the
+    /// source lists, each under its own name (decision E59).
+    pub tables: Vec<NamedTable>,
+    /// Declared primary keys, by the schema's name of the table.
     pub primary_keys: BTreeMap<String, Vec<String>>,
-    /// Declared time columns, by table.
+    /// Declared time columns, by the schema's name of the table.
     pub time_columns: BTreeMap<String, String>,
+    /// The relationships given, each `[foreign key, referenced key]` by the
+    /// schema's names, in place of the declared and inferred ones; an empty
+    /// list says there are none. Left out, they are the source's declared
+    /// foreign keys and the links inferred by name (decision E59).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relationships: Option<Vec<Vec<ColumnRef>>>,
+}
+
+/// A table named for the schema: the name a query uses, and the source's
+/// name of the table it reads.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NamedTable {
+    pub name: String,
+    pub source: String,
 }
 
 /// `describe_source`'s result.
@@ -344,15 +361,20 @@ pub struct SourceDescription {
 #[serde(deny_unknown_fields)]
 pub struct DescribedTable {
     pub name: String,
+    /// The source's name of the table this one reads: its own name unless
+    /// the caller named it otherwise (decision E59).
+    pub source: String,
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
-    /// The lone stamp of the last edit inference took as the time column
-    /// and a link to the table then refused, so the table has none: what
-    /// the time-column warning names, and the column the reference's schema
-    /// was ordered by before the links settled it (decision E55). `None`
-    /// otherwise; `materialize` does not read it.
-    pub edit_stamp_refused: Option<String>,
+    /// The column inference took as the time column, when the table's
+    /// time column is now another or none: a lone stamp of the last edit a
+    /// link then refused (decision E55), or the column inference took where
+    /// the caller named another (decision E59). `None` when the time column
+    /// is inference's, or inference took none. The host's schema was
+    /// ordered by it first, as the reference's was; `materialize` does not
+    /// read it.
+    pub time_column_inferred: Option<String>,
     /// Rows sharing a key value, when keys were checked: a `u64` scalar.
     pub duplicate_keys: Option<Scalar>,
 }

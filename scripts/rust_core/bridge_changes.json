@@ -3,10 +3,10 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), allowance (an owner-approved ALLOWANCES row), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: build presents the description, a lone edit stamp a link refused shown as the reference's schema shows it; no link inference, edit stamps, key marking or warnings of its own"
+      "moved": "T1.23 (E59): the schema's assembly in sdm-schema decides each table's source name and the time column inference took before the links or the caller settled another (time_column_inferred, in place of edit_stamp_refused); build presents them as the description gives them"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the key marking moved into materialize, which reads each column's stype_before_key the host sends, with each table's edit_stamp_refused as described"
+      "refactor": "T1.23 (E59): each table's source name passed back to the core as the description gave it (contract version 12); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the consistency check moved into materialize; no check_consistent call"
@@ -25,6 +25,36 @@
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_warn_how_time_columns_were_inferred": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the time-column warning, given by the core, no longer reached on the core route"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.__setattr__": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema._check_relationships": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema._settle": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._adopt_key": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._check_key": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._check_time_column": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._re_derive_key_columns": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_require_joinable": {
+      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
     }
   }
 }

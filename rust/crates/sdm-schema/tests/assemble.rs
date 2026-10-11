@@ -4,8 +4,11 @@
 
 //! The schema's assembly (T1.21d, decision E55), rule by rule, each held to
 //! what the reference client's `Schema.from_source` makes of the same
-//! tables, its warnings word for word; and the consistency check that holds
-//! the schema `materialize` is handed, each refusal seeded.
+//! tables, its warnings by code and fields (their words are the host's,
+//! decision E59, held word for word by the client's tests); the keys, time
+//! columns and relationships a caller names (T1.23); and the consistency
+//! check that holds the schema `materialize` is handed, each refusal
+//! seeded.
 
 use std::collections::BTreeSet;
 
@@ -13,7 +16,7 @@ use sdm_contract::ops::{
     ColumnRef, DescribedColumn, DescribedTable, Dtype, SourceDescription, Stype,
 };
 use sdm_contract::{ColumnType, CoreWarning, Detail, ErrorCode, Scalar};
-use sdm_schema::assemble::{self, Link};
+use sdm_schema::assemble::{self, Given, Link};
 use sdm_schema::infer::{InferredColumn, InferredTable, PassedOver, Taken, TimeChoice};
 
 fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
@@ -39,9 +42,13 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
 fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> InferredTable {
     InferredTable {
         name: name.into(),
+        source: name.into(),
         columns,
+        left_out: Vec::new(),
+        unread_times: Vec::new(),
         primary_key: key.map(Into::into),
         time: TimeChoice::default(),
+        time_column: None,
         unique: Vec::new(),
     }
 }
@@ -87,6 +94,23 @@ fn stype(description: &SourceDescription, table: &str, name: &str) -> (Stype, Op
     (c.stype, c.stype_before_key)
 }
 
+/// The schema assembled of `tables` and `declared`, with nothing given.
+fn made_of(tables: Vec<InferredTable>, declared: Vec<Link>) -> assemble::Assembled {
+    assemble::assemble(tables, declared, Given::default(), None).unwrap()
+}
+
+/// The text of field `name` of `warning`.
+fn said<'a>(warning: &'a CoreWarning, name: &str) -> &'a str {
+    match &warning.fields[name] {
+        Detail::Scalar(Scalar::Utf8(text)) => text,
+        other => panic!("{name}: {other:?}"),
+    }
+}
+
+fn names(list: &[&str]) -> Detail {
+    Detail::List(list.iter().map(|n| Scalar::Utf8((*n).into())).collect())
+}
+
 fn codes(warnings: &[CoreWarning]) -> Vec<&str> {
     warnings.iter().map(|w| w.code.as_str()).collect()
 }
@@ -116,7 +140,7 @@ fn orders(user_id: Dtype) -> InferredTable {
 
 #[test]
 fn a_column_named_as_another_table_s_key_links_to_it_and_is_marked() {
-    let made = assemble::assemble(vec![orders(Dtype::Int), users()], vec![], None);
+    let made = made_of(vec![orders(Dtype::Int), users()], vec![]);
     assert_eq!(
         links(&made.description),
         [(
@@ -145,7 +169,7 @@ fn a_key_name_two_tables_share_links_nothing() {
         vec![column("user_id", Dtype::Int, Stype::Id)],
         Some("user_id"),
     );
-    let made = assemble::assemble(vec![orders(Dtype::Int), users(), twin], vec![], None);
+    let made = made_of(vec![orders(Dtype::Int), users(), twin], vec![]);
     assert!(made.description.links.is_empty());
     assert_eq!(
         stype(&made.description, "orders", "user_id"),
@@ -155,15 +179,16 @@ fn a_key_name_two_tables_share_links_nothing() {
 
 #[test]
 fn a_link_that_cannot_join_is_dropped_and_said() {
-    let made = assemble::assemble(vec![orders(Dtype::String), users()], vec![], None);
+    let made = made_of(vec![orders(Dtype::String), users()], vec![]);
     assert!(made.description.links.is_empty());
     assert_eq!(codes(&made.warnings), ["LINK_CANNOT_JOIN"]);
-    assert_eq!(
-        made.warnings[0].message,
-        "orders.user_id names the key of 'users' and holds 'string' where that key holds \
-         'int64', which cannot match, so no relationship was made from it. Store the two as \
-         one type if they are the same identifier."
-    );
+    let warning = &made.warnings[0];
+    assert_eq!(said(warning, "variant"), "types");
+    assert_eq!(said(warning, "source_table"), "orders");
+    assert_eq!(said(warning, "source_column"), "user_id");
+    assert_eq!(said(warning, "target_table"), "users");
+    assert_eq!(said(warning, "source_dtype"), "string");
+    assert_eq!(said(warning, "target_dtype"), "int64");
     // A declared foreign key to a column that is not its table's key.
     let items = table(
         "items",
@@ -181,18 +206,13 @@ fn a_link_that_cannot_join_is_dropped_and_said() {
         ],
         None,
     );
-    let made = assemble::assemble(
+    let made = made_of(
         vec![items, lines],
         vec![link(("lines", "sku"), ("items", "sku"))],
-        None,
     );
     assert!(made.description.links.is_empty());
-    assert_eq!(
-        made.warnings[0].message,
-        "lines.sku refers to items.sku, but the primary key of 'items' is 'item_id'. A \
-         relationship joins to a primary key, so none was made from it. Pass \
-         primary_keys={'items': 'sku'} if 'sku' identifies a row of 'items'."
-    );
+    assert_eq!(said(&made.warnings[0], "variant"), "not_the_key");
+    assert_eq!(made.warnings[0].fields["key"], names(&["item_id"]));
     assert_eq!(
         made.warnings[0].fields["reason"],
         Detail::text("not_the_key")
@@ -218,10 +238,9 @@ fn two_ways_and_tables_naming_each_other_are_said_in_the_reference_s_words() {
         ],
         Some("refund_id"),
     );
-    let made = assemble::assemble(
+    let made = made_of(
         vec![accounts, refunds],
         vec![link(("refunds", "payer"), ("accounts", "account_id"))],
-        None,
     );
     assert_eq!(
         links(&made.description),
@@ -250,23 +269,12 @@ fn two_ways_and_tables_naming_each_other_are_said_in_the_reference_s_words() {
         codes(&made.warnings),
         ["TABLES_NAME_EACH_OTHER", "TWO_WAYS_TO_A_TABLE"]
     );
-    assert_eq!(
-        made.warnings[0].message,
-        "'accounts' and 'refunds' name each other, and a relationship is crossed in both \
-         directions, so this is two ways over one pair and an aggregation between them is \
-         refused for not having a single one. Declare whichever of the two a question is about \
-         and leave the other out."
-    );
-    assert_eq!(
-        made.warnings[1].message,
-        "'refunds' reaches 'accounts' through 'account_id' and 'payer', and an aggregation \
-         across the two tables has to be resolved to one of them, so a query that crosses this \
-         pair is refused until it is. They are all kept because they are all real, and which \
-         one a question means is not something this can decide. To keep 'account_id', drop the \
-         others: schema.relationships = [link for link in schema.relationships if not \
-         (link.source_table == 'refunds' and link.target_table == 'accounts' and \
-         link.source_column in ['payer'])]."
-    );
+    assert_eq!(said(&made.warnings[0], "source_table"), "accounts");
+    assert_eq!(said(&made.warnings[0], "target_table"), "refunds");
+    assert_eq!(said(&made.warnings[1], "source_table"), "refunds");
+    assert_eq!(said(&made.warnings[1], "target_table"), "accounts");
+    assert_eq!(said(&made.warnings[1], "kept"), "account_id");
+    assert_eq!(made.warnings[1].fields["others"], names(&["payer"]));
     assert_eq!(
         made.warnings[1].fields["columns"],
         Detail::List(vec![
@@ -291,6 +299,7 @@ fn plans() -> InferredTable {
     plans.time = TimeChoice {
         column: None,
         how: None,
+        among: vec![],
         refused: vec![
             ("modified_at".into(), PassedOver::EditStamp),
             ("_loaded_at".into(), PassedOver::LoadStamp),
@@ -298,6 +307,7 @@ fn plans() -> InferredTable {
         fallback: Some("modified_at".into()),
     }
     .for_links(false);
+    plans.time_column.clone_from(&plans.time.column);
     assert_eq!(plans.time.how, Some(Taken::EditStamp));
     plans
 }
@@ -305,24 +315,19 @@ fn plans() -> InferredTable {
 #[test]
 fn a_lone_edit_stamp_is_taken_in_a_log_and_refused_in_an_entity() {
     // Nothing links to plans: a log of changes, the stamp taken.
-    let made = assemble::assemble(vec![plans(), users()], vec![], None);
+    let made = made_of(vec![plans(), users()], vec![]);
     assert_eq!(
         described(&made.description, "plans").time_column.as_deref(),
         Some("modified_at")
     );
     assert_eq!(
-        described(&made.description, "plans").edit_stamp_refused,
+        described(&made.description, "plans").time_column_inferred,
         None
     );
     assert_eq!(codes(&made.warnings), ["TIME_COLUMNS_GUESSED"]);
-    assert_eq!(
-        made.warnings[0].message,
-        "Some time columns were inferred, or refused, on a guess about what a column holds:\n\
-         - plans.modified_at was taken as the time column although it looks like when a row \
-         was last changed, because the table has no other timestamp and no table links to it, \
-         so it reads as a log of changes. If it does not say when a row became true, clear it: \
-         time_columns={'plans': None}."
-    );
+    assert_eq!(said(&made.warnings[0], "variant"), "taken_edit_stamp");
+    assert_eq!(said(&made.warnings[0], "table"), "plans");
+    assert_eq!(said(&made.warnings[0], "column"), "modified_at");
     // Something links to plans: an entity edited in place, the stamp refused.
     let subscriptions = table(
         "subscriptions",
@@ -332,26 +337,27 @@ fn a_lone_edit_stamp_is_taken_in_a_log_and_refused_in_an_entity() {
         ],
         Some("sub_id"),
     );
-    let made = assemble::assemble(vec![plans(), subscriptions], vec![], None);
+    let made = made_of(vec![plans(), subscriptions], vec![]);
     assert_eq!(described(&made.description, "plans").time_column, None);
     assert_eq!(
         described(&made.description, "plans")
-            .edit_stamp_refused
+            .time_column_inferred
             .as_deref(),
         Some("modified_at")
     );
+    // One warning a line of the reference's, in its order.
     assert_eq!(
-        made.warnings[0].message,
-        "Some time columns were inferred, or refused, on a guess about what a column holds:\n\
-         - plans.modified_at was not taken as the time column because it looks like when a row \
-         was last changed, not when it began. If it does say when a row became true, name it: \
-         time_columns={'plans': 'modified_at'}.\n\
-         - plans._loaded_at was not taken as the time column because it looks like when a row \
-         was loaded, not when it began. If it does say when a row became true, name it: \
-         time_columns={'plans': '_loaded_at'}."
+        made.warnings
+            .iter()
+            .map(|w| (said(w, "column"), said(w, "variant")))
+            .collect::<Vec<_>>(),
+        [
+            ("modified_at", "refused_edit_stamp"),
+            ("_loaded_at", "refused_load_stamp")
+        ]
     );
     // A lone table with no link has nothing to window: nothing is said.
-    let made = assemble::assemble(vec![plans()], vec![], None);
+    let made = made_of(vec![plans()], vec![]);
     assert!(made.warnings.is_empty());
 }
 
@@ -394,13 +400,13 @@ fn a_keyless_table_is_keyed_by_the_one_column_foreign_keys_refer_to() {
         assemble::key_by_reference(&mut dated, &[link(("x", "day"), ("days", "day"))]).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let mut timed = vec![codes_table()];
-    timed[0].time.column = Some("tag".into());
+    timed[0].time_column = Some("tag".into());
     let err = assemble::key_by_reference(&mut timed, &declared).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
 fn description() -> SourceDescription {
-    assemble::assemble(vec![orders(Dtype::Int), users()], vec![], None).description
+    made_of(vec![orders(Dtype::Int), users()], vec![]).description
 }
 
 #[test]
@@ -486,29 +492,18 @@ fn names_are_quoted_and_listed_as_the_reference_s_messages_do() {
         Some("a"),
     );
     let referred = table("t", vec![column("k", Dtype::Int, Stype::Id)], Some("k"));
-    let made = assemble::assemble(
+    let made = made_of(
         vec![three, referred],
         vec![
             link(("c", "x"), ("t", "k")),
             link(("c", "y"), ("t", "k")),
             link(("c", "a"), ("t", "k")),
         ],
-        None,
     );
     assert_eq!(codes(&made.warnings), ["TWO_WAYS_TO_A_TABLE"]);
-    assert!(
-        made.warnings[0]
-            .message
-            .starts_with("'c' reaches 't' through 'a', 'x' and 'y', and"),
-        "{}",
-        made.warnings[0].message
-    );
-    assert!(
-        made.warnings[0]
-            .message
-            .ends_with("link.source_column in ['x', 'y'])].")
-    );
-    let names: BTreeSet<&str> = made.warnings[0]
+    assert_eq!(made.warnings[0].fields["columns"], names(&["a", "x", "y"]));
+    assert_eq!(made.warnings[0].fields["others"], names(&["x", "y"]));
+    let texts: BTreeSet<&str> = made.warnings[0]
         .fields
         .values()
         .filter_map(|d| match d {
@@ -516,27 +511,14 @@ fn names_are_quoted_and_listed_as_the_reference_s_messages_do() {
             _ => None,
         })
         .collect();
-    assert_eq!(names, BTreeSet::from(["c", "t"]));
+    assert_eq!(texts, BTreeSet::from(["c", "t", "a"]));
 }
 
-/// A name is written as Python's `repr` writes it, so a remedy holding it
-/// is valid Python: held to vectors CPython wrote (`tests/quoted.json`).
+/// A warning's message names nothing: every name it speaks of is a field,
+/// for the host to word (decision E59).
 #[test]
-fn names_are_written_as_python_string_literals() {
-    let doc: serde_json::Value =
-        serde_json::from_str(include_str!("quoted.json")).expect("the vectors read");
-    let vectors = doc["vectors"].as_array().expect("a list of vectors");
-    assert!(vectors.len() >= 20);
-    for vector in vectors {
-        let name = vector["name"].as_str().expect("a name");
-        assert_eq!(
-            assemble::quoted(name),
-            vector["repr"].as_str().unwrap(),
-            "{name:?}"
-        );
-    }
-    // A remedy naming a table with a quote is valid Python.
-    let made = assemble::assemble(
+fn a_warning_s_message_names_nothing_and_its_fields_name_everything() {
+    let made = made_of(
         vec![
             table(
                 "odd'name",
@@ -546,13 +528,174 @@ fn names_are_written_as_python_string_literals() {
             users(),
         ],
         vec![],
+    );
+    let [warning] = made.warnings.as_slice() else {
+        panic!("{:?}", made.warnings)
+    };
+    assert_eq!(said(warning, "source_table"), "odd'name");
+    for name in ["odd'name", "user_id", "users", "string", "int64"] {
+        assert!(!warning.message.contains(name), "{}", warning.message);
+    }
+}
+
+/// The keys and time columns a caller names (T1.23), applied between the
+/// reading and the count as the reference applies them, each refusal
+/// seeded: a table or column the schema does not hold, a key that cannot
+/// identify a row or is the time column, a time column that is the key or
+/// cannot hold a time, an empty key, and a key of two columns.
+#[test]
+fn keys_and_time_columns_named_are_applied_and_checked() {
+    let named = |keys: &[(&str, &[&str])], times: &[(&str, &str)]| {
+        let mut tables = vec![orders(Dtype::Int), users()];
+        tables[0]
+            .columns
+            .push(column("ts", Dtype::Date, Stype::Timestamp));
+        tables[0]
+            .columns
+            .push(column("note", Dtype::String, Stype::Text));
+        tables[0].time_column = Some("ts".into());
+        let keys = keys
+            .iter()
+            .map(|(t, k)| ((*t).to_owned(), k.iter().map(|c| (*c).to_owned()).collect()))
+            .collect();
+        let times = times
+            .iter()
+            .map(|(t, c)| ((*t).to_owned(), (*c).to_owned()))
+            .collect();
+        assemble::apply_keys_and_times(&mut tables, &keys, &times).map(|()| tables)
+    };
+    // A key moved: the new column an identifier, what it meant kept.
+    let tables = named(&[("users", &["age"])], &[]).unwrap();
+    assert_eq!(tables[1].primary_key.as_deref(), Some("age"));
+    assert_eq!(tables[1].columns[1].stype, Stype::Id);
+    assert_eq!(
+        tables[1].columns[1].stype_before_key,
+        Some(Stype::Numerical)
+    );
+    // Text named as the time column means a timestamp.
+    let tables = named(&[], &[("orders", "note")]).unwrap();
+    assert_eq!(tables[0].time_column.as_deref(), Some("note"));
+    assert_eq!(tables[0].columns[4].stype, Stype::Timestamp);
+    let rule = |result: Result<Vec<InferredTable>, sdm_contract::CoreError>| {
+        let err = result.unwrap_err();
+        (
+            err.code,
+            err.fields.get("field").or(err.fields.get("rule")).cloned(),
+        )
+    };
+    let invalid = |field: &str| (ErrorCode::InvalidRequest, Some(Detail::text(field)));
+    assert_eq!(
+        rule(named(&[("nowhere", &["x"])], &[])),
+        invalid("primary_keys")
+    );
+    assert_eq!(
+        rule(named(&[("users", &["nothing"])], &[])),
+        invalid("primary_keys")
+    );
+    assert_eq!(
+        rule(named(&[("orders", &["ts"])], &[])),
+        invalid("primary_keys")
+    );
+    assert_eq!(rule(named(&[("users", &[])], &[])), invalid("primary_keys"));
+    assert_eq!(
+        rule(named(&[], &[("nowhere", "ts")])),
+        invalid("time_columns")
+    );
+    assert_eq!(
+        rule(named(&[], &[("orders", "nothing")])),
+        invalid("time_columns")
+    );
+    assert_eq!(
+        rule(named(&[], &[("orders", "order_id")])),
+        invalid("time_columns")
+    );
+    assert_eq!(
+        rule(named(&[], &[("orders", "price")])),
+        invalid("time_columns")
+    );
+    assert_eq!(
+        rule(named(&[("orders", &["order_id", "user_id"])], &[])),
+        (
+            ErrorCode::UnsupportedRequest,
+            Some(Detail::text("composite_key"))
+        )
+    );
+}
+
+/// The relationships a caller gives (T1.23) are the schema's, in place of
+/// the declared and inferred ones, each checked as the reference checks
+/// them, each refusal seeded; an empty list says there are none. A table
+/// whose time column the caller named is neither settled by the links nor
+/// warned of.
+#[test]
+fn relationships_given_are_the_schema_s_and_checked() {
+    let given = |links: &[Link], times: Option<&std::collections::BTreeMap<String, String>>| {
+        assemble::assemble(
+            vec![orders(Dtype::Int), users()],
+            vec![],
+            Given {
+                time_columns: times,
+                relationships: Some(links),
+            },
+            None,
+        )
+    };
+    let none = given(&[], None).unwrap();
+    assert!(none.description.links.is_empty());
+    assert_eq!(
+        stype(&none.description, "orders", "user_id"),
+        (Stype::Numerical, None)
+    );
+    let one = [link(("orders", "user_id"), ("users", "user_id"))];
+    let made = given(&one, None).unwrap();
+    assert_eq!(links(&made.description).len(), 1);
+    for bad in [
+        link(("orders", "gone"), ("users", "user_id")),
+        link(("orders", "user_id"), ("users", "age")),
+        link(("orders", "price"), ("nowhere", "user_id")),
+    ] {
+        let err = given(&[bad], None).unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidRequest);
+        assert_eq!(err.fields["field"], Detail::text("relationships"));
+    }
+    let mut strings = vec![orders(Dtype::String), users()];
+    strings.truncate(2);
+    let err = assemble::assemble(
+        strings,
+        vec![],
+        Given {
+            time_columns: None,
+            relationships: Some(&one),
+        },
         None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    // A lone edit stamp a link would refuse, kept where its table's time
+    // column was named, and not warned of.
+    let mut subscriptions = table(
+        "subscriptions",
+        vec![
+            column("sub_id", Dtype::Int, Stype::Id),
+            column("plan_id", Dtype::Int, Stype::Id),
+        ],
+        Some("sub_id"),
     );
-    assert!(
-        made.warnings[0]
-            .message
-            .contains("names the key of 'users'"),
-        "{}",
-        made.warnings[0].message
+    subscriptions.time_column = None;
+    let timed = std::collections::BTreeMap::from([("plans".to_owned(), "modified_at".to_owned())]);
+    let made = assemble::assemble(
+        vec![plans(), subscriptions],
+        vec![],
+        Given {
+            time_columns: Some(&timed),
+            relationships: None,
+        },
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        described(&made.description, "plans").time_column.as_deref(),
+        Some("modified_at")
     );
+    assert!(made.warnings.is_empty(), "{:?}", made.warnings);
 }

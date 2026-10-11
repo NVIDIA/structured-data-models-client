@@ -90,6 +90,7 @@ fn shop() -> SourceDescription {
         tables: vec![
             DescribedTable {
                 name: "orders".into(),
+                source: "orders".into(),
                 columns: vec![
                     column("order_id", ColumnType::Int64, Dtype::Int, Stype::Id, true),
                     column("user_id", ColumnType::Int64, Dtype::Int, Stype::Id, false),
@@ -104,11 +105,12 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["order_id".into()],
                 time_column: Some("ts".into()),
-                edit_stamp_refused: None,
+                time_column_inferred: None,
                 duplicate_keys: None,
             },
             DescribedTable {
                 name: "users".into(),
+                source: "users".into(),
                 columns: vec![
                     column("user_id", ColumnType::Int64, Dtype::Int, Stype::Id, true),
                     column(
@@ -121,7 +123,7 @@ fn shop() -> SourceDescription {
                 ],
                 primary_key: vec!["user_id".into()],
                 time_column: None,
-                edit_stamp_refused: None,
+                time_column_inferred: None,
                 duplicate_keys: None,
             },
         ],
@@ -559,6 +561,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     ));
     parent.tables.push(DescribedTable {
         name: "countries".into(),
+        source: "countries".into(),
         columns: vec![column(
             "code",
             ColumnType::Utf8,
@@ -568,7 +571,7 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         )],
         primary_key: vec!["code".into()],
         time_column: None,
-        edit_stamp_refused: None,
+        time_column_inferred: None,
         duplicate_keys: None,
     });
     parent.links.push(vec![

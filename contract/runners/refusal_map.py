@@ -326,8 +326,10 @@ def _said(seen: dict[str, Any]) -> str:
 # --- the hosts' descriptions agree -------------------------------------------------
 
 #: What each probe both core hosts reach ``describe_source`` on records of
-#: their core operations (``contract/pinned/base.adventureworks.probes.json``).
-AGREE = ('described', 'materialize_schema')
+#: their core operations (``contract/pinned/base.adventureworks.probes.json``):
+#: the description, the schema ``materialize`` samples, and, from T1.23, the
+#: core's warnings, each its code and fields, which each host words itself.
+AGREE = ('described', 'materialize_schema', 'warnings')
 _SHA256 = re.compile(r'^[0-9a-f]{64}$')
 
 
@@ -605,14 +607,35 @@ def _python_step(
 
 
 def _rust_step(core: dict[str, Any], step: dict[str, Any]) -> dict[str, Any]:
-    r"""``core`` with one removal of a rust-host probe's ``derive``: a field
-    of describe_source's source emptied."""
+    r"""``core`` with one removal of a rust-host probe's ``derive``, on
+    describe_source's source: a field emptied (``clear``), the
+    relationships left out (``remove``), or the tables' names given up
+    (``rename_tables``), each table then named as the source names it, in
+    the keys, time columns and relationships too, as the python-core step
+    of the same name renames them (T1.23, whose ``SourceSpec`` names
+    tables and carries relationships)."""
     core = copy.deepcopy(core)
     [(op, value)] = step.items()
-    if op != 'clear':
-        raise MapFailure('a probe names a step this deriver does not take')
     source = core['describe_source']['source']
-    source[value] = [] if isinstance(source[value], list) else {}
+    if op == 'clear':
+        source[value] = [] if isinstance(source[value], list) else {}
+    elif op == 'remove' and value == 'relationships':
+        del source['relationships']
+    elif op == 'rename_tables' and value is True:
+        local = {table['name']: table['source'] for table in source['tables']}
+        source['tables'] = []
+        for key in ('primary_keys', 'time_columns'):
+            source[key] = {local.get(t, t): v for t, v in source[key].items()}
+        if 'relationships' in source:
+            source['relationships'] = [
+                [
+                    {**end, 'table': local.get(end['table'], end['table'])}
+                    for end in link
+                ]
+                for link in source['relationships']
+            ]
+    else:
+        raise MapFailure('a probe names a step this deriver does not take')
     return core
 
 

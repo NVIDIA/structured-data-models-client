@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/11",
+  "$id": "sdm-contract/12",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -420,14 +420,14 @@
       "type": "object",
       "properties": {
         "tables": {
-          "description": "The tables to describe, in order.",
+          "description": "The tables to describe, in order, each by the name the schema gives\nit and the name the source holds it under; empty, every table the\nsource lists, each under its own name (decision E59).",
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/NamedTable"
           }
         },
         "primary_keys": {
-          "description": "Declared primary keys, by table.",
+          "description": "Declared primary keys, by the schema's name of the table.",
           "type": "object",
           "additionalProperties": {
             "type": "array",
@@ -437,10 +437,23 @@
           }
         },
         "time_columns": {
-          "description": "Declared time columns, by table.",
+          "description": "Declared time columns, by the schema's name of the table.",
           "type": "object",
           "additionalProperties": {
             "type": "string"
+          }
+        },
+        "relationships": {
+          "description": "The relationships given, each `[foreign key, referenced key]` by the\nschema's names, in place of the declared and inferred ones; an empty\nlist says there are none. Left out, they are the source's declared\nforeign keys and the links inferred by name (decision E59).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ColumnRef"
+            }
           }
         }
       },
@@ -449,6 +462,23 @@
         "tables",
         "primary_keys",
         "time_columns"
+      ]
+    },
+    "NamedTable": {
+      "description": "A table named for the schema: the name a query uses, and the source's\nname of the table it reads.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source"
       ]
     },
     "SourceDescription": {
@@ -484,6 +514,10 @@
         "name": {
           "type": "string"
         },
+        "source": {
+          "description": "The source's name of the table this one reads: its own name unless\nthe caller named it otherwise (decision E59).",
+          "type": "string"
+        },
         "columns": {
           "type": "array",
           "items": {
@@ -502,8 +536,8 @@
             "null"
           ]
         },
-        "edit_stamp_refused": {
-          "description": "The lone stamp of the last edit inference took as the time column\nand a link to the table then refused, so the table has none: what\nthe time-column warning names, and the column the reference's schema\nwas ordered by before the links settled it (decision E55). `None`\notherwise; `materialize` does not read it.",
+        "time_column_inferred": {
+          "description": "The column inference took as the time column, when the table's\ntime column is now another or none: a lone stamp of the last edit a\nlink then refused (decision E55), or the column inference took where\nthe caller named another (decision E59). `None` when the time column\nis inference's, or inference took none. The host's schema was\nordered by it first, as the reference's was; `materialize` does not\nread it.",
           "type": [
             "string",
             "null"
@@ -524,6 +558,7 @@
       "additionalProperties": false,
       "required": [
         "name",
+        "source",
         "columns",
         "primary_key"
       ]

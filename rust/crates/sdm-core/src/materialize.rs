@@ -559,6 +559,12 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         seed,
         facts,
     } = inputs;
+    // A table the schema names otherwise than the source does: its data
+    // requests would name the schema's table, so it is refused by name
+    // until the route that takes tables named samples them (T1.24).
+    if description.tables.iter().any(|t| t.source != t.name) {
+        return Err(not_yet("table_source"));
+    }
     consistent(&mut description)?;
     // The seed reaches this entry as the integer the caller gave, of any
     // size (decision H7); numpy's generator takes it whole, and the sample

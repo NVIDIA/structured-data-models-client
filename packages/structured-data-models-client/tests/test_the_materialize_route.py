@@ -235,6 +235,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
         'tables': [
             {
                 'name': 'users',
+                'source': 'users',
                 'columns': [
                     {
                         'name': 'user_id',
@@ -251,6 +252,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
             },
             {
                 'name': 'orders',
+                'source': 'orders',
                 'columns': [
                     {
                         'name': 'order_id',

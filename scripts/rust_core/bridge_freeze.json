@@ -11,7 +11,7 @@
         "calls": []
       },
       "build": {
-        "fingerprint": "dbda3c416890a01132624ce2b81be346307f1cbb9cea6d6a818eb6f9810a15ed",
+        "fingerprint": "11fa0297f63b6f8a068b46d118d50505516bf6a21e7115d3a212b30ce99bf660",
         "raise": 1,
         "warn": 0,
         "branch": 7,
@@ -83,7 +83,7 @@
         ]
       },
       "description": {
-        "fingerprint": "b794ba1c093f3be7b1f709763c969352b5325c1a10906b47e515d2e61bb926db",
+        "fingerprint": "5140ad9a9b5353aaa6ef848e121157c1f467e312cddafe6a76c464466695d046",
         "raise": 3,
         "warn": 0,
         "branch": 8,
@@ -717,6 +717,40 @@
         "branch": 1,
         "calls": []
       },
+      "Column.__setattr__": {
+        "fingerprint": "64cc55e156fab030439211d631711d43d7cc18687957338221762323267f2176",
+        "raise": 1,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".__setattr__",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.schema.Column._adopt_as_time_column",
+          "sdm_client.schema.Column._check_stype",
+          "sdm_client.schema.Column._check_supports_dtype",
+          "sdm_client.schema.Column._stay_a_key_if_the_schema_joins_on_this"
+        ]
+      },
+      "Schema.__setattr__": {
+        "fingerprint": "0eb8da79fb815daa89d671082b5579aa4df7bf8ead38509e6e19e86f2d53ac74",
+        "raise": 0,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          ".__setattr__",
+          "sdm_client.schema._Links"
+        ]
+      },
+      "Schema._check_relationships": {
+        "fingerprint": "0c06d607dacc5e86b7d925b6b2c5379000b759ff13083daaca579c79c03ead17",
+        "raise": 1,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.schema._require_column"
+        ]
+      },
       "Schema._mark_key_columns": {
         "fingerprint": "5886e0ee34af1ac5354e334c9684726d1aa8a56096abcbfec3e24601409bd4af",
         "raise": 0,
@@ -733,6 +767,15 @@
           "sdm_client.schema._as_key_tuple"
         ]
       },
+      "Schema._settle": {
+        "fingerprint": "a8c808e3731c980c32d33316608a537d220aaf3924766765e8f46ea4d5ae7a7f",
+        "raise": 0,
+        "warn": 0,
+        "branch": 0,
+        "calls": [
+          "sdm_client.schema._each_link_once"
+        ]
+      },
       "Schema.check_consistent": {
         "fingerprint": "9f85ce317e6a058bb8b9cafc843533a09da7c62cab927f1aa88edb39682232cd",
         "raise": 0,
@@ -740,8 +783,7 @@
         "branch": 2,
         "calls": [
           ".check_consistent",
-          ".values",
-          "sdm_client.schema.Schema._check_relationships"
+          ".values"
         ]
       },
       "Schema.from_source": {
@@ -775,6 +817,84 @@
           "sdm_client.schema._require_table_names",
           "sdm_client.schema._settle_edit_stamps",
           "sdm_client.schema._warn_how_time_columns_were_inferred"
+        ]
+      },
+      "_TableShape.__setattr__": {
+        "fingerprint": "110348d51d428a4358d69e2084c674a3953fea4254ffceea749a46687f139cdd",
+        "raise": 0,
+        "warn": 0,
+        "branch": 8,
+        "calls": [
+          ".__setattr__",
+          "sdm_client.schema._TableShape._own_columns",
+          "sdm_client.schema._as_key_tuple"
+        ]
+      },
+      "_TableShape._adopt_key": {
+        "fingerprint": "91d49153a954976826b704f5e67105a3c868641c9f521b3a8333de776b5f08da",
+        "raise": 0,
+        "warn": 0,
+        "branch": 9,
+        "calls": [
+          ".__setattr__",
+          "._mark_as_key",
+          ".join",
+          "sdm_client.schema._TableShape._could_hold_a_key",
+          "sdm_client.schema._and_list",
+          "sdm_client.schema._as_key_tuple",
+          "sdm_client.schema._key_quality",
+          "sdm_client.schema._warn_a_key_repeats"
+        ]
+      },
+      "_TableShape._check_key": {
+        "fingerprint": "380509cfc7bbb9bb665b8cc7959a4c20e5d7856cdf8122be039c9fca6066c787",
+        "raise": 5,
+        "warn": 0,
+        "branch": 11,
+        "calls": [
+          ".any",
+          ".isna",
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.schema._TableShape._check_column",
+          "sdm_client.schema._a_key_missing_values",
+          "sdm_client.schema._key_quality",
+          "sdm_client.schema._not_unique_enough",
+          "sdm_client.schema._too_many_repeats",
+          "sdm_client.schema.supports_dtype"
+        ]
+      },
+      "_TableShape._check_time_column": {
+        "fingerprint": "9eceb431e2dbbaac9387f892b452e2b15f1ecd5bc6630b1b3d08ae83093963f3",
+        "raise": 1,
+        "warn": 0,
+        "branch": 2,
+        "calls": [
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.schema._TableShape._check_column",
+          "sdm_client.schema._as_key_tuple"
+        ]
+      },
+      "_TableShape._re_derive_key_columns": {
+        "fingerprint": "db19c7e9f5078d8749c2f2b049b23481247a08d6a9572bf2dca38a918dbe28bc",
+        "raise": 0,
+        "warn": 0,
+        "branch": 3,
+        "calls": [
+          "._mark_key_columns",
+          "._release_as_key",
+          ".items",
+          "sdm_client.schema._as_key_tuple"
+        ]
+      },
+      "_require_joinable": {
+        "fingerprint": "21ffbfd2221ff6ceba7bb938d58bf7a6551ef49c53712e3ba7803280ff54bb3f",
+        "raise": 3,
+        "warn": 0,
+        "branch": 4,
+        "calls": [
+          "sdm_client.errors.StructuredDataError",
+          "sdm_client.schema._as_key_tuple",
+          "sdm_client.schema._join_family"
         ]
       },
       "_warn_two_ways_to_reach_one_table": {

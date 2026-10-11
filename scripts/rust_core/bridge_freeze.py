@@ -248,10 +248,25 @@ COVERED: dict[Path, tuple[str, ...]] = {
     # Schema still runs on it stays (its key marking, its two-ways warning,
     # which the schema bridge suppresses), and check_consistent, the old
     # route's and the tabular route's, which the self-tests seed.
+    # From T1.23 (checkpoint 5, subagent P2-2): the live object's edit
+    # semantics, which building a Schema runs on the core route and T1.24
+    # will reach when it passes edits through (the ledger's row, now
+    # T1.24's): the relationships' assignment and its checks, and the
+    # table and column setters, which a new rule must not join unseen.
     _CLIENT / 'schema.py': (
+        'Column.__setattr__',
+        'Schema.__setattr__',
+        'Schema._check_relationships',
         'Schema._mark_key_columns',
+        'Schema._settle',
         'Schema.check_consistent',
         'Schema.from_source',
+        '_TableShape.__setattr__',
+        '_TableShape._adopt_key',
+        '_TableShape._check_key',
+        '_TableShape._check_time_column',
+        '_TableShape._re_derive_key_columns',
+        '_require_joinable',
         '_warn_two_ways_to_reach_one_table',
     ),
     _CLIENT / 'adapters/relational.py': ('RelationalAdapter._preflight',),

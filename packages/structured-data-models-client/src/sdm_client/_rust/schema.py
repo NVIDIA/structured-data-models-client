@@ -129,13 +129,15 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             columns[column['name']] = Column(
                 column['name'], dtype, column['stype']
             )
-        table_shape = SourceTable(name=name, source_name=name, columns=columns)
+        table_shape = SourceTable(
+            name=name, source_name=table['source'], columns=columns
+        )
         keys = tuple(table['primary_key'])
         if keys:
             table_shape.primary_key = keys[0] if len(keys) == 1 else keys
-        # A lone edit stamp a link refused ordered the table before the
-        # links settled it, as the reference's schema shows it.
-        table_shape.time_column = table['edit_stamp_refused']
+        # The column inference took ordered the table before the links or
+        # the caller settled another, as the reference's schema shows it.
+        table_shape.time_column = table['time_column_inferred']
         table_shape.time_column = table['time_column']
         # Once the key and time column are set, whose setters re-derive
         # the marks of a table held on its own.

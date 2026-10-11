@@ -179,7 +179,13 @@ fn run_with_digests(map: &Value) -> (BTreeMap<String, Value>, Digests) {
         let ran = host::run_edited(&given, &bases, &edits).unwrap();
         let name = probe["id"].as_str().unwrap().to_owned();
         if let Some(described) = &ran.described {
-            let mut agreed = BTreeMap::from([("described".to_owned(), digest(described))]);
+            let mut agreed = BTreeMap::from([
+                ("described".to_owned(), digest(described)),
+                (
+                    "warnings".to_owned(),
+                    digest(&Value::from(ran.warnings.clone())),
+                ),
+            ]);
             for input in &ran.inputs {
                 if input["op"] == "materialize" {
                     agreed.insert("materialize_schema".into(), digest(&input["schema"]));
@@ -225,7 +231,7 @@ fn pin() -> Value {
 /// `refusal_map.agree` reads them; empty when they are the pin's. Missing,
 /// empty or retyped evidence fails.
 fn agree(pin: &Value, observed: &Digests) -> Vec<String> {
-    const AGREE: [&str; 2] = ["described", "materialize_schema"];
+    const AGREE: [&str; 3] = ["described", "materialize_schema", "warnings"];
     let Some(probes) = pin
         .get("probes")
         .and_then(Value::as_object)
@@ -447,12 +453,12 @@ fn a_refusal_the_map_does_not_list_fails() {
     map["entries"]
         .as_array_mut()
         .unwrap()
-        .retain(|entry| entry["id"] != "describe_source/time_values");
+        .retain(|entry| entry["id"] != "describe_source/text_time");
     let failures = check(&map, observed());
     assert!(
         failures
             .iter()
-            .any(|f| f.starts_with("no-text-dates: a refusal the map does not list")),
+            .any(|f| f.starts_with("notebook: a refusal the map does not list")),
         "{failures:?}"
     );
 }
@@ -476,24 +482,23 @@ fn missing_empty_or_retyped_evidence_fails() {
     let map = map();
     assert_eq!(check(&map, &BTreeMap::new()), ["nothing was observed"]);
     let mut missing = observed().clone();
-    missing.remove("no-keys");
+    missing.remove("no-inference-config");
     let failures = check(&map, &missing);
     assert!(
-        failures.contains(&"no-keys: not observed".to_owned()),
+        failures.contains(&"no-inference-config: not observed".to_owned()),
         "{failures:?}"
     );
     assert!(
-        failures
-            .contains(&"describe_source/time_columns: listed for rust-host and not hit".to_owned()),
+        failures.contains(&"materialize/deeper_hop: listed for rust-host and not hit".to_owned()),
         "{failures:?}"
     );
-    for retyped in [json!(7), Value::Null, json!(""), json!(["time_columns"])] {
+    for retyped in [json!(7), Value::Null, json!(""), json!(["deeper_hop"])] {
         let mut changed = observed().clone();
-        changed.get_mut("no-keys").unwrap()["rule"] = retyped.clone();
+        changed.get_mut("no-inference-config").unwrap()["rule"] = retyped.clone();
         assert!(!check(&map, &changed).is_empty(), "{retyped}");
     }
     let mut extra = observed().clone();
-    extra.get_mut("no-keys").unwrap()["stage"] = json!("from_source");
+    extra.get_mut("no-inference-config").unwrap()["stage"] = json!("materialize");
     assert!(!check(&map, &extra).is_empty());
     let mut unknown = observed().clone();
     unknown.insert("not-a-probe".into(), success(&json!("predict")));

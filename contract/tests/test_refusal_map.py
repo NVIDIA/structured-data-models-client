@@ -299,7 +299,10 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
         # and the schema its materialize samples are the pin's, which
         # rust-host is held to (T1.21d).
         if capture.described is not None:
-            agreed = {'described': refusal_map.digest(capture.described)}
+            agreed = {
+                'described': refusal_map.digest(capture.described),
+                'warnings': refusal_map.digest(capture.warnings),
+            }
             for each in capture.inputs:
                 if each['op'] == 'materialize':
                     agreed['materialize_schema'] = refusal_map.digest(
@@ -432,15 +435,15 @@ def test_missing_or_empty_evidence_fails() -> None:
         'python-core: nothing was observed'
     ]
     observed = _observed()
-    del observed['no-keys']
+    del observed['no-table-names']
     failures = refusal_map.check(document, 'python-core', observed)
-    assert 'no-keys: not observed' in failures
+    assert 'no-table-names: not observed' in failures
     assert (
-        'describe_source/time_columns: listed for python-core and not hit'
+        'from_source/relationships: listed for python-core and not hit'
         in failures
     )
     observed = _observed()
-    del observed['no-keys']['rule']
+    del observed['no-table-names']['rule']
     assert refusal_map.check(document, 'python-core', observed) != []
     observed = _observed()
     observed['not-a-probe'] = refusal_map.success('predict')
@@ -459,10 +462,10 @@ def test_missing_or_empty_evidence_fails() -> None:
 def test_a_probe_that_succeeds_or_hits_another_entry_fails() -> None:
     document = _map()
     observed = _observed()
-    observed['no-keys'] = copy.deepcopy(observed['no-time-columns'])
+    observed['no-table-names'] = copy.deepcopy(observed['no-time-columns'])
     assert (
-        'no-keys: hit describe_source/text_time, where the map has '
-        'describe_source/time_columns'
+        'no-table-names: hit describe_source/text_time, where the map has '
+        'from_source/relationships'
     ) in refusal_map.check(document, 'python-core', observed)
     observed = _observed()
     observed['one-hop'] = refusal_map.success('predict')
@@ -838,7 +841,7 @@ def test_a_family_map_fails_on_an_unlisted_refusal_and_a_stale_entry() -> None:
     unlisted['entries'] = [
         entry
         for entry in unlisted['entries']
-        if entry['id'] != 'describe_source/time_of_day'
+        if entry['id'] != 'materialize/wire_dtype'
     ]
     failures = refusal_map.check(unlisted, 'python-core', observed)
     assert any(
@@ -855,7 +858,7 @@ def test_a_family_map_fails_on_an_unlisted_refusal_and_a_stale_entry() -> None:
     assert refusal_map.check(stale, 'python-core', observed) == [
         'materialize/stale: listed for python-core and not hit'
     ]
-    for retyped in (7, None, '', ['time_of_day']):
+    for retyped in (7, None, '', ['wire_dtype']):
         changed = copy.deepcopy(observed)
         changed['time.feature-time-of-day']['rule'] = retyped
         assert refusal_map.check(document, 'python-core', changed) != []
@@ -897,10 +900,9 @@ def test_the_writer_lists_a_new_refusal_and_drops_a_lifted_entry() -> None:
     assert added['owner'] == refusal_map.UNSET
     assert 'materialize/seeded: owner is not written' in report
     for probe in document['probes']:
-        if probe['python-core']['expect'] != 'success':
-            runs[_spec_key(probe['python-core'])] = refusal_map.success(
-                probe['python-core']['until']
-            )
+        runs[_spec_key(probe['python-core'])] = refusal_map.success(
+            probe['python-core']['until']
+        )
     written, report = refusal_map.write(
         document, _of(document), lambda spec: runs[_spec_key(spec)]
     )

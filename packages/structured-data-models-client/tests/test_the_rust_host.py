@@ -339,7 +339,7 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
         assert len({str(error) for error in made}) == 1
         assert all(CANARY not in str(error) for error in made)
     # Nothing that maps an error reads a message: only a warning's text is
-    # shown, by warn_from_core.
+    # shown, by said, for a code the warning table does not word (T1.23).
     tree = ast.parse(Path(errors.__file__).read_text(encoding='utf-8'))
     for function in tree.body:
         if not isinstance(function, ast.FunctionDef):
@@ -349,7 +349,7 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
             for node in ast.walk(function)
             if isinstance(node, ast.Constant) and node.value == 'message'
         ]
-        if function.name == 'warn_from_core':
+        if function.name == 'said':
             assert reads
         else:
             assert not reads, function.name
@@ -417,3 +417,234 @@ def test_warnings_keep_their_order_and_map_to_their_classes(
         (SDMWarning, '[TEST_OTHER] second'),
         (_Synthetic, '[TEST_SYNTHETIC] third'),
     ]
+
+
+def _warning(code: str, **fields: Any) -> dict[str, Any]:
+    r"""A core warning of ``code`` whose fields are ``fields``, each a text,
+    a list of texts, a count or a scalar already encoded."""
+
+    def encoded(value: Any) -> Any:
+        if isinstance(value, list):
+            return [encoded(item) for item in value]
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, int):
+            return {'t': 'u64', 'v': str(value)}
+        return {'t': 'utf8', 'v': value}
+
+    return {
+        'code': code,
+        'message': 'the core says this naming nothing',
+        'fields': {name: encoded(value) for name, value in fields.items()},
+    }
+
+
+def _shown(*given: dict[str, Any]) -> list[tuple[str, str]]:
+    control = json.dumps({'message': 'warnings', 'warnings': list(given)})
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        errors.warn_from_core(control.encode(), {})
+    return [(type(w.message).__name__, str(w.message)) for w in shown]
+
+
+def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> (
+    None
+):
+    # T1.23 (E59): the core gives codes and fields, and this host words
+    # them, the reference's Python remedies included. The texts the core
+    # wrote itself before T1.23, word for word.
+    assert _shown(
+        _warning(
+            'LINK_CANNOT_JOIN',
+            source_table='orders',
+            source_column='user_id',
+            target_table='users',
+            target_column='user_id',
+            reason='types',
+            variant='types',
+            source_dtype='string',
+            target_dtype='int64',
+        )
+    ) == [
+        (
+            'SDMWarning',
+            "[LINK_CANNOT_JOIN] orders.user_id names the key of 'users' and "
+            "holds 'string' where that key holds 'int64', which cannot match, "
+            'so no relationship was made from it. Store the two as one type '
+            'if they are the same identifier.',
+        )
+    ]
+    assert _shown(
+        _warning(
+            'LINK_CANNOT_JOIN',
+            source_table='lines',
+            source_column='sku',
+            target_table='items',
+            target_column='sku',
+            reason='not_the_key',
+            variant='not_the_key',
+            key=['item_id'],
+        )
+    )[0][1] == (
+        '[LINK_CANNOT_JOIN] lines.sku refers to items.sku, but the primary '
+        "key of 'items' is 'item_id'. A relationship joins to a primary key, "
+        "so none was made from it. Pass primary_keys={'items': 'sku'} if "
+        "'sku' identifies a row of 'items'."
+    )
+    two_ways = _shown(
+        _warning(
+            'TABLES_NAME_EACH_OTHER',
+            source_table='accounts',
+            target_table='refunds',
+        ),
+        _warning(
+            'TWO_WAYS_TO_A_TABLE',
+            source_table='refunds',
+            target_table='accounts',
+            columns=['account_id', 'payer'],
+            kept='account_id',
+            others=['payer'],
+        ),
+    )
+    assert [text for _, text in two_ways] == [
+        "[TABLES_NAME_EACH_OTHER] 'accounts' and 'refunds' name each other, "
+        'and a relationship is crossed in both directions, so this is two '
+        'ways over one pair and an aggregation between them is refused for '
+        'not having a single one. Declare whichever of the two a question is '
+        'about and leave the other out.',
+        "[TWO_WAYS_TO_A_TABLE] 'refunds' reaches 'accounts' through "
+        "'account_id' and 'payer', and an aggregation across the two tables "
+        'has to be resolved to one of them, so a query that crosses this pair '
+        'is refused until it is. They are all kept because they are all real, '
+        'and which one a question means is not something this can decide. To '
+        "keep 'account_id', drop the others: schema.relationships = [link for "
+        'link in schema.relationships if not (link.source_table == '
+        "'refunds' and link.target_table == 'accounts' and "
+        "link.source_column in ['payer'])].",
+    ]
+    # One warning a line, shown as the reference's one warning of them all.
+    stamp = {'t': 'ts', 'unit': 'us', 'zone': None, 'v': '1757585707263000'}
+    guessed = _shown(
+        _warning(
+            'TIME_COLUMNS_GUESSED',
+            table='plans',
+            column='modified_at',
+            reason='edit_stamp',
+            variant='refused_edit_stamp',
+        ),
+        _warning(
+            'TIME_COLUMNS_GUESSED',
+            table='plans',
+            column='stamped',
+            reason='constant',
+            missing=0,
+            rows=9,
+            value=stamp,
+            variant='refused_constant',
+        ),
+        _warning(
+            'TIME_COLUMNS_GUESSED',
+            table='visits',
+            column='seen',
+            variant='taken_earliest',
+            among=['seen', 'left', 'third'],
+            other='left',
+        ),
+    )
+    assert guessed == [
+        (
+            'SDMWarning',
+            '[TIME_COLUMNS_GUESSED] Some time columns were inferred, or '
+            'refused, on a guess about what a column holds:\n'
+            '- plans.modified_at was not taken as the time column because it '
+            'looks like when a row was last changed, not when it began. If it '
+            'does say when a row became true, name it: '
+            "time_columns={'plans': 'modified_at'}.\n"
+            '- plans.stamped was not taken as the time column because every '
+            'row holds 2025-09-11 10:15:07.263000. If it does say when a row '
+            "became true, name it: time_columns={'plans': 'stamped'}.\n"
+            '- visits.seen was taken as the time column because its values '
+            "start earliest of 'seen', 'left' and 'third'. If another says "
+            'when a row became true, name it: '
+            "time_columns={'visits': 'left'}. If none does, clear it: "
+            "time_columns={'visits': None}.",
+        )
+    ]
+    # Columns left out, said once a table.
+    assert _shown(
+        _warning(
+            'COLUMNS_LEFT_OUT', table='users', column='f', dtype='intlist'
+        ),
+        _warning(
+            'COLUMNS_LEFT_OUT', table='users', column='g', dtype='stringlist'
+        ),
+        _warning(
+            'COLUMNS_LEFT_OUT', table='orders', column='h', dtype='floatlist'
+        ),
+    ) == [
+        (
+            'SDMWarning',
+            '[COLUMNS_LEFT_OUT] users leaves out f (intlist), g (stringlist): '
+            'a request carries one scalar value per cell, and these hold none',
+        ),
+        (
+            'SDMWarning',
+            '[COLUMNS_LEFT_OUT] orders leaves out h (floatlist): a request '
+            'carries one scalar value per cell, and these hold none',
+        ),
+    ]
+    time = [
+        {'t': 'time64', 'unit': 'us', 'v': str(v)}
+        for v in (1_800_000_000, 5_400_123_456)
+    ]
+    assert _shown(
+        _warning(
+            'TIME_VALUES_UNREAD',
+            table='users',
+            column='f',
+            unread=1_234,
+            rows=2_000,
+            examples=time,
+        )
+    ) == [
+        (
+            'UserWarning',
+            '[TIME_VALUES_UNREAD] Could not parse 1,234 of 2,000 value(s) of '
+            "time column 'f' (for example [datetime.time(0, 30), "
+            "datetime.time(1, 30, 0, 123456)]); they were dropped as 'NaT'",
+        )
+    ]
+
+
+def test_a_remedy_names_a_table_as_python_writes_its_name() -> None:
+    # The vectors CPython 3.12's repr wrote (tests/quoted.json, from
+    # T1.21d): each name a remedy holds is the literal Python reads back.
+    vectors = json.loads(
+        (Path(__file__).parent / 'quoted.json').read_text(encoding='utf-8')
+    )['vectors']
+    assert len(vectors) >= 20
+    for vector in vectors:
+        [(_, text)] = _shown(
+            _warning(
+                'TIME_COLUMNS_GUESSED',
+                table=vector['name'],
+                column='c',
+                variant='refused_load_stamp',
+            )
+        )
+        assert text.endswith(f"time_columns={{{vector['repr']}: 'c'}}."), text
+        assert ast.literal_eval(vector['repr']) == vector['name']
+
+
+def test_a_warning_the_table_cannot_word_is_shown_in_the_core_s_sentence() -> (
+    None
+):
+    # An unknown code, an unknown variant, and a field the words need left
+    # out: each shown, in the core's own sentence, never raised.
+    for given in (
+        _warning('NOT_A_CODE_HERE'),
+        _warning('TIME_COLUMNS_GUESSED', table='t', column='c', variant='new'),
+        _warning('TWO_WAYS_TO_A_TABLE', source_table='a'),
+    ):
+        [(_, text)] = _shown(given)
+        assert text.endswith('the core says this naming nothing'), text

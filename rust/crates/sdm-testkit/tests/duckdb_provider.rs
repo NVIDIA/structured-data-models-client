@@ -273,7 +273,9 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
 }
 
 #[test]
-fn a_time_of_day_is_refused_as_a_time_column_by_name() {
+fn a_time_of_day_is_passed_over_as_holding_no_time_and_said() {
+    // T1.23: as the reference's engine reads a time of day as no time at
+    // all, it is passed over as holding no value, and the run says so.
     let mut loaded = case::load(&[contract().join("cases/s1/base.regression.json")])
         .unwrap()
         .remove(0)
@@ -285,17 +287,21 @@ fn a_time_of_day_is_refused_as_a_time_column_by_name() {
     ]);
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let observed = host::run(&loaded, &bases).unwrap();
-    assert_eq!(
-        observed.answer,
-        Answer::Error {
-            kind: "unsupported".into(),
-            code: "UNSUPPORTED_REQUEST".into(),
-            fields: [("operation", "describe_source"), ("rule", "time_of_day")]
-                .into_iter()
-                .map(|(name, text)| (name.to_owned(), text.to_owned()))
-                .collect(),
-        }
-    );
+    let described = observed.described.expect("described");
+    let things = described["tables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "things")
+        .unwrap();
+    assert_eq!(things["time_column"], Value::Null);
+    let codes: Vec<&str> = observed
+        .warnings
+        .iter()
+        .map(|w| w["code"].as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"TIME_VALUES_UNREAD"), "{codes:?}");
+    assert!(codes.contains(&"TIME_COLUMNS_GUESSED"), "{codes:?}");
 }
 
 #[test]
