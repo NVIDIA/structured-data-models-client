@@ -120,7 +120,7 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     # Past the 64 KB control cap (decision H5).
     assert len(pql('start-past-64kb').encode()) > 64 * 1024
     # Below the depth the reference reaches before RecursionError (about
-    # 455 in the runner) and the core's MAX_DEPTH (999).
+    # 461 in the runner on Python 3.12) and the core's MAX_DEPTH (999).
     deepest = pql('deepest')
     assert deepest.count('(' * 400) == 1 and '(' * 401 not in deepest
     # The two date cases DT-9 holds back stay diagnostic until T1.6b.
@@ -145,7 +145,9 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     assert {
         case['id'] for case in cases.values() if case.get('register') == 'PQL-2'
     } == {'s0.boundary.depth-999'}
-    assert pql('depth-999').count('(' * 999) == 1
+    # 999 levels exactly: one more is the core's first refusal.
+    depth_999 = pql('depth-999')
+    assert depth_999.count('(' * 999) == 1 and '(' * 1000 not in depth_999
 
 
 def test_the_reference_observations_validate_and_meet_each_expectation(

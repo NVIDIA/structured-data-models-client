@@ -1205,7 +1205,7 @@ entries:
   kind: change
   old_behavior: >-
     The reference has no depth limit of its own: its parser and the old
-    materializer recurse, and past about 455 nested levels (in the
+    materializer recurse, and past about 461 nested levels (in the
     contract runner under Python 3.12; the edge moves with the caller's
     stack) the public call raises RecursionError.
   new_behavior: >-
@@ -1213,7 +1213,7 @@ entries:
     nested levels, on its grown stack, and refuses 1,000 and more with
     PQL_PARSE_SYNTAX. On the Python core route the accepted query still
     goes through the shadow check's old validator, so the public call
-    raises RecursionError from about 455 to 999 levels, as the reference
+    raises RecursionError from about 461 to 999 levels, as the reference
     does, and answers INVALID_REQUEST at 1,000 and above, where the
     reference raises RecursionError.
   affected_inputs: >-
@@ -1234,3 +1234,7 @@ entries:
     RecursionError, rust-host accepts) and sdm-core's
     tests/pql_adapter.rs, whose deepest() queries are accepted at 999
     nested levels and refused at 1,000 (T1.7c).
+    The edge, about 461 levels, was measured in the runner on Python 3.12
+    at T1.12's last review; the two depth cases' texts still say about
+    455, left as written, since changing a case file changes the digest
+    its reference observation is held to.
