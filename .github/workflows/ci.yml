@@ -643,7 +643,10 @@ jobs:
           for runner in ('python-core', 'python-old'):
               path = pathlib.Path('gate-observations') / f'{runner}.jsonl'
               lines = path.read_text().splitlines() if path.is_file() else []
-              seen = {json.loads(line)['identity']['cell'] for line in lines}
+              try:
+                  seen = {json.loads(line)['identity']['cell'] for line in lines}
+              except (ValueError, RecursionError, KeyError, TypeError):
+                  sys.exit(f'{runner}: an observation names no cell')
               if seen != {cell}:
                   sys.exit(f'{runner}: observed in {sorted(map(str, seen))}, not {cell}')
           print(f'every observation in {cell}')
