@@ -1135,8 +1135,14 @@ entries:
     free-form date (March 3 2020), a packed one (20240101), the year 0, more
     than six fractional digits, a three-digit year, mixed separators, and
     the clock's own now and today, dot dates (15.01.2024) and unpadded
-    year-first values (2024-1-5), for example; offsets mixed are refused by name
-    (text_time_zones, DT-11). Measured at T1.25 over the T0.6 corpus's 121
+    year-first values (2024-1-5); and, from T1.25's fix round 1, an offset
+    with seconds (+01:00:30), Z followed by an offset (Z+01:00), and an
+    offset writing minutes past 59 under an ISO format, where pandas reads
+    that value as no time (2024-01-02T01:02:03+01:99 after
+    2024-01-01T01:02:03+01:00, refused for inference and the time column's
+    choice; pinned at T1.26a by text-times.json, beside the non-ISO
+    format's reading, which agrees with pandas); offsets mixed are refused
+    by name (text_time_zones, DT-11). Measured at T1.25 over the T0.6 corpus's 121
     column cases as source columns under a name that says time and one that
     does not: the core describes 112 of the 242 as the reference does,
     warnings included; on 66 it decides, as the reference does, that the
@@ -1160,7 +1166,7 @@ entries:
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
     reference's.
-  cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d, T1.21e, T1.23, T1.24, T1.25, T1.32c, T1.32d]
+  cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d, T1.21e, T1.23, T1.24, T1.25, T1.26a, T1.32c, T1.32d]
   status: proposed
   approved_by: null
   decision_ref: null

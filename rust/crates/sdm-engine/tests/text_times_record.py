@@ -294,6 +294,10 @@ def main() -> None:
         ['01/15/2024 01:02:03+24:00', '01/16/2024 01:02:03+01:00'],
         ['15/01/2024 01:02:03 +99:00', '16/01/2024 01:02:03 +01:99'],
         ['2024-01-01T01:02:03+01:99', '2024-01-02T01:02:03+0160'],
+        # A later value with minutes past 59, under the format the first
+        # value guessed: ISO and not (T1.25 round 2, pinned at T1.26a).
+        ['2024-01-01T01:02:03+01:00', '2024-01-02T01:02:03+01:99'],
+        ['01/15/2024 01:02:03+01:00', '01/16/2024 01:02:03+01:99'],
     ]
     # Two-digit years at the pivot, each side of both ends of the hundred
     # years around the clock's year (49 after it, 50 before it).

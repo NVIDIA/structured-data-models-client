@@ -173,7 +173,7 @@ fn document() -> Value {
 /// The readings the reader decided when the vectors were recorded: a
 /// change that decides fewer is seen, and one that decides more is a
 /// change to record here.
-const DECIDED: usize = 18_080;
+const DECIDED: usize = 18_084;
 /// The columns `never_read` bounded when the vectors were recorded.
 const BOUNDED: usize = 404;
 /// The day-first formats pandas warned of where the reading decided.
@@ -232,4 +232,51 @@ fn the_check_fails_closed() {
     ] {
         assert!(check(&broken).is_err(), "{broken}");
     }
+}
+
+/// A later value writing an offset's minutes past 59, under the format the
+/// first value guessed (T1.25's second review, pinned at T1.26a with no
+/// change to the reader, whose expansion waits on the owner's H21
+/// decision): pandas reads it as no time and refuses the values one by one
+/// for their mixed offsets. Not under ISO, the reader agrees; under ISO
+/// the inference's two readings are undecided, refused by name
+/// (`text_time`) where pandas gives no time for that value, register
+/// P1B-2.
+#[test]
+fn a_later_value_with_minutes_past_59_is_read_as_pinned() {
+    let doc = document();
+    let reader = Reader::new(doc["year"].as_i64().unwrap());
+    let column = |pair: [&str; 2]| -> (Vec<Option<String>>, Value) {
+        let found = doc["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["values"] == json!(pair))
+            .unwrap_or_else(|| panic!("{pair:?} is recorded"));
+        (values(&found["values"], pair[0]).unwrap(), found.clone())
+    };
+    let (iso, recorded) = column(["2024-01-01T01:02:03+01:00", "2024-01-02T01:02:03+01:99"]);
+    let given: Vec<Option<&str>> = iso.iter().map(|v| v.as_deref()).collect();
+    assert_eq!(recorded["coerce"][1], Value::Null);
+    assert_eq!(recorded["utc"][1], Value::Null);
+    assert_eq!(reader.column(&given, false), Err(Unread::Undecided));
+    assert_eq!(reader.column(&given, true), Err(Unread::Undecided));
+    assert_eq!(recorded["each"], json!("MIXED"));
+    assert_eq!(reader.each(&given), Err(Unread::MixedZones));
+
+    let (slash, recorded) = column(["01/15/2024 01:02:03+01:00", "01/16/2024 01:02:03+01:99"]);
+    let given: Vec<Option<&str>> = slash.iter().map(|v| v.as_deref()).collect();
+    for (utc, kind) in [(false, "coerce"), (true, "utc")] {
+        let read: Vec<Option<i128>> = reader
+            .column(&given, utc)
+            .unwrap()
+            .iter()
+            .map(|at| at.map(|at| at.nanos()))
+            .collect();
+        let want = expected(&recorded[kind], kind).unwrap().unwrap();
+        assert_eq!(read, want, "{kind}");
+        assert_eq!(read[1], None, "{kind}");
+    }
+    assert_eq!(recorded["each"], json!("MIXED"));
+    assert_eq!(reader.each(&given), Err(Unread::MixedZones));
 }
