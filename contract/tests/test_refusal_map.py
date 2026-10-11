@@ -769,11 +769,17 @@ def test_a_family_map_without_a_case_s_probe_or_with_a_stranger_fails() -> None:
     )
 
 
+FAMILY_PIN = ROOT / 'contract/pinned/families.probes.json'
+
+
 def _python_core_run(
     document: dict[str, Any],
+    digests: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     r"""Each python-core probe of ``document`` run: what it observed, and
-    its observation by its input, routes and stage."""
+    its observation by its input, routes and stage. Where it reached
+    ``describe_source`` and has a rust-host twin, the digests of what
+    both hosts are held to agree on are added to ``digests`` (T1.23)."""
     bases = run_python.load_bases()
     observed: dict[str, Any] = {}
     by_input: dict[str, Any] = {}
@@ -787,6 +793,15 @@ def _python_core_run(
         rust = probe.get('rust-host')
         if rust is None:
             continue
+        if digests is not None and capture.described is not None:
+            # Not the schema materialize samples: the hosts refuse some
+            # questions at different points (python-core's bridge before
+            # materialize starts, rust-host in the core), which the maps
+            # hold; the AdventureWorks pin holds that schema.
+            digests[probe['id']] = {
+                'described': refusal_map.digest(capture.described),
+                'warnings': refusal_map.digest(capture.warnings),
+            }
         # Where python-core reached the core, it started the operations the
         # rust-host probe starts, with the same inputs.
         started = {each['op']: each for each in capture.inputs}
@@ -808,8 +823,14 @@ def test_the_family_map_holds_on_python_core_and_is_the_writer_s(
     family: str,
 ) -> None:
     document = _family_maps()[family]
-    observed, by_input = _python_core_run(document)
+    digests: dict[str, dict[str, str]] = {}
+    observed, by_input = _python_core_run(document, digests)
     assert refusal_map.check(document, 'python-core', observed) == []
+    # Where both hosts reach describe_source, the description, the schema
+    # materialize samples and the core's warnings (codes and fields) are
+    # the pin's, which rust-host is held to too (T1.23).
+    pinned = json.loads(FAMILY_PIN.read_text(encoding='utf-8'))
+    assert refusal_map.agree(pinned['families'][family], digests) == []
     # Generated, not edited: the writer, given this run, makes the map as
     # committed, its rust-host observations kept.
     written, report = refusal_map.write(

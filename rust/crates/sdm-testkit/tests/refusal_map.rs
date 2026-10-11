@@ -212,12 +212,36 @@ fn ran() -> &'static (BTreeMap<String, Value>, Digests) {
 }
 
 /// What this host observed of each family map's probes, by file name.
-fn families_observed() -> &'static BTreeMap<String, BTreeMap<String, Value>> {
-    static RAN: OnceLock<BTreeMap<String, BTreeMap<String, Value>>> = OnceLock::new();
+/// Each family map's run on this host, by map: what each probe observed,
+/// and the digests of its core operations where it reached
+/// `describe_source`.
+#[allow(clippy::type_complexity)]
+fn families_ran() -> &'static BTreeMap<String, (BTreeMap<String, Value>, Digests)> {
+    static RAN: OnceLock<BTreeMap<String, (BTreeMap<String, Value>, Digests)>> = OnceLock::new();
     RAN.get_or_init(|| {
         family_maps()
             .into_iter()
-            .map(|(name, map)| (name, run_with_digests(&map).0))
+            .map(|(name, map)| {
+                let (observed, mut digests) = run_with_digests(&map);
+                // Not the schema materialize samples, which the family pin
+                // leaves out: the hosts refuse some questions at different
+                // points (python-core's bridge before materialize starts,
+                // this host in the core).
+                for agreed in digests.values_mut() {
+                    agreed.remove("materialize_schema");
+                }
+                (name, (observed, digests))
+            })
+            .collect()
+    })
+}
+
+fn families_observed() -> &'static BTreeMap<String, BTreeMap<String, Value>> {
+    static OBSERVED: OnceLock<BTreeMap<String, BTreeMap<String, Value>>> = OnceLock::new();
+    OBSERVED.get_or_init(|| {
+        families_ran()
+            .iter()
+            .map(|(name, (observed, _))| (name.clone(), observed.clone()))
             .collect()
     })
 }
@@ -570,9 +594,22 @@ fn the_family_maps_are_held_on_the_rust_host() {
         every.insert("base.adventureworks.json".into(), self::observed().clone());
         std::fs::write(path, serde_json::to_vec_pretty(&every).unwrap()).unwrap();
     }
+    // Where both hosts reach describe_source, this host's description, the
+    // schema its materialize samples and the core's warnings are the pin
+    // python-core is held to (T1.23).
+    let pinned: Value = serde_json::from_slice(
+        &std::fs::read(contract().join("pinned/families.probes.json")).unwrap(),
+    )
+    .unwrap();
     for (name, map) in &maps {
         let seen = &observed[name];
         assert_eq!(check(map, seen), Vec::<String>::new(), "{name}");
+        let family = map["family"].as_str().unwrap();
+        assert_eq!(
+            agree(&pinned["families"][family], &families_ran()[name].1),
+            Vec::<String>::new(),
+            "{name}"
+        );
         // Each case's first probe is the case's own core operations; the
         // Python test binds every later one to its case (refusal_map.bound).
         let mut started = BTreeSet::new();
