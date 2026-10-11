@@ -330,22 +330,42 @@ fn a_doc_comment_change_keeps_the_hash_and_a_property_named_description_does_not
 
 // --- The attachments the control messages name (T1.22) -----------------------
 
-/// Whether `node` refers to an attachment id, directly, as one of a union's
-/// members or as a list's items.
-fn names_attachment(node: &Value) -> bool {
-    if node.get("$ref").and_then(Value::as_str) == Some("#/$defs/AttachmentId") {
-        return true;
+/// Whether `node` refers to an attachment id: directly; as one of a
+/// union's members; as a list's items, a tuple's members or a map's values;
+/// or through a definition that is not a struct of its own (a newtype or
+/// an alias of one), followed in `root`'s `$defs` to a bounded depth.
+fn names_attachment(root: &Value, node: &Value, depth: usize) -> bool {
+    if depth > 16 {
+        return false;
     }
-    ["anyOf", "oneOf"].iter().any(|key| {
+    let follow = |sub: &Value| names_attachment(root, sub, depth + 1);
+    if let Some(target) = node.get("$ref").and_then(Value::as_str) {
+        if target == "#/$defs/AttachmentId" {
+            return true;
+        }
+        let definition = target
+            .strip_prefix("#/$defs/")
+            .and_then(|name| root["$defs"].get(name));
+        if let Some(definition) = definition
+            && definition.get("properties").is_none()
+            && definition.get("oneOf").is_none()
+            && follow(definition)
+        {
+            return true;
+        }
+    }
+    ["anyOf", "oneOf", "prefixItems"].iter().any(|key| {
         node.get(*key)
             .and_then(Value::as_array)
-            .is_some_and(|members| members.iter().any(names_attachment))
-    }) || node.get("items").is_some_and(names_attachment)
+            .is_some_and(|members| members.iter().any(follow))
+    }) || ["items", "additionalProperties"]
+        .iter()
+        .any(|key| node.get(*key).is_some_and(follow))
 }
 
 /// Every field of a control message that names an attachment, as
 /// `<definition>[/<tag>].<field>`, the tag being the variant's constant.
-fn attachment_fields(node: &Value, at: &str, found: &mut Vec<String>) {
+fn attachment_fields(root: &Value, node: &Value, at: &str, found: &mut Vec<String>) {
     match node {
         Value::Object(map) => {
             if let Some(Value::Object(properties)) = map.get("properties") {
@@ -353,7 +373,7 @@ fn attachment_fields(node: &Value, at: &str, found: &mut Vec<String>) {
                     .values()
                     .find_map(|p| p.get("const").and_then(Value::as_str));
                 for (name, property) in properties {
-                    if names_attachment(property) {
+                    if names_attachment(root, property, 0) {
                         found.push(match tag {
                             Some(tag) => format!("{at}/{tag}.{name}"),
                             None => format!("{at}.{name}"),
@@ -363,13 +383,13 @@ fn attachment_fields(node: &Value, at: &str, found: &mut Vec<String>) {
             }
             for (key, value) in map {
                 if key != "$defs" {
-                    attachment_fields(value, at, found);
+                    attachment_fields(root, value, at, found);
                 }
             }
         }
         Value::Array(items) => {
             for item in items {
-                attachment_fields(item, at, found);
+                attachment_fields(root, item, at, found);
             }
         }
         _ => {}
@@ -380,10 +400,10 @@ fn attachment_fields(node: &Value, at: &str, found: &mut Vec<String>) {
 /// account for, and the classified ones it no longer has.
 fn unaccounted(schema: &Value) -> Result<(), String> {
     let mut found = Vec::new();
-    attachment_fields(schema, "ControlMessage", &mut found);
+    attachment_fields(schema, schema, "ControlMessage", &mut found);
     for (name, definition) in schema["$defs"].as_object().ok_or("no $defs")? {
         if name != "Attachments" {
-            attachment_fields(definition, name, &mut found);
+            attachment_fields(schema, definition, name, &mut found);
         }
     }
     let listed: Vec<&str> = schema["$defs"]["Attachments"]["properties"]
@@ -463,6 +483,21 @@ fn the_lock_accounts_for_every_attachment_a_message_names() {
         serde_json::json!({"$ref": "#/$defs/AttachmentId"});
     let err = unaccounted(&added).unwrap_err();
     assert!(err.contains("SourceSpec.extra"), "{err}");
+    // So does one inside a map's values, a tuple's members, a list of
+    // optional ids, or a newtype over an id (subagent P3-1, fix round 1).
+    let attachment = serde_json::json!({"$ref": "#/$defs/AttachmentId"});
+    for shape in [
+        serde_json::json!({"type": "object", "additionalProperties": attachment}),
+        serde_json::json!({"type": "array", "prefixItems": [attachment, {"type": "integer"}]}),
+        serde_json::json!({"type": "array", "items": {"anyOf": [attachment, {"type": "null"}]}}),
+        serde_json::json!({"$ref": "#/$defs/Wrapped"}),
+    ] {
+        let mut added = generated();
+        added["$defs"]["Wrapped"] = attachment.clone();
+        added["$defs"]["SourceSpec"]["properties"]["extra"] = shape.clone();
+        let err = unaccounted(&added).unwrap_err();
+        assert!(err.contains("SourceSpec.extra"), "{shape}: {err}");
+    }
     let mut listed = generated();
     listed["$defs"]["Attachments"]["properties"]["Spare.json"] = serde_json::json!({});
     assert!(unaccounted(&listed).unwrap_err().contains("no field names"));
