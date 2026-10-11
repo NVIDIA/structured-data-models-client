@@ -27,6 +27,7 @@ import base64
 import decimal
 import json
 import math
+import numbers
 import re
 import struct
 from dataclasses import dataclass
@@ -255,6 +256,18 @@ def seed(value: int) -> str:
     return f'{sign}0x{abs(value):x}'
 
 
+def _integral(value: Any) -> int:
+    r"""A host integer the JSON encoder does not know, such as a NumPy
+    integer, which the client's checks take as a whole number, written as
+    the integer it is; any other value refused, as the encoder refuses it.
+    A bool is not one (NumPy's is not ``numbers.Integral``)."""
+    if isinstance(value, numbers.Integral) and not isinstance(value, bool):
+        return int(value)
+    raise TypeError(
+        f'Object of type {type(value).__name__} is not JSON serializable'
+    )
+
+
 def encode(message: dict[str, Any]) -> bytes:
     r"""A control message the host sends, within the control cap.
 
@@ -262,7 +275,9 @@ def encode(message: dict[str, Any]) -> bytes:
     as an attachment (:func:`attachment`), so a message past it is a defect
     of this host.
     """
-    data = json.dumps(message, ensure_ascii=False, allow_nan=False).encode()
+    data = json.dumps(
+        message, ensure_ascii=False, allow_nan=False, default=_integral
+    ).encode()
     if len(data) > CONTROL_CAP:
         raise CodecError(
             f'a control message of {len(data)} bytes is past the control cap'
@@ -272,7 +287,9 @@ def encode(message: dict[str, Any]) -> bytes:
 
 def attachment(value: Any) -> bytes:
     r"""An input-sized field as a bytes attachment of its JSON."""
-    return json.dumps(value, ensure_ascii=False, allow_nan=False).encode()
+    return json.dumps(
+        value, ensure_ascii=False, allow_nan=False, default=_integral
+    ).encode()
 
 
 def _json(data: bytes) -> dict[str, Any]:

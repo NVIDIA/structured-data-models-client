@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import numpy as np
 import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
@@ -744,3 +745,80 @@ def test_a_source_of_5000_columns_is_described_and_materialized_on_the_core(
     assert taken == ['describe_source', 'materialize']
     users = request._payloads[0]['context']['related_tables']['users']
     assert len(users['columns']) == 5_001
+
+
+@pytest.mark.parametrize(
+    'count',
+    [np.int64(4), np.uint64(4), np.int8(4)],
+    ids=['int64', 'uint64', 'int8'],
+)
+def test_a_numpy_context_size_reaches_the_core(
+    monkeypatch: pytest.MonkeyPatch, count: Any
+) -> None:
+    # T1.24 fix 1 (review P2-1): the client takes a NumPy integer as a whole
+    # number, and the codec writes it as the integer it is, so the core
+    # refuses the context size by name, as it refuses a built-in int; the
+    # old route takes it.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(num_context_samples=count)
+    assert type(refused.value).__name__ == 'UnsupportedRequestError'
+    assert refused.value.details['rule'] == 'num_context_samples'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    assert _materialize(num_context_samples=count)._payloads
+
+
+@pytest.mark.parametrize(
+    ('tables', 'key'),
+    [
+        (None, ['user_id']),
+        ({'users': 'users', 'orders': 'orders'}, ('user_id',)),
+    ],
+    ids=['every-table-list', 'tables-named-tuple'],
+)
+def test_a_key_of_one_column_as_a_sequence_is_pinned_on_both_routes(
+    monkeypatch: pytest.MonkeyPatch, tables: Any, key: Any
+) -> None:
+    # Register entries P1B-2 and P1B-3 (proposed; T1.24's review, P2-2):
+    # the reference keeps a key of one column given as a sequence as a
+    # tuple, infers no link to it and refuses the question's entity,
+    # INVALID_REQUEST; the core's description cannot say the key's form, so
+    # on the core route the key is the column's name, the link is inferred
+    # and materialize builds the request. Pinned, naming both outcomes.
+    def built() -> tuple[Any, Any]:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(
+                DuckDBSource(_connection()), tables, primary_keys={'users': key}
+            )
+            try:
+                PredictiveQuery(QUERY, schema).materialize(
+                    indices=[0, 1], anchor_time=ANCHOR
+                )
+            except StructuredDataError as refused:
+                return schema, refused.code
+            return schema, 'success'
+
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT,
+        ','.join(
+            dict.fromkeys(
+                _routing.FROM_SOURCE_DUCKDB
+                + _routing.FROM_SOURCE_DUCKDB_TABLES
+                + _routing.MATERIALIZE_DUCKDB
+            )
+        ),
+    )
+    schema, outcome = built()
+    assert schema['users'].primary_key == 'user_id'
+    assert len(schema.relationships) == 1
+    assert outcome == 'success'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    schema, outcome = built()
+    assert schema['users'].primary_key == ('user_id',)
+    assert schema.relationships == []
+    assert outcome == 'INVALID_REQUEST'

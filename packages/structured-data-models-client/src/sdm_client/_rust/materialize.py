@@ -269,6 +269,8 @@ def gather(
         # call, never the default; the core says whether it takes it.
         'unseeded': 'random_seed' in options and seed is None,
         'anchor_entity': isinstance(anchor, str) and anchor == 'entity',
+        # Validated as a whole number by the client; the codec writes a
+        # NumPy integer as the JSON integer it is.
         'num_context_samples': num_context_samples,
         'options': sorted(set(options) - TAKEN),
     }
