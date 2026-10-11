@@ -5,7 +5,22 @@
 # The quirk register (migration-plan.md section 5; Phase 0, T0.8).
 #
 # Every behavior of the reference that the Rust core keeps, drops or changes by
-# recorded decision. Validated against register.schema.json.
+# recorded decision. Format 2 from T1.14 (Phase 1 decision A6), checked by
+# scripts/rust_core/register.py validate against register.schema.json:
+#
+#   cases          contract case IDs, or for an entry written before the
+#                  corpus the legacy form, a task ID or an inventory case ID;
+#   refs           what an entry cites that is not a case (Phase 0 vector
+#                  groups G1 to G5 and M1 to M5, reference commits, documents,
+#                  other entries), moved out of `cases` by the migration;
+#   case_outcomes  each case, cell and runner whose projected outcome the
+#                  entry changes, with the exact old and new outcome, generated
+#                  by scripts/rust_core/ratchet.py, never written by hand;
+#   decision_ref   {file, row}: a decisions file by path and the row's ID.
+#
+# The checkpoint's ratchet compares each entry with the checkpoint's: changed
+# contents under an approved ID are a new change and need approval again, and
+# an ID is never removed or reused.
 #
 # IDs by origin:
 #   PK-n   the plan's section 5 "keep" column (approved by the owner)
@@ -23,7 +38,7 @@
 # recommendation is in notes. approved_by is null while proposed.
 # "The reference" is rust-core-reference; "main" is unpatched main at fa0637d.
 
-format: sdm-register/1
+format: sdm-register/2
 
 entries:
 
@@ -42,7 +57,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). The streams themselves are
@@ -54,10 +69,11 @@ entries:
   old_behavior: Labels are summed in float32 with Kahan compensation, in row order.
   new_behavior: The same, so labels agree bit for bit.
   affected_inputs: Every aggregation label (sums, averages, counts over float columns).
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29).
@@ -73,7 +89,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). chrono-check.md: chrono's
@@ -88,7 +104,7 @@ entries:
   cases: [T0.9]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). The agreement is tracked in
@@ -107,7 +123,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). The packed-date rule D8 is
@@ -119,10 +135,11 @@ entries:
   old_behavior: The client raises its public exception and warning classes with their codes.
   new_behavior: The same classes and codes.
   affected_inputs: Every public refusal and warning.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). Error class paths as text are
@@ -139,7 +156,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). The rules are in
@@ -151,10 +168,11 @@ entries:
   old_behavior: Payloads carry each integer at the width the reference sends.
   new_behavior: The same widths.
   affected_inputs: Every payload with integer values.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29).
@@ -167,10 +185,11 @@ entries:
     Payloads equal after parsing (not byte for byte); SQL text per database
     compared with reviewed golden files.
   affected_inputs: Every request payload and every pushed-down SQL statement.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). A change to SQL text still
@@ -184,10 +203,11 @@ entries:
   old_behavior: Sorting scores with NaN follows CPython's comparison accidents.
   new_behavior: NaN ranks last.
   affected_inputs: Results whose scores include NaN.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29).
@@ -198,10 +218,11 @@ entries:
   old_behavior: The request size limit is measured as the length of json.dumps output.
   new_behavior: The limit counts the bytes actually sent.
   affected_inputs: Requests near the size limit.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29).
@@ -212,10 +233,11 @@ entries:
   old_behavior: Engine code relies on Python truthiness, hashing, sorting and dtype inference.
   new_behavior: The core never calls back into language behavior; hosts convert inputs at the boundary.
   affected_inputs: Inputs whose answer depended on a Python object protocol.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). Enforced by the L0 boundary
@@ -227,10 +249,11 @@ entries:
   old_behavior: Some errors carry a Python class path as text.
   new_behavior: Errors carry public classes and codes only (PK-6).
   affected_inputs: Error messages and payloads that name a Python class path.
-  cases: [migration-plan section 5]
+  cases: []
+  refs: [migration-plan section 5]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29).
@@ -243,10 +266,11 @@ entries:
     unnamed exception.
   new_behavior: Each type is handled as the type set says, or refused with a named error.
   affected_inputs: Columns of types outside what the old code handled.
-  cases: [P1B-1]
+  cases: []
+  refs: [P1B-1]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). Each concrete case still needs
@@ -264,7 +288,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 29
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
     confirmed these entries (decisions row 29). The reference on pandas 3
@@ -285,7 +309,8 @@ entries:
   affected_inputs: >-
     In-memory relational requests whose sampled neighbors tie on parent and
     timestamp, without torch installed.
-  cases: [T0.3, bdc4f2d4]
+  cases: [T0.3]
+  refs: [bdc4f2d4]
   status: approved
   approved_by: reviewer
   decision_ref: null
@@ -311,10 +336,11 @@ entries:
   affected_inputs: >-
     SQLite push-down requests with a seed and without explicit entity ids;
     unseeded requests are unchanged.
-  cases: [T0.3, 2e48359f, 100872a9]
+  cases: [T0.3]
+  refs: [2e48359f, 100872a9]
   status: approved
   approved_by: owner
-  decision_ref: 28
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 28}
   notes: D2. There was no repeatable old answer to preserve.
 
 - id: DF-3
@@ -325,7 +351,8 @@ entries:
     SQLite does not warn, since it now honors the seed; Snowflake still warns,
     and the random_seed docstrings in rfm.py say so.
   affected_inputs: Seeded SQLite push-down requests.
-  cases: [T0.3, f0f324c]
+  cases: [T0.3]
+  refs: [f0f324c]
   status: approved
   approved_by: reviewer
   decision_ref: null
@@ -344,7 +371,8 @@ entries:
     random_state seeds MT19937 with the seed's 32-bit words, least significant
     first (init_by_array), so every non-negative seed is accepted on SQLite.
   affected_inputs: SQLite push-down requests with a seed of 2**32 or more.
-  cases: [T0.3, f0f324c]
+  cases: [T0.3]
+  refs: [f0f324c]
   status: approved
   approved_by: reviewer
   decision_ref: null
@@ -362,10 +390,11 @@ entries:
     RandomState stream, which reorders the relational/pql-count-aggregation
     golden payload under a fixed seed.
   affected_inputs: Every relational request on every backend that samples training or test examples.
-  cases: [T0.3, 508845fe, f2f5b86c, c9695f3c]
+  cases: [T0.3]
+  refs: [508845fe, f2f5b86c, c9695f3c]
   status: rejected
   approved_by: owner
-  decision_ref: 27
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 27}
   notes: D1. The reference keeps default_rng, so the core ports it (RS-1).
 
 # --- Random streams (T0.6) ----------------------------------------------------
@@ -384,10 +413,11 @@ entries:
     sample_target's call order; any non-negative seed, including 2**64 and
     above; None draws OS entropy.
   affected_inputs: Every relational request that samples training, test or forecast entities.
-  cases: [T0.6, G1]
+  cases: [T0.6]
+  refs: [G1]
   status: approved
   approved_by: reviewer
-  decision_ref: 27
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 27}
   notes: >-
     Required by D1 and PK-1; verified in plain Python against numpy 2.5.3.
     Recommendation: approve. Approved by the independent reviewer, who re-ran
@@ -404,10 +434,11 @@ entries:
     The same coefficients, the same SQL text (ORDER BY hash, key, rowid LIMIT n,
     or hash of rowid, rowid), and the same key choice; seeds of any size.
   affected_inputs: SQLite push-down requests with a seed and without explicit entity ids.
-  cases: [T0.6, G2]
+  cases: [T0.6]
+  refs: [G2]
   status: approved
   approved_by: owner
-  decision_ref: 28
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 28}
   notes: D2 makes this a stream the core must reproduce. Unseeded SQLite stays ORDER BY RANDOM().
 
 - id: RS-3
@@ -420,7 +451,8 @@ entries:
     only on static hops larger than their count.
   new_behavior: The same stream, including the modulo bias and the continuing unseeded stream.
   affected_inputs: In-memory relational requests with static hops larger than their neighbor count.
-  cases: [T0.6, G4]
+  cases: [T0.6]
+  refs: [G4]
   status: approved
   approved_by: reviewer
   decision_ref: null
@@ -443,10 +475,11 @@ entries:
   affected_inputs: >-
     In-memory relational requests without entity ids on tables larger than the
     sample; the change concerns only random_seed=None.
-  cases: [T0.6, G3]
+  cases: [T0.6]
+  refs: [G3]
   status: approved
   approved_by: owner
-  decision_ref: 30
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
   notes: >-
     Owner decision 30 chose OS entropy for None; the only loss is that a
     user's np.random.seed no longer makes an unseeded request repeatable. The
@@ -461,7 +494,8 @@ entries:
     random_seed does not reach it.
   new_behavior: The same.
   affected_inputs: Tabular materialize with more context rows than the endpoint accepts.
-  cases: [T0.6, G5]
+  cases: [T0.6]
+  refs: [G5]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -512,7 +546,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 30
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
   notes: >-
     Owner decision 30 keeps today's refusals, with no regression and no new
     stream to define. The refusal message changes from pybind11's or pandas'
@@ -539,10 +573,11 @@ entries:
   affected_inputs: >-
     Local wall times and localization of instants from 2100 on (128 of 1,404
     zone answers in the check).
-  cases: [T0.6, M4]
+  cases: [T0.6]
+  refs: [M4]
   status: approved
   approved_by: owner
-  decision_ref: 30
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
   notes: >-
     Owner decision 30 requires continuation; the tested chrono-tz
     implementation does not satisfy this requirement.
@@ -561,10 +596,11 @@ entries:
   affected_inputs: >-
     Zones whose rules differ between database versions; in the check, all 88
     differences were Africa/Casablanca from 2036 on.
-  cases: [T0.6, M5]
+  cases: [T0.6]
+  refs: [M5]
   status: approved
   approved_by: owner
-  decision_ref: 30
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
   notes: >-
     The owner chose to follow the host, like today's Python, over a bundled
     database pinned at build time.
@@ -592,10 +628,11 @@ entries:
     through seconds: its payload's anchor time column and the end-time
     columns it sends. No Phase 1 case: Phase 1 runs the SQL path, which keeps
     the sentinel, and every inventory case is a DuckDB source.
-  cases: [T0.6, M3, T1.21]
+  cases: [T0.6, T1.21]
+  refs: [M3]
   status: approved
   approved_by: owner
-  decision_ref: 30
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
   notes: >-
     Answered at T1.21 from the reference alone (b413e9a), by the
     algorithm-level probes in contract/tests/test_register_probes.py, which
@@ -635,7 +672,8 @@ entries:
   affected_inputs: >-
     None on public paths: the time-column path never passes dayfirst for a
     year-first column, and reads_as_a_date only asks whether a value reads.
-  cases: [T0.6, M1]
+  cases: [T0.6]
+  refs: [M1]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -653,10 +691,11 @@ entries:
     Kept as part of PK-5, through the PQL team's crate (owner decision 6), or
     registered as a change if the agreed dialect differs.
   affected_inputs: PQL date literals with packed fields.
-  cases: [T0.6, T0.9, M2]
+  cases: [T0.6, T0.9]
+  refs: [M2]
   status: approved
   approved_by: owner
-  decision_ref: 6
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 6}
   notes: >-
     Not a chrono limit; the probe does not model dateutil's packed reading.
     Recommendation: add it to the PQL asks and keep it unless the agreed
@@ -676,7 +715,7 @@ entries:
   cases: [T0.6]
   status: approved
   approved_by: owner
-  decision_ref: 30
+  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
   notes: >-
     date-rules.md, "Per-row reading". Owner decision 30 keeps it, scoped by
     Phase 1 cases; refusing would refuse input Python accepts.
