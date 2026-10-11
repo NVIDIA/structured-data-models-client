@@ -17,7 +17,7 @@
       "owner": "T1.27",
       "register": "P1B-3",
       "where": "rust/crates/sdm-core/src/materialize.rs:221",
-      "why": "materialize takes a windowed SUM's target only: base.binary's COUNT(orders.*, 0, 30, days) > 0, a condition over a count, and base.multiclass's users.country, a static target, are refused before any label; T1.27 computes both labels over fetched Arrow (the COUNT aggregation is refused next, aggregation). Masked behind it, for T1.28 and T1.28 as they surface: the classification task's layout (the classes, their order, ['IN', 'DE', 'US'], and the positive class), the static target's context leakage, and boolean and text predictions in the result",
+      "why": "materialize takes a windowed SUM's target only. base.binary's COUNT(orders.*, 0, 30, days) > 0 is refused here, and behind static_target are its condition target, its COUNT(*) (aggregation, materialize.rs:224), its orders.* (target_filter, :226) and its boolean label; base.multiclass's users.country, a static target, is refused before any label. T1.27 computes both labels over fetched Arrow. Masked behind it too, for T1.28 as they surface: the classification task's layout (the classes, their order, ['IN', 'DE', 'US'], and the positive class), the static target's context leakage, and boolean and text predictions in the result",
       "observed": {
         "python-core": {
           "stage": "materialize",

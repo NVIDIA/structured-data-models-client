@@ -30,7 +30,7 @@
       "register": "P1B-3",
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:195",
       "holds": "raise _not_taken('key_type')",
-      "why": "The bridge's cast of the entities knows no Arrow type for a decimal key (HUGEINT as decimal128(38, 0), DECIMAL(18, 0), DECIMAL(38, 10)), which Schema.from_source described on the core; the reference fails INTERNAL_ERROR there (P1B-1). T1.32a moves the entities' cast into the core and widens the key types",
+      "why": "The bridge's cast of the entities knows no Arrow type for a decimal key (HUGEINT as decimal128(38, 0), DECIMAL(18, 0), DECIMAL(38, 10)), which Schema.from_source described on the core; the reference fails INTERNAL_ERROR there (P1B-1). T1.32a admits the decimal keys; the cast's placement is checkpoint 4's reassignment (T1.12b), owner to confirm",
       "observed": {
         "python-core": {
           "stage": "materialize",
@@ -50,7 +50,7 @@
       "reference": "same",
       "where": "rust/crates/sdm-request/src/payload.rs:131",
       "holds": "a value is outside the range int64 holds",
-      "why": "The reference's own refusal of uint64 keys past int64's maximum, on both runners; T1.32a admits the case with it",
+      "why": "The reference's own refusal of uint64 keys past int64's maximum in stage, class and code, on both runners, but not in its message or details: the core says only that the request is not one it accepts, with the column in its details, where the reference names the column, row and value and gives the remedy (send the column as strings) with no details. T1.32a decides, on purpose, whether to carry the remedy when it admits the case",
       "observed": {
         "python-core": {
           "stage": "materialize",

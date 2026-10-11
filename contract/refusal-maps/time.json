@@ -68,10 +68,10 @@
       "operation": "admission (the host layer, before inference)",
       "rule": "UNSUPPORTED_TYPE: an interval, outside the type set",
       "owner": "T1.32e",
-      "register": "P1B-1",
+      "register": "P1B-8",
       "where": "rust/crates/sdm-host/src/admission.rs:74",
       "holds": "ErrorCode::UnsupportedType,",
-      "why": "DuckDB's INTERVAL (month_day_nano_interval) refused by name in place of the reference's unnamed RuntimeError; T1.32e admits time.feature-interval with it, under its own entry of P1B-1's. The probe without the column reaches predict's result on both runners",
+      "why": "DuckDB's INTERVAL (month_day_nano_interval) refused by name in place of the reference's unnamed RuntimeError: register P1B-8, proposed, which T1.32e resolves when it admits time.feature-interval. The probe without the column reaches predict's result on both runners",
       "observed": {
         "python-core": {
           "stage": "from_source",

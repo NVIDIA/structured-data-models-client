@@ -844,9 +844,12 @@ entries:
     schema accepted the input, or with an unnamed RuntimeError, sometimes
     naming the wrong type.
   new_behavior: >-
-    Not decided. If Phase 1b changes a case's outcome (for example a decimal
-    key that now works, or a named refusal), that case gets its own entry here
-    before the change is adopted.
+    Not decided for the cases as a set. If Phase 1b changes a case's outcome
+    (for example a decimal key that now works, or a named refusal), that case
+    gets its own entry here before the change is adopted. The changes the
+    core route already shows, measured at T1.21e, have theirs: P1B-6
+    (key.varchar-large-buffers), P1B-7 (nested.union) and P1B-8
+    (time.feature-interval).
   affected_inputs: >-
     DuckDB HUGEINT, large_string and decimal keys, decimal targets, ARRAY,
     STRUCT, MAP, UNION and INTERVAL features, empty fact tables, and text time
@@ -873,10 +876,8 @@ entries:
     and internal errors; per-case entries name the new answer. A new success
     can be approved by the reviewer; turning an accepted input into a refusal
     needs the owner. T1.21e's family maps (contract/refusal-maps/<seam>.json)
-    show today's core route on each: key.varchar-large-buffers already
-    reaches predict's result on python-core and rust-host, and nested.union
-    and time.feature-interval are refused by name (UNSUPPORTED_TYPE), each
-    awaiting its own entry with its family (T1.32a, T1.32c, T1.32e).
+    show today's core route on each; the three outcomes it already changes
+    are P1B-6 to P1B-8.
 
 - id: P1B-2
   title: Schema.from_source on the core route refuses what T1.11b's thin describe_source does not infer yet
@@ -1097,6 +1098,90 @@ entries:
     (carried in the tracker) reads such a table's catalog, or refuses it as
     the reference does, and this entry is set to rejected then. Never
     self-approved.
+
+- id: P1B-6
+  title: key.varchar-large-buffers succeeds on the core route where the reference refuses it
+  kind: change
+  old_behavior: >-
+    The reference refuses the case at materialize with StructuredDataError,
+    code INTERNAL_ERROR: its engine fails on the entity key DuckDB hands over
+    as large_string under SET arrow_large_buffer_size = true ("unsupported
+    data type 'large_string[pyarrow]' for column 'ENTITY'").
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    case reaches predict's result on python-core and on rust-host: the host
+    layer admits large_utf8 as utf8 without loss, as the plan's type set has
+    it, so the text keys are read as key.varchar's are. The default route is
+    unchanged.
+  affected_inputs: >-
+    A DuckDB source whose text keys reach the host as large_string (DuckDB's
+    arrow_large_buffer_size setting), under a forced core route.
+  cases: [key.varchar-large-buffers, T1.21e, T1.32a]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.21e: the reference observation of the diagnostic case
+    contract/cases/s1/key.varchar-large-buffers.json, and its probe in
+    contract/refusal-maps/keys.json, which expects success on both runners.
+    A new success, which a reviewer may approve (P1B-1's process); T1.32a
+    resolves it when it admits the keys family. Never self-approved.
+
+- id: P1B-7
+  title: nested.union is refused by name on the core route where the reference raises an unnamed RuntimeError
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a users table with a UNION
+    feature (UNION(n INTEGER, s VARCHAR)) raises an unnamed RuntimeError
+    naming the wrong type ("Could not determine semantic type for column 'f'
+    with data type 'int'").
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same call is refused at from_source with StructuredDataError, code
+    UNSUPPORTED_TYPE, details naming the column and its Arrow type: the host
+    layer's admission refuses a type outside the plan's set by name, as the
+    plan asks (rust/crates/sdm-host/src/admission.rs:74). The default route
+    is unchanged.
+  affected_inputs: >-
+    A DuckDB source holding a UNION column, under a forced core route.
+  cases: [nested.union, T1.21e, T1.32c]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.21e: the reference observation of the diagnostic case
+    contract/cases/s1/nested.union.json, and the entry admission/union of
+    contract/refusal-maps/refusal.json, on python-core and rust-host. Both
+    refuse; the class and code change. T1.32c resolves it when it admits
+    the case. Never self-approved.
+
+- id: P1B-8
+  title: time.feature-interval is refused by name on the core route where the reference raises an unnamed RuntimeError
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a users table with an INTERVAL
+    feature (month_day_nano_interval in Arrow) raises an unnamed RuntimeError
+    ("unsupported data type 'month_day_nano_interval[pyarrow]' for column
+    'f'").
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same call is refused at from_source with StructuredDataError, code
+    UNSUPPORTED_TYPE, details naming the column and its Arrow type, by the
+    host layer's admission (rust/crates/sdm-host/src/admission.rs:74); a
+    duration is in the plan's type set, an interval is not. The default
+    route is unchanged.
+  affected_inputs: >-
+    A DuckDB source holding an INTERVAL column, under a forced core route.
+  cases: [time.feature-interval, T1.21e, T1.32e]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.21e: the reference observation of the diagnostic case
+    contract/cases/s1/time.feature-interval.json, and the entry
+    admission/interval of contract/refusal-maps/time.json, on python-core and
+    rust-host. Both refuse; the class and code change. T1.32e resolves it
+    when it admits the case. Never self-approved.
 
 # --- The host layer -------------------------------------------------------------
 
