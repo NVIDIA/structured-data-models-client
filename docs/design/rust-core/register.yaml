@@ -953,12 +953,17 @@ entries:
     named and relationships given are taken, a timestamp is passed over
     for its values, a creation stamp or the earliest of several is taken,
     a time of day is passed over as holding no time, and a list column is
-    left out, as the reference does. The schema bridge refuses
-    relationships and a time column cleared (None) the same way before
-    the core runs, with the rules relationships and time_column_cleared,
-    until T1.24. Tables named are reachable only from a rust-host case,
-    since the bridge always sends no tables: a call with tables named has
-    no core route. The default route is unchanged.
+    left out, as the reference does. From T1.24 (E61) a call with tables
+    named has a core route (schema.from-source/tables/duckdb), and the
+    schema bridge refuses neither relationships nor a time column cleared
+    (None), which the core takes (contract version 13): the rules
+    relationships and time_column_cleared are gone. Through that route a
+    DuckDB system view named as a table (pg_class; duckdb_columns over a
+    source of one table, which the core describes over the shop base),
+    which the reference describes, is refused by text_time, as any text
+    whose values could be dates is (measured at T1.24, pinned by the
+    client's tests/test_the_schema_route.py). The default route is
+    unchanged.
   affected_inputs: >-
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
@@ -1017,14 +1022,19 @@ entries:
     target_filter, open_window, month_window, entity_key, parent_table,
     deeper_hop, text_column, anchor_zone, key_type, time_type, target_type,
     indices_type, context_coverage (in place of the once-per-process
-    warning), keyless_neighbors, parent_lookup, wire_dtype and seed_size; in
-    the core from T1.23, table_source (a table the schema names otherwise
-    than its source does, which only rust-host can describe so far); in
-    the bridge, before the core runs: each sampling option the core does
-    not take, by its name, num_context_samples, unseeded (a random_seed
-    given as None), anchor_entity, key_type and schema_edited (a table,
-    column or type changed since the description, or a table mapped to
-    another source table). The entities are cast to the key's type as the
+    warning), keyless_neighbors, parent_lookup, wire_dtype and seed_size;
+    in the core from T1.24, the call's options, which the bridge passes
+    through (contract version 13, E61), before anything is fetched: each
+    sampling option by its name (the first in name order), unseeded (a
+    random_seed given as None), num_context_samples and anchor_entity,
+    each raised as the core's UnsupportedRequestError where the bridge
+    raised StructuredDataError with the same code until T1.24; T1.23's
+    table_source is lifted at T1.24, a table the schema names otherwise
+    than its source sampled by its source name, as the reference samples
+    it; in the bridge, before the core runs: key_type and schema_edited (a
+    table, column or type changed since the description, or a table
+    mapped to another source table than the description's; T1.24b's).
+    The entities are cast to the key's type as the
     reference casts them (pandas, to the key's Arrow dtype), so none the
     reference takes is refused. A schema not described on the core has no core route
     (RouteError, the seam's own failure). A seed DuckDB's parser refuses,
@@ -1056,7 +1066,12 @@ entries:
     E27's AdventureWorks journey reaches and which task removes each, and
     T1.21e's family maps which the inventory's cases reach (key_type in the
     bridge; static_target, target_type, time_type and wire_dtype in the
-    core); they approve nothing.
+    core); they approve nothing. Measured at T1.24 (E61) by an old-against-
+    core differential over 160 generated DuckDB sources through
+    Schema.from_source, edits, materialize and predict: every refusal of
+    materialize's on the core named its rule (text_column, keyless_neighbors,
+    num_neighbors, num_context_samples, unseeded) where the reference
+    succeeded, and nothing else differed.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1078,8 +1093,12 @@ entries:
     asked for its default output to kumo-relational and lays out an answer
     of float predictions, by the reference's rules, and refuses every other
     input with UNSUPPORTED_REQUEST naming the rule, never a value (fields
-    operation and rule): in the bridge, before the core runs, outputs (any
-    but the regression's default, prediction); in the core, model (the
+    operation and rule): outputs (any but the regression's default,
+    prediction), in the bridge before the core ran until T1.24, in the core
+    from T1.24 (E61), which the bridge passes them to (Predict.outputs,
+    contract version 13), before the state is read or the model called,
+    raised as the core's UnsupportedRequestError where the bridge raised
+    StructuredDataError with the same code; in the core, model (the
     tabular model), problem_type, prediction_statistic (a statistic not
     written as text), entity_ref (a request with no entity reference
     column), id_type (an entity key not declared int8 to int64, written as
@@ -1138,7 +1157,10 @@ entries:
     schema's rule on names, INVALID_REQUEST as on the reference: from
     T1.23 the core holds a table's name in the schema to that rule
     (E59(b)), before the client's own does. With tables named (T1.23, a
-    rust-host case until T1.24's route), measured at T1.23's fix round 2: a
+    rust-host case until T1.24's route, the public call's from T1.24),
+    measured at T1.23's fix round 2 and again at T1.24 through the public
+    call (a schema-qualified system view, information_schema.tables, among
+    them): a
     plain name over a source table named with a dot is described on the
     core, where the reference refuses it (INVALID_REQUEST, its pragma
     reading the name as another); a source name qualified or quoted
@@ -1306,8 +1328,14 @@ entries:
     default route is unchanged.
   affected_inputs: >-
     A DuckDB source holding a MAP or STRUCT column, under a forced core
-    route.
-  cases: [nested.map, nested.struct, T1.21e, T1.23, T1.32c]
+    route; from T1.24, a DuckDB system view named as a table that holds one
+    (duckdb_tables, whose tags column is a MAP), which the reference fails
+    with the same unnamed RuntimeError and the core refuses with
+    UnsupportedRequestError, code UNSUPPORTED_REQUEST, by the first rule
+    it meets in the view's rows, which are the database's catalog:
+    text_time over a source of one table, column_type over the shop
+    base.
+  cases: [nested.map, nested.struct, T1.21e, T1.23, T1.24, T1.32c]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -1317,7 +1345,10 @@ entries:
     contract/refusal-maps/nested.json, on python-core and rust-host, owned
     by T1.32c from T1.23 (it was T1.23's, under P1B-2). Both refuse; the
     class and code change, as P1B-7's union. T1.32c resolves it when it
-    admits the cases. Never self-approved.
+    admits the cases. The system view (T1.23's review, carried to T1.24,
+    which first reaches it through the public call with tables named) is
+    pinned, both routes' outcomes, by the client's
+    tests/test_the_schema_route.py. Never self-approved.
 
 - id: P1B-11
   title: empty.fact-table is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -1339,8 +1370,11 @@ entries:
     The default route is unchanged.
   affected_inputs: >-
     Schema.from_source over a DuckDB source holding a table with no rows,
-    under a forced core route.
-  cases: [empty.fact-table, T1.21e, T1.23, T1.32d]
+    under a forced core route; from T1.24, the system view duckdb_views
+    named as a table, whose preview holds no row, which the reference
+    fails with its RuntimeError (pinned by the client's
+    tests/test_the_schema_route.py).
+  cases: [empty.fact-table, T1.21e, T1.23, T1.24, T1.32d]
   status: proposed
   approved_by: null
   decision_ref: null
