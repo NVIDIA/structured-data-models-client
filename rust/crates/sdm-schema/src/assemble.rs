@@ -471,9 +471,11 @@ pub fn quoted(text: &str) -> String {
 /// Whether Python's `str.isprintable` holds of `c`, which its `repr`
 /// writes as itself: every character but the controls (Cc), the format
 /// characters (Cf), the separators other than the space (Zs, Zl, Zp) and
-/// the private use ones (Co), as Unicode 15 assigns them. A code point no
-/// version assigns (Cn), which Python escapes too, is written as itself
-/// here: telling one apart takes the whole character database.
+/// the private use ones (Co), as Unicode 15 assigns them. A code point
+/// unassigned in the interpreter's Unicode database (Cn), which Python
+/// escapes too, is written as itself here: telling one apart takes that
+/// whole database, which differs between Python versions. The remedy still
+/// reads back as the name.
 fn printed(c: char) -> bool {
     const NOT_PRINTED: &[(u32, u32)] = &[
         (0x0000, 0x001f),

@@ -196,3 +196,62 @@ def test_the_schema_built_from_the_description_is_the_description() -> None:
 
     assert built(a_link_twice) == ['the links']
     assert built(lambda d: None) == []
+
+
+def test_the_runners_hold_each_core_schema_to_its_description() -> None:
+    # The check above is called where the runners build a schema (T1.21d
+    # fix round 2): a run_python case and a refusal-map probe each fail
+    # when it finds a departure, seeded by making it find one, and pass
+    # without the seed.
+    import copy
+    import os
+
+    import pytest
+
+    runner = _runner()
+    spec = importlib_module('refusal_map')
+    bases = runner.load_bases()
+    [(case, _)] = runner.load_cases([CASES / 'base.regression.json'])
+    case = copy.deepcopy(case)
+    case['until'] = 'from_source'
+    probe = next(
+        p['python-core']
+        for p in spec.load(
+            ROOT / 'contract/refusal-maps/base.adventureworks.json'
+        )['probes']
+        if p['id'] == 'one-order-time'
+    )
+    previous = os.environ.get('SDM_CORE_ROUTES')
+    os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
+    honest = runner.presented
+    try:
+        outcome = runner._call(case, bases)[0]
+        assert outcome['result'] == 'success', outcome
+        seen, _ = spec.observe_python_core(runner, probe, bases)
+        assert seen == spec.success('from_source'), seen
+        runner.presented = lambda schema: ['seeded']
+        with pytest.raises(runner.RunnerFailure, match='departs from it'):
+            runner._call(case, bases)
+        with pytest.raises(spec.MapFailure, match='departs from it'):
+            spec.observe_python_core(runner, probe, bases)
+    finally:
+        runner.presented = honest
+        if previous is None:
+            os.environ.pop('SDM_CORE_ROUTES', None)
+        else:
+            os.environ['SDM_CORE_ROUTES'] = previous
+
+
+def importlib_module(name: str) -> Any:
+    import importlib.util
+
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(
+        name, ROOT / f'contract/runners/{name}.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module

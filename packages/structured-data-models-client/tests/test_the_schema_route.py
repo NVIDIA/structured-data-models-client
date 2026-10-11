@@ -641,3 +641,33 @@ def test_the_core_assembles_the_schema_as_the_old_route_does(
     ] == old_said
     assert _before_key(schema) == _before_key(old_schema)
     assert _declared(schema) == _declared(old_schema)
+
+
+def test_a_table_named_with_a_double_quote_is_refused_with_another_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register entry P1B-5 (proposed, temporary, T1.22): both routes refuse
+    # a table whose name holds a double quote, the reference with
+    # INVALID_REQUEST, the core with PROVIDER_ERROR. Pinned here, naming
+    # both outcomes, so the divergence fails this test the day either
+    # changes; T1.22 resolves it.
+    setup = (
+        'CREATE TABLE "double""quote" (id INTEGER PRIMARY KEY)',
+        'INSERT INTO "double""quote" VALUES (1), (2), (3)',
+    )
+
+    def refused(routes: str) -> tuple[str, str | None]:
+        if routes:
+            monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+        else:
+            monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            with pytest.raises(StructuredDataError) as error:
+                Schema.from_source(DuckDBSource(_connection(*setup)))
+        return type(error.value).__name__, error.value.code
+
+    assert refused(CORE) == ('StructuredDataError', 'PROVIDER_ERROR')
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    assert refused('') == ('StructuredDataError', 'INVALID_REQUEST')

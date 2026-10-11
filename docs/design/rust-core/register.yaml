@@ -1056,6 +1056,40 @@ entries:
     each rule's refusal, and this entry is set to rejected when the last
     one goes.
 
+- id: P1B-5
+  title: A DuckDB table named with a double quote is refused with another code on the core route
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a DuckDB source holding a table
+    whose name holds a double quote (CREATE TABLE "double""quote") refuses
+    the call: its catalog read (PRAGMA table_info, which DuckDB reads
+    without the doubled quote) fails, and the engine raises its
+    TableNotFoundError, which the client raises as StructuredDataError with
+    code INVALID_REQUEST.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same call is refused too, as StructuredDataError, but with code
+    PROVIDER_ERROR: sdm-data's DuckDB dialect renders the same catalog
+    statement, DuckDB's driver fails it, and the run ends as the provider's
+    error (details kind data_source, driver_class CatalogException). The
+    class is the reference's and the code is not, against PK-6. The
+    default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source holding a table named with a
+    double quote, under a forced core route.
+  cases: [T1.21d, T1.22]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found at T1.21d's review (Codex P2 of round 2, subagent P3-2); it
+    predates T1.21d, which does not touch the catalog read. Pinned by the
+    client's tests/test_the_schema_route.py, which names both outcomes and
+    fails when either changes. Recommendation: approve as temporary; T1.22
+    (carried in the tracker) reads such a table's catalog, or refuses it as
+    the reference does, and this entry is set to rejected then. Never
+    self-approved.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
