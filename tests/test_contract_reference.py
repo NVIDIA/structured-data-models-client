@@ -326,6 +326,10 @@ LINE_FAULTS: dict[str, tuple[Callable[[list[dict[str, Any]]], None], str]] = {
         _set('identity.reference.guard', {}),
         'identity.reference.guard',
     ),
+    'a native module recorded': (
+        _set('identity.native', {'sha256': 'a' * 64}),
+        'identity.native',
+    ),
     'the core loaded': (
         _set('identity.native_loaded', True),
         'identity.native_loaded',
@@ -342,6 +346,14 @@ LINE_FAULTS: dict[str, tuple[Callable[[list[dict[str, Any]]], None], str]] = {
     'another pandas': (
         _set('identity.versions.pandas', '2.2.3'),
         'identity.versions.pandas',
+    ),
+    'another pyarrow': (
+        _set('identity.versions.pyarrow', '19.0.1'),
+        'identity.versions.pyarrow',
+    ),
+    'another numpy': (
+        _set('identity.versions.numpy', '2.1.3'),
+        'identity.versions.numpy',
     ),
     'no Python version': (
         _set('identity.versions.python', _MISSING),
