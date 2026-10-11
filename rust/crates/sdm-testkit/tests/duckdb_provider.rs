@@ -925,3 +925,55 @@ fn a_table_the_pragma_reads_as_another_name_is_read_by_its_own() {
         assert_eq!(answer, twin, "{name}");
     }
 }
+
+/// `value` with each `{"number": text}` the observation writes for a
+/// number read back as that number (`host::numbers_as_text` undone).
+fn numbers_again(value: Value) -> Value {
+    match value {
+        Value::Object(members) => match members.get("number") {
+            Some(Value::String(text)) if members.len() == 1 => {
+                serde_json::from_str(text).expect("a number's text")
+            }
+            _ => Value::Object(
+                members
+                    .into_iter()
+                    .map(|(k, v)| (k, numbers_again(v)))
+                    .collect(),
+            ),
+        },
+        Value::Array(items) => Value::Array(items.into_iter().map(numbers_again).collect()),
+        other => other,
+    }
+}
+
+#[test]
+fn every_payload_rust_host_materializes_is_the_locked_definition_s() {
+    // T1.22: the request state's payload of each case the pure-Rust host
+    // materializes, base.regression and the family cases among them,
+    // against the contract's locked definition (`$defs/StatePayload`).
+    let loaded = case::load(&[contract().join("cases")]).unwrap();
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let mut held = Vec::new();
+    for one in &loaded {
+        let observed = host::run(&one.case, &bases).unwrap();
+        let Some(state) = observed.materialized else {
+            continue;
+        };
+        let payload = numbers_again(state["payload"].clone());
+        assert_eq!(
+            sdm_contract::schema_check::check("StatePayload", &payload),
+            Ok(()),
+            "{}",
+            one.case.id
+        );
+        held.push(one.case.id.clone());
+    }
+    assert!(held.contains(&"base.regression".to_owned()), "{held:?}");
+    // At least one case of each family that reaches materialize.
+    for family in ["key.", "null.", "time.", "empty."] {
+        assert!(
+            held.iter().any(|id| id.starts_with(family)),
+            "{family} {held:?}"
+        );
+    }
+}

@@ -20,5 +20,10 @@ sdm-engine = { path = "../sdm-engine" }
 sdm-wire = { path = "../sdm-wire" }
 serde_json.workspace = true
 
+[dev-dependencies]
+# The schema check, to hold the payload the producer builds to the
+# definition the contract's lock holds (T1.22).
+sdm-contract = { path = "../sdm-contract", features = ["test-ops"] }
+
 [lints]
 workspace = true

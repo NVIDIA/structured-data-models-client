@@ -29,6 +29,8 @@ pub mod pql;
 pub mod run;
 pub mod scalar;
 #[cfg(feature = "test-ops")]
+pub mod schema_check;
+#[cfg(feature = "test-ops")]
 pub mod test_ops;
 pub mod types;
 

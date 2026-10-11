@@ -591,9 +591,25 @@ pub struct Attachments {
     pub predicted_metadata: EndpointMetadata,
 }
 
-/// [`RequestState`]'s payload: the request as JSON, in the format of the
-/// state's version, which the schema records, so a new state format is a
-/// new contract schema too.
+/// [`RequestState`]'s payload: the prediction request as JSON, as
+/// `materialize` writes it (`sdm_request::payload`) and `predict` reads it
+/// (`sdm_request::predict`), at the state's version, which the schema
+/// records as `x-request-state-version`.
+///
+/// What is fixed is closed: every object whose keys the format names
+/// (the payload, the task, the schema and each table's schema, a column's
+/// spec, a relationship, the two halves and their tables, the output, the
+/// inference options, the metadata) refuses a key it does not name, and
+/// each key has its type. What is open is the data: the tables named by
+/// the source (`related_tables`, a table's `columns`), keyed by the
+/// source's names, and the cells of each row, whose JSON type follows the
+/// column's dtype. Two optional keys are the reader's, not the writer's:
+/// `output.prediction_statistic` and `inference_config.class_shuffle`,
+/// which `predict` reads when a host's state carries them. `sdm-request`'s
+/// tests hold the payload its producer builds, and `sdm-testkit`'s the
+/// payload of every case `rust-host` materializes, to this definition, so
+/// a field added to or retyped in the producer fails until the definition,
+/// the state's version and the lock move with it.
 pub struct StatePayload;
 
 impl JsonSchema for StatePayload {
@@ -602,10 +618,138 @@ impl JsonSchema for StatePayload {
     }
 
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({
-            "type": "object",
-            "x-request-state-version": REQUEST_STATE_VERSION
-        })
+        let text = serde_json::json!({"type": "string"});
+        let texts = serde_json::json!({"type": "array", "items": {"type": "string"}});
+        let boolean = serde_json::json!({"type": "boolean"});
+        let count = serde_json::json!({"type": "integer", "minimum": 0});
+        let closed = |properties: serde_json::Value, required: &[&str]| {
+            serde_json::json!({
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": false
+            })
+        };
+        // A table's rows as `arrays` JSON: its columns, then one array of
+        // cells per row, each cell any JSON value its column's dtype gives.
+        let rows = closed(
+            serde_json::json!({
+                "format": {"const": "arrays"},
+                "columns": texts,
+                "rows": {"type": "array", "items": {"type": "array"}}
+            }),
+            &["format", "columns", "rows"],
+        );
+        let half = closed(
+            serde_json::json!({
+                "instance_table": rows,
+                "related_tables": {"type": "object", "additionalProperties": rows}
+            }),
+            &["instance_table", "related_tables"],
+        );
+        let column = closed(
+            serde_json::json!({
+                "dtype": text,
+                "stype": {"enum": [
+                    "numerical", "categorical", "multicategorical", "ID", "text",
+                    "timestamp", "sequence", "image", "unsupported"
+                ]},
+                "nullable": boolean
+            }),
+            &["dtype"],
+        );
+        let table = closed(
+            serde_json::json!({
+                "columns": {"type": "object", "additionalProperties": column},
+                "primary_key": {"anyOf": [text, texts]}
+            }),
+            &["columns", "primary_key"],
+        );
+        let relationship = closed(
+            serde_json::json!({
+                "source_table": text,
+                "source_columns": texts,
+                "target_table": text,
+                "target_columns": texts
+            }),
+            &["source_columns", "target_table", "target_columns"],
+        );
+        let payload = closed(
+            serde_json::json!({
+                "model": text,
+                "task": closed(
+                    serde_json::json!({
+                        "kind": text,
+                        "target": closed(
+                            serde_json::json!({"column_name": text, "dtype": text}),
+                            &["column_name", "dtype"],
+                        ),
+                        "entity_table_names": texts,
+                        "anchor_time_column": text
+                    }),
+                    &["kind", "target", "entity_table_names"],
+                ),
+                "schema": closed(
+                    serde_json::json!({
+                        "instance_table": table,
+                        "related_tables": {"type": "object", "additionalProperties": table},
+                        "relationships": {"type": "array", "items": relationship}
+                    }),
+                    &["instance_table", "related_tables", "relationships"],
+                ),
+                "context": half,
+                "predict": half,
+                "output": closed(
+                    serde_json::json!({"fields": texts, "prediction_statistic": text}),
+                    &["fields"],
+                ),
+                "inference": closed(
+                    serde_json::json!({
+                        "run_mode": text,
+                        "use_prediction_time": boolean,
+                        "inference_config": closed(
+                            serde_json::json!({
+                                "kind": text,
+                                "num_estimators": count,
+                                "column_shuffle": boolean,
+                                "category_shuffle": boolean,
+                                "hop_shuffle": boolean,
+                                "class_shuffle": boolean,
+                                "target_transforms": texts,
+                                "output_type": text
+                            }),
+                            &[
+                                "kind", "num_estimators", "column_shuffle",
+                                "category_shuffle", "hop_shuffle",
+                                "target_transforms", "output_type",
+                            ],
+                        )
+                    }),
+                    &["run_mode", "use_prediction_time", "inference_config"],
+                ),
+                "metadata": closed(
+                    serde_json::json!({
+                        "source_query": text,
+                        "num_context_examples": count,
+                        "num_prediction_examples": count
+                    }),
+                    &["num_context_examples", "num_prediction_examples"],
+                )
+            }),
+            &[
+                "model",
+                "task",
+                "schema",
+                "context",
+                "predict",
+                "output",
+                "inference",
+                "metadata",
+            ],
+        );
+        let mut payload = payload;
+        payload["x-request-state-version"] = serde_json::json!(REQUEST_STATE_VERSION);
+        schemars::Schema::try_from(payload).expect("the state payload's schema is an object")
     }
 }
 
