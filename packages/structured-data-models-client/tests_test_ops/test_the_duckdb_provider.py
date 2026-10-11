@@ -332,10 +332,11 @@ def test_every_request_kind_runs_on_every_base_as_the_vectors_say() -> None:
         'neighbors',
         'lookup',
     }
-    assert {fetch['base'] for fetch in fetches} == {
-        'shop',
-        'declared',
-        'adventureworks',
+    # Every kind on every base, not only every kind and every base.
+    assert {(f['request']['request'], f['base']) for f in fetches} == {
+        (kind, base)
+        for kind in kinds
+        for base in ('shop', 'declared', 'adventureworks')
     }
     connections: dict[str, Any] = {}
     for fetch in fetches:

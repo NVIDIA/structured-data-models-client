@@ -214,6 +214,94 @@
   },
   {
    "base": "shop",
+   "name": "scan with a filter and a limit",
+   "request": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "user_id",
+     "user_id"
+    ],
+    "filters": [
+     {
+      "column": "user_id",
+      "filter": "not_null"
+     }
+    ],
+    "limit": 1000
+   },
+   "schema": [
+    [
+     "user_id",
+     "int64"
+    ],
+    [
+     "user_id",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "0"
+    ],
+    [
+     "1",
+     "1"
+    ],
+    [
+     "2",
+     "2"
+    ],
+    [
+     "3",
+     "3"
+    ],
+    [
+     "4",
+     "4"
+    ],
+    [
+     "5",
+     "5"
+    ],
+    [
+     "6",
+     "6"
+    ],
+    [
+     "7",
+     "7"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "count the rows a filter keeps",
+   "request": {
+    "request": "count_rows",
+    "table": "users",
+    "filters": [
+     {
+      "column": "user_id",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "8"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
    "name": "preview",
    "request": {
     "request": "preview",
@@ -792,6 +880,94 @@
     ],
     [
      "7"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "scan with a filter and a limit",
+   "request": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "uid",
+     "uid"
+    ],
+    "filters": [
+     {
+      "column": "uid",
+      "filter": "not_null"
+     }
+    ],
+    "limit": 1000
+   },
+   "schema": [
+    [
+     "uid",
+     "int32"
+    ],
+    [
+     "uid",
+     "int32"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "0"
+    ],
+    [
+     "1",
+     "1"
+    ],
+    [
+     "2",
+     "2"
+    ],
+    [
+     "3",
+     "3"
+    ],
+    [
+     "4",
+     "4"
+    ],
+    [
+     "5",
+     "5"
+    ],
+    [
+     "6",
+     "6"
+    ],
+    [
+     "7",
+     "7"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "count the rows a filter keeps",
+   "request": {
+    "request": "count_rows",
+    "table": "users",
+    "filters": [
+     {
+      "column": "uid",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "8"
     ]
    ]
   },
@@ -1929,6 +2105,70 @@
     ],
     [
      "29945"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "scan with a filter and a limit",
+   "request": {
+    "request": "scan",
+    "table": "adventureworks_customers",
+    "columns": [
+     "CustomerID",
+     "StoreID"
+    ],
+    "filters": [
+     {
+      "column": "StoreID",
+      "filter": "not_null"
+     }
+    ],
+    "limit": 1000
+   },
+   "schema": [
+    [
+     "CustomerID",
+     "int64"
+    ],
+    [
+     "StoreID",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "29504",
+     "334"
+    ],
+    [
+     "29945",
+     "1310"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "count the rows a filter keeps",
+   "request": {
+    "request": "count_rows",
+    "table": "adventureworks_customers",
+    "filters": [
+     {
+      "column": "StoreID",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "2"
     ]
    ]
   },
