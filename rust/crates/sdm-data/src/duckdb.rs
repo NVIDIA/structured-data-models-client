@@ -597,7 +597,7 @@ fn describe(
                 "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
             )
         }
-        DescribePart::Columns => format!("PRAGMA table_info({})", identifier(one()?)),
+        DescribePart::Columns => columns(one()?),
         DescribePart::Keys => format!(
             "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = {}\n  AND {IN_CURRENT_SCHEMA}",
             text(one()?)
@@ -611,6 +611,32 @@ fn describe(
             "SELECT table_name, expressions FROM duckdb_indexes()".to_owned()
         }
     })
+}
+
+/// The columns of `table`, in `PRAGMA table_info`'s columns and order.
+///
+/// The reference reads them with `PRAGMA table_info`, and so does this
+/// rendering, text for text, for every name the pragma reads as itself. The
+/// pragma reads its argument as a qualified name, though: a dot splits it,
+/// and a double quote opens or closes a quoted part, so a name holding
+/// either is read as another name, which DuckDB refuses (a parser error for
+/// `double"quote`, no such schema for `a.b`) or, where one exists, reads in
+/// its place (`main.x` read as `x`). Quoting cannot help: DuckDB 1.5.6
+/// unquotes no doubled quote there. Such a table's columns are read by its
+/// own name, as text, from `duckdb_columns()` and its primary key from
+/// `duckdb_constraints()`, as the other catalog reads are, the answer's
+/// columns, types and rows those the pragma gives for a table of an
+/// ordinary name. Where the reference refuses (its `TableNotFoundError`,
+/// `INVALID_REQUEST`), the core now describes the table: register entry
+/// P1B-5, proposed.
+fn columns(table: &str) -> String {
+    if !table.contains(['"', '.']) {
+        return format!("PRAGMA table_info({})", identifier(table));
+    }
+    let name = text(table);
+    format!(
+        "SELECT CAST(c.column_index - 1 AS INTEGER) AS cid, c.column_name AS name,\n       c.data_type AS type, NOT c.is_nullable AS notnull,\n       c.column_default AS dflt_value,\n       COALESCE(list_contains(k.columns, c.column_name), false) AS pk\nFROM duckdb_columns() c\nLEFT JOIN (\n  SELECT constraint_column_names AS columns\n  FROM duckdb_constraints()\n  WHERE table_name = {name}\n    AND {IN_CURRENT_SCHEMA}\n    AND constraint_type = 'PRIMARY KEY'\n) k ON true\nWHERE c.table_name = {name}\n  AND c.database_name = current_database() AND c.schema_name = current_schema()\nORDER BY c.column_index"
+    )
 }
 
 /// One `SELECT` per key, in order, labelled by its position: the table's

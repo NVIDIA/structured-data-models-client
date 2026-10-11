@@ -135,9 +135,19 @@ fn each_catalog_request_renders_the_reference_statement() {
 #[test]
 fn names_are_quoted_with_their_quotes_doubled() {
     assert_eq!(
-        rendered(&describe(&["a\"b"], DescribePart::Columns)),
-        "PRAGMA table_info(\"a\"\"b\")"
+        rendered(&describe(&["it's"], DescribePart::Columns)),
+        "PRAGMA table_info(\"it's\")"
     );
+    // A name the pragma reads as another (P1B-5): read by itself, as text.
+    for (name, quoted) in [("a\"b", "'a\"b'"), ("a.b", "'a.b'"), ("o'd.d", "'o''d.d'")] {
+        let text = rendered(&describe(&[name], DescribePart::Columns));
+        assert!(text.starts_with("SELECT CAST(c.column_index - 1"), "{text}");
+        assert_eq!(
+            text.matches(&format!("table_name = {quoted}\n")).count(),
+            2,
+            "{text}"
+        );
+    }
     assert!(rendered(&describe(&["it's"], DescribePart::Keys)).contains("table_name = 'it''s'\n"));
     assert_eq!(
         rendered(&preview("t\"", &["c\"1", "c'2"])),

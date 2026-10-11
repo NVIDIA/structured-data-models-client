@@ -863,3 +863,65 @@ fn base_regression_s_statements_return_the_reference_s_results() {
         }
     }
 }
+
+/// The answer to the one statement the shipped data layer plans for the
+/// columns of `table` on DuckDB, and that statement.
+fn columns_of(connection: &Connection, table: &str) -> (String, Vec<RecordBatch>) {
+    use sdm_contract::data::{DescribePart, FetchPlan};
+    let request = DataRequest::Describe {
+        tables: vec![table.to_owned()],
+        part: DescribePart::Columns,
+    };
+    let duckdb = ProviderChoice::Sql {
+        dialect: Dialect::new("duckdb"),
+    };
+    let FetchPlan::Sql { statements, .. } =
+        default_root().data_layer().plan(&request, &duckdb).unwrap()
+    else {
+        panic!("not SQL");
+    };
+    let text = statements[0].text.clone();
+    let fetched = duck::run(connection, &text).unwrap();
+    (text, fetched.batches)
+}
+
+#[test]
+fn a_table_the_pragma_reads_as_another_name_is_read_by_its_own() {
+    // Register entry P1B-5: PRAGMA table_info reads its argument as a
+    // qualified name, so a name holding a double quote or a dot is read as
+    // another; the data layer reads such a table by its own name, in the
+    // pragma's columns and rows.
+    let connection = duck::open().unwrap();
+    let columns = "(id INTEGER, \"o\"\"dd\" VARCHAR NOT NULL, b DOUBLE DEFAULT 1.5, \
+                   t TIMESTAMP, d DECIMAL(18, 3)[], s STRUCT(x INTEGER), PRIMARY KEY (id, b))";
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE twin {columns};
+             CREATE TABLE \"double\"\"quote\" {columns};
+             CREATE TABLE \"a.b\" {columns};
+             CREATE TABLE \"main.x\" {columns};
+             CREATE TABLE \"\"\"lead\" {columns};
+             CREATE TABLE x (other BIGINT);"
+        ))
+        .unwrap();
+    let (text, twin) = columns_of(&connection, "twin");
+    assert_eq!(text, "PRAGMA table_info(\"twin\")");
+    let twin = concat_batches(&twin[0].schema(), &twin).unwrap();
+    assert_eq!(twin.num_rows(), 6);
+    for name in ["double\"quote", "a.b", "main.x", "\"lead"] {
+        // The pragma itself fails, or reads `x` in `main.x`'s place.
+        let pragma = format!("PRAGMA table_info(\"{}\")", name.replace('"', "\"\""));
+        match duck::run(&connection, &pragma) {
+            Err(_) => {}
+            Ok(read) => assert_ne!(
+                concat_batches(&read.schema, &read.batches).unwrap(),
+                twin,
+                "{name}"
+            ),
+        }
+        let (text, answer) = columns_of(&connection, name);
+        assert!(!text.starts_with("PRAGMA"), "{text}");
+        let answer = concat_batches(&answer[0].schema(), &answer).unwrap();
+        assert_eq!(answer, twin, "{name}");
+    }
+}

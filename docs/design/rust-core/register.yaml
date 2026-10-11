@@ -1065,39 +1065,45 @@ entries:
     one goes.
 
 - id: P1B-5
-  title: A DuckDB table named with a double quote is refused with another code on the core route
+  title: A DuckDB table named with a double quote is described on the core route where the reference refuses it
   kind: change
   old_behavior: >-
     The reference's Schema.from_source over a DuckDB source holding a table
     whose name holds a double quote (CREATE TABLE "double""quote") refuses
-    the call: its catalog read (PRAGMA table_info, which DuckDB reads
-    without the doubled quote) fails, and the engine raises its
-    TableNotFoundError, which the client raises as StructuredDataError with
-    code INVALID_REQUEST.
+    the call: its catalog read, PRAGMA table_info, reads its argument as a
+    qualified name, in which a double quote opens or closes a quoted part,
+    so DuckDB fails it, and the engine raises its TableNotFoundError, which
+    the client raises as StructuredDataError with code INVALID_REQUEST. A
+    name holding a dot is read as another table's (schema.table) the same
+    way.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    same call is refused too, as StructuredDataError, but with code
-    PROVIDER_ERROR: sdm-data's DuckDB dialect renders the same catalog
-    statement, DuckDB's driver fails it, and the run ends as the provider's
-    error (details kind data_source, driver_class
-    _duckdb.ParserException, as DuckDB 1.5.6 names it). The
-    class is the reference's and the code is not, against PK-6. The
-    default route is unchanged.
+    table is described: sdm-data reads the columns of a table whose name
+    holds a double quote or a dot by its own name, as text, from
+    duckdb_columns() and duckdb_constraints(), in the pragma's columns and
+    rows (decision E58(d)); every other name is still read with the
+    reference's PRAGMA text. A name holding a dot is then refused by the
+    client's own rule on names, INVALID_REQUEST as on the reference. Before
+    T1.22 the core refused the double-quoted name with PROVIDER_ERROR
+    (DuckDB's parser error as the provider's), against PK-6. The default
+    route is unchanged.
   affected_inputs: >-
-    Schema.from_source over a DuckDB source holding a table named with a
-    double quote, under a forced core route.
+    Schema.from_source, and what follows it, over a DuckDB source holding a
+    table named with a double quote, under a forced core route.
   cases: [T1.21d, T1.22]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Found at T1.21d's review (Codex P2 of round 2, subagent P3-2); it
-    predates T1.21d, which does not touch the catalog read. Pinned by the
-    client's tests/test_the_schema_route.py, which names both outcomes and
-    fails when either changes. Recommendation: approve as temporary; T1.22
-    (carried in the tracker) reads such a table's catalog, or refuses it as
-    the reference does, and this entry is set to rejected then. Never
-    self-approved.
+    Found at T1.21d's review (Codex P2 of round 2, subagent P3-2) as the
+    PROVIDER_ERROR divergence; at T1.22 no quoting of the pragma's argument
+    reads such a name on DuckDB 1.5.6 (it unquotes no doubled quote), so
+    the catalog read takes the name as text, and the core now accepts what
+    the reference refuses: it refuses nothing the reference accepts.
+    Pinned by the client's tests/test_the_schema_route.py, which names both
+    routes' outcomes for a double quote and for a dot, and by sdm-testkit's
+    duckdb_provider.rs, which holds the by-name read to the pragma's answer
+    for an ordinary twin. Recommendation: approve. Never self-approved.
 
 - id: P1B-6
   title: key.varchar-large-buffers succeeds on the core route where the reference refuses it
