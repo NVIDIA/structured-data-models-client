@@ -2,10 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! RS-1, as far as `materialize` reaches it at T1.11c: numpy's
-//! `default_rng(seed)` (a `SeedSequence` seeding `PCG64`) and its
-//! `Generator.shuffle` of a one-dimensional array, which the reference's
-//! `sample_target` draws its example order from.
+//! RS-1: numpy's `default_rng(seed)` (a `SeedSequence` seeding `PCG64`),
+//! its bounded draw and its `Generator.shuffle` of a one-dimensional array,
+//! which the reference's `sample_target` draws its example order from.
 //!
 //! These are ports of defined algorithms (decision A4's line; a row in
 //! `dependencies.md`), written from numpy's own sources:
@@ -14,9 +13,14 @@
 //! (`next_uint32` from half of a 64-bit draw, the other half kept for the
 //! next one), `distributions.c` (`random_interval`, a masked rejection
 //! draw) and `_generator.pyx` (`_shuffle_raw`, Fisher and Yates from the
-//! last position down). `tests/rs1.json`, recorded from numpy, holds them
-//! to numpy's answers for seeds from 0 to past 2**200. T1.22 completes
-//! RS-1 (bounded draws other than the shuffle) and the seed ranges (RS-7).
+//! last position down). Vectors recorded from numpy hold them to numpy's
+//! answers: `tests/rs1.json` for seeds from 0 to past 2**200, and
+//! `tests/rs1-draws.json` (T1.22) for every seed of T0.6's model, 2**70
+//! among them, and for numpy's compiled `random_interval` on both of its
+//! paths, to a maximum of 2**64 - 1. No other stream is reached: the
+//! reference's other draws (RS-2 to RS-5) are on backends and paths the
+//! core does not take, and a seed's range is the provider's (RS-7, a
+//! capability `sdm-core` reads).
 
 /// A non-negative integer of any size, as numpy's `SeedSequence` reads it:
 /// its 32-bit words, least significant first, `[0]` for zero.
