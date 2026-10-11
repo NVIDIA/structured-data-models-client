@@ -80,6 +80,108 @@ def test_the_inventory_loader_maps_every_case_without_loss() -> None:
         run_python.inventory_entry(case, defaults)
 
 
+#: The inventory cases whose call the contract cannot carry to materialize,
+#: so their core is describe_source alone (T1.21e): materialize's indices
+#: are one integer or text type, at least one, and these name none, or
+#: entities of a decimal key (the keys and empty-null refusal maps' gaps).
+_DESCRIBE_ONLY = {
+    'empty.indices',
+    'key.hugeint',
+    'key.decimal-18-0',
+    'key.decimal-38-10',
+}
+
+
+def _anchor(text: str) -> dict[str, Any]:
+    import datetime
+
+    when = datetime.datetime.fromisoformat(text)
+    epoch = datetime.datetime(1970, 1, 1)
+    nanos = (when - epoch) // datetime.timedelta(microseconds=1) * 1000
+    return {'t': 'ts', 'v': str(nanos), 'unit': 'ns', 'zone': None}
+
+
+def _held_to_its_input(case: dict[str, Any]) -> list[str]:
+    r"""Each way a case's core operations depart from its own input: the
+    source described is the one ``from_source`` names, materialize's
+    entities and anchor time are the call's, and predict follows
+    materialize."""
+    given, core = case['input'], case['core']
+    problems = []
+    source = core['describe_source']['source']
+    named = given.get('from_source', {})
+    if source != {
+        'tables': list(named.get('tables', [])),
+        'primary_keys': {t: [k] for t, k in named.get('primary_keys', {}).items()},
+        'time_columns': named.get('time_columns', {}),
+    }:
+        problems.append('describe_source is not of its source')
+    materialize = core.get('materialize')
+    if (materialize is None) != (case['id'] in _DESCRIBE_ONLY):
+        problems.append('materialize present where it cannot be, or absent')
+    if materialize is not None:
+        call = given['materialize']
+        if [index['v'] for index in materialize['indices']] != [
+            str(index) for index in call['indices']
+        ]:
+            problems.append("materialize's indices are not the call's")
+        wanted = _anchor(call['anchor_time']) if 'anchor_time' in call else None
+        if materialize['anchor_time'] != wanted:
+            problems.append("materialize's anchor time is not the call's")
+    if ('predict' in core) != (materialize is not None) or core.get(
+        'predict', {'model': 'kumo-relational'}
+    ) != {'model': 'kumo-relational'}:
+        problems.append('predict does not follow materialize')
+    return problems
+
+
+def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
+    None
+):
+    # T1.21e: the 40 cases are contract cases, each the inventory's as its
+    # loader maps it (ids, bases, setup, from_source, query, materialize,
+    # expect), diagnostic, with the core operations its call starts.
+    # base.regression, a case since T1.10, keeps the inventory's input and
+    # expectation and adds its routes.
+    inventory = _inventory()
+    defaults = inventory['defaults']
+    committed = {
+        case['id']: case for case, _ in run_python.load_cases([CASES / 's1'])
+    }
+    assert set(committed) == {
+        entry['id'] for entry in inventory['cases']
+    } | {'base.adventureworks'}
+    for entry in inventory['cases']:
+        case = committed[entry['id']]
+        assert case['status'] == 'diagnostic', entry['id']
+        assert _held_to_its_input(case) == [], entry['id']
+        if entry['id'] == 'base.regression':
+            mapped = run_python.inventory_case(entry, defaults)
+            for key in ('input', 'expect', 'seam', 'cells', 'until'):
+                assert case[key] == mapped[key], key
+            continue
+        held = {key: value for key, value in case.items() if key != 'core'}
+        assert run_python.inventory_entry(held, defaults) == entry, entry['id']
+    # Seeded: a case changed alone departs from the inventory, and a core
+    # changed alone from its input.
+    case = copy.deepcopy(committed['time.text-declared'])
+    case['input']['setup'].pop()
+    held = {key: value for key, value in case.items() if key != 'core'}
+    assert run_python.inventory_entry(held, defaults) != next(
+        entry for entry in inventory['cases'] if entry['id'] == case['id']
+    )
+    for change in (
+        lambda core: core['describe_source']['source']['time_columns'].clear(),
+        lambda core: core['materialize']['indices'].pop(),
+        lambda core: core['materialize'].__setitem__('anchor_time', None),
+        lambda core: core.pop('predict'),
+        lambda core: core.pop('materialize'),
+    ):
+        case = copy.deepcopy(committed['time.text-declared'])
+        change(case['core'])
+        assert _held_to_its_input(case) != [], change
+
+
 def test_the_bases_are_the_inventorys_and_adventureworks() -> None:
     # The inventory's bases, and E27's AdventureWorks base beside them, in
     # addition to the inventory (E31; T1.21b).

@@ -1,0 +1,76 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.uint8",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [],
+  "seam": "keys",
+  "cells": [
+    "uint8/primary-key",
+    "uint8/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE UTINYINT",
+      "ALTER TABLE orders ALTER user_id TYPE UTINYINT"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "u8",
+          "v": "0"
+        },
+        {
+          "t": "u8",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "schema dtype int64; result id int64"
+  },
+  "why": "Narrow unsigned keys; the plan keeps every integer width distinct on the wire",
+  "source": "dtypes:key:uint8; plan (type set)"
+}

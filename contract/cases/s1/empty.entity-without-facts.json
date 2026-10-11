@@ -1,0 +1,73 @@
+{
+  "format": "sdm-case/1",
+  "id": "empty.entity-without-facts",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [],
+  "seam": "empty-null",
+  "cells": [
+    "int64/primary-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "INSERT INTO users VALUES (99, 50, 'US')"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        99
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "99"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "An entity with no related rows; its neighborhood is empty and its answer must still come back under its key",
+  "source": "plan (empty and all-null data)"
+}

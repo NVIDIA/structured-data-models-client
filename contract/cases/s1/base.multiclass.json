@@ -1,0 +1,65 @@
+{
+  "format": "sdm-case/1",
+  "id": "base.multiclass",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [],
+  "seam": "baseline",
+  "cells": [
+    "utf8/target"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT users.country FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "task multiclass_classification, target dtype string, classes ['IN', 'DE', 'US'] (in that order)"
+  },
+  "why": "Covers client.predict/multiclass/duckdb, a static target with no time window, and class order",
+  "source": "scope-python.yaml paths"
+}

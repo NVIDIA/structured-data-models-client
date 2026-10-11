@@ -1,0 +1,72 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.declared-int32",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [],
+  "seam": "keys",
+  "cells": [
+    "int32/primary-key",
+    "int32/foreign-key"
+  ],
+  "input": {
+    "base": "declared",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i32",
+          "v": "0"
+        },
+        {
+          "t": "i32",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "keys and the link come from DuckDB's declared constraints (names alone would not infer buyer -> uid); schema dtype int64 for both; result id int64"
+  },
+  "why": "Covers schema.from-source/catalog-keys/duckdb and an int32 key, and skips the key count for enforced keys",
+  "source": "scope-python.yaml paths"
+}

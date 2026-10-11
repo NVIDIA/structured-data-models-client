@@ -1,0 +1,75 @@
+{
+  "format": "sdm-case/1",
+  "id": "time.feature-date-and-timestamp-with-null",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [],
+  "seam": "time",
+  "cells": [
+    "date32/feature",
+    "timestamp-us/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN NULL ELSE DATE '2020-01-01' + user_id::INTEGER END AS f_date, CASE WHEN user_id = 5 THEN NULL ELSE TIMESTAMP '2020-01-01' + to_days(user_id::INTEGER) END AS f_ts FROM users"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "both read as timestamp; users.f_date becomes the users time column, with a warning that it was chosen because its values start earliest of f_date and f_ts"
+  },
+  "why": "Date and timestamp features with nulls; the first attempt read the date as text and refused the null timestamp; also time inference on a dimension table",
+  "source": "probe#6; probe#7; dtypes:feature:arrow_date32; dtypes:feature:arrow_timestamp_us"
+}

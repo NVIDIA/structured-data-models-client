@@ -220,7 +220,13 @@ def _every_case() -> list[dict[str, Any]]:
     inventory = run_python.load_inventory()
     ids = [entry['id'] for entry in inventory['cases']]
     assert len(ids) == 40
-    cases = run_python.inventory_cases(ids) + run_python.load_cases([CASES])
+    # From T1.21e every inventory case is a committed case; one the
+    # inventory holds and contract/cases does not is taken from it.
+    committed = run_python.load_cases([CASES])
+    have = {case['id'] for case, _ in committed}
+    cases = committed + run_python.inventory_cases(
+        [case_id for case_id in ids if case_id not in have]
+    )
     return [case for case, _ in cases]
 
 

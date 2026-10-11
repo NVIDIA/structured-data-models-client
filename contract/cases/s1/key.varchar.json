@@ -1,0 +1,76 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.varchar",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [],
+  "seam": "keys",
+  "cells": [
+    "utf8/primary-key",
+    "utf8/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE VARCHAR USING 'u' || user_id",
+      "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING 'u' || user_id"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        "u0",
+        "u1"
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "utf8",
+          "v": "u0"
+        },
+        {
+          "t": "utf8",
+          "v": "u1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "schema dtype string / ID; result id str ('u0', 'u1')"
+  },
+  "why": "Text keys; the first attempt failed an Arrow string key with INTERNAL_ERROR",
+  "source": "probe#4; dtypes:key:arrow_string"
+}
