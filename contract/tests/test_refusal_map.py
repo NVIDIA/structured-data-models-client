@@ -920,3 +920,142 @@ def test_the_writer_lists_a_new_refusal_and_drops_a_lifted_entry() -> None:
             document, _of(document), lambda spec: runs[_spec_key(spec)]
         )
         assert any(line.startswith(f'{name}/python-core: ') for line in report)
+
+
+def _rust_run(document: dict[str, Any]) -> dict[str, Any]:
+    r"""rust-host's run of ``document`` as the map records it."""
+    entries = {entry['id']: entry for entry in document['entries']}
+    return {
+        probe['id']: (
+            refusal_map.success(probe['rust-host']['until'])
+            if probe['rust-host']['expect'] == 'success'
+            else entries[probe['rust-host']['expect']]['observed']['rust-host']
+        )
+        for probe in document['probes']
+        if 'rust-host' in probe
+    }
+
+
+def test_supplied_rust_evidence_is_the_whole_of_it() -> None:
+    # Codex P2-1 (fix round 1): rust-host evidence supplied empty, short
+    # or with a stranger is reported, never filled from the map.
+    document = _family_maps()['baseline']
+    _, by_input = _python_core_run(document)
+
+    def observe(spec: dict[str, Any]) -> Any:
+        return by_input[_spec_key(spec)]
+
+    rust = _rust_run(document)
+    written, report = refusal_map.write(document, _of(document), observe, rust)
+    assert (written, report) == (document, [])
+    probes = sorted(rust)
+    _, report = refusal_map.write(document, _of(document), observe, {})
+    assert report == [f'{name}/rust-host: not observed' for name in probes]
+    short = {name: seen for name, seen in rust.items() if name != probes[0]}
+    _, report = refusal_map.write(document, _of(document), observe, short)
+    assert report == [f'{probes[0]}/rust-host: not observed']
+    extra = {**rust, 'not-a-probe': refusal_map.success('predict')}
+    _, report = refusal_map.write(document, _of(document), observe, extra)
+    assert report == [
+        'not-a-probe/rust-host: observed, and not a probe of rust-host'
+    ]
+    for retyped in ({}, [], None, 'success'):
+        changed = {**rust, probes[0]: retyped}
+        _, report = refusal_map.write(document, _of(document), observe, changed)
+        assert report and report[0].startswith(f'{probes[0]}/rust-host: '), (
+            retyped
+        )
+
+
+@pytest.mark.parametrize(
+    ('observed', 'problem'),
+    [
+        ({'baseline.json': {}}, 'base.binary/rust-host: not observed'),
+        ({}, 'no observations of baseline.json'),
+        ({'baseline.json': []}, 'no observations of baseline.json'),
+    ],
+)
+def test_the_writer_s_script_fails_on_supplied_rust_evidence_it_lacks(
+    tmp_path: Path, observed: Any, problem: str
+) -> None:
+    # The script, seeded as Codex reproduced it: a copy of the baseline map
+    # written with an observations file that holds none of its probes.
+    import subprocess
+
+    target = tmp_path / 'baseline.json'
+    target.write_text((MAPS / 'baseline.json').read_text())
+    evidence = tmp_path / 'observed.json'
+    evidence.write_text(json.dumps(observed))
+    run = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(RUNNERS / 'refusal_map.py'),
+            'write',
+            str(target),
+            '--rust-observed',
+            str(evidence),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode != 0
+    assert problem in run.stdout + run.stderr
+
+
+def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
+    tmp_path: Path,
+) -> None:
+    # Codex P2-2 (fix round 1): every probe succeeding on both hosts, the
+    # writer drops every entry; the map it writes loads, holds both runs
+    # and is written again unchanged, its probes and coverage kept.
+    document = _family_maps()['baseline']
+    lifted = {
+        runner: {
+            probe['id']: refusal_map.success(probe[runner]['until'])
+            for probe in document['probes']
+            if runner in probe
+        }
+        for runner in refusal_map.RUNNERS
+    }
+
+    def observe(spec: dict[str, Any]) -> Any:
+        name = next(
+            p['id']
+            for p in document['probes']
+            if _spec_key(p['python-core']) == _spec_key(spec)
+        )
+        return lifted['python-core'][name]
+
+    written, report = refusal_map.write(
+        document, _of(document), observe, lifted['rust-host']
+    )
+    assert report == ['materialize/static_target: no probe hits it; dropped']
+    assert written['entries'] == [] and written['probes']
+    path = tmp_path / 'baseline.json'
+    path.write_text(json.dumps(written))
+    loaded = refusal_map.load(path)
+    for runner in refusal_map.RUNNERS:
+        assert refusal_map.check(loaded, runner, lifted[runner]) == []
+    assert refusal_map.bound(_of(loaded), loaded) == []
+    again, report = refusal_map.write(
+        loaded, _of(loaded), observe, lifted['rust-host']
+    )
+    assert (again, report) == (loaded, [])
+    # Still fail-closed: a refusal on the lifted map is one it does not
+    # list, and a case left without its probe fails the binding.
+    refused = copy.deepcopy(lifted['python-core'])
+    refused['base.binary'] = {
+        'stage': 'materialize',
+        'error': 'UnsupportedRequestError',
+        'code': 'UNSUPPORTED_REQUEST',
+        'operation': 'materialize',
+        'rule': 'static_target',
+    }
+    assert any(
+        failure.startswith('base.binary: a refusal the map does not list')
+        for failure in refusal_map.check(loaded, 'python-core', refused)
+    )
+    loaded['probes'] = loaded['probes'][1:]
+    assert refusal_map.bound(_of(loaded), loaded) != []

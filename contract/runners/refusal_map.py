@@ -53,8 +53,16 @@ entry it hits. Run as a script it rewrites a map in place::
     python -I contract/runners/refusal_map.py write MAP [--rust-observed FILE]
 
 where FILE is what ``sdm-testkit``'s ``tests/refusal_map.rs`` writes of
-the rust-host probes (its ignored test ``write_observed``); without it the
-map's rust-host observations are kept.
+every map's rust-host probes when run as::
+
+    SDM_REFUSAL_MAP_OBSERVED=FILE cargo test -p sdm-testkit \\
+        --test refusal_map the_family_maps_are_held_on_the_rust_host
+
+Without FILE the map's rust-host observations are kept; with it, every
+rust-host probe must be observed there, and nothing else.
+
+A map whose every probe succeeds on every runner it names has no entries:
+its probes stay, as the evidence that nothing is refused.
 """
 
 from __future__ import annotations
@@ -163,7 +171,9 @@ def shape(document: Any) -> str | None:
         return 'no case'
     entries = document.get('entries')
     probes = document.get('probes')
-    if not isinstance(entries, list) or not entries:
+    # No entries is a map all of whose refusals are lifted: its probes,
+    # every case's on each runner, then all expect success (T1.21e).
+    if not isinstance(entries, list):
         return 'no entries'
     if not isinstance(probes, list) or not probes:
         return 'no probes'
@@ -789,7 +799,22 @@ def write(
     # What each entry was observed as before this run, which a refusal is
     # matched against; its observations are this run's.
     before = {e['id']: copy.deepcopy(e['observed']) for e in entries}
-    runners = ['python-core'] + (['rust-host'] if rust_observed else [])
+    runners = ['python-core'] + (
+        ['rust-host'] if rust_observed is not None else []
+    )
+    if rust_observed is not None:
+        # Supplied rust-host evidence is the whole of it: a probe of
+        # rust-host it does not observe, or an observation of no such
+        # probe, is reported, never filled from the map.
+        given = {
+            probe['id'] for probe in document['probes'] if 'rust-host' in probe
+        }
+        if not isinstance(rust_observed, dict):
+            return document, ['rust-host: the observations are not a map']
+        report += [
+            f'{name}/rust-host: observed, and not a probe of rust-host'
+            for name in sorted(set(rust_observed) - given)
+        ]
     for entry in entries:
         for runner in runners:
             entry['observed'].pop(runner, None)
@@ -820,7 +845,7 @@ def write(
             spec = probe.get(runner)
             if spec is None:
                 continue
-            if runner == 'rust-host' and not rust_observed:
+            if runner == 'rust-host' and rust_observed is None:
                 if spec.get('expect', 'success') != 'success':
                     hit.add(spec['expect'])
                 continue
