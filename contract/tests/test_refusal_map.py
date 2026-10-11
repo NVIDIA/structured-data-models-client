@@ -798,8 +798,12 @@ def _python_core_run(
             # questions at different points (python-core's bridge before
             # materialize starts, rust-host in the core), which the maps
             # hold; the AdventureWorks pin holds that schema.
+            # The database zone a zoned column arrives in is the
+            # machine's, so the pin writes it as one marker.
             digests[probe['id']] = {
-                'described': refusal_map.digest(capture.described),
+                'described': refusal_map.digest(
+                    refusal_map.zone_free(capture.described)
+                ),
                 'warnings': refusal_map.digest(capture.warnings),
             }
         # Where python-core reached the core, it started the operations the

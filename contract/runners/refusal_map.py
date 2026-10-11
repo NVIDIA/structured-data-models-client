@@ -343,6 +343,25 @@ def digest(value: Any) -> str:
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
 
+#: What a description's zoned column says of its zone, in the family pin:
+#: DuckDB hands a ``TIMESTAMPTZ`` over in the database's zone, the
+#: machine's, so the zone is the host machine's, not the case's.
+DATABASE_ZONE = '<the database zone>'
+
+
+def zone_free(described: Any) -> Any:
+    r"""``described`` with each zoned column's received zone written as
+    :data:`DATABASE_ZONE`, so its digest is the same on every machine
+    (``contract/pinned/families.probes.json``, T1.23)."""
+    described = copy.deepcopy(described)
+    for table in described.get('tables', []):
+        for column in table.get('columns', []):
+            received = column.get('received')
+            if isinstance(received, dict) and received.get('zone') is not None:
+                received['zone'] = DATABASE_ZONE
+    return described
+
+
 def agree(pin: Any, observed: dict[str, dict[str, str]]) -> list[str]:
     r"""Each way ``observed`` (a runner's digests, by probe, of what
     :data:`AGREE` names) departs from ``pin``'s; empty when they are the

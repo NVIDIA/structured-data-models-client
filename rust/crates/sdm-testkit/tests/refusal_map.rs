@@ -154,9 +154,16 @@ fn digest(value: &Value) -> String {
 /// probe's id, and the digests of its core operations where it reached
 /// `describe_source`.
 fn run_with_digests(map: &Value) -> (BTreeMap<String, Value>, Digests) {
+    let (observed, digests, _) = run_probes(map);
+    (observed, digests)
+}
+
+/// [`run_with_digests`], with each description reached, by probe.
+fn run_probes(map: &Value) -> (BTreeMap<String, Value>, Digests, BTreeMap<String, Value>) {
     let bases: Bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let mut observed = BTreeMap::new();
     let mut digests = Digests::new();
+    let mut descriptions = BTreeMap::new();
     for probe in map["probes"].as_array().unwrap() {
         let Some(spec) = probe.get(RUNNER) else {
             continue;
@@ -192,10 +199,35 @@ fn run_with_digests(map: &Value) -> (BTreeMap<String, Value>, Digests) {
                 }
             }
             digests.insert(name.clone(), agreed);
+            descriptions.insert(name.clone(), described.clone());
         }
         observed.insert(name, observation(&ran.answer));
     }
-    (observed, digests)
+    (observed, digests, descriptions)
+}
+
+/// `described` with each zoned column's received zone written as the
+/// family pin writes it (`refusal_map.zone_free`): DuckDB hands a
+/// `TIMESTAMPTZ` over in the database's zone, the machine's.
+fn zone_free(described: &Value) -> Value {
+    let mut described = described.clone();
+    if let Some(tables) = described["tables"].as_array_mut() {
+        for table in tables {
+            if let Some(columns) = table["columns"].as_array_mut() {
+                for column in columns {
+                    // Read, never indexed into, so nothing is added.
+                    if let Some(zone) = column
+                        .get_mut("received")
+                        .and_then(|received| received.get_mut("zone"))
+                        .filter(|zone| !zone.is_null())
+                    {
+                        *zone = json!("<the database zone>");
+                    }
+                }
+            }
+        }
+    }
+    described
 }
 
 fn observed() -> &'static BTreeMap<String, Value> {
@@ -222,13 +254,21 @@ fn families_ran() -> &'static BTreeMap<String, (BTreeMap<String, Value>, Digests
         family_maps()
             .into_iter()
             .map(|(name, map)| {
-                let (observed, mut digests) = run_with_digests(&map);
+                let (observed, mut digests, descriptions) = run_probes(&map);
                 // Not the schema materialize samples, which the family pin
                 // leaves out: the hosts refuse some questions at different
                 // points (python-core's bridge before materialize starts,
                 // this host in the core).
                 for agreed in digests.values_mut() {
                     agreed.remove("materialize_schema");
+                }
+                // A zoned column's received zone is the database's, the
+                // machine's, so the pin writes it as one marker
+                // (refusal_map.zone_free).
+                for (name, described) in &descriptions {
+                    if let Some(agreed) = digests.get_mut(name) {
+                        agreed.insert("described".into(), digest(&zone_free(described)));
+                    }
                 }
                 (name, (observed, digests))
             })

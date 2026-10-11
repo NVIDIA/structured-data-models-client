@@ -1,5 +1,5 @@
 {
- "description": "The family refusal maps' probes (contract/refusal-maps/<family>.json) on which both core hosts reach describe_source, by family and probe, each with the SHA-256 of describe_source's SourceDescription, and of the core's warnings (each its code and fields, which each host words itself), each as canonical JSON; not the schema materialize samples, since the hosts refuse some questions at different points (python-core's bridge before materialize starts, rust-host in the core), which the maps hold (refusal_map.digest), as contract/pinned/base.adventureworks.probes.json pins AdventureWorks' (T1.23). contract/tests/test_refusal_map.py holds python-core to it and sdm-testkit's tests/refusal_map.rs holds rust-host to it, so CI gates that the two hosts' descriptions and warnings agree on every family case they describe. Regenerated, never edited, when a case, a base or the core's description changes.",
+ "description": "The family refusal maps' probes (contract/refusal-maps/<family>.json) on which both core hosts reach describe_source, by family and probe, each with the SHA-256 of describe_source's SourceDescription, and of the core's warnings (each its code and fields, which each host words itself), each as canonical JSON, a zoned column's received zone written as refusal_map.DATABASE_ZONE, since DuckDB hands a TIMESTAMPTZ over in the database's zone, the machine's; not the schema materialize samples, since the hosts refuse some questions at different points (python-core's bridge before materialize starts, rust-host in the core), which the maps hold (refusal_map.digest), as contract/pinned/base.adventureworks.probes.json pins AdventureWorks' (T1.23). contract/tests/test_refusal_map.py holds python-core to it and sdm-testkit's tests/refusal_map.rs holds rust-host to it, so CI gates that the two hosts' descriptions and warnings agree on every family case they describe. Regenerated, never edited, when a case, a base or the core's description changes.",
  "families": {
   "baseline": {
    "probes": {
@@ -184,7 +184,7 @@
      "warnings": "59b5f1e5be7840700f58cd3ffde7c159195046cb2900a6187ecbdb87031d13d6"
     },
     "time.timestamptz": {
-     "described": "f6367b7e067d6ec47863287cb311078225ce84300d343e01529fe32858be6cdb",
+     "described": "77a96277114dee2a35a1a0c3cf69ecb0b5b5b9b3664754cac483b584375efaae",
      "warnings": "59b5f1e5be7840700f58cd3ffde7c159195046cb2900a6187ecbdb87031d13d6"
     }
    }

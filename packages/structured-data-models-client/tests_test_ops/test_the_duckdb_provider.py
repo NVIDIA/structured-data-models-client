@@ -296,16 +296,21 @@ def _canonical(table: pa.Table) -> list[list[Any]]:
 
 
 def _base(name: str) -> Any:
-    import yaml
-
-    bases = yaml.safe_load(
-        (Path(__file__).resolve().parents[3] / 'contract/bases.yaml').read_text(
-            encoding='utf-8'
-        )
-    )['bases']
+    r"""A connection holding base ``name`` of ``contract/bases.yaml``, read
+    without a YAML library (this job installs none): its statements are the
+    plain list items under its name, comments between them skipped."""
+    lines = (
+        (Path(__file__).resolve().parents[3] / 'contract/bases.yaml')
+        .read_text(encoding='utf-8')
+        .splitlines()
+    )
     connection = duckdb.connect()
-    for statement in bases[name]:
-        connection.execute(statement)
+    for line in lines[lines.index(f'  {name}:') + 1 :]:
+        if line.startswith('  #'):
+            continue
+        if not line.startswith('  - '):
+            break
+        connection.execute(line[len('  - ') :])
     return connection
 
 
