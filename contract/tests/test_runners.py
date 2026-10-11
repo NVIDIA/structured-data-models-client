@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -28,9 +29,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 COMPARE = ROOT / 'scripts/rust_core/compare.py'
+RATCHET = ROOT / 'scripts/rust_core/ratchet.py'
 CASES = ROOT / 'contract/cases'
 REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
 ACCEPTED = CASES / 's0/s0.accept.sum-window.json'
@@ -59,12 +63,63 @@ def _run(
     )
 
 
+def expectations(
+    directory: Path, repo: Path = ROOT, where: list[str] | None = None
+) -> list[str]:
+    r"""The comparator's ``--expect`` for the cases' comparisons here, the
+    effective expectations the gate holds the outcomes to (T1.18): the
+    checkpoint's baselines and the transitions the candidate's register
+    approves from them, written by ``ratchet.py effective`` for the
+    checkpoint of ``where`` (by default ``ratchet.py where``'s, as CI's
+    gate step takes it). Off the phase branch and its lanes there is no
+    ratchet, and the outcomes are held to the reference; on a push to them
+    an empty ``where`` fails, as the gate step does."""
+    ratchet = repo / 'scripts/rust_core/ratchet.py'
+    if where is None:
+        asked = subprocess.run(
+            [sys.executable, str(ratchet), 'where'],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert asked.returncode == 0, asked.stdout + asked.stderr
+        where = asked.stdout.split()
+        pushed = os.environ.get('GITHUB_EVENT_NAME') == 'push' and (
+            os.environ.get('GITHUB_REF_NAME', '') + '-'
+        ).startswith('rust-core-phase-1-')
+        assert where or not pushed, 'ratchet.py where named no base'
+        if not where:
+            return []
+    out = directory / 'effective.json'
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(ratchet),
+            'effective',
+            '--repo',
+            str(repo),
+            *where,
+            '--out',
+            str(out),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    return ['--expect', str(out)]
+
+
 def _compare(
-    cases: Path, *observations: Path, reference: bool = True
+    cases: Path,
+    *observations: Path,
+    reference: bool = True,
+    expect: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     arguments = [sys.executable, str(COMPARE), '--cases', str(cases)]
     if reference:
         arguments += ['--reference', str(REFERENCE)]
+    arguments += expect or []
     arguments += [str(path) for path in observations]
     return subprocess.run(
         arguments, capture_output=True, text=True, check=False
@@ -90,8 +145,10 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
         run = _run(mode, out, CASES)
         assert run.returncode == 0, run.stderr
     # Every case, base.regression's diagnostic one included (T1.11b), whose
-    # differences the comparator reports and gates none.
-    compared = _compare(CASES, core, old)
+    # differences the comparator reports and gates none; each outcome held
+    # to its effective expectation, as the gate holds it (T1.18), so an
+    # approved outcome change passes here too.
+    compared = _compare(CASES, core, old, expect=expectations(tmp_path))
     assert compared.returncode == 0, compared.stdout
     assert 'DIFFERS' not in compared.stdout
     operations = {
@@ -291,3 +348,95 @@ def test_python_ref_stops_when_the_guard_fails_after_the_last_case(
     assert run.returncode == 1, run.stderr
     assert 'the reference guard failed after the last case' in run.stderr
     assert not out.exists()
+
+
+@pytest.fixture(scope='module')
+def accepted_runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    r"""The accepted S0 case on both Python runners."""
+    where = tmp_path_factory.mktemp('accepted')
+    cases = where / 'cases'
+    cases.mkdir()
+    (cases / ACCEPTED.name).write_bytes(ACCEPTED.read_bytes())
+    found = {}
+    for mode in ('python-core', 'python-old'):
+        out = where / f'{mode}.jsonl'
+        run = _run(mode, out, cases)
+        assert run.returncode == 0, run.stderr
+        found[mode] = out
+    found['cases'] = cases
+    return found
+
+
+@pytest.mark.parametrize(
+    'seed',
+    ['agree', 'old-warns', 'both-warn', 'core-alone', 'two-cells', 'unnamed'],
+)
+def test_a_cell_other_than_the_reference_s_holds_core_to_old(
+    accepted_runs: dict[str, Path], tmp_path: Path, seed: str
+) -> None:
+    r"""H1 in the comparator (T1.18): in a named cell other than
+    ``ref-pandas3`` the host fields of python-core and python-old gate
+    against each other and the reference's are reported, so the floor
+    cell's runtime-only warning (register HOST-3) passes where both
+    runners show it and fails where only one does; either runner alone
+    there fails, as do two cells; an unnamed cell is held to the reference
+    as before."""
+    observed = {
+        mode: json.loads(accepted_runs[mode].read_text())
+        for mode in ('python-core', 'python-old')
+    }
+    for mode, line in observed.items():
+        line['identity']['cell'] = (
+            None if seed == 'unnamed' else 'floor-pandas2.2'
+        )
+        if seed in ('both-warn', 'unnamed') or (
+            seed == 'old-warns' and mode == 'python-old'
+        ):
+            line['host']['warnings'].append('DeprecationWarning')
+    if seed == 'two-cells':
+        observed['python-old']['identity']['cell'] = 'dbr17-pandas2'
+    paths = []
+    for mode, line in observed.items():
+        if seed == 'core-alone' and mode == 'python-old':
+            continue
+        path = tmp_path / f'{mode}.jsonl'
+        path.write_text(json.dumps(line) + '\n', encoding='utf-8')
+        paths.append(path)
+    reference = tmp_path / 'python-ref.jsonl'
+    reference.write_text(
+        ''.join(
+            line + '\n'
+            for line in REFERENCE.read_text().splitlines()
+            if json.loads(line)['case'] == observed['python-core']['case']
+        ),
+        encoding='utf-8',
+    )
+    compared = subprocess.run(
+        [
+            sys.executable,
+            str(COMPARE),
+            '--cases',
+            str(accepted_runs['cases']),
+            '--reference',
+            str(reference),
+            *map(str, paths),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if seed in ('agree', 'both-warn'):
+        assert compared.returncode == 0, compared.stdout
+        if seed == 'both-warn':
+            assert 'reported (cell floor-pandas2.2, against the reference' in (
+                compared.stdout
+            )
+        return
+    assert compared.returncode == 1, compared.stdout
+    wanted = {
+        'old-warns': 'python-core against python-old: host.warnings: differ',
+        'core-alone': 'python-core and python-old are both needed',
+        'two-cells': 'python-core and python-old in different cells',
+        'unnamed': 'python-core against python-ref: host.warnings: differ',
+    }[seed]
+    assert wanted in compared.stdout, compared.stdout

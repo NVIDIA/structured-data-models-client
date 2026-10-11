@@ -1872,6 +1872,33 @@ entries:
     generated list here and T1.33 marks each type reference-accepted or not,
     with a case where the inventory reaches one.
 
+- id: HOST-3
+  title: The floor cell's to_pandas raises pandas' BlockManager DeprecationWarning
+  kind: keep
+  old_behavior: >-
+    In the reference environment (ref-pandas3: pandas 3.0.6, pyarrow 25.0.1)
+    an S0 case's public calls raise no warning.
+  new_behavior: >-
+    In the floor-pandas2.2 cell (Python 3.10, pandas 2.2.0, pyarrow 14.0.1,
+    NumPy 1.26.4) pyarrow 14's to_pandas() builds its frame by passing a
+    BlockManager to DataFrame, which pandas 2.2.0 deprecates, so each of 19
+    S0 acceptance cases records two DeprecationWarnings, on python-core and
+    python-old alike: a runtime-only difference, the same on both routes,
+    which the client neither causes nor changes. Measured at T1.18 in a
+    local floor-pandas2.2 environment; ref-pandas3 and dbr17-pandas2 show
+    none. From T1.18 the comparator holds python-core to python-old on host
+    fields in a cell other than the reference's and reports the reference's
+    (H1), so the warning passes where both runners show it and fails where
+    one alone does (contract/tests/test_runners.py).
+  affected_inputs: Any public call whose result reaches to_pandas() under pandas 2.2.0 with pyarrow 14.
+  cases: [T1.18]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E65}
+  notes: >-
+    Runtime-only, so a register entry naming the cell, never an exclusion
+    (H1). For the independent reviewer; no case outcome changes.
+
 # --- PQL validation (T1.12) ---------------------------------------------------
 
 - id: PQL-1

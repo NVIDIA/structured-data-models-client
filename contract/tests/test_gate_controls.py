@@ -352,3 +352,68 @@ def test_an_approved_outcome_change_passes_the_whole_gate_and_no_other(
     else:
         assert failed(done) == {'ratchet', 'compare'}, done.stdout
         assert 'against its effective expectation: outcome.stage' in done.stdout
+
+
+def _runners_module() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        'runners_for_gate', ROOT / 'contract/tests/test_runners.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize('transition', ['approved', 'unapproved'])
+def test_an_approved_outcome_change_passes_contract_tests_comparison(
+    repo: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    transition: str,
+) -> None:
+    r"""The comparison ``contract/tests`` makes (``test_runners``'s, CI's
+    contract-python job) holds outcomes to the same effective expectations
+    as the gate (T1.18): python-old's moved stage passes under an approved
+    entry stating the exact transition, and fails without one."""
+    landed = git(repo, 'rev-parse', 'HEAD')
+    arguments = files(observed, tmp_path, _moved)
+    if transition == 'approved':
+        item = {
+            'case': CASE,
+            'cell': 'ref-pandas3',
+            'runner': 'python-old',
+            'old': 'success at materialize',
+            'new': 'success at predict',
+            'summary': 'seeded',
+        }
+        commit(
+            repo,
+            edit=lambda r: helpers.append_entry(
+                r, {'id': 'SEED-1', 'cases': [CASE], 'case_outcomes': [item]}
+            ),
+        )
+    else:
+        commit(repo)
+    runners = _runners_module()
+    expect = runners.expectations(tmp_path, repo, ['--base', landed])
+    assert expect[0] == '--expect'
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(repo / 'scripts/rust_core/compare.py'),
+            '--cases',
+            str(repo / 'contract/cases'),
+            '--reference',
+            str(next((repo / 'contract/reference').glob('*.jsonl'))),
+            *expect,
+            *[a for a in arguments if a != '--observations'],
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if transition == 'approved':
+        assert done.returncode == 0, done.stdout
+    else:
+        assert done.returncode == 1, done.stdout
+        assert 'against its effective expectation: outcome.stage' in done.stdout

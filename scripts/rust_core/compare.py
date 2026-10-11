@@ -49,7 +49,12 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
 - ``schema``, ``warnings``, ``result`` (T1.11e): each Python runner's public
   ``Schema``, warning classes in order, and result through ``to_pandas()``
   (columns and dtypes, rows, and their digest in order) are the
-  reference's;
+  reference's; in a runtime cell other than the reference's
+  (``identity.cell`` named and not ``ref-pandas3``; H1, T1.18) they are
+  ``python-old``'s there, both runners required, and the reference's are
+  reported, not gated, since a pandas or pyarrow of that cell may differ
+  from the reference's (a difference only one cell shows is a register
+  entry naming the cell, never an exclusion);
 - ``payload`` (T1.11e): each request the scripted endpoint received is the
   reference's, parsed, every number compared as its kind (an integer or a
   float token) and its exact decimal value, the policy's exclusions left
@@ -110,6 +115,10 @@ OUTCOME = ('result', 'stage', 'error', 'code')
 #: observes both, and a null there is a defect, never a pass.
 UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
 PYTHON = ('python-ref', 'python-core', 'python-old')
+#: The runtime cell the reference is recorded in (design, "Runtime cells",
+#: H1). In another named cell the host rules compare ``python-core`` with
+#: ``python-old`` there and only report the reference's (T1.18).
+REFERENCE_CELL = 'ref-pandas3'
 #: The rules this comparator runs, which the policy must name exactly.
 RULES = (
     'outcome',
@@ -197,6 +206,15 @@ class Report:
 
     def note(self, text: str) -> None:
         self.notes.append(text)
+
+    def reported(self, since: int, why: str) -> None:
+        r"""The failures since ``since`` reported as notes, not gated,
+        each saying ``why``."""
+        for rule, text in self.failures[since:]:
+            self.notes.append(
+                f'reported ({why}): {text if rule is None else f"{rule}: {text}"}'
+            )
+        del self.failures[since:]
 
     def demote(self, since: int, keep: tuple[str, ...] = ()) -> None:
         kept = []
@@ -751,10 +769,12 @@ def _host_fields(
     who: str,
     observation: dict[str, Any],
     reference: dict[str, Any],
+    against: str = 'python-ref',
 ) -> None:
-    r"""A Python runner's public fields against the reference's: the
+    r"""A Python runner's public fields against the reference's (or, in a
+    cell other than the reference's, ``python-old``'s, ``against``): the
     ``schema``, ``warnings``, ``result`` and ``payload`` rules."""
-    where = f'{case["id"]}: {who} against python-ref'
+    where = f'{case["id"]}: {who} against {against}'
     mine, theirs = observation.get('public'), reference.get('public')
     if mine is None or theirs is None:
         report.fail(f'{where}: public: not recorded', 'schema')
@@ -1143,6 +1163,36 @@ def _sql_core(
             )
 
 
+def _cell_pair(
+    report: Report,
+    case: dict[str, Any],
+    core: dict[str, Any] | None,
+    old: dict[str, Any] | None,
+) -> None:
+    r"""H1's comparison in a cell other than the reference's: ``python-core``
+    and ``python-old`` observed in the same cell, and their host fields
+    equal (the ``schema``, ``warnings``, ``result`` and ``payload`` rules),
+    in place of the reference's, which are reported. Either runner alone
+    there is a failure: the cell's comparison needs both."""
+    cells = {
+        each['identity'].get('cell') for each in (core, old) if each is not None
+    }
+    other = cells - {None, REFERENCE_CELL}
+    if not other:
+        return
+    where = f'{case["id"]}: cell {sorted(other)[0]}'
+    if core is None or old is None:
+        report.fail(
+            f'{where}: python-core and python-old are both needed: the cell '
+            'compares them with each other (H1)'
+        )
+        return
+    if len(cells) != 1:
+        report.fail(f'{where}: python-core and python-old in different cells')
+        return
+    _host_fields(report, case, 'python-core', core, old, 'python-old')
+
+
 def compare(
     cases_dir: list[Path],
     reference_file: Path | None,
@@ -1256,7 +1306,17 @@ def compare(
                 report.info.append(f'{case["id"]}: {who}: {found}')
             _core_payload(report, case, who, observation, ref)
             if ref is not None:
-                if who in PYTHON:
+                cell = observation['identity'].get('cell')
+                if who in PYTHON and cell not in (None, REFERENCE_CELL):
+                    # H1: in a cell other than the reference's, the host
+                    # fields against the reference are reported; python-core
+                    # against python-old gates them (below).
+                    since = len(report.failures)
+                    _host_fields(report, case, who, observation, ref)
+                    report.reported(
+                        since, f'cell {cell}, against the reference; H1'
+                    )
+                elif who in PYTHON:
                     _host_fields(report, case, who, observation, ref)
                 _sql(report, case, who, observation, ref, ordered)
                 theirs = ref['identity']['versions']['duckdb']
@@ -1271,6 +1331,8 @@ def compare(
                         rule='route',
                     )
         python = observed.get('python-core', {}).get(case['id'])
+        old = observed.get('python-old', {}).get(case['id'])
+        _cell_pair(report, case, python, old)
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(report, case, python, rust)
