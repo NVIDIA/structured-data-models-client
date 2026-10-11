@@ -874,6 +874,52 @@ def test_a_landing_without_a_reviewed_by_trailer_fails(repo: Path) -> None:
     ]
 
 
+def test_a_protected_file_renamed_out_of_protection_or_onto_it_fails(
+    repo: Path,
+) -> None:
+    landed = checkpoint_of(repo)
+    protected = 'contract/tests/test_runners.py'
+    moved = 'tests/test_runners_moved.py'
+
+    def out(r: Path) -> None:
+        (r / 'tests').mkdir(exist_ok=True)
+        git(r, 'mv', protected, moved)
+        with (r / moved).open('a') as handle:
+            handle.write('\n# changed in the move\n')
+
+    commit(repo, edit=out)
+    assert check(repo, landed, protected='') == [
+        f'protected: {protected}: changed, and the Reviewed-by and '
+        'Protected-paths trailers do not name it'
+    ]
+    git(repo, 'reset', '-q', '--hard', landed)
+    seam = 'packages/structured-data-models-client/src/sdm_client/_routing.py'
+    onto = 'contract/runners/routing.py'
+    commit(repo, edit=lambda r: git(r, 'mv', seam, onto))
+    assert check(repo, landed, protected='') == [
+        f'protected: {onto}: changed, and the Reviewed-by and '
+        'Protected-paths trailers do not name it'
+    ]
+
+
+def test_the_protected_list_holds_the_corpus_test_and_the_stream_vectors() -> (
+    None
+):
+    rules = ratchet.patterns(
+        (ROOT / 'contract/protected-paths.txt').read_text()
+    )
+    for path in (
+        'rust/crates/sdm-core/tests/pql_corpus.rs',
+        'rust/crates/sdm-core/tests/pql/known-differing.json',
+        'rust/crates/sdm-engine/tests/rs1.json',
+        'rust/crates/sdm-engine/tests/rs1-draws.json',
+        'rust/crates/sdm-engine/tests/rs1.rs',
+        'rust/crates/sdm-engine/tests/rs1_record.py',
+        'contract/request-kinds.json',
+    ):
+        assert ratchet.protects(rules, path), path
+
+
 def test_a_change_to_the_routing_seam_is_not_protected(repo: Path) -> None:
     landed = checkpoint_of(repo)
     seam = 'packages/structured-data-models-client/src/sdm_client/_routing.py'
@@ -1054,6 +1100,42 @@ def test_an_id_added_to_known_differing_fails(repo: Path) -> None:
 
     commit(repo, edit=shrink)
     assert check(repo, landed, protected=path) == []
+
+
+@pytest.mark.parametrize(
+    ('seed', 'wanted'),
+    [
+        (
+            'missing',
+            'no rust/crates/sdm-core/tests/pql/known-differing.json at the candidate',
+        ),
+        ('no cases key', 'is not a list of cases'),
+        ('cases retyped', 'is not a list of cases'),
+        ('parts retyped', 'is not a list of cases'),
+    ],
+)
+def test_a_known_differing_file_missing_or_reshaped_fails(
+    repo: Path, seed: str, wanted: str
+) -> None:
+    path = 'rust/crates/sdm-core/tests/pql/known-differing.json'
+    landed = checkpoint_of(repo)
+
+    def reshape(r: Path) -> None:
+        if seed == 'missing':
+            (r / path).unlink()
+            return
+        document = json.loads((r / path).read_text())
+        if seed == 'no cases key':
+            del document['cases']
+        elif seed == 'cases retyped':
+            document['cases'] = {}
+        else:
+            document['cases'][0]['parts'] = 'warnings'
+        (r / path).write_text(json.dumps(document))
+
+    commit(repo, edit=reshape)
+    found = check(repo, landed, protected=path)
+    assert any(wanted in p for p in found), found
 
 
 def resolve(repo: Path, **where: str) -> tuple[Any, list[str]]:
@@ -1307,7 +1389,7 @@ def test_a_removed_register_id_fails(repo: Path) -> None:
         (
             'rust/crates/sdm-core/tests/pql/known-differing.json',
             '[1]',
-            ('a file not of its format',),
+            ('is not a list of cases',),
         ),
     ],
     # Short IDs: pytest puts the test's ID in each subprocess's environment,

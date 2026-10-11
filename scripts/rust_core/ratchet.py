@@ -939,18 +939,37 @@ def check_relaxations(
 def check_known_differing(
     report: Report, checkpoint: Tree, candidate: Tree
 ) -> None:
-    def listed(tree: Tree) -> dict[str, set[str]]:
+    def listed(tree: Tree, which: str) -> dict[str, set[str]] | None:
+        r"""The file's cases and their parts, or None, the failure named:
+        a file missing, without its ``cases`` list, or with an entry not
+        an ID and a list of parts reads as no list, never as an empty one."""
         text = tree.read(KNOWN_DIFFERING)
         if text is None:
-            return {}
+            report.fail(
+                'known-differing', f'no {KNOWN_DIFFERING} at the {which}'
+            )
+            return None
         document = _json(text, KNOWN_DIFFERING)
-        found: dict[str, set[str]] = {}
-        for item in (document or {}).get('cases') or []:
-            if isinstance(item, dict) and isinstance(item.get('id'), str):
-                found[item['id']] = set(map(str, item.get('parts') or []))
-        return found
+        items = document.get('cases') if isinstance(document, dict) else None
+        if not isinstance(items, list) or not all(
+            isinstance(item, dict)
+            and isinstance(item.get('id'), str)
+            and isinstance(item.get('parts'), list)
+            and all(isinstance(part, str) for part in item['parts'])
+            for item in items
+        ):
+            report.fail(
+                'known-differing',
+                f"the {which}'s {KNOWN_DIFFERING} is not a list of cases, "
+                'each an ID and its parts',
+            )
+            return None
+        return {item['id']: set(item['parts']) for item in items}
 
-    before, after = listed(checkpoint), listed(candidate)
+    before = listed(checkpoint, 'checkpoint')
+    after = listed(candidate, 'candidate')
+    if before is None or after is None:
+        return
     for case, parts in sorted(after.items()):
         if case not in before:
             report.fail('known-differing', f'{case}: added')
@@ -1140,7 +1159,11 @@ def check(
         trailer = ' '.join(
             found.get(key, '') for key in ('Reviewed-by', 'Protected-paths')
         )
-    changed = git(repo, 'diff', '--name-only', checkpoint_sha, head).split('\n')
+    # Without rename detection, a move lists both its paths, so a protected
+    # file moved out of (or onto) a protected path is seen at both.
+    changed = git(
+        repo, 'diff', '--name-only', '--no-renames', checkpoint_sha, head
+    ).split('\n')
     changed = [path for path in changed if path]
     try:
         mine = check_register(report, checkpoint, candidate, repo)

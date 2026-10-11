@@ -42,6 +42,8 @@ scripts/rust_core/**
 # stream and hash vectors (sdm-engine's rs1), the vendored tzdata, the layout and value vectors,
 # the contract's locked schemas, the goldens.
 rust/crates/sdm-core/tests/pql/**
+# The test that holds the corpus to its expectations and KNOWN_DIFFERING.
+rust/crates/sdm-core/tests/pql_corpus.rs
 rust/testdata/**
 rust/crates/sdm-contract/schema/**
 rust/crates/sdm-contract/tests/*.json
