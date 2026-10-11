@@ -1423,3 +1423,63 @@ def test_a_key_or_time_column_of_the_wrong_type_is_pinned_on_both_routes(
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
     assert _outcome_of(monkeypatch, '', arguments) == old
+
+
+def _offset_events(zone: str) -> Any:
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE events (id BIGINT PRIMARY KEY, event_date VARCHAR)'
+    )
+    connection.execute(
+        'INSERT INTO events VALUES '
+        + ', '.join(
+            f"({i}, '2024-01-0{i}T01:02:03{zone}')" for i in range(1, 5)
+        )
+    )
+    return connection
+
+
+@pytest.mark.parametrize(
+    ('zone', 'read'),
+    [
+        # An offset of a day or more, either way: no time, so no timestamp
+        # (T1.25 fix round 1, Codex P2).
+        ('+24:00', False),
+        ('+99:00', False),
+        ('+2360', False),
+        ('-25:00', False),
+        # Below a day, minutes past 59 count on, and zero either sign.
+        ('+01:99', True),
+        ('+0160', True),
+        ('+23:59', True),
+        ('-23:59', True),
+        ('+00', True),
+        ('-00', True),
+        ('Z', True),
+    ],
+)
+def test_text_with_an_offset_is_a_timestamp_as_the_reference_reads_it(
+    monkeypatch: pytest.MonkeyPatch, zone: str, read: bool
+) -> None:
+    # The old route describes each with its engine's pandas reading; the
+    # core reads the same, and text it decides is no timestamp meets the
+    # next rule, multicategorical (a value holds ':'), not a time column.
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            old = Schema.from_source(DuckDBSource(_offset_events(zone)))
+        assert (old['events'].time_column == 'event_date') is read
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        if read:
+            core = Schema.from_source(DuckDBSource(_offset_events(zone)))
+            assert core['events'].time_column == 'event_date'
+            assert (
+                str(core['events'].columns['event_date'].stype) == 'timestamp'
+            )
+        else:
+            with pytest.raises(StructuredDataError) as refused:
+                Schema.from_source(DuckDBSource(_offset_events(zone)))
+            assert refused.value.details['rule'] == 'multicategorical'

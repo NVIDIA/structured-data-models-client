@@ -820,7 +820,7 @@ entries:
     OverflowError), and at 0001-01-01T00:00Z it raises in 6 zones and in 11
     shows the instant's UTC wall clock with the zone's offset beside it, where
     the wall clock falls in the year 0; it answers every other vector
-    (111 of 162) by the zone's rules.
+    (101 of 162) by the zone's rules.
   new_behavior: >-
     sdm_engine::time answers every instant an i128 of nanoseconds holds by
     the zone's rules (Instant::to_local, localize): inside jiff's range by
@@ -936,6 +936,37 @@ entries:
     session's zone (a change, which would make the answer machine-
     independent) rather than keep the reference's machine dependence.
     Recommendation: keep for Phase 1.
+
+- id: DT-14
+  title: Time values past what a nanosecond count holds, refused as out of range
+  kind: change
+  old_behavior: >-
+    A DATE, TIMESTAMPTZ or text time value before 1677-09-21 or after
+    2262-04-11, which pandas' nanosecond datetimes cannot hold, fails the
+    reference's materialize: INTERNAL_ERROR for a DATE time column of the
+    year 0001, a TIMESTAMPTZ value in 3000 and text dates of the year 0001;
+    INVALID_REQUEST for a DATE time column in 3000 (measured at T1.25's
+    review).
+  new_behavior: >-
+    The core refuses each with VALUE_OUT_OF_RANGE when it reads the value
+    to nanoseconds (materialize's Times, Instant::to_count). Neither route
+    takes such a value.
+  affected_inputs: >-
+    SQL sources whose DATE, TIMESTAMPTZ or text time columns or timestamp
+    features hold a value outside 1677 to 2262; reachable from T1.25, when
+    time_type and text_time were lifted (a TIMESTAMP column of such years
+    differed the same way before).
+  cases: [T1.25]
+  refs: [DT-12, P1B-1]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.25's review (subagent P3-2). Pinned on both routes by the
+    client's tests/test_the_materialize_route.py
+    (test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code,
+    diagnostic). A refusal for a refusal under another code, so for the
+    owner, beside DT-12.
 
 # --- Orderings ----------------------------------------------------------------
 
@@ -1100,10 +1131,11 @@ entries:
     reads text as dates as the reference's engine does (DT-7), over
     date-rules.md's shapes, so text_time refuses only text whose reading
     takes a rule outside them and that the values that never read do not
-    already decide: a zone written by name, white space around a value, a
+    already decide, for example: a zone written by name, white space around a value, a
     free-form date (March 3 2020), a packed one (20240101), the year 0, more
     than six fractional digits, a three-digit year, mixed separators, and
-    the clock's own now and today; offsets mixed are refused by name
+    the clock's own now and today, dot dates (15.01.2024) and unpadded
+    year-first values (2024-1-5), for example; offsets mixed are refused by name
     (text_time_zones, DT-11). Measured at T1.25 over the T0.6 corpus's 121
     column cases as source columns under a name that says time and one that
     does not: the core describes 112 of the 242 as the reference does,

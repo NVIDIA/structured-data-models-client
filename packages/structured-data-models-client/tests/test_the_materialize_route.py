@@ -880,3 +880,50 @@ def test_a_zoned_anchor_time_is_read_at_its_utc_instant(
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         assert core == _anchored(zoned)
+
+
+#: Time values past the years a nanosecond count holds (1677 to 2262), on
+#: both routes: neither takes them, the old route refusing with its own
+#: code, the core with VALUE_OUT_OF_RANGE (register DT-14, proposed).
+OUT_OF_RANGE = {
+    'date 0001': (
+        'CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, '
+        "DATE '0001-01-01' + (order_id * 7)::INTEGER AS ts FROM orders",
+        'INTERNAL_ERROR',
+    ),
+    'date 3000': (
+        'CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, '
+        "DATE '3000-01-01' + (order_id * 7)::INTEGER AS ts FROM orders",
+        'INVALID_REQUEST',
+    ),
+    'timestamptz 3000': (
+        'CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, '
+        "CASE WHEN order_id = 3 THEN TIMESTAMPTZ '3000-01-01 00:00:00+00' "
+        'ELSE ts::TIMESTAMPTZ END AS ts FROM orders',
+        'INTERNAL_ERROR',
+    ),
+    'text 0001': (
+        'CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, '
+        "strftime(DATE '0001-01-01' + (order_id * 7)::INTEGER, '%Y-%m-%d') "
+        'AS ts FROM orders',
+        'INTERNAL_ERROR',
+    ),
+}
+
+
+@pytest.mark.parametrize('kind', sorted(OUT_OF_RANGE))
+def test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code(
+    monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    # Diagnostic, measured at T1.25's review: pinned so the day either
+    # route's code changes, this fails.
+    setup, old_code = OUT_OF_RANGE[kind]
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as core:
+        _materialize(setup)
+    assert core.value.code == 'VALUE_OUT_OF_RANGE'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        with pytest.raises(StructuredDataError) as old:
+            _materialize(setup)
+        assert old.value.code == old_code

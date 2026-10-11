@@ -173,11 +173,11 @@ fn document() -> Value {
 /// The readings the reader decided when the vectors were recorded: a
 /// change that decides fewer is seen, and one that decides more is a
 /// change to record here.
-const DECIDED: usize = 8_708;
+const DECIDED: usize = 18_080;
 /// The columns `never_read` bounded when the vectors were recorded.
-const BOUNDED: usize = 391;
+const BOUNDED: usize = 404;
 /// The day-first formats pandas warned of where the reading decided.
-const DAY_FIRST: usize = 202;
+const DAY_FIRST: usize = 219;
 
 #[test]
 fn the_reader_reads_text_as_pandas_does_wherever_it_decides() {

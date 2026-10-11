@@ -44,6 +44,9 @@ pub enum Unread {
     MixedZones,
 }
 
+/// Seconds in a day: an offset must be less, either way.
+const SECONDS_PER_DAY: i32 = 86_400;
+
 /// The texts pandas reads as a missing time.
 const MISSING: [&str; 7] = ["", "NaT", "nat", "NAT", "nan", "NaN", "NAN"];
 
@@ -269,7 +272,7 @@ type Read = Option<(Instant, Option<i32>)>;
 /// month first and `year` for its year, or `None` when it names no date
 /// (a month past 12, a day the month lacks, an hour past 23, a minute or
 /// second past 59, a second past 61 where `leap` takes 60 and 61 as
-/// pandas' formats do, rolling over). Undecided at pandas' range ends.
+/// pandas' formats do, rolling over, an offset of a day or more). Undecided at pandas' range ends.
 fn read_shape(shape: &Shape<'_>, order: Order, year: i64, leap: bool) -> Result<Read, Unread> {
     let [a, b, c] = shape.fields;
     let (month, day) = match (shape.lead, order) {
@@ -317,12 +320,32 @@ fn read_shape(shape: &Shape<'_>, order: Order, year: i64, leap: bool) -> Result<
     );
     let offset = zone.and_then(|z| z.offset_seconds());
     if let Some(offset) = offset {
+        // An offset of a whole day or more is no offset to Python's
+        // `timezone`, which every reading of pandas builds: the value names
+        // no time. Its minutes may pass 59 (`+01:99` is 2:39) below that.
+        if offset.abs() >= SECONDS_PER_DAY {
+            return Ok(None);
+        }
         at = Instant::from_nanos(at.nanos() - i128::from(offset) * 1_000_000_000);
     }
     if !in_years(at) {
         return Err(Unread::Undecided);
     }
     Ok(Some((at, offset)))
+}
+
+/// Whether the zone writes minutes past 59 (`+01:99`): a first value so
+/// written gives no format (pandas' guess writes the offset back as
+/// `+0239` and finds it another text), `strptime`'s `%z` reads none, and
+/// whether pandas' ISO parser reads one under a format is not ported.
+fn minutes_past_59(shape: &Shape<'_>) -> bool {
+    matches!(
+        shape.time,
+        Some(TimeOfDay {
+            zone: Some((_, Zone::Compact { minute, .. } | Zone::Colon { minute, .. })),
+            ..
+        }) if minute > 59
+    )
 }
 
 /// Whether the zone is a bare hour (`+HH`).
@@ -505,8 +528,9 @@ impl Reader {
                     // The date reader does not read it: no format.
                     return Ok(None);
                 }
-                // A bare hour's zone only an ISO format reads.
-                if bare_hour(&shape) && !iso(&layout) {
+                // A bare hour's zone only an ISO format reads; minutes past
+                // 59 give none.
+                if (bare_hour(&shape) && !iso(&layout)) || minutes_past_59(&shape) {
                     return Ok(None);
                 }
                 Ok(Some(Format {
@@ -516,8 +540,8 @@ impl Reader {
             }
             Lead::DayOrMonth => {
                 // No format takes a year of two or three digits, nor a
-                // bare hour's zone.
-                if shape.fields[2].len() != 4 || bare_hour(&shape) {
+                // bare hour's zone or minutes past 59.
+                if shape.fields[2].len() != 4 || bare_hour(&shape) || minutes_past_59(&shape) {
                     return Ok(None);
                 }
                 let order = if number(shape.fields[0]) > 12 {
@@ -542,9 +566,18 @@ impl Reader {
                     if mixed_separators(&shape) {
                         return Err(Unread::Undecided);
                     }
-                    // A bare hour's zone only an ISO format reads.
+                    // A bare hour's zone only an ISO format reads; minutes
+                    // past 59 `strptime` does not read, and an ISO format's
+                    // reading of them is not ported.
                     if bare_hour(&shape) && !iso(&layout) {
                         return Ok(None);
+                    }
+                    if minutes_past_59(&shape) {
+                        return if iso(&layout) {
+                            Err(Unread::Undecided)
+                        } else {
+                            Ok(None)
+                        };
                     }
                     let year = match shape.lead {
                         Lead::Year => number(shape.fields[0]),
@@ -752,6 +785,28 @@ mod tests {
         assert_eq!(
             each(&["13/02/2020 00:00 +0100", "15/02/2020"]),
             Err(Unread::MixedZones)
+        );
+    }
+
+    #[test]
+    fn an_offset_of_a_day_or_more_names_no_time() {
+        for zone in ["+24:00", "+2360", "-25:00", "+99:00", "+24"] {
+            let value = format!("2024-01-01T01:02:03{zone}");
+            assert_eq!(read(&[&value], false), Ok(vec![None]), "{zone}");
+            assert_eq!(read(&[&value], true), Ok(vec![None]), "{zone}");
+            assert_eq!(each(&[&value]), Ok(vec![None]), "{zone}");
+        }
+        // Below a day, minutes past 59 count on: +01:99 is 2:39 east.
+        assert_eq!(
+            read(&["2024-01-01T01:02:03+01:99"], true),
+            Ok(vec![at("2023-12-31T22:23:03")])
+        );
+        assert_eq!(
+            read(
+                &["2024-01-01T01:02:03-23:59", "2024-01-01T01:02:03-00"],
+                true
+            ),
+            Ok(vec![at("2024-01-02T01:01:03"), at("2024-01-01T01:02:03")])
         );
     }
 

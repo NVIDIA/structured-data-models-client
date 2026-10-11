@@ -40,10 +40,11 @@ pub enum Zone<'a> {
     Z,
     /// `+HH` or `-HH`: an offset of whole hours.
     Hours { seconds: i32 },
-    /// `+HHMM` or `-HHMM`.
-    Compact { seconds: i32 },
+    /// `+HHMM` or `-HHMM`; `minute` the minutes field as written, which may
+    /// pass 59.
+    Compact { seconds: i32, minute: i32 },
     /// `+HH:MM` or `-HH:MM`.
-    Colon { seconds: i32 },
+    Colon { seconds: i32, minute: i32 },
     /// A name, such as `UTC` or `CST`.
     Name(&'a str),
 }
@@ -54,9 +55,9 @@ impl Zone<'_> {
     pub fn offset_seconds(&self) -> Option<i32> {
         match self {
             Zone::Z => Some(0),
-            Zone::Hours { seconds } | Zone::Compact { seconds } | Zone::Colon { seconds } => {
-                Some(*seconds)
-            }
+            Zone::Hours { seconds }
+            | Zone::Compact { seconds, .. }
+            | Zone::Colon { seconds, .. } => Some(*seconds),
             Zone::Name(_) => None,
         }
     }
@@ -182,9 +183,11 @@ fn zone(text: &str) -> Option<Zone<'_>> {
             }),
             4 if digits(rest) => Some(Zone::Compact {
                 seconds: sign * (number(&rest[..2]) * 3_600 + number(&rest[2..]) * 60),
+                minute: number(&rest[2..]),
             }),
             5 if digits(&rest[..2]) && rest[2] == b':' && digits(&rest[3..]) => Some(Zone::Colon {
                 seconds: sign * (number(&rest[..2]) * 3_600 + number(&rest[3..]) * 60),
+                minute: number(&rest[3..]),
             }),
             _ => None,
         };
@@ -300,7 +303,16 @@ mod tests {
             (t.separator, t.hour, t.minute, t.second, t.fraction),
             (' ', "9", "05", Some("07"), Some("25"))
         );
-        assert_eq!(t.zone, Some((true, Zone::Colon { seconds: -19_800 })));
+        assert_eq!(
+            t.zone,
+            Some((
+                true,
+                Zone::Colon {
+                    seconds: -19_800,
+                    minute: 30
+                }
+            ))
+        );
         assert_eq!(Zone::Hours { seconds: 3_600 }.offset_seconds(), Some(3_600));
         assert_eq!(Zone::Name("UTC").offset_seconds(), None);
     }
