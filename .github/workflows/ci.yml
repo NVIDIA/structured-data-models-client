@@ -653,8 +653,11 @@ jobs:
           EOF
           if [ "$status" != 0 ] && [ "${REPORT_ONLY_BEFORE_CELLS:-}" = 1 ] && [ -f gate.log ]; then
             checkpoint=$(sed -n 's/^gate: base .*, checkpoint //p' gate.log)
-            if [ "$(grep '^  FAIL ' gate.log)" = '  FAIL compare' ] && [ -n "$checkpoint" ] &&
-              ! git show "$checkpoint:scripts/rust_core/compare.py" | grep -q REFERENCE_CELL; then
+            # Read from the checkpoint's tree; a checkpoint git cannot read
+            # never reports.
+            if [ "$(grep '^  FAIL ' gate.log)" = '  FAIL compare' ] &&
+              comparator=$(git show "${checkpoint}:scripts/rust_core/compare.py") &&
+              ! grep -q REFERENCE_CELL <<<"$comparator"; then
               echo "gate: REPORT-ONLY in $CELL: the checkpoint's comparator ($checkpoint) predates H1's"
               echo "gate: cell rule, so its differences above are reported, not gated (T1.18's own run)"
               status=0

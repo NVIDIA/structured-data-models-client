@@ -152,3 +152,79 @@ def test_off_the_phase_branch_an_empty_where_skips_rust_host_s_gate(
     done, called = _run(tmp_path, step, job_env, '', 'pull_request', LANE)
     assert done.returncode == 0, done.stdout + done.stderr
     assert not called.exists()
+
+
+def _git(work: Path, *args: str) -> str:
+    return subprocess.run(
+        ['git', '-C', str(work), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
+@pytest.mark.parametrize(
+    'seed',
+    ['comparator', 'ratchet-too', 'rule-held', 'unreadable', 'other-cell'],
+)
+def test_the_floor_cell_reports_only_a_comparator_before_the_cell_rule(
+    tmp_path: Path, seed: str
+) -> None:
+    r"""T1.18's own run (E65(c)): the floor job reports a gate whose one
+    failing step is the comparator, while the checkpoint's ``compare.py``
+    has no cell rule, and says so; a failing ratchet, a checkpoint holding
+    the rule, a checkpoint git cannot read, or another cell's job gates."""
+    job = (
+        'contract-python-dbr17-pandas2'
+        if seed == 'other-cell'
+        else 'contract-python-floor-pandas2-2'
+    )
+    [(_, step, job_env)] = [s for s in STEPS if s[0] == job]
+    work = tmp_path / 'work'
+    (work / 'scripts/rust_core').mkdir(parents=True)
+    _git(work, 'init', '-q')
+    (work / 'scripts/rust_core/compare.py').write_text(
+        'REFERENCE_CELL = 1\n' if seed == 'rule-held' else '# no cells\n'
+    )
+    _git(work, 'add', '.')
+    _git(
+        work, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'c'
+    )
+    checkpoint = (
+        'f' * 40 if seed == 'unreadable' else _git(work, 'rev-parse', 'HEAD')
+    )
+    failed = ['compare'] + (['ratchet'] if seed == 'ratchet-too' else [])
+    summary = ''.join(f'echo "  FAIL {name}"\n' for name in failed)
+    _executable(
+        work / 'scripts/rust_core/gate.sh',
+        '#!/usr/bin/env bash\n'
+        f'echo "gate: base {checkpoint}, checkpoint {checkpoint}"\n'
+        + summary
+        + 'echo "gate: FAILED"\nexit 1\n',
+    )
+    bin_dir = tmp_path / 'bin'
+    _executable(
+        bin_dir / 'python',
+        '#!/usr/bin/env bash\n'
+        'if [ "$2" = where ]; then echo "--base x"; fi\nexit 0\n',
+    )
+    done = subprocess.run(
+        ['bash', '--noprofile', '--norc', '-e', '-c', step['run']],
+        cwd=work,
+        env={
+            'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
+            'HOME': str(tmp_path),
+            'GITHUB_EVENT_NAME': 'push',
+            'GITHUB_REF_NAME': LANE,
+            **{k: str(v) for k, v in job_env.items()},
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if seed == 'comparator':
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert 'gate: REPORT-ONLY in floor-pandas2.2' in done.stdout
+    else:
+        assert done.returncode == 1, done.stdout + done.stderr
+        assert 'REPORT-ONLY' not in done.stdout
