@@ -444,7 +444,13 @@ def _shown(*given: dict[str, Any]) -> list[tuple[str, str]]:
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         errors.warn_from_core(control.encode(), {})
-    return [(type(w.message).__name__, str(w.message)) for w in shown]
+    # Not a ResourceWarning the collector raises meanwhile for another
+    # test's unclosed connection.
+    return [
+        (type(w.message).__name__, str(w.message))
+        for w in shown
+        if not issubclass(w.category, ResourceWarning)
+    ]
 
 
 def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> (

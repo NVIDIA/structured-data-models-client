@@ -621,6 +621,13 @@ SCHEMA_RULES = {
 }
 
 
+def _said(shown: list[Any]) -> list[Any]:
+    r"""The warnings a call said, without a ``ResourceWarning`` the
+    collector raised meanwhile for another test's unclosed connection,
+    which ``simplefilter('always')`` lets in at any point (T1.23 fix 1)."""
+    return [w for w in shown if not issubclass(w.category, ResourceWarning)]
+
+
 def _described(
     monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...], routes: str
 ) -> tuple[dict[str, Any], list[tuple[str, str]], Schema]:
@@ -631,7 +638,7 @@ def _described(
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(_connection(*setup)))
-    said = [(type(w.message).__name__, str(w.message)) for w in shown]
+    said = [(type(w.message).__name__, str(w.message)) for w in _said(shown)]
     return _projection(schema), said, schema
 
 
@@ -821,7 +828,7 @@ def _from_source(
             if str(w.message).startswith('[')
             else str(w.message),
         )
-        for w in shown
+        for w in _said(shown)
     ]
     return _projection(schema), said, schema
 
@@ -902,7 +909,7 @@ def _named_on_the_core(
         schema = bridge.build(Schema, DuckDBSource(connection), described)
     said = [
         (type(w.message).__name__, str(w.message).split('] ', 1)[1])
-        for w in shown
+        for w in _said(shown)
     ]
     return _projection(schema), said
 
@@ -915,7 +922,7 @@ def _named_on_the_old_route(
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(connection), tables)
     return _projection(schema), [
-        (type(w.message).__name__, str(w.message)) for w in shown
+        (type(w.message).__name__, str(w.message)) for w in _said(shown)
     ]
 
 
