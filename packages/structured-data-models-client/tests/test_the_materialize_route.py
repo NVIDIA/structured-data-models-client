@@ -39,6 +39,9 @@ from sdm_client import (
     _routing,
 )
 from sdm_client._rust import codec
+from sdm_client._rust import materialize as _rust_materialize
+from sdm_client._rust import run as _rust_run
+from sdm_client._rust import schema as _rust_schema
 from sdm_client._rust.run import run
 from sdm_client.errors import MissingExtraError
 
@@ -650,3 +653,33 @@ def test_a_call_refused_before_the_run_leaves_the_warning_to_the_next(
     query = PredictiveQuery(QUERY, schema)
     calls = [{'indices': ['abc']}, {'indices': [0, 1]}, {'indices': [0, 1]}]
     assert _warned(query, calls) == [0, 1, 0]
+
+
+def test_a_source_of_5000_columns_is_described_and_materialized_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.23's exit: describe_source and materialize on a generated source
+    # of 5,000 columns run to Done through HostRun on this core runner
+    # (sdm-testkit's duckdb_provider.rs runs them on rust-host): the shop
+    # base with its users widened to 5,000 columns, each a feature.
+    features = ', '.join(
+        f'(user_id * {i}) % 7 AS f{i}' for i in range(3, 5_000)
+    )
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    taken: list[str] = []
+    real = _rust_run.run
+
+    def counted(operation: dict[str, Any], *rest: Any, **named: Any) -> Any:
+        finished = real(operation, *rest, **named)
+        taken.append(operation['op'])
+        return finished
+
+    for module in (_rust_schema, _rust_materialize):
+        monkeypatch.setattr(module, 'run', counted)
+    request = _materialize(
+        f'CREATE OR REPLACE TABLE users AS SELECT *, {features} FROM users'
+    )
+    # Each core run finished with its result: Done.
+    assert taken == ['describe_source', 'materialize']
+    users = request._payloads[0]['context']['related_tables']['users']
+    assert len(users['columns']) == 5_001

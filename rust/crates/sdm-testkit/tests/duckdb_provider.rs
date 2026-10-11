@@ -1177,3 +1177,47 @@ fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
     assert_eq!(held, fetches.len());
     assert!(held >= 30);
 }
+
+#[test]
+fn a_source_of_5000_columns_is_described_and_materialized_through_host_run() {
+    // T1.23's exit: describe_source and materialize on a generated source
+    // of 5,000 columns run to Done through HostRun on this core runner
+    // (the client's tests run them on python-core): base.regression with
+    // its users widened to 5,000 columns, each a feature.
+    let mut loaded = case::load(&[contract().join("cases/s1/base.regression.json")])
+        .unwrap()
+        .remove(0)
+        .case;
+    let features: Vec<String> = (3..5_000)
+        .map(|i| format!("(user_id * {i}) % 7 AS f{i}"))
+        .collect();
+    loaded.input.setup = Some(vec![format!(
+        "CREATE OR REPLACE TABLE users AS SELECT *, {} FROM users",
+        features.join(", ")
+    )]);
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let observed = host::run(&loaded, &bases).unwrap();
+    let described = observed.described.expect("described");
+    let users = described["tables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "users")
+        .unwrap();
+    assert_eq!(users["columns"].as_array().unwrap().len(), 5_000);
+    assert_eq!(
+        observed.operations,
+        ["describe_source", "materialize", "predict"]
+    );
+    let state = observed.materialized.expect("materialized");
+    // The payload's users carry every column, beside the instance's id.
+    let sent = state["payload"]["context"]["related_tables"]["users"]["columns"]
+        .as_array()
+        .map(Vec::len);
+    assert_eq!(sent, Some(5_001));
+    assert!(
+        matches!(observed.answer, Answer::Predicted(_)),
+        "{:?}",
+        observed.answer
+    );
+}
