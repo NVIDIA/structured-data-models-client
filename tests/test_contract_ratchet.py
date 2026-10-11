@@ -337,11 +337,146 @@ def test_a_changed_answer_passes_only_with_an_exact_reviewer_approved_entry(
     )
     found = check(repo, landed, files)
     # Judged against the checkpoint's baseline, the change passes; the
-    # candidate's proposed baseline must then say the new outcome.
+    # candidate's proposed baseline must then say the new outcome, which
+    # accept writes from the effective expectation.
     assert not any('became' in p for p in found), found
     assert any(
         'the proposed baseline is not the observation' in p for p in found
     )
+    commit(repo, edit=lambda r: accepted(r, landed, files))
+    assert check(repo, landed, files) == []
+
+
+def accepted(repo: Path, checkpoint: str, files: tuple[Path, ...]) -> None:
+    r"""Writes the proposed baselines as ``ratchet.py accept --checkpoint``
+    does, for the runners observed."""
+    for runner, lines in ratchet.accept(repo, list(files), checkpoint).items():
+        path = repo / f'contract/baselines/{CELL}/{runner}.jsonl'
+        path.write_text(
+            ''.join(json.dumps(line, sort_keys=True) + '\n' for line in lines)
+        )
+
+
+def _transition(
+    repo: Path, tmp_path: Path, item: dict[str, str] | None, owner: bool = False
+) -> tuple[str, tuple[Path, ...]]:
+    r"""A candidate whose python-old observation of ACCEPTED moves to
+    predict, with ``item`` as an approved entry's one case outcome."""
+    landed = checkpoint_of(repo)
+    files = (
+        observe(
+            repo, tmp_path, 'python-old', set_outcome(ACCEPTED, stage='predict')
+        ),
+    )
+    if item is not None:
+        commit(
+            repo,
+            edit=lambda r: append_entry(
+                r,
+                {
+                    'id': 'SEED-1',
+                    'cases': [ACCEPTED],
+                    'case_outcomes': [item],
+                    'approved_by': 'owner' if owner else 'reviewer',
+                },
+            ),
+        )
+    return landed, files
+
+
+def test_accept_writes_the_successor_baseline_of_an_approved_transition_only(
+    repo: Path, tmp_path: Path
+) -> None:
+    old, new = 'success at materialize', 'success at predict'
+
+    def held(found: dict[str, list[dict[str, Any]]]) -> dict[str, Any] | None:
+        return next(
+            (
+                x['projection']
+                for x in found['python-old']
+                if x['case'] == ACCEPTED
+            ),
+            None,
+        )
+
+    landed, files = _transition(
+        repo, tmp_path, outcome(ACCEPTED, 'python-old', old, new)
+    )
+    # Approved, exact: the successor baseline holds the new outcome.
+    assert held(ratchet.accept(repo, list(files), landed)) == {
+        'outcome.code': None,
+        'outcome.error': None,
+        'outcome.result': 'success',
+        'outcome.stage': 'predict',
+    }
+    # Without the checkpoint (the first baselines), only reference equality.
+    assert held(ratchet.accept(repo, list(files))) is None
+    # A wrong or unapproved transition admits nothing.
+    for item in (outcome(ACCEPTED, 'python-old', 'success', new), None):
+        git(repo, 'reset', '-q', '--hard', landed)
+        landed, files = _transition(repo, tmp_path, item)
+        assert held(ratchet.accept(repo, list(files), landed)) is None, item
+
+
+def test_the_effective_expectation_is_the_baseline_or_its_approved_transition(
+    repo: Path, tmp_path: Path
+) -> None:
+    landed = checkpoint_of(repo)
+    target = tmp_path / 'effective.json'
+    refusal = 'refusal INVALID_REQUEST at materialize (ValueError)'
+
+    def wanted(item: dict[str, str] | None, owner: bool = False) -> Any:
+        git(repo, 'reset', '-q', '--hard', landed)
+        _transition(repo, tmp_path, item, owner)
+        ratchet.check(repo, landed, [], '', effective_out=target)
+        return json.loads(target.read_text())[ACCEPTED]['python-old']
+
+    baseline = {
+        'result': 'success',
+        'stage': 'materialize',
+        'error': None,
+        'code': None,
+    }
+    assert wanted(None) == baseline
+    assert wanted(
+        outcome(
+            ACCEPTED,
+            'python-old',
+            'success at materialize',
+            'success at predict',
+        )
+    ) == {
+        **baseline,
+        'stage': 'predict',
+    }
+    # Not from the baseline's outcome, another runner, a new refusal the
+    # reviewer approved, a panic: the baseline stands.
+    for item in (
+        outcome(ACCEPTED, 'python-old', 'success', 'success at predict'),
+        outcome(
+            ACCEPTED,
+            'python-core',
+            'success at materialize',
+            'success at predict',
+        ),
+        outcome(ACCEPTED, 'python-old', 'success at materialize', refusal),
+        outcome(
+            ACCEPTED,
+            'python-old',
+            'success at materialize',
+            'refusal INTERNAL_ERROR at materialize',
+        ),
+    ):
+        assert wanted(item) == baseline, item
+    assert wanted(
+        outcome(ACCEPTED, 'python-old', 'success at materialize', refusal),
+        owner=True,
+    ) == {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'ValueError',
+        'code': 'INVALID_REQUEST',
+    }
 
 
 def test_a_new_refusal_fails_without_the_owner(
@@ -1244,3 +1379,30 @@ def test_ci_judges_a_phase_push_from_its_previous_tip_and_a_lane_from_the_phase_
         event.write_text(broken)
         with pytest.raises(ratchet.Unreadable):
             ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'rust-core-phase-1'})
+
+
+compare = _module(ROOT / 'scripts/rust_core/compare.py', 'compare_for_ratchet')
+
+
+@pytest.mark.parametrize(
+    ('text', 'wanted'),
+    [
+        (DEEP, 'not JSON it reads'),
+        ('[]', 'not effective expectations'),
+        (
+            '{"a.case": {"python-old": {"rows": 1}}}',
+            'not effective expectations',
+        ),
+        ('{"a.case": {"python-old": []}}', 'not effective expectations'),
+        ('{', 'not JSON it reads'),
+    ],
+    ids=['deep', 'a-list', 'another-field', 'retyped', 'truncated'],
+)
+def test_the_comparator_refuses_effective_expectations_of_another_shape(
+    tmp_path: Path, text: str, wanted: str
+) -> None:
+    path = tmp_path / 'effective.json'
+    path.write_text(text)
+    # Python 3.14's json reads the deep list; it is then no mapping.
+    with pytest.raises(ValueError, match=wanted if text != DEEP else 'not '):
+        compare.expectations(path)

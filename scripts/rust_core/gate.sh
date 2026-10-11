@@ -26,7 +26,9 @@
 #
 # The checks, each run even after one fails, and the summary at the end:
 #
-#   observations  --run python-core,python-old,rust-host makes them here:
+#   observations  required: with neither --run nor --observations the gate
+#                 fails, since the tree checks alone judge no behaviour;
+#                 --run python-core,python-old,rust-host makes them here:
 #                 the Python runners with $PYTHON (default python3, an
 #                 environment holding the candidate's client), rust-host with
 #                 cargo, each with the checkpoint's run_python.py and test
@@ -42,7 +44,10 @@
 #                 observations the baselines and availability;
 #   compare       the checkpoint's compare.py on the observations, against
 #                 the candidate's cases, bases and reference, which the
-#                 ratchet lets differ from the checkpoint's only as approved;
+#                 ratchet lets differ from the checkpoint's only as approved,
+#                 each baselined case's outcome against its effective
+#                 expectation (--expect, which the ratchet writes: the
+#                 checkpoint's baseline or an approved transition from it);
 #   l0            the checkpoint's l0_deps.py (with the bridge freeze, based
 #                 at the checkpoint) and l0_scan.py on the candidate's tree;
 #                 --no-l0 leaves them to the job that has cargo.
@@ -216,17 +221,29 @@ elif [ ${#given[@]} -gt 0 ] && [ "$differs" = 1 ]; then
   }
   step observations refuse
 fi
+if [ ${#given[@]} -eq 0 ]; then
+  # The gate judges behaviour: without observations it would check the tree
+  # alone and say nothing of the outcomes, baselines or availability.
+  no_evidence() {
+    echo 'no observations: give --run RUNNERS or --observations FILE; the'
+    echo 'tree checks alone are no gate'
+    return 1
+  }
+  step observations no_evidence
+fi
 
 with=()
 for file in "${given[@]+"${given[@]}"}"; do with+=(--observations "$file"); done
 step ratchet "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
   --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
+  --effective-out "$scratch/effective.json" \
   "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
 
 if [ ${#given[@]} -gt 0 ]; then
   step compare "$PYTHON" "$here/scripts/rust_core/compare.py" \
     --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
-    --reference "$(ls "$candidate"/contract/reference/*.jsonl)" "${given[@]}"
+    --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
+    --expect "$scratch/effective.json" "${given[@]}"
 fi
 
 if [ "$l0" = 1 ]; then

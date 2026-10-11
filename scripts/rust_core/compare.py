@@ -6,14 +6,17 @@
 r"""Compares runners' observations of the contract cases.
 
     scripts/rust_core/compare.py --cases DIR [--reference FILE]
-        [--policy FILE] [--bases FILE] OBSERVATIONS...
+        [--policy FILE] [--bases FILE] [--expect FILE] OBSERVATIONS...
 
 Each OBSERVATIONS file is one runner's output (run_python.py or
 sdm-contract-run); FILE is the committed reference observations
 (``contract/reference/<reference-commit>.jsonl``), and ``--bases`` the
 bases file the cases build from (this checkout's ``contract/bases.yaml`` by
 default; ``gate.sh`` gives the candidate's, which the checkpoint's ratchet
-lets change only by additions). Every observation is
+lets change only by additions), and ``--expect`` each case's effective
+expected outcome by runner, which ``ratchet.py check --effective-out``
+writes from the checkpoint's baselines and the transitions approved since
+(T1.14). Every observation is
 validated against ``contract/observation.schema.json``; a file with none,
 or a case a given runner did not observe, is a runner failure. Each
 observation must be of the case and bases files compared (their SHA-256 in
@@ -27,7 +30,10 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
 
 - ``outcome`` (T1.10): the call succeeded or refused, as expected and as
   the reference did, at the same stage and with the same exception class
-  and ``StructuredDataError.code`` wherever both sides observe them; each
+  and ``StructuredDataError.code`` wherever both sides observe them, or, for
+  a case and runner ``--expect`` names, as its effective expectation says
+  (the reference plus approved deviations, design "Reference observations
+  and the gate"), the reference itself still held to the case; each
   core runner's outcome is the core's answer as the route maps it
   (accepted, a success; refused, ``INVALID_REQUEST``; an error, a refusal
   with its code; a description or request state, the call going on);
@@ -315,6 +321,57 @@ def _against_reference(
                 theirs,
                 mine,
             )
+
+
+def _effective(
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    outcome: dict[str, Any],
+    wanted: dict[str, Any],
+    reference: dict[str, Any] | None,
+) -> None:
+    r"""The outcome rule against the case's effective expectation for this
+    runner, in place of its expectation and the reference's outcome: each
+    field the expectation names, the rest the reference's (or, with none,
+    the case's)."""
+    expect = case['expect']
+    base = (
+        reference['outcome']
+        if reference is not None
+        else {
+            'result': expect['outcome'],
+            'stage': expect['stage'],
+            'error': expect.get('error'),
+            'code': expect.get('code'),
+        }
+    )
+    where = f'{case["id"]}: {who} against its effective expectation'
+    for field in OUTCOME:
+        if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+            continue
+        value = wanted.get(field, base[field])
+        if outcome[field] != value:
+            _differ(report, where, f'outcome.{field}', value, outcome[field])
+
+
+def expectations(path: Path) -> dict[str, dict[str, dict[str, Any]]]:
+    r"""The effective expectations ``ratchet.py`` wrote: by case and runner,
+    outcome fields; a file of another shape is refused by name."""
+    try:
+        found = json.loads(path.read_text(encoding='utf-8'))
+    except (ValueError, RecursionError, OSError):
+        raise ValueError(f'{path.name}: not JSON it reads') from None
+    if not isinstance(found, dict) or not all(
+        isinstance(by_runner, dict)
+        and all(
+            isinstance(wanted, dict) and set(wanted) <= set(OUTCOME)
+            for wanted in by_runner.values()
+        )
+        for by_runner in found.values()
+    ):
+        raise ValueError(f'{path.name}: not effective expectations')
+    return found
 
 
 def _route(
@@ -1092,6 +1149,7 @@ def compare(
     files: list[Path],
     policy_file: Path | None = None,
     bases_file: Path | None = None,
+    expect_file: Path | None = None,
 ) -> Report:
     check = _capture_check()
     try:
@@ -1108,6 +1166,11 @@ def compare(
             'compare-policy.yaml: its rules are not the ones this runs: '
             f'{sorted(set(policy["rules"]) ^ set(RULES))}'
         )
+        return report
+    try:
+        effective = {} if expect_file is None else expectations(expect_file)
+    except ValueError as problem:
+        report.fail(f'--expect: {problem}')
         return report
     runner = _runner()
     try:
@@ -1173,11 +1236,17 @@ def compare(
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
             _core_consistent(report, case, who, observation)
-            _expectation(report, case, who, observation['outcome'])
-            if ref is not None:
-                _against_reference(
-                    report, case, who, observation['outcome'], ref
+            wanted = effective.get(case['id'], {}).get(who)
+            if wanted is not None:
+                _effective(
+                    report, case, who, observation['outcome'], wanted, ref
                 )
+            else:
+                _expectation(report, case, who, observation['outcome'])
+                if ref is not None:
+                    _against_reference(
+                        report, case, who, observation['outcome'], ref
+                    )
             _route(report, case, who, observation)
             _case_inputs(report, case, who, observation)
             if reach is not None:
@@ -1217,6 +1286,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--reference', type=Path)
     parser.add_argument('--policy', type=Path)
     parser.add_argument('--bases', type=Path)
+    parser.add_argument('--expect', type=Path)
     parser.add_argument('observations', type=Path, nargs='+')
     arguments = parser.parse_args(argv)
     report = compare(
@@ -1225,6 +1295,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.observations,
         arguments.policy,
         arguments.bases,
+        arguments.expect,
     )
     for text in report.info:
         print(f'statements per public call: {text}')

@@ -9,8 +9,8 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
 
     ratchet.py checkpoint [--repo DIR] (--base REV | --phase-push BEFORE)
     ratchet.py check [--repo DIR] --checkpoint SHA [--protected-paths TEXT]
-        [--observations FILE]...
-    ratchet.py accept [--repo DIR] --observations FILE...
+        [--observations FILE]... [--effective-out FILE]
+    ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
     ratchet.py where
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
@@ -70,10 +70,17 @@ A baseline is the checkpoint's, so a branch-side edit of one changes
 nothing the candidate is judged by; the identity envelope is outside every
 projection, so an identity-only change passes.
 
+``check --effective-out`` also writes each baselined case's effective
+expected outcome by runner (:func:`effective`: the checkpoint's baseline, or
+an approved entry's exact transition from it), which ``gate.sh`` hands the
+comparator as ``--expect``, so an approved change passes its outcome rule
+while every other field is still compared with the reference.
+
 ``accept`` writes the proposed baselines from the observations of every
-runner given: each case whose projection equals the committed reference's
-on every one of them, the first baselines (T1.14) included; it is the
-package's to commit and the reviewer's to review (H3).
+runner given: each case every runner meets, its effective expectation where
+``--checkpoint``'s baselines hold it, and the committed reference's
+projection otherwise (the first baselines, T1.14, had only the latter); it
+is the package's to commit and the reviewer's to review (H3).
 
 ``where`` prints the gate's ``--base`` or ``--phase-push`` for the CI run
 it is in, from GitHub's environment, or nothing outside the phase branch and
@@ -191,7 +198,9 @@ class Tree:
         self._batch.stdin.flush()
         header = self._batch.stdout.readline().split()
         text: str | None = None
-        if len(header) == 3 and header[1] == b'blob':
+        if header[-1:] == [b'missing']:
+            pass
+        elif len(header) == 3 and header[1] == b'blob':
             data = self._batch.stdout.read(int(header[2]))
             self._batch.stdout.read(1)
             try:
@@ -528,6 +537,83 @@ def authorized(
             ):
                 return True
     return False
+
+
+def outcome_projection(
+    text: Any, like: dict[str, Any]
+) -> dict[str, Any] | None:
+    r"""An entry's outcome text as a projection shaped as ``like``, or None
+    for one that is no outcome (``none``, ``removed``, ``diagnostic``) or
+    is ``INTERNAL_ERROR``."""
+    parts = register_module().parse_outcome(str(text))
+    if parts is None or parts['code'] == PANIC:
+        return None
+    found = {
+        'outcome.result': parts['result'],
+        'outcome.code': None if parts['code'] in (None, '-') else parts['code'],
+        'outcome.stage': parts['stage'],
+        'outcome.error': parts['error'],
+    }
+    return {name: found.get(name, like[name]) for name in like}
+
+
+def effective(
+    held: dict[str, dict[str, dict[str, Any]]], entries: list[dict[str, Any]]
+) -> dict[str, dict[str, dict[str, Any]]]:
+    r"""Each baselined case's effective expected projection, by case and
+    runner: the checkpoint's baseline, or, where an approved entry states
+    the exact transition from it (case, cell, runner and old outcome), its
+    new outcome, an owner's entry for a new refusal and never
+    ``INTERNAL_ERROR``. The reference plus approved deviations (design,
+    "Reference observations and the gate"), for the comparator's outcome
+    rule and for :func:`accept`."""
+    found: dict[str, dict[str, dict[str, Any]]] = {}
+    for runner, by_case in held.items():
+        for case, line in by_case.items():
+            want = dict(line['projection'])
+            old = outcome_text(want)
+            for entry in entries:
+                for item in entry.get('case_outcomes') or []:
+                    if not (
+                        isinstance(item, dict)
+                        and item.get('case') == case
+                        and item.get('cell') == CELL
+                        and item.get('runner') == runner
+                        and item.get('old') == old
+                    ):
+                        continue
+                    new = outcome_projection(item.get('new'), want)
+                    refusal = (
+                        new is not None
+                        and new.get('outcome.result') == 'refusal'
+                        and want.get('outcome.result') == 'success'
+                    )
+                    if new is not None and (
+                        not refusal or entry.get('approved_by') == 'owner'
+                    ):
+                        want = new
+                        break
+                else:
+                    continue
+                break
+            found.setdefault(case, {})[runner] = want
+    return found
+
+
+def outcomes(projected: dict[str, dict[str, dict[str, Any]]]) -> Any:
+    r"""Effective projections as the comparator's ``--expect`` reads them:
+    outcome fields by their names in an observation's ``outcome``."""
+    return {
+        case: {
+            runner: {
+                name.removeprefix('outcome.'): value
+                for name, value in want.items()
+                if name.startswith('outcome.')
+            }
+            for runner, want in by_runner.items()
+        }
+        for case, by_runner in projected.items()
+    }
 
 
 def proposal(case: str, runner: str, old: str, new: str) -> str:
@@ -1030,7 +1116,10 @@ def check(
     observation_files: list[Path],
     protected_text: str | None = None,
     bootstrap: bool = False,
+    effective_out: Path | None = None,
 ) -> Report:
+    r"""Every rule's problems; ``effective_out`` receives the effective
+    expectations (:func:`effective`) for the comparator."""
     report = Report()
     checkpoint = Tree(repo, checkpoint_sha)
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
@@ -1057,6 +1146,11 @@ def check(
         mine = check_register(report, checkpoint, candidate, repo)
         entries = approved(mine)
         held = baselines(checkpoint)
+        if effective_out is not None:
+            effective_out.write_text(
+                json.dumps(outcomes(effective(held, entries)), sort_keys=True),
+                encoding='utf-8',
+            )
         gone, removed = check_cases(
             report, checkpoint, candidate, entries, held
         )
@@ -1145,12 +1239,24 @@ def check(
 
 
 def accept(
-    repo: Path, observation_files: list[Path]
+    repo: Path, observation_files: list[Path], checkpoint: str | None = None
 ) -> dict[str, list[dict[str, Any]]]:
-    r"""The proposed baselines: per runner given, a line for each case whose
-    projection equals the committed reference's on every runner given,
-    fields a runner cannot observe left out of that comparison."""
+    r"""The proposed baselines: per runner given, a line for each case every
+    runner given meets: its effective expectation where ``checkpoint``'s
+    baselines hold the case for that runner (:func:`effective`, with the
+    candidate's approved entries), otherwise the committed reference's
+    projection, fields a runner cannot observe left out of that comparison.
+    Without a checkpoint (the first baselines) only reference equality
+    admits a case."""
     tree = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
+    expected = (
+        effective(
+            baselines(Tree(repo, checkpoint)),
+            approved(_yaml(tree.read(REGISTER), REGISTER)),
+        )
+        if checkpoint
+        else {}
+    )
     policy = _yaml(tree.read(POLICY), POLICY)
     fields = [str(f) for f in policy['baseline']]
     marks = (_yaml(tree.read(AVAILABILITY), AVAILABILITY) or {})['runners']
@@ -1163,17 +1269,23 @@ def accept(
     found: dict[str, list[dict[str, Any]]] = {runner: [] for runner in observed}
     for case in sorted(cases(tree)):
         ref = reference.get(case)
-        if ref is None or any(
-            case not in by_case for by_case in observed.values()
-        ):
+        if any(case not in by_case for by_case in observed.values()):
             continue
-        equal = all(
-            at(by_case[case], name) == at(ref, name)
+
+        meets = [
+            (
+                projection(by_case[case], list(want)) == want
+                if (want := expected.get(case, {}).get(runner)) is not None
+                else ref is not None
+                and all(
+                    at(by_case[case], name) == at(ref, name)
+                    for name in fields
+                    if (marks.get(runner) or {}).get(name) != 'unavailable'
+                )
+            )
             for runner, by_case in observed.items()
-            for name in fields
-            if (marks.get(runner) or {}).get(name) != 'unavailable'
-        )
-        if not equal:
+        ]
+        if not all(meets):
             continue
         for runner, by_case in observed.items():
             projected = projection(by_case[case], fields)
@@ -1230,9 +1342,11 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--protected-paths')
     judge.add_argument('--bootstrap', action='store_true')
     judge.add_argument('--observations', type=Path, action='append', default=[])
+    judge.add_argument('--effective-out', type=Path)
     commands.add_parser('where')
     take = commands.add_parser('accept')
     take.add_argument('--repo', type=Path, default=Path('.'))
+    take.add_argument('--checkpoint')
     take.add_argument(
         '--observations', type=Path, action='append', required=True
     )
@@ -1259,7 +1373,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if arguments.command == 'accept':
             for runner, lines in accept(
-                arguments.repo, arguments.observations
+                arguments.repo, arguments.observations, arguments.checkpoint
             ).items():
                 path = arguments.repo / BASELINES / CELL / f'{runner}.jsonl'
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -1278,6 +1392,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.observations,
             arguments.protected_paths,
             arguments.bootstrap,
+            arguments.effective_out,
         )
     except Unreadable as error:
         print(f'ratchet: {error}\nratchet: FAIL')

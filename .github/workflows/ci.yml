@@ -197,8 +197,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      # On the phase branch and its lanes the gate step below runs this
+      # comparison with the checkpoint's comparator, each baselined case's
+      # outcome against its effective expectation (an approved change
+      # included), so this one runs only elsewhere (T1.14).
       - run: |
           pip install jsonschema pyyaml
+          if [ -n "$(python scripts/rust_core/ratchet.py where)" ]; then
+            echo 'the gate step compares rust-host on this branch'
+            exit 0
+          fi
           python scripts/rust_core/compare.py --cases contract/cases --reference contract/reference/*.jsonl rust-host.jsonl
         working-directory: .
       # The gate (T1.14): the candidate judged by its checkpoint's harness,

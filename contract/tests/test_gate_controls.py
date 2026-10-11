@@ -226,10 +226,16 @@ def test_a_protected_change_fails_unless_named(
             handle.write('\n# touched\n')
 
     commit(repo, edit=touch)
-    done = gate(repo, '--base', landed, '--protected-paths', 'nothing')
+    given = files(observed, tmp_path)
+    done = gate(repo, '--base', landed, '--protected-paths', 'nothing', *given)
     assert failed(done) == {'ratchet'}, done.stdout
     done = gate(
-        repo, '--base', landed, '--protected-paths', f'{path} (a comment)'
+        repo,
+        '--base',
+        landed,
+        '--protected-paths',
+        f'{path} (a comment)',
+        *given,
     )
     assert done.returncode == 0, done.stdout
 
@@ -255,3 +261,94 @@ def test_the_checkpoint_s_harness_refuses_to_judge_from_another_commit(
     )
     assert done.returncode == 1
     assert "this harness is not the checkpoint's" in done.stderr
+
+
+def test_the_gate_fails_without_behavioural_evidence(repo: Path) -> None:
+    landed = git(repo, 'rev-parse', 'HEAD')
+    commit(repo)
+    done = gate(repo, '--base', landed)
+    assert done.returncode == 1
+    assert 'gate: passed' not in done.stdout
+    assert failed(done) == {'observations'}, done.stdout
+    assert 'no observations: give --run RUNNERS or --observations FILE' in (
+        done.stdout
+    )
+
+
+def _moved(runner: str, lines: list[dict[str, Any]]) -> None:
+    r"""python-old's outcome of the case moves to predict."""
+    for line in lines:
+        if runner == 'python-old' and line['case'] == CASE:
+            line['outcome']['stage'] = 'predict'
+
+
+@pytest.mark.parametrize('transition', ['approved', 'wrong', 'unapproved'])
+def test_an_approved_outcome_change_passes_the_whole_gate_and_no_other(
+    repo: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    transition: str,
+) -> None:
+    landed = git(repo, 'rev-parse', 'HEAD')
+    arguments = files(observed, tmp_path, _moved)
+    old = {'approved': 'success at materialize', 'wrong': 'success'}
+    if transition in old:
+        item = {
+            'case': CASE,
+            'cell': 'ref-pandas3',
+            'runner': 'python-old',
+            'old': old[transition],
+            'new': 'success at predict',
+            'summary': 'seeded',
+        }
+        commit(
+            repo,
+            edit=lambda r: helpers.append_entry(
+                r, {'id': 'SEED-1', 'cases': [CASE], 'case_outcomes': [item]}
+            ),
+        )
+    # The successor baselines, as ratchet.py accept writes them; an
+    # unapproved change is written into python-old's by hand.
+    paths = [Path(a) for a in arguments if a != '--observations']
+    helpers.accepted(repo, landed, tuple(paths))
+    baseline = repo / 'contract/baselines/ref-pandas3/python-old.jsonl'
+    if transition != 'approved':
+        lines = [json.loads(x) for x in baseline.read_text().splitlines()]
+        if not any(x['case'] == CASE for x in lines):
+            projection = {
+                'outcome.code': None,
+                'outcome.error': None,
+                'outcome.result': 'success',
+                'outcome.stage': 'predict',
+            }
+            lines.append(
+                {
+                    'case': CASE,
+                    'cell': 'ref-pandas3',
+                    'runner': 'python-old',
+                    'projection': projection,
+                    'digest': helpers.ratchet.digest(projection),
+                }
+            )
+            lines.sort(key=lambda x: x['case'])
+        baseline.write_text(
+            ''.join(json.dumps(x, sort_keys=True) + '\n' for x in lines)
+        )
+    commit(repo)
+    done = gate(
+        repo,
+        '--base',
+        landed,
+        '--protected-paths',
+        'contract/baselines/** docs/design/rust-core/register.yaml',
+        *arguments,
+    )
+    if transition == 'approved':
+        assert done.returncode == 0, done.stdout
+        assert (
+            f'{CASE}: python-old: success at materialize to success at predict, approved'
+            in done.stdout
+        )
+    else:
+        assert failed(done) == {'ratchet', 'compare'}, done.stdout
+        assert 'against its effective expectation: outcome.stage' in done.stdout
