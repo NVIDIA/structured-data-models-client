@@ -4,9 +4,8 @@
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
 # the option refusals (T1.24), the zoned anchor's conversion (T1.25), the
 # run mode, entity count, shape, limits and capped-context notice (T1.28a),
-# the index warning's once-flag (T1.26, by E52) and the entities' cast to
-# the key's type (T1.32a, from checkpoint 4), are deleted in Phase 1 by
-# those tasks.
+# the index once-flag (T1.26, by E52) and the entities' cast to the key's
+# type (T1.32a, checkpoint 4), are deleted in Phase 1 by those tasks.
 # Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request's gathering (T1.11c).
