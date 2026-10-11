@@ -20,7 +20,7 @@ pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error}
 pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone};
 /// The types a binding hands across, so a binding depends on `sdm-host`
 /// and on `sdm-contract` for types, never on `sdm-core` (decision E21).
-pub use sdm_core::{ArrowData, Attachment, Attachments};
+pub use sdm_core::{ArrowData, Attachment, Attachments, warning_codes};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
 
 /// The composition root a binding starts its runs with: the one data layer,

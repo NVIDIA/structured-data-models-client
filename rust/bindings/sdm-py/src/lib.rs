@@ -358,6 +358,16 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "ERROR_CODES",
         PyTuple::new(py, ErrorCode::ALL.map(ErrorCode::as_str))?,
     )?;
+    module.add(
+        "WARNING_CODES",
+        PyTuple::new(
+            py,
+            sdm_host::warning_codes()
+                .into_iter()
+                .map(|(code, variants)| Ok((code, PyTuple::new(py, variants)?)))
+                .collect::<PyResult<Vec<_>>>()?,
+        )?,
+    )?;
     module.add("CoreError", py.get_type::<CoreError>())?;
     module.add_class::<ArrowStream>()?;
     module.add_class::<Run>()?;

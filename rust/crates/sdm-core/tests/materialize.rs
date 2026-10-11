@@ -641,3 +641,19 @@ fn the_schema_is_held_to_the_reference_s_consistency_check() {
     let err = run.next().unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
 }
+
+#[test]
+fn a_table_read_under_another_name_is_refused_by_name() {
+    // T1.23: a description may name a table otherwise than its source
+    // does (contract version 12), which materialize does not sample until
+    // the route that takes tables named (T1.24): refused by name, before
+    // anything is fetched. Seeded: the same schema named as its source
+    // reaches the catalog requests.
+    let mut renamed = shop();
+    renamed.tables[1].source = "app_users".into();
+    let mut run = materialize(host(), &renamed, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(rule(&err), "table_source");
+    let mut run = materialize(host(), &shop(), QUERY, None).unwrap();
+    assert!(matches!(run.next(), Ok(Step::Fetch { .. })));
+}

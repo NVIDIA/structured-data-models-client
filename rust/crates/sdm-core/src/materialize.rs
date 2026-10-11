@@ -62,6 +62,28 @@ use crate::describe::{ask, describe};
 use crate::profiles::Profile;
 use crate::run::{ArrowData, Asker, Attachment, internal};
 
+/// The warning that indices the sampler's reads would use are missing.
+pub const MISSING_INDICES: &str = "MISSING_INDICES";
+/// The warning that the context reaches back before the data.
+pub const CONTEXT_BEFORE_DATA: &str = "CONTEXT_BEFORE_DATA";
+/// The warning that the anchor time is after the data.
+pub const ANCHOR_AFTER_DATA: &str = "ANCHOR_AFTER_DATA";
+
+/// The sampler's warnings, each with the variants it gives (none: one
+/// sentence), which a host words (decision E59(d)).
+pub const WARNINGS: &[(&str, &[&str])] = &[
+    (
+        MISSING_INDICES,
+        &[
+            "index_table",
+            "index_tables",
+            "indices_table",
+            "indices_tables",
+        ],
+    ),
+    (CONTEXT_BEFORE_DATA, &[]),
+    (ANCHOR_AFTER_DATA, &[]),
+];
 /// The seed the reference samples with when none is given.
 const DEFAULT_SEED: u128 = 42;
 /// A fast run's most context examples (`_MAX_CONTEXT_SIZE`).
@@ -491,22 +513,21 @@ async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> 
     }
     if !missing.is_empty() {
         let indexes: usize = missing.iter().map(|(_, c)| c.len()).sum();
+        // Which of the reference's sentences, by its two counts' number
+        // (decision E59(d)): the host words it.
+        let variant = match (indexes == 1, missing.len() == 1) {
+            (true, true) => "index_table",
+            (true, false) => "index_tables",
+            (false, true) => "indices_table",
+            (false, false) => "indices_tables",
+        };
         asker.warn(CoreWarning {
-            code: "MISSING_INDICES".into(),
-            message: format!(
-                "Missing {indexes} {} in {} {} for optimal database querying; indices on \
-                 primary and foreign keys speed sampling up",
-                if indexes == 1 { "index" } else { "indices" },
-                missing.len(),
-                if missing.len() == 1 {
-                    "table"
-                } else {
-                    "tables"
-                },
-            ),
+            code: MISSING_INDICES.into(),
+            message: "indices the sampler's reads would use are missing".into(),
             fields: [
                 ("indices".to_owned(), count(indexes)),
                 ("tables".to_owned(), count(missing.len())),
+                ("variant".to_owned(), Detail::text(variant)),
             ]
             .into(),
         });
@@ -730,16 +751,15 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     if i128::from(context_anchor) - asked.end < i128::from(bounds.min) {
         warn(
             &asker,
-            "CONTEXT_BEFORE_DATA",
-            "the context's anchor time is too early, or the aggregation's window too long, \
-             for the data to reach back as far as the examples need",
+            CONTEXT_BEFORE_DATA,
+            "the context reaches back before the data",
         );
     }
     if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
         warn(
             &asker,
-            "ANCHOR_AFTER_DATA",
-            "the anchor time is after the latest time in the data",
+            ANCHOR_AFTER_DATA,
+            "the anchor time is after the data",
         );
     }
 

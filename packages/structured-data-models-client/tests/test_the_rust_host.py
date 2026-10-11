@@ -648,3 +648,32 @@ def test_a_warning_the_table_cannot_word_is_shown_in_the_core_s_sentence() -> (
     ):
         [(_, text)] = _shown(given)
         assert text.endswith('the core says this naming nothing'), text
+
+
+#: The core's warnings this host does not word, each with why: none. Every
+#: code and variant the core gives (`_native.WARNING_CODES`) is worded from
+#: `errors.SAID` (T1.23 fix 1, subagent P2-1).
+CORE_WORDED: dict[tuple[str, str | None], str] = {}
+
+
+def test_every_warning_the_core_gives_is_worded_here() -> None:
+    # The binding lists every code the core may give with its variants, as
+    # it lists its error codes; each is worded by SAID exactly once, or
+    # named here as the core's to word, with the reason. The fallback to the
+    # core's sentence stays for robustness; this test is the guard.
+    given = {
+        (code, variant)
+        for code, variants in _native.WARNING_CODES
+        for variant in (variants or (None,))
+    }
+    assert len(given) >= 22
+    worded = {
+        (code, variant)
+        for code, templates in errors.SAID.items()
+        for variant in templates
+    }
+    assert given - set(CORE_WORDED) == worded
+    assert not set(CORE_WORDED) & worded
+    for code, variants in _native.WARNING_CODES:
+        assert code == code.upper() and ' ' not in code, code
+        assert len(set(variants)) == len(variants), code

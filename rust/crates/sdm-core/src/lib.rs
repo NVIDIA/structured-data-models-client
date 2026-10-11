@@ -29,3 +29,14 @@ pub use run::{
 /// so a host reaches it through the core, never through an edge to
 /// `sdm-engine` (decision E30).
 pub use sdm_engine::time::{UnknownZone, Zones};
+
+/// Every warning the core gives, with the variants of each (none: one
+/// sentence), for a host to word each (decision E59(d)): the schema's
+/// then the sampler's.
+pub fn warning_codes() -> Vec<(&'static str, &'static [&'static str])> {
+    sdm_schema::assemble::WARNINGS
+        .iter()
+        .chain(materialize::WARNINGS)
+        .copied()
+        .collect()
+}

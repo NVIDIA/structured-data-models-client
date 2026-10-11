@@ -239,6 +239,28 @@ SAID: dict[str, dict[str | None, str]] = {
             'about and leave the other out.'
         )
     },
+    'MISSING_INDICES': {
+        f'{index}_{table}': (
+            'Missing {indices} '
+            + index
+            + ' in {tables} '
+            + table
+            + ' for optimal database querying; indices on primary and foreign '
+            'keys speed sampling up'
+        )
+        for index in ('index', 'indices')
+        for table in ('table', 'tables')
+    },
+    'CONTEXT_BEFORE_DATA': {
+        None: (
+            "the context's anchor time is too early, or the aggregation's "
+            'window too long, for the data to reach back as far as the '
+            'examples need'
+        )
+    },
+    'ANCHOR_AFTER_DATA': {
+        None: 'the anchor time is after the latest time in the data'
+    },
     'TWO_WAYS_TO_A_TABLE': {
         None: (
             '{source_table!r} reaches {target_table!r} through {columns!l}, '

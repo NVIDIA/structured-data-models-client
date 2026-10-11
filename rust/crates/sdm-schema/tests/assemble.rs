@@ -699,3 +699,186 @@ fn relationships_given_are_the_schema_s_and_checked() {
     );
     assert!(made.warnings.is_empty(), "{:?}", made.warnings);
 }
+
+/// The warnings the assembly gives are the ones `assemble::WARNINGS` lists,
+/// each code with its variants, and every listed pair is given by some
+/// schema here: what a host words is the list the binding exports
+/// (decision E59(d)), checked by what the assembly does, not by its text.
+#[test]
+fn every_warning_given_is_listed_and_every_listed_one_is_given() {
+    use sdm_schema::infer::{LeftOut, UnreadTimes};
+    let stamp = |name: &str| column(name, Dtype::Date, Stype::Timestamp);
+    let ts = |v| {
+        Some(Scalar::Timestamp {
+            unit: sdm_contract::Unit::Us,
+            zone: None,
+            value: v,
+        })
+    };
+    // A table whose every timestamp was passed over, one reason each.
+    let mut refused = table(
+        "refused",
+        vec![
+            column("refused_id", Dtype::Int, Stype::Id),
+            stamp("a"),
+            stamp("b"),
+            stamp("c"),
+            stamp("d"),
+            stamp("e"),
+            stamp("f"),
+            stamp("g"),
+        ],
+        Some("refused_id"),
+    );
+    refused.time.refused = vec![
+        (
+            "a".into(),
+            PassedOver::Constant {
+                value: None,
+                missing: 3,
+                rows: 3,
+            },
+        ),
+        (
+            "b".into(),
+            PassedOver::Sparse {
+                missing: 2,
+                rows: 3,
+            },
+        ),
+        (
+            "c".into(),
+            PassedOver::Constant {
+                value: ts(1),
+                missing: 0,
+                rows: 3,
+            },
+        ),
+        (
+            "d".into(),
+            PassedOver::Constant {
+                value: ts(1),
+                missing: 1,
+                rows: 3,
+            },
+        ),
+        ("e".into(), PassedOver::LoadStamp),
+        ("f".into(), PassedOver::EditStamp),
+        ("g".into(), PassedOver::BirthDate),
+    ];
+    refused.left_out = vec![LeftOut {
+        name: "tags".into(),
+        dtype: Dtype::Intlist,
+    }];
+    refused.unread_times = vec![UnreadTimes {
+        column: "tod".into(),
+        unread: 2,
+        rows: 3,
+        examples: vec![],
+    }];
+    // One taken as the earliest of two, one a lone edit stamp in a log.
+    let mut earliest = table(
+        "earliest",
+        vec![
+            column("earliest_id", Dtype::Int, Stype::Id),
+            stamp("x"),
+            stamp("y"),
+        ],
+        Some("earliest_id"),
+    );
+    earliest.time = TimeChoice {
+        column: Some("x".into()),
+        how: Some(Taken::Earliest),
+        among: vec!["x".into(), "y".into()],
+        refused: vec![],
+        fallback: None,
+    };
+    earliest.time_column = Some("x".into());
+    // Links that cannot join, two ways to a table, two naming each other.
+    let keyless = table(
+        "keyless",
+        vec![
+            column("u1", Dtype::Int, Stype::Categorical),
+            column("u2", Dtype::Int, Stype::Categorical),
+        ],
+        None,
+    );
+    let pointing = table(
+        "pointing",
+        vec![
+            column("pointing_id", Dtype::Int, Stype::Id),
+            column("u1", Dtype::Int, Stype::Numerical),
+            column("u2", Dtype::Int, Stype::Numerical),
+            column("users_ref", Dtype::Int, Stype::Numerical),
+        ],
+        Some("pointing_id"),
+    );
+    let mut given = Vec::new();
+    for made in [
+        made_of(vec![refused.clone(), earliest, plans(), users()], vec![]),
+        made_of(
+            vec![keyless, pointing.clone(), users(), orders(Dtype::String)],
+            vec![
+                link(("pointing", "u1"), ("keyless", "u1")),
+                link(("pointing", "u2"), ("keyless", "u2")),
+                link(("pointing", "users_ref"), ("users", "age")),
+            ],
+        ),
+        made_of(
+            vec![
+                table(
+                    "accounts",
+                    vec![
+                        column("account_id", Dtype::Int, Stype::Id),
+                        column("refund_id", Dtype::Int, Stype::Id),
+                    ],
+                    Some("account_id"),
+                ),
+                table(
+                    "refunds",
+                    vec![
+                        column("refund_id", Dtype::Int, Stype::Id),
+                        column("account_id", Dtype::Int, Stype::Id),
+                        column("payer", Dtype::Int, Stype::Numerical),
+                    ],
+                    Some("refund_id"),
+                ),
+            ],
+            vec![link(("refunds", "payer"), ("accounts", "account_id"))],
+        ),
+    ] {
+        given.extend(made.warnings);
+    }
+    given.extend(assemble::left_out(&refused));
+    given.extend(assemble::unread_times(&refused));
+    let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
+    for warning in &given {
+        let variant = warning.fields.get("variant").map(|v| match v {
+            Detail::Scalar(Scalar::Utf8(text)) => text.clone(),
+            other => panic!("{other:?}"),
+        });
+        let listed = assemble::WARNINGS
+            .iter()
+            .find(|(code, _)| *code == warning.code)
+            .unwrap_or_else(|| panic!("{} is not listed", warning.code));
+        match &variant {
+            Some(v) => assert!(listed.1.contains(&v.as_str()), "{}/{v}", warning.code),
+            None => assert!(listed.1.is_empty(), "{} gives no variant", warning.code),
+        }
+        seen.insert((warning.code.clone(), variant));
+    }
+    let listed: BTreeSet<(String, Option<String>)> = assemble::WARNINGS
+        .iter()
+        .flat_map(|(code, variants)| {
+            if variants.is_empty() {
+                vec![((*code).to_owned(), None)]
+            } else {
+                variants
+                    .iter()
+                    .map(|v| ((*code).to_owned(), Some((*v).to_owned())))
+                    .collect()
+            }
+        })
+        .collect();
+    assert_eq!(seen, listed);
+}

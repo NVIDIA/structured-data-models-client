@@ -58,6 +58,9 @@ CONTRACT_VERSION: int
 TEST_OPS: bool
 #: Every code an error of the core may carry, in the contract's order.
 ERROR_CODES: tuple[_Code, ...]
+#: Every warning the core may give, each with the variants it gives (none:
+#: one sentence), which a host words (decision E59(d)).
+WARNING_CODES: tuple[tuple[str, tuple[str, ...]], ...]
 
 class _ArrowStreamExportable(Protocol):
     def __arrow_c_stream__(
