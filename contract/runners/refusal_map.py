@@ -170,6 +170,9 @@ def shape(document: Any) -> str | None:
         for gap in gaps
     ):
         return 'gaps are not each an input, its contract and an owner'
+    for at, gap in enumerate(gaps):
+        if not OWNER.match(gap['owner']):
+            return f'gaps/{at}/owner is not a task a map may name'
     if not family and not _strings(document.get('case')):
         return 'no case'
     entries = document.get('entries')
@@ -187,6 +190,8 @@ def shape(document: Any) -> str | None:
         for key in ('id', 'operation', 'rule', 'owner', 'register', 'where'):
             if not _strings(entry.get(key)):
                 return f'entries/{at}/{key} is not text'
+        if not OWNER.match(entry['owner']):
+            return f'entries/{at}/owner is not a task a map may name'
         if entry['id'] in ids:
             return f'entries/{at}/id repeats'
         ids.add(entry['id'])
@@ -1028,12 +1033,14 @@ def _main(argv: list[str] | None = None) -> int:
     # it was, and the map the run would make is beside it, for a person to
     # finish.
     text = json.dumps(written, indent=2, ensure_ascii=False) + '\n'
+    draft = arguments.map.with_name(arguments.map.name + '.draft')
     if report or problem:
-        draft = arguments.map.with_name(arguments.map.name + '.draft')
         draft.write_text(text, encoding='utf-8')
         print(f'{arguments.map.name} left as it was; the draft is {draft.name}')
         return 1
     arguments.map.write_text(text, encoding='utf-8')
+    # A draft an earlier run left is stale once the map is written.
+    draft.unlink(missing_ok=True)
     return 0
 
 

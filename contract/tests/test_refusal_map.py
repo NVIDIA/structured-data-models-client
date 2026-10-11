@@ -13,8 +13,9 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
   1,000 rows in all, at most 2,000, as its README's table says, and the
   case asks for the product the notebook asks for, the most units sold.
 - The map (``contract/refusal-maps/base.adventureworks.json``): every entry
-  names its rule and operation, an owning task among T1.21c, T1.21d and
-  T1.22 to T1.28 (E50) and a register entry that is proposed, and the line
+  names its rule and operation, an owning task among T1.21c, T1.21d,
+  T1.22 to T1.27, T1.28a and T1.28b (E50, and T1.28's split at T1.12b) and
+  a register entry that is proposed, and the line
   it cites holds the rule;
   each probe's input is a case input, its own edits aside; the line it
   cites holds the rule (a core refusal) or the text it names (a bridge's or
@@ -32,7 +33,8 @@ Run where the contract tests run (CI's ``engine`` job until T1.18):
   and a wide object, by name.
 - The family maps (``contract/refusal-maps/<seam>.json``, T1.21e): one per
   seam of the inventory, its cases every committed case of that seam;
-  every entry owned (T1.21d to T1.28, T1.32a to T1.32e), its line cited,
+  every entry owned (T1.21c to T1.27, T1.28a, T1.28b, T1.32a to T1.32e;
+  the writer refuses any other owner), its line cited,
   and either under a proposed register entry or the reference's own
   refusal, held to the case's reference observation (seeded); every probe
   bound to its case (seeded: a case changed alone, a case left without a
@@ -1023,6 +1025,9 @@ def test_the_writer_s_script_rewrites_a_map_its_run_holds(
     document = _family_maps()['baseline']
     target = tmp_path / 'baseline.json'
     target.write_text((MAPS / 'baseline.json').read_text())
+    # A draft an earlier, failed run left beside it, stale once the map is
+    # written (T1.22, from T1.21e's review).
+    (tmp_path / 'baseline.json.draft').write_text('{}')
     evidence = tmp_path / 'observed.json'
     evidence.write_text(json.dumps({'baseline.json': _rust_run(document)}))
     run = subprocess.run(
@@ -1042,6 +1047,52 @@ def test_the_writer_s_script_rewrites_a_map_its_run_holds(
     assert run.returncode == 0, run.stdout + run.stderr
     assert target.read_text() == (MAPS / 'baseline.json').read_text()
     assert not (tmp_path / 'baseline.json.draft').exists()
+
+
+def test_the_writer_s_script_refuses_an_owner_no_map_may_name(
+    tmp_path: Path,
+) -> None:
+    # T1.22 (from T1.21e's review): the writer holds owners to OWNER as the
+    # tests do, so a bare T1.28, which T1.12b split into T1.28a and
+    # T1.28b, is refused, the map left as it was and the run's map a draft.
+    import subprocess
+
+    document = _family_maps()['baseline']
+    assert document['entries']
+    changed = copy.deepcopy(document)
+    changed['entries'][0]['owner'] = 'T1.28'
+    assert refusal_map.shape(changed) == (
+        'entries/0/owner is not a task a map may name'
+    )
+    target = tmp_path / 'baseline.json'
+    target.write_text(json.dumps(changed, indent=2) + '\n')
+    before = target.read_text()
+    evidence = tmp_path / 'observed.json'
+    evidence.write_text(json.dumps({'baseline.json': _rust_run(document)}))
+    run = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(RUNNERS / 'refusal_map.py'),
+            'write',
+            str(target),
+            '--rust-observed',
+            str(evidence),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode != 0, run.stdout + run.stderr
+    assert 'owner is not a task a map may name' in run.stdout
+    assert target.read_text() == before
+    assert (tmp_path / 'baseline.json.draft').exists()
+    # A gap's owner too.
+    gapped = copy.deepcopy(document)
+    gapped['gaps'] = [{'input': 'x', 'contract': 'y', 'owner': 'T1.28'}]
+    assert refusal_map.shape(gapped) == (
+        'gaps/0/owner is not a task a map may name'
+    )
 
 
 def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
