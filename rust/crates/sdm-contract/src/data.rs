@@ -95,7 +95,8 @@ pub enum Filter {
 pub enum DescribePart {
     /// The source's table names: one row per table. With tables named,
     /// the relations, tables or views, the source would read under any of
-    /// those names, by its own resolution of a name: none when it holds
+    /// those names written unqualified, by its own resolution of such a
+    /// name (on DuckDB, through its search path): none when it would read
     /// none, which is how the core learns a name the caller gave is not
     /// the source's, never by matching names itself (T1.23, decision
     /// E59).

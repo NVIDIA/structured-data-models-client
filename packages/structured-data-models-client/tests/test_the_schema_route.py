@@ -1055,6 +1055,15 @@ HELD = (
     'CREATE VIEW parent_view AS SELECT * FROM parent',
     'CREATE TABLE "Äpfel" (apfel_id BIGINT PRIMARY KEY)',
     'INSERT INTO "Äpfel" VALUES (1), (2)',
+    # Relations no unqualified name reads (T1.23 fix 3): another schema's
+    # table and view, an attached database's table.
+    'CREATE SCHEMA other',
+    'CREATE TABLE other.elsewhere (id BIGINT PRIMARY KEY)',
+    'INSERT INTO other.elsewhere VALUES (1), (2)',
+    'CREATE VIEW other.elsewhere_view AS SELECT * FROM other.elsewhere',
+    "ATTACH ':memory:' AS att",
+    'CREATE TABLE att.attached (id BIGINT PRIMARY KEY)',
+    'INSERT INTO att.attached VALUES (1), (2)',
 )
 
 
@@ -1082,7 +1091,7 @@ def test_a_relation_the_source_holds_keeps_its_provider_s_failure(
     # A table the source does not hold, or holds under a name DuckDB does
     # not fold to the one given, is the caller's naming, as on the old
     # route.
-    for source in ('nope', 'äpfel'):
+    for source in ('nope', 'äpfel', 'elsewhere', 'elsewhere_view', 'attached'):
         with pytest.raises(StructuredDataError) as missing:
             _named_on_the_core(held(), {'x': source})
         assert missing.value.code == 'INVALID_REQUEST', source

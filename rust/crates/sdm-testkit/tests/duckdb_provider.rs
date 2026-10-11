@@ -1312,7 +1312,10 @@ fn the_source_says_which_relations_it_holds_under_a_name() {
     connection
         .execute_batch(
             "CREATE TABLE parent (id BIGINT); CREATE VIEW parent_view AS SELECT * FROM parent; \
-             CREATE TABLE \"Äpfel\" (id BIGINT)",
+             CREATE TABLE \"Äpfel\" (id BIGINT); CREATE SCHEMA other; \
+             CREATE TABLE other.elsewhere (id BIGINT); \
+             CREATE VIEW other.elsewhere_view AS SELECT * FROM other.elsewhere; \
+             ATTACH ':memory:' AS att; CREATE TABLE att.attached (id BIGINT)",
         )
         .unwrap();
     for (name, held) in [
@@ -1323,6 +1326,11 @@ fn the_source_says_which_relations_it_holds_under_a_name() {
         ("Äpfel", 1),
         ("äpfel", 0),
         ("nope", 0),
+        // Not what an unqualified name reads: another schema, another
+        // attached database (T1.23 fix 3).
+        ("elsewhere", 0),
+        ("elsewhere_view", 0),
+        ("attached", 0),
     ] {
         let run =
             start(&serde_json::json!({"request": "describe", "tables": [name], "part": "tables"}));

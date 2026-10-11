@@ -113,7 +113,10 @@ pub(crate) async fn run(
             // failure stays the provider's.
             Err(failed) if caller_named && failed.code == ErrorCode::ProviderError => {
                 // Absence only where the source says so; the provider's
-                // first error stands otherwise, the probe's failure too.
+                // first error stands otherwise, and where the question
+                // itself fails, whatever its error (a provider's, or an
+                // answer that does not read), since that says nothing of
+                // the table.
                 return Err(match holds(&asker, &table.source).await {
                     Ok(false) => not_held(),
                     Ok(true) | Err(_) => failed,

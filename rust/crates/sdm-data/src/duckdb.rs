@@ -651,13 +651,17 @@ fn describe(
     })
 }
 
-/// The relations, tables or views, temporary or not, in any schema, that
-/// DuckDB would read under any of `names`: a catalog name equal to one of
-/// them once each of their ASCII letters is lowered, as DuckDB resolves a
-/// name (it folds ASCII letters only, so `"Äpfel"` is not read as
-/// `äpfel`). Asked only when reading a named table's columns has failed:
-/// no row says the source holds no such relation, so the caller named
-/// one it lacks; any row, that the failure was another (T1.23 fix 2).
+/// The relations, tables or views, DuckDB would read under any of `names`
+/// written unqualified, as it resolves such a name: a temporary relation,
+/// or one of the current database in a schema of the search path
+/// (`current_schemas(true)`, its implicit schemas included), whose name
+/// equals one of `names` once each of their ASCII letters is lowered, as
+/// DuckDB folds a name (ASCII letters only, so `"Äpfel"` is not read as
+/// `äpfel`). A relation of another schema or another attached database is
+/// not one the name reads. Asked only when reading a named table's columns
+/// has failed: no row says the source holds no such relation, so the
+/// caller named one it lacks; any row, that the failure was another
+/// (T1.23 fix 3).
 fn held(names: &[String]) -> String {
     let fold = |text: &str| {
         format!("translate({text}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')")
@@ -667,8 +671,9 @@ fn held(names: &[String]) -> String {
         .map(|name| fold(&self::text(name)))
         .collect::<Vec<_>>()
         .join(", ");
+    let resolved = "(temporary OR (database_name = current_database() AND list_contains(current_schemas(true), schema_name)))";
     format!(
-        "SELECT table_name FROM duckdb_tables() WHERE NOT internal AND {} IN ({asked})\nUNION ALL\nSELECT view_name AS table_name FROM duckdb_views() WHERE NOT internal AND {} IN ({asked})",
+        "SELECT table_name FROM duckdb_tables() WHERE NOT internal AND {resolved} AND {} IN ({asked})\nUNION ALL\nSELECT view_name AS table_name FROM duckdb_views() WHERE NOT internal AND {resolved} AND {} IN ({asked})",
         fold("table_name"),
         fold("view_name"),
     )
