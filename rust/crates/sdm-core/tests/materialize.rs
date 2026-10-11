@@ -1703,6 +1703,18 @@ fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
     twice["bounds"].as_array_mut().unwrap().push(bound);
     let mut extra = kept.clone();
     extra["trusted"] = serde_json::json!(true);
+    // Bounds no read gives: the smallest time after the largest, and one
+    // missing without the other.
+    let mut swapped = kept.clone();
+    let (min, max) = (
+        swapped["bounds"][0]["min"].clone(),
+        swapped["bounds"][0]["max"].clone(),
+    );
+    assert!(min.as_i64().unwrap() < max.as_i64().unwrap());
+    swapped["bounds"][0]["min"] = max;
+    swapped["bounds"][0]["max"] = min;
+    let mut half = kept.clone();
+    half["bounds"][0]["max"] = serde_json::Value::Null;
     kept["indexes_checked"] = serde_json::json!("yes");
     let deep = format!("{}{}", "[".repeat(5_000), "]".repeat(5_000));
     let wide = serde_json::to_vec(&serde_json::Value::Object(
@@ -1717,6 +1729,8 @@ fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
         ("retyped", serde_json::to_vec(&kept).unwrap()),
         ("a field more", serde_json::to_vec(&extra).unwrap()),
         ("a table twice", serde_json::to_vec(&twice).unwrap()),
+        ("bounds swapped", serde_json::to_vec(&swapped).unwrap()),
+        ("half the bounds", serde_json::to_vec(&half).unwrap()),
         ("deep", deep.into_bytes()),
         ("wide", wide),
     ] {

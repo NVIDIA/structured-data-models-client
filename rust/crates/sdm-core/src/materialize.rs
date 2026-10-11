@@ -187,10 +187,22 @@ pub fn fingerprint(
     Ok(format!("{hash:016x}"))
 }
 
-/// Refuses a sampler memo no run left: one naming a table's bounds twice.
+/// Refuses a sampler memo no run left, naming `sampler_state`, before
+/// anything of it is used: one naming a table's bounds twice, or bounds no
+/// read gives (a smallest time after the largest, or one of the two
+/// missing without the other: a time column holding no time gives
+/// neither).
 pub fn check_memo(memo: &SamplerMemo) -> Result<(), CoreError> {
     let mut tables = BTreeSet::new();
-    if memo.bounds.iter().all(|b| tables.insert(&b.table)) {
+    let sound = memo.bounds.iter().all(|b| {
+        tables.insert(&b.table)
+            && match (b.min, b.max) {
+                (Some(min), Some(max)) => min <= max,
+                (None, None) => true,
+                _ => false,
+            }
+    });
+    if sound {
         return Ok(());
     }
     Err(invalid(

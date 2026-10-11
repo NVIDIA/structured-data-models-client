@@ -1709,6 +1709,50 @@ entries:
     approve the refusal for Phase 1 and decide the null's reading with S3
     in Phase 4. Never self-approved.
 
+- id: P1B-14
+  title: A schema's keys, links or time column edited between two materialize calls is followed on the core route
+  kind: change
+  old_behavior: >-
+    The reference builds its model, and with it its sampler, once per
+    materializer (RelationalMaterializer._get_model), from the schema as it
+    stood at the first call; a key, a link or a time column edited on the
+    same schema before a later call of the same query is not followed: the
+    later call reads neither the indexes nor the time bounds again, warns
+    of no missing index, and sends the request the first schema gives.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    sampler state a call leaves is made under the provider and each table's
+    key, time column and unique columns and the links (E64); a later call
+    of the same query whose schema's keys, links or time column were
+    edited does not read it: it checks the indexes and reads the time
+    bounds afresh, warns of missing indexes again, and sends the request a
+    new materializer of the edited schema sends (measured at T1.26b's fix
+    round 1 on the shop with a second time column, a second key and a
+    second table referring to the users: the core's second call 7, 7 and
+    6 statements with one warning each, the reference's 5 with none and
+    its first request; the core's request equal to a fresh old-route
+    materializer's of the edited schema each time). A column's type or
+    meaning edited is not in the state's fingerprint and changes nothing of
+    this. The default route is unchanged.
+  affected_inputs: >-
+    Two or more materialize calls of one PredictiveQuery over a DuckDB
+    source under a forced core route, the schema's keys, relationships or a
+    table's time column edited between them.
+  cases: [T1.26b, T1.24b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.26b's review round 1 (Codex P2). Following the edit is the
+    proposed behavior: the reference's request after such an edit is the
+    first schema's, which the caller's edit says is not the one asked for;
+    keeping it would mean holding the first schema's sampling in the state.
+    Which edits the core route takes at all is T1.24b's (the edit
+    semantics, schema_edited), so the owner decides this with it. Pinned
+    by the client's tests/test_the_materialize_route.py,
+    test_a_schema_edited_between_two_calls_is_sampled_as_edited, on both
+    routes. Never self-approved.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1

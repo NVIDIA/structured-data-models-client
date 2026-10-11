@@ -1147,3 +1147,116 @@ def test_a_null_key_the_walk_reaches_is_refused_by_name(
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         assert _crossing(_deeper(*setup, edit=False)._payloads[0]) > 0
+
+
+#: The shop with a second time column, a second key and a second table
+#: referring to the users, so a schema can be edited between two calls.
+_EDITABLE = (
+    'ALTER TABLE orders ADD COLUMN ts2 TIMESTAMP',
+    "UPDATE orders SET ts2 = ts + INTERVAL '10 days'",
+    'ALTER TABLE orders ADD COLUMN alt BIGINT',
+    'UPDATE orders SET alt = order_id + 1000',
+    'CREATE TABLE extra AS SELECT i::BIGINT AS extra_id, (i % 8)::BIGINT AS '
+    'user_id, i::DOUBLE AS w FROM range(20) t(i)',
+)
+
+
+def _edit(schema: Schema, edit: str) -> None:
+    if edit == 'time_column':
+        schema['orders'].time_column = 'ts2'
+    elif edit == 'key':
+        schema['orders'].primary_key = 'alt'
+    else:
+        schema.relationships = [
+            link
+            for link in schema.relationships
+            if link.source_table != 'extra'
+        ]
+
+
+def _editable() -> tuple[Any, Schema]:
+    from sdm_client import Relationship
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        connection = _connection(*_EDITABLE)
+        schema = Schema.from_source(
+            DuckDBSource(connection),
+            primary_keys={
+                'users': 'user_id',
+                'orders': 'order_id',
+                'extra': 'extra_id',
+            },
+            time_columns={'orders': 'ts'},
+            relationships=[
+                Relationship('orders', 'user_id', 'users', 'user_id'),
+                Relationship('extra', 'user_id', 'users', 'user_id'),
+            ],
+        )
+    connection.execute("CALL enable_logging('QueryLog')")
+    return connection, schema
+
+
+def _edited_between_calls(edit: str) -> list[tuple[int, int, str]]:
+    r"""Two calls of one query, ``edit`` made to its schema between them:
+    each call's statements, missing-index warnings and payload."""
+    connection, schema = _editable()
+    query = PredictiveQuery(QUERY, schema)
+    made = []
+    for call in range(2):
+        if call == 1:
+            _edit(schema, edit)
+        before = _logged(connection)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            payload = query.materialize(
+                indices=[0, 1], anchor_time=ANCHOR
+            )._payloads[0]
+        made.append(
+            (
+                _logged(connection) - before,
+                sum('Missing' in str(w.message) for w in caught),
+                json.dumps(payload, sort_keys=True, default=str),
+            )
+        )
+    return made
+
+
+@pytest.mark.parametrize('edit', ['time_column', 'key', 'link'])
+def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
+    monkeypatch: pytest.MonkeyPatch, edit: str
+) -> None:
+    # Register P1B-14, diagnostic: the reference builds its model once per
+    # materializer, so a key, link or time column edited between two calls
+    # is not followed (the second call reads nothing again, warns of
+    # nothing, and sends the first call's request). The core's state is
+    # made under the keys, links and time columns (E64), so it is not read
+    # across the edit: the second call checks and reads afresh, warns
+    # again, and sends the request a new materializer of the edited schema
+    # sends.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _edited_between_calls(edit)
+    assert [made[:2] for made in core] == [
+        (7, 1),
+        (6, 1) if edit == 'link' else (7, 1),
+    ]
+    assert core[0][2] != core[1][2]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        with pytest.raises(MissingExtraError):
+            _edited_between_calls(edit)
+        return
+    old = _edited_between_calls(edit)
+    assert old[0] == core[0]
+    assert old[1][:2] == (5, 0)
+    assert old[1][2] == old[0][2]
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        _, schema = _editable()
+        _edit(schema, edit)
+        fresh = (
+            PredictiveQuery(QUERY, schema)
+            .materialize(indices=[0, 1], anchor_time=ANCHOR)
+            ._payloads[0]
+        )
+    assert json.dumps(fresh, sort_keys=True, default=str) == core[1][2]
