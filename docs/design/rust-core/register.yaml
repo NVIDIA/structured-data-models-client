@@ -1095,8 +1095,10 @@ entries:
     holds a double quote or a dot by its own name, as text, from
     duckdb_columns() and duckdb_constraints(), in the pragma's columns and
     rows (decision E58(d)); every other name is still read with the
-    reference's PRAGMA text. A name holding a dot is then refused by the
-    client's own rule on names, INVALID_REQUEST as on the reference. Before
+    reference's PRAGMA text. A name holding a dot is refused by the
+    schema's rule on names, INVALID_REQUEST as on the reference: from
+    T1.23 the core holds a table's name in the schema to that rule
+    (E59(b)), before the client's own does. Before
     T1.22 the core refused the double-quoted name with PROVIDER_ERROR
     (DuckDB's parser error as the provider's), against PK-6. The default
     route is unchanged.
