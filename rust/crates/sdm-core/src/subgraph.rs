@@ -32,7 +32,7 @@
 //! then numbers the rows it adds out of step with the rows it keeps, so the
 //! request it builds links rows across examples.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef, RecordBatch, UInt32Array};
@@ -119,8 +119,7 @@ pub(crate) struct Walk<'a> {
 /// The columns the walk reads of `table`: its features, foreign keys and
 /// key, in the table's order (`sample_columns_dict`).
 pub(crate) fn sample_columns(graph: &Graph, table: &Table) -> Vec<String> {
-    let mut names: std::collections::BTreeSet<String> =
-        graph.features(table).into_iter().map(|(n, _)| n).collect();
+    let mut names: BTreeSet<String> = graph.features(table).into_iter().map(|(n, _)| n).collect();
     for (fkey, _) in graph.foreign_keys(&table.name) {
         names.insert(fkey.to_owned());
     }
@@ -277,19 +276,19 @@ impl Walk<'_> {
                 // The distinct (key, example) pairs, in the order first
                 // reached; the distinct keys among them, likewise.
                 let mut pairs: Vec<(Key, usize)> = Vec::new();
-                for &i in &missing {
-                    let pair = (values[i].clone().unwrap_or(Key::Int(0)), batch[i]);
-                    if !pairs.contains(&pair) {
-                        pairs.push(pair);
-                    }
-                }
-                let mut distinct: Vec<Key> = Vec::new();
+                let mut paired: BTreeSet<(Key, usize)> = BTreeSet::new();
+                let mut distinct: BTreeMap<Key, usize> = BTreeMap::new();
                 let mut first_row: Vec<usize> = Vec::new();
                 for &i in &missing {
-                    let key = values[i].clone().unwrap_or(Key::Int(0));
-                    if !distinct.contains(&key) {
-                        distinct.push(key);
+                    let key = values[i]
+                        .clone()
+                        .ok_or_else(|| internal("a null key reached the lookup"))?;
+                    if !distinct.contains_key(&key) {
+                        distinct.insert(key.clone(), first_row.len());
                         first_row.push(i);
+                    }
+                    if paired.insert((key.clone(), batch[i])) {
+                        pairs.push((key, batch[i]));
                     }
                 }
                 let seeds = take_array(named(&frame, fkey)?, &first_row)?;
@@ -318,9 +317,8 @@ impl Walk<'_> {
                     let mut taken = Vec::new();
                     let mut examples = Vec::new();
                     for (key, example) in &pairs {
-                        let position = distinct
-                            .iter()
-                            .position(|k| k == key)
+                        let position = *distinct
+                            .get(key)
                             .ok_or_else(|| internal("a key looked up was not asked for"))?;
                         if let Some(answer_row) = answered[position] {
                             taken.push(answer_row);
@@ -463,8 +461,7 @@ impl Walk<'_> {
             }
             let entity = table.name == self.entity.name;
             let features = self.graph.features(table);
-            let mut sent: std::collections::BTreeSet<String> =
-                features.iter().map(|(n, _)| n.clone()).collect();
+            let mut sent: BTreeSet<String> = features.iter().map(|(n, _)| n.clone()).collect();
             if entity && let Some(key) = &table.primary_key {
                 sent.insert(key.clone());
             }
@@ -601,7 +598,8 @@ fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
     use arrow_array::Array;
     use arrow_array::cast::AsArray;
     if array.data_type() != &arrow_schema::DataType::Utf8 {
-        return Err(not_yet("text_type"));
+        // The schema's consistency check holds a text feature to text.
+        return Err(internal("a text feature's values are not text"));
     }
     let text = array.as_string::<i32>();
     Ok((0..text.len())
