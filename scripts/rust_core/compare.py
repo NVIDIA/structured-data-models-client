@@ -5,11 +5,15 @@
 
 r"""Compares runners' observations of the contract cases.
 
-    scripts/rust_core/compare.py --cases DIR [--reference FILE] OBSERVATIONS...
+    scripts/rust_core/compare.py --cases DIR [--reference FILE]
+        [--policy FILE] [--bases FILE] OBSERVATIONS...
 
 Each OBSERVATIONS file is one runner's output (run_python.py or
 sdm-contract-run); FILE is the committed reference observations
-(``contract/reference/<reference-commit>.jsonl``). Every observation is
+(``contract/reference/<reference-commit>.jsonl``), and ``--bases`` the
+bases file the cases build from (this checkout's ``contract/bases.yaml`` by
+default; ``gate.sh`` gives the candidate's, which the checkpoint's ratchet
+lets change only by additions). Every observation is
 validated against ``contract/observation.schema.json``; a file with none,
 or a case a given runner did not observe, is a runner failure. Each
 observation must be of the case and bases files compared (their SHA-256 in
@@ -1087,6 +1091,7 @@ def compare(
     reference_file: Path | None,
     files: list[Path],
     policy_file: Path | None = None,
+    bases_file: Path | None = None,
 ) -> Report:
     check = _capture_check()
     try:
@@ -1112,7 +1117,7 @@ def compare(
         return report
     cases = [case for case, _ in loaded]
     digests = {case['id']: digest for case, digest in loaded}
-    digests[''] = runner.digest(runner.BASES.read_bytes())
+    digests[''] = runner.digest((bases_file or runner.BASES).read_bytes())
     reference: dict[str, dict[str, Any]] = {}
     if reference_file is not None:
         who, reference = _observations(reference_file, runner, report)
@@ -1211,6 +1216,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--cases', type=Path, action='append', required=True)
     parser.add_argument('--reference', type=Path)
     parser.add_argument('--policy', type=Path)
+    parser.add_argument('--bases', type=Path)
     parser.add_argument('observations', type=Path, nargs='+')
     arguments = parser.parse_args(argv)
     report = compare(
@@ -1218,6 +1224,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.reference,
         arguments.observations,
         arguments.policy,
+        arguments.bases,
     )
     for text in report.info:
         print(f'statements per public call: {text}')

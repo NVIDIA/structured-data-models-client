@@ -6,10 +6,16 @@
 # scripts/rust_core/compare.py and contract/runners/capture_check.py, the one
 # place each comparison rule says whether it gates and each exclusion is
 # written. From T1.11e, the payload and result rules (decision H9 for
-# statements, E35 for the one exclusion); T1.14 adds the ratchet's reading of
-# it, which treats a removed rule, a gate made diagnostic, an added or widened
-# exclusion, or a statement dropped from `ordered` as a relaxation, which
-# needs an owner-approved decisions row (decisions.md preamble).
+# statements, E35 for the one exclusion). From T1.14, the projection the
+# baselines hold (`baseline`), and the checkpoint's ratchet
+# (scripts/rust_core/ratchet.py) reads this file at the checkpoint and at the
+# candidate: a removed rule, a gate made diagnostic, an added or changed
+# exclusion, a statement dropped from `ordered`, a case dropped from `reach`
+# or its stage changed, or a field dropped from `baseline` is a relaxation,
+# which passes only when `relaxations` lists it, word for word as the ratchet
+# prints it, under a row of the checkpoint's decisions.md whose status reads
+# "approved by owner <date>" and which names this file (design, "Reference
+# observations and the gate"; H2). Adding or tightening a rule passes.
 #
 # A rule that gates fails the comparison on any difference in an acceptance
 # case; in a diagnostic case every rule only reports (design, "Merge rules"),
@@ -99,3 +105,17 @@ ordered:
 # is reached at.
 reach:
   base.regression: predict
+
+# The projection each baseline holds (contract/baselines/<cell>/<runner>.jsonl,
+# design "Reference observations and the gate"), by field path: the outcome,
+# platform-independent, so CI ratchets it in every cell (S0 validity and
+# codes; on the core runners the code is the core's, by the `outcome` rule).
+# A field a runner cannot observe (contract/availability.yaml) is null in
+# its projection, never filled. The other fields are held to the committed
+# reference observations by this file's rules, not baselined.
+baseline: [outcome.result, outcome.stage, outcome.error, outcome.code]
+
+# The relaxations of this file the owner approved, each {change, decision}:
+# the change as the ratchet prints it, and the decisions.md row, at the
+# checkpoint, that approves it.
+relaxations: []

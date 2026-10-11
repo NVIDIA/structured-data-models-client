@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The protected paths (design, "Reference observations and the gate"; H2),
+# read at the checkpoint by scripts/rust_core/ratchet.py: a change to one
+# passes only when the landing commit's Reviewed-by or Protected-paths
+# trailer names it, by its path or by a directory written with a trailing
+# "/" or "/**" (the orchestrator passes the same text to gate.sh as
+# --protected-paths before landing). One pattern per line: "*" matches within
+# a path segment, "**" across segments; a line starting "!" takes paths out
+# of the patterns above it.
+
+# The cases, their inputs, and what they are held to.
+contract/cases/**
+contract/bases.yaml
+contract/fixtures/**
+contract/*.schema.json
+contract/*-vectors.json
+contract/scripted-endpoint.json
+contract/pinned/**
+contract/refusal-maps/**
+contract/reference/**
+contract/reference-env.txt
+contract/baselines/**
+contract/compare-policy.yaml
+contract/availability.yaml
+contract/protected-paths.txt
+docs/design/rust-core/phase-0/phase-1b-inventory.yaml
+docs/design/rust-core/register.yaml
+docs/design/rust-core/register.schema.json
+
+# The harness: the runners, the test kit, the corpus tests and the scripts.
+contract/runners/**
+contract/tests/**
+rust/crates/sdm-testkit/**
+tests/test_contract_*.py
+scripts/rust_core/**
+
+# The L1 expectation files: the PQL corpus and journey queries, the zone,
+# stream and hash vectors, the vendored tzdata, the layout and value vectors,
+# the contract's locked schemas, the goldens.
+rust/crates/sdm-core/tests/pql/**
+rust/testdata/**
+rust/crates/sdm-contract/schema/**
+rust/crates/sdm-contract/tests/*.json
+rust/crates/sdm-engine/tests/*.json
+rust/crates/sdm-schema/tests/*.json
+tests/golden/**
+
+# The bans and CI.
+rust/deny.toml
+rust/clippy.toml
+rust/**/clippy.toml
+.github/workflows/ci.yml
+
+# The product's Python, but for the routing seam. query.py, whose
+# Query._resolve holds the S0 hook, and the client's pyproject.toml, whose
+# build metadata is the seam's, stay protected as whole files: a path list
+# cannot take out part of a file.
+packages/**
+!packages/structured-data-models-client/src/sdm_client/_rust/**
+!packages/structured-data-models-client/src/sdm_client/_routing.py
+!packages/structured-data-models-client/src/sdm_client/_native.pyi

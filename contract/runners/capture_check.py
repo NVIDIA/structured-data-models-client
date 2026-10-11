@@ -55,6 +55,21 @@ DECISIONS = (
 POLICY_FORMAT = 'sdm-compare-policy/1'
 RULE_CLASSES = ('gate', 'diagnostic')
 STAGES = ('from_source', 'materialize', 'predict')
+#: The policy's sections: the rules, the exclusions, the ordered statements
+#: and the cases whose reach gates (T1.11e); from T1.14 the projection the
+#: baselines hold (``baseline``, read by scripts/rust_core/ratchet.py) and
+#: the relaxations of this file an owner-approved row allows.
+SECTIONS = (
+    'format',
+    'rules',
+    'exclusions',
+    'ordered',
+    'reach',
+    'baseline',
+    'relaxations',
+)
+#: A field path of an observation, dotted (``outcome.code``).
+FIELD = re.compile(r'[a-z_]+(\.[a-z_]+)*')
 
 
 #: The exclusions the owner has approved, by decision, each with the one
@@ -75,8 +90,14 @@ class PolicyError(Exception):
 def _decision_rows(path: Path) -> dict[str, tuple[str, str]]:
     r"""decisions.md's rows by ID: each row's whole text and its status,
     the last cell."""
+    return decision_rows(path.read_text(encoding='utf-8'))
+
+
+def decision_rows(text: str) -> dict[str, tuple[str, str]]:
+    r"""The rows of a decisions file's text by ID, as
+    :func:`_decision_rows`; the ratchet reads the checkpoint's this way."""
     rows = {}
-    for line in path.read_text(encoding='utf-8').splitlines():
+    for line in text.splitlines():
         found = re.match(r'\| ([A-Z][A-Z0-9-]*) \|', line)
         if found:
             cells = [
@@ -137,13 +158,7 @@ def policy(path: Path = POLICY, decisions: Path = DECISIONS) -> dict[str, Any]:
     import yaml
 
     loaded = yaml.safe_load(path.read_text(encoding='utf-8'))
-    if not isinstance(loaded, dict) or set(loaded) != {
-        'format',
-        'rules',
-        'exclusions',
-        'ordered',
-        'reach',
-    }:
+    if not isinstance(loaded, dict) or set(loaded) != set(SECTIONS):
         raise PolicyError('not a policy: its sections')
     if loaded['format'] != POLICY_FORMAT:
         raise PolicyError(f'not {POLICY_FORMAT}')
@@ -181,6 +196,24 @@ def policy(path: Path = POLICY, decisions: Path = DECISIONS) -> dict[str, Any]:
     for case, stage in loaded['reach'].items():
         if stage not in STAGES:
             raise PolicyError(f'reach: {case}')
+    fields = loaded['baseline']
+    if (
+        not isinstance(fields, list)
+        or not fields
+        or len(set(map(str, fields))) != len(fields)
+        or not all(
+            isinstance(field, str) and FIELD.fullmatch(field)
+            for field in fields
+        )
+    ):
+        raise PolicyError('baseline: not a list of field paths')
+    if not isinstance(loaded['relaxations'], list) or any(
+        not isinstance(item, dict)
+        or set(item) != {'change', 'decision'}
+        or not all(isinstance(value, str) and value for value in item.values())
+        for item in loaded['relaxations']
+    ):
+        raise PolicyError('relaxations: not a list of changes and decisions')
     return loaded
 
 
