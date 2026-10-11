@@ -47,7 +47,7 @@
       "rule": "wire_dtype",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-request/src/payload.rs:123",
+      "where": "rust/crates/sdm-request/src/payload.rs:144",
       "why": "A time-of-day (TIME) feature, described from T1.23 as the reference describes it (a timestamp column its engine reads as holding no time), has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
       "observed": {
         "python-core": {

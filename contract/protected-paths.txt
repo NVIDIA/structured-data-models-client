@@ -58,6 +58,13 @@ rust/crates/sdm-engine/tests/text_times.rs
 rust/crates/sdm-engine/tests/text_times_record.py
 rust/crates/sdm-engine/tests/time_ranges.rs
 rust/crates/sdm-engine/tests/time_ranges_record.py
+# The words vectors' check and recorder (T1.26b): words.json is
+# rust/crates/sdm-engine/tests/*.json above; and the check holding the
+# sampler's reads to the neighbor vectors' requests, whose vectors are
+# sdm-testkit's.
+rust/crates/sdm-engine/tests/words.rs
+rust/crates/sdm-engine/tests/words_record.py
+rust/crates/sdm-engine/tests/neighbor_requests.rs
 rust/crates/sdm-schema/tests/*.json
 tests/golden/**
 

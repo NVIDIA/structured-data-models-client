@@ -15,7 +15,7 @@
       "rule": "static_target",
       "owner": "T1.27",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:251",
+      "where": "rust/crates/sdm-core/src/materialize.rs:320",
       "why": "decimal.class-target-38-18 asks for users.tier, a static target, refused before its DECIMAL(38, 18) type is read, which the reference fails INTERNAL_ERROR on (P1B-1)",
       "observed": {
         "python-core": {
@@ -38,7 +38,7 @@
       "rule": "wire_dtype",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-request/src/payload.rs:123",
+      "where": "rust/crates/sdm-request/src/payload.rs:144",
       "why": "A DECIMAL(38, 0) feature past float64's and int64's precision has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
       "observed": {
         "python-core": {
@@ -61,7 +61,7 @@
       "rule": "target_type",
       "owner": "T1.27",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:532",
+      "where": "rust/crates/sdm-core/src/materialize.rs:601",
       "why": "A SUM over a DECIMAL(38, 18) column is a label type materialize does not compute yet; the reference sums it as float64",
       "observed": {
         "python-core": {

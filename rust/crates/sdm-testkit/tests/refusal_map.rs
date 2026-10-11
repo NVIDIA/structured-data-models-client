@@ -443,8 +443,8 @@ fn the_rust_host_run_is_held_to_the_map() {
     let observed = observed();
     // From T1.24 the probes keep the notebook's inputs whose rules have
     // landed, and from T1.25 its text dates, so the ladder is four
-    // rust-host probes: the notebook's call and the three past
-    // materialize's refusals.
+    // rust-host probes: the notebook's call and the three that were past
+    // materialize's refusals, each reaching predict's result from T1.26b.
     assert!(observed.len() >= 4, "{observed:?}");
     assert_eq!(check(&map, observed), Vec::<String>::new());
     // The ladder ends at predict's result.
@@ -515,14 +515,39 @@ fn the_descriptions_are_held_to_the_pin_fail_closed() {
     );
 }
 
-#[test]
-fn a_refusal_the_map_does_not_list_fails() {
+/// A refusal this host may observe, seeded: from T1.26b the map lists no
+/// refusal for this host (its journey reaches predict's result), so the
+/// seeded faults below add one.
+fn seeded_refusal() -> Value {
+    json!({"code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "seeded"})
+}
+
+/// The map with a seeded entry the `no-inference-config` probe expects,
+/// and this host's observations with that probe hitting it.
+fn seeded() -> (Value, BTreeMap<String, Value>) {
     let mut map = map();
-    map["entries"]
+    map["entries"].as_array_mut().unwrap().push(json!({
+        "id": "materialize/seeded",
+        "observed": {"rust-host": seeded_refusal()},
+    }));
+    let probe = map["probes"]
         .as_array_mut()
         .unwrap()
-        .retain(|entry| entry["id"] != "materialize/deeper_hop");
-    let failures = check(&map, observed());
+        .iter_mut()
+        .find(|probe| probe["id"] == "no-inference-config")
+        .unwrap();
+    probe[RUNNER]["expect"] = json!("materialize/seeded");
+    let mut observed = observed().clone();
+    observed.insert("no-inference-config".into(), seeded_refusal());
+    assert_eq!(check(&map, &observed), Vec::<String>::new());
+    (map, observed)
+}
+
+#[test]
+fn a_refusal_the_map_does_not_list_fails() {
+    let mut observed = observed().clone();
+    observed.insert("no-inference-config".into(), seeded_refusal());
+    let failures = check(&map(), &observed);
     assert!(
         failures
             .iter()
@@ -536,7 +561,7 @@ fn an_entry_no_probe_hits_fails() {
     let mut map = map();
     map["entries"].as_array_mut().unwrap().push(json!({
         "id": "materialize/seeded",
-        "observed": {"rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "seeded"}},
+        "observed": {"rust-host": seeded_refusal()},
     }));
     let failures = check(&map, observed());
     assert_eq!(
@@ -547,9 +572,9 @@ fn an_entry_no_probe_hits_fails() {
 
 #[test]
 fn missing_empty_or_retyped_evidence_fails() {
-    let map = map();
+    let (map, observed) = seeded();
     assert_eq!(check(&map, &BTreeMap::new()), ["nothing was observed"]);
-    let mut missing = observed().clone();
+    let mut missing = observed.clone();
     missing.remove("no-inference-config");
     let failures = check(&map, &missing);
     assert!(
@@ -557,18 +582,18 @@ fn missing_empty_or_retyped_evidence_fails() {
         "{failures:?}"
     );
     assert!(
-        failures.contains(&"materialize/deeper_hop: listed for rust-host and not hit".to_owned()),
+        failures.contains(&"materialize/seeded: listed for rust-host and not hit".to_owned()),
         "{failures:?}"
     );
-    for retyped in [json!(7), Value::Null, json!(""), json!(["deeper_hop"])] {
-        let mut changed = observed().clone();
+    for retyped in [json!(7), Value::Null, json!(""), json!(["seeded"])] {
+        let mut changed = observed.clone();
         changed.get_mut("no-inference-config").unwrap()["rule"] = retyped.clone();
         assert!(!check(&map, &changed).is_empty(), "{retyped}");
     }
-    let mut extra = observed().clone();
+    let mut extra = observed.clone();
     extra.get_mut("no-inference-config").unwrap()["stage"] = json!("materialize");
     assert!(!check(&map, &extra).is_empty());
-    let mut unknown = observed().clone();
+    let mut unknown = observed.clone();
     unknown.insert("not-a-probe".into(), success(&json!("predict")));
     assert_eq!(
         check(&map, &unknown),
@@ -577,35 +602,28 @@ fn missing_empty_or_retyped_evidence_fails() {
     let mut no_probes = map.clone();
     no_probes["probes"] = json!([]);
     assert_eq!(
-        check(&no_probes, observed()),
+        check(&no_probes, &observed),
         ["the map gives this host no probe"]
     );
 }
 
 #[test]
 fn a_probe_that_succeeds_or_hits_another_entry_fails() {
-    let mut map = map();
-    let probes = map["probes"].as_array_mut().unwrap();
-    let probe = probes
-        .iter_mut()
-        .find(|probe| probe["id"] == "no-text")
-        .unwrap();
-    probe[RUNNER]["expect"] = json!("materialize/text_column");
-    let failures = check(&map, observed());
-    assert!(
-        failures
-            .contains(&"no-text: succeeded, where the map has materialize/text_column".to_owned()),
-        "{failures:?}"
-    );
-    let mut swapped = observed().clone();
-    let deeper = swapped["no-inference-config"].clone();
-    swapped.insert("one-hop".into(), deeper);
-    let failures = check(&self::map(), &swapped);
+    let (map, observed) = seeded();
+    let mut succeeded = observed.clone();
+    succeeded.insert("no-inference-config".into(), success(&json!("predict")));
+    let failures = check(&map, &succeeded);
     assert!(
         failures.contains(
-            &"one-hop: hit materialize/deeper_hop, where the map has materialize/text_column"
-                .to_owned()
+            &"no-inference-config: succeeded, where the map has materialize/seeded".to_owned()
         ),
+        "{failures:?}"
+    );
+    let mut swapped = observed.clone();
+    swapped.insert("one-hop".into(), seeded_refusal());
+    let failures = check(&map, &swapped);
+    assert!(
+        failures.contains(&"one-hop: hit materialize/seeded, where the map has success".to_owned()),
         "{failures:?}"
     );
 }

@@ -1035,9 +1035,16 @@ entries:
     Proposed: each path keeps its own reference policy until the disagreement
     is settled. Phase 1 runs only the SQL path; its policy is stated in the
     Neighbors request's window (NULL window times not returned) and TieBreak,
-    and pinned by L1 vectors in T1.26b (T1.26 split at T1.25).
+    and pinned by L1 vectors from T1.26b: sdm-testkit's tests/neighbors.json,
+    the rows the reference's DuckDB sampler's _by_fkey and _by_time returned
+    for 14 sets of seeds (an anchor equal to a time, window starts and ends,
+    a microsecond either side, ties broken by the key at the cut, a NULL
+    time, times before 1970, several seeds reaching one row, a TIMESTAMPTZ
+    column under a session zone of America/New_York), which the core's own
+    requests (tests/neighbor-requests.json, held to sdm_engine::sample's
+    builders) return on DuckDB, by neighbors.rs.
   affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
-  cases: [T1.26]
+  cases: [T1.26, T1.26b]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -1218,9 +1225,16 @@ entries:
     rule). In the core: composite_key, evaluate, explain, problem_type,
     assuming, entity_ids, entity_filter, static_target, aggregation,
     target_filter, open_window, month_window, entity_key, parent_table,
-    deeper_hop, text_column, key_type, target_type,
-    indices_type, context_coverage (in place of the once-per-process
-    warning), keyless_neighbors, parent_lookup, wire_dtype and seed_size;
+    key_type, target_type, indices_type, keyless_neighbors, wire_dtype and
+    seed_size; from T1.26b the subgraph is walked as the reference walks
+    it, hops past the first and a second table referring to an entity
+    included (deeper_hop and parent_lookup lifted), a text feature is sent
+    as the reference's words (text_column lifted), the coverage warning is
+    given on every run that meets it and once in a process by sdm-host
+    (context_coverage lifted, decision E52), and a provider declaring no
+    null order (null_order) or not one of the requests the sampler asks
+    (named by the request) is refused before anything is fetched; a null
+    where the walk tells rows apart is P1B-13's;
     from T1.25, a time column of any type the reference reads is read (a
     date, a timestamp with a zone, text), time_type lifted, a zoned anchor
     time read at its UTC instant (anchor_zone lifted), and text the
@@ -1261,10 +1275,9 @@ entries:
     route is not a default anywhere, so no caller meets it. The tests that
     pin the refusals (sdm-core's tests/materialize.rs, the client's
     tests/test_the_materialize_route.py) are diagnostic: base.regression is
-    diagnostic until T1.29. context_coverage is a choice for the owner: the
-    reference's warning is held once per process by a module global, which a
-    core holding no state across runs cannot promise; the host could hold
-    it. Recommendation: approve as temporary, as P1B-2; T1.22 (seeds and
+    diagnostic until T1.29. context_coverage was a choice for the owner,
+    answered by E52 (the dedupe in sdm-host) and lifted at T1.26b.
+    Recommendation: approve as temporary, as P1B-2; T1.22 (seeds and
     streams), T1.26a and T1.26b (sampling), T1.27 (labels) and T1.28 (the payload)
     remove each rule's refusal, and this entry is set to rejected when the
     last one goes. T1.21b's refusal map
@@ -1648,6 +1661,53 @@ entries:
     grows frozen bridge code (E50(c)), so it waits for an owner-approved
     allowance, which T1.24b's row asks for its setters' routing too.
     Never self-approved.
+
+- id: P1B-13
+  title: materialize on the core route refuses a null where the sampler's walk tells rows apart
+  kind: change
+  old_behavior: >-
+    The reference's SQL sampler numbers each row it reaches by its key and
+    its example (Mapper). A foreign key it looks up holding a null is taken
+    for the last key it looked up (pandas' factorize gives the null -1, and
+    the mask of keys found is read at -1) whenever that key was found, so a
+    row of the table referred to is added for it; a null key of a table it
+    reads by foreign key numbers every such row as one row, whatever its
+    example. Either way the rows it adds are numbered out of step with the
+    rows it keeps: the request sends rows nothing refers to, and links
+    rows to rows of other examples (measured at T1.26b on generated DuckDB
+    sources: of 4 with a null foreign key, every one sends rows of the
+    table referred to that no row refers to, and one links 3,690 rows
+    across examples; of 6 with a null key, 5 link rows across examples;
+    the client's tests/test_the_materialize_route.py holds a crossing link
+    on the old route for each rule).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    materialize refuses with UNSUPPORTED_REQUEST naming the rule: a foreign
+    key the walk looks up holding a null among the rows it expands
+    (null_foreign_key), and a key of a table it reads by foreign key
+    holding a null (null_key). A foreign key whose key no row of the table
+    referred to holds is taken as the reference takes it: no row is added,
+    and the row's foreign key is sent as null (an integer key column
+    holding one as float64, as pandas types it). The default route is
+    unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route whose sampled tables hold a null foreign key reached
+    at the second hop or a null key in a table referring to a sampled one.
+  cases: [T1.26b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.26b's old-against-core differential (E49). Refusing is the
+    conservative choice: porting the reference's numbering would reproduce
+    a request whose links name rows of other examples; taking a null as no
+    key, which a correct walk would, is a change of a payload, and the
+    owner's. Some inputs the reference answers without crossing links are
+    refused too (a null foreign key where the last key looked up was not
+    found; a null key reached for one example once). Recommendation:
+    approve the refusal for Phase 1 and decide the null's reading with S3
+    in Phase 4. Never self-approved.
 
 # --- The host layer -------------------------------------------------------------
 

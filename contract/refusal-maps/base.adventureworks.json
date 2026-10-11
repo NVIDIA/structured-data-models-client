@@ -1,7 +1,7 @@
 {
   "format": "sdm-refusal-map/1",
   "case": "base.adventureworks",
-  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is, its tables named, keys, time columns and relationships passed to Schema.from_source as the notebook passes them, its edits (the products' time column cleared, rowguid deleted) and materialize with inference_config, which describes the source on both runners; then without inference_config, with one hop, and without the text columns of the tables sampled, which reaches predict's result on both runners. From T1.24 Schema.from_source with tables named has a core route and every option passes through to the core, which refuses by name what it does not take, and from T1.25 the core reads text as dates as the reference does, so the probes restore the inputs earlier probes masked while their rules had not landed (the tables' names, the keys, time columns and relationships given, the edit stamps, sparse and several timestamps, the text columns whose values could be dates): what the probes still remove is the scope this map gives T1.26 and T1.28a. A rule no probe reached past (predict with inference_config) is not in it and stays refused (P1B). rust-host starts the core operations, so it has a probe only where the case format can carry the input (gaps): its notebook probe runs without inference_config, as its probe without it does.",
+  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is, its tables named, keys, time columns and relationships passed to Schema.from_source as the notebook passes them, its edits (the products' time column cleared, rowguid deleted) and materialize with inference_config, which describes the source on both runners; then without inference_config, which reaches predict's result on both runners from T1.26b, the core walking the order lines to the customers they refer to and sending the products' text as the reference's words; then with one hop, and without the text columns of the tables sampled, the probes that removed T1.26b's refusals until it landed, kept as the journey reached both ways. From T1.24 Schema.from_source with tables named has a core route and every option passes through to the core, which refuses by name what it does not take, and from T1.25 the core reads text as dates as the reference does, so the probes restore the inputs earlier probes masked while their rules had not landed (the tables' names, the keys, time columns and relationships given, the edit stamps, sparse and several timestamps, the text columns whose values could be dates): what the probes still remove is the scope this map gives T1.28a. A rule no probe reached past (predict with inference_config) is not in it and stays refused (P1B). rust-host starts the core operations, so it has a probe only where the case format can carry the input (gaps): its notebook probe runs without inference_config, as its probe without it does.",
   "gaps": [
     {
       "input": "materialize's inference_config",
@@ -16,7 +16,7 @@
       "rule": "inference_config",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:767",
+      "where": "rust/crates/sdm-core/src/materialize.rs:913",
       "holds": null,
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28a); from T1.24 the host passes the option's name through to the core (contract version 13), which refuses it by name, the value having no place in the contract yet",
       "observed": {
@@ -26,52 +26,6 @@
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "inference_config"
-        }
-      }
-    },
-    {
-      "id": "materialize/deeper_hop",
-      "operation": "materialize",
-      "rule": "deeper_hop",
-      "owner": "T1.26b",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:923",
-      "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
-      "observed": {
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "deeper_hop"
-        },
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "deeper_hop"
-        }
-      }
-    },
-    {
-      "id": "materialize/text_column",
-      "operation": "materialize",
-      "rule": "text_column",
-      "owner": "T1.26b",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:937",
-      "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
-      "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "text_column"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "text_column"
         }
       }
     }
@@ -367,7 +321,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/deeper_hop"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -469,7 +423,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/deeper_hop",
+        "expect": "success",
         "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
         "edits": [
           {
@@ -599,7 +553,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/text_column"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -700,7 +654,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/text_column",
+        "expect": "success",
         "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
         "edits": [
           {
