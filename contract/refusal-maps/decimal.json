@@ -15,7 +15,7 @@
       "rule": "static_target",
       "owner": "T1.27",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:249",
+      "where": "rust/crates/sdm-core/src/materialize.rs:251",
       "why": "decimal.class-target-38-18 asks for users.tier, a static target, refused before its DECIMAL(38, 18) type is read, which the reference fails INTERNAL_ERROR on (P1B-1)",
       "observed": {
         "python-core": {
@@ -61,7 +61,7 @@
       "rule": "target_type",
       "owner": "T1.27",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:530",
+      "where": "rust/crates/sdm-core/src/materialize.rs:532",
       "why": "A SUM over a DECIMAL(38, 18) column is a label type materialize does not compute yet; the reference sums it as float64",
       "observed": {
         "python-core": {

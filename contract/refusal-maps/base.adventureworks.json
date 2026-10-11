@@ -16,7 +16,7 @@
       "rule": "inference_config",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:739",
+      "where": "rust/crates/sdm-core/src/materialize.rs:767",
       "holds": null,
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28a); from T1.24 the host passes the option's name through to the core (contract version 13), which refuses it by name, the value having no place in the contract yet",
       "observed": {
@@ -35,7 +35,7 @@
       "rule": "deeper_hop",
       "owner": "T1.26b",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:894",
+      "where": "rust/crates/sdm-core/src/materialize.rs:923",
       "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
       "observed": {
         "rust-host": {
@@ -58,7 +58,7 @@
       "rule": "text_column",
       "owner": "T1.26b",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:908",
+      "where": "rust/crates/sdm-core/src/materialize.rs:937",
       "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
       "observed": {
         "python-core": {
