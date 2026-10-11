@@ -738,7 +738,16 @@ entries:
   decision_ref: null
   notes: >-
     Checked at the function level only. Recommendation: keep for Phase 1;
-    unifying the two rule sets would be a separate change entry.
+    unifying the two rule sets would be a separate change entry. Implemented
+    at T1.25 as kept (E62): whether a source's text times are read value by
+    value is the provider's capability (ProviderCapabilities.text_times),
+    which sdm-data declares for its SQL dialects, and sdm_engine::time::text
+    reads value by value within date-rules.md's shapes, refusing by name
+    what takes another rule; held to pandas by sdm-engine's
+    tests/text-times.json. time.text-us-date and time.text-one-bad-value
+    now meet the source's own CAST failure, under another code (DT-12).
+    Still for the owner: implementing the reference's behaviour, it waits
+    only if the owner wants to depart from it.
 
 - id: DT-8
   title: Zone names in any case, known by their IANA spelling
@@ -798,6 +807,135 @@ entries:
     refuses input the reference accepts, so it needs the owner while it
     stands; no path switches before T1.6b removes it, and T1.6b sets this
     entry to rejected. T1.12's D8 and DT-9 cases stay diagnostic until then.
+
+- id: DT-10
+  title: Zone answers at the ends of the time range, by the zone's rules
+  kind: change
+  old_behavior: >-
+    pandas 3 converts an instant to a zone's wall clock (Timestamp.tz_convert)
+    only where Python's datetime holds both: of the range-end vectors in the
+    18 vendored zones, at the int64 microsecond range's ends it raises
+    (ValueError, NotImplementedError, OutOfBoundsDatetime: 36 of 36), at
+    9999-12-31T23:59:59.999999Z in 8 zones (NotImplementedError,
+    OverflowError), and at 0001-01-01T00:00Z it raises in 6 zones and in 11
+    shows the instant's UTC wall clock with the zone's offset beside it, where
+    the wall clock falls in the year 0; it answers every other vector
+    (111 of 162) by the zone's rules.
+  new_behavior: >-
+    sdm_engine::time answers every instant an i128 of nanoseconds holds by
+    the zone's rules (Instant::to_local, localize): inside jiff's range by
+    jiff, outside it by moving the instant by whole 400-year Gregorian cycles
+    into a window jiff holds on the same side of the zone's history (before
+    its first transition the offset it starts with, after its last the rule
+    its database ends with, which repeats every cycle), with civil arithmetic
+    for the wall clock (E6). time-ranges.json holds the answers in every
+    vendored zone, recorded with zoneinfo over the same files and moved by
+    other windows, so the cycle rule is held, not assumed.
+  affected_inputs: >-
+    Zone conversions of instants or wall clocks before 0001-01-02 or after
+    9999-12-30T22:00Z. No public path reaches one in Phase 1: a zoned time
+    column is read at its UTC instants, and an anchor time with a zone at
+    its UTC instant, neither through a zone's rules.
+  cases: [T1.25]
+  refs: [DT-1, M4]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.25 (rust/crates/sdm-engine/tests/time_ranges_record.py
+    records pandas' own answer beside each expected one). It refuses nothing
+    the reference answers, so it is for the independent reviewer.
+    Recommendation: approve.
+
+- id: DT-11
+  title: Text time values with mixed offsets refused by name
+  kind: change
+  old_behavior: >-
+    A text column whose first 100 values read with different offsets, or
+    with and without one, makes the engine's inference raise (pandas 3's
+    "Mixed timezones detected"), which Schema.from_source reports as a
+    RuntimeError ("Could not determine semantic type for column ...");
+    fetched rows of a text time column that do the same make materialize
+    fail in its to_datetime.
+  new_behavior: >-
+    The core refuses both by name, UNSUPPORTED_REQUEST with rule
+    text_time_zones (operation describe_source or materialize).
+  affected_inputs: >-
+    SQL sources holding text times written with different offsets, or with
+    an offset on some rows only. The T0.6 corpus's two-offsets and
+    mixed-offset cases among them.
+  cases: [T1.25]
+  refs: [DT-7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.25 over sources built from the T0.6 column cases: the
+    reference refuses each with the RuntimeError above, the core with the
+    named refusal. A refusal for a refusal, in another class and code, so
+    for the owner beside P1B-11's like case (an empty table).
+
+- id: DT-12
+  title: A text time column the source's CAST cannot read, refused as the provider's error
+  kind: change
+  old_behavior: >-
+    Text that the engine's inference reads as dates and DuckDB's CAST in the
+    time bounds cannot (time.text-us-date's 01/01/2023, time.text-one-bad-
+    value's one 'not a date') fails the reference's sampling statement, which
+    its client reports as INTERNAL_ERROR at materialize (P1B-1).
+  new_behavior: >-
+    The core renders the same statement, which fails the same way in the
+    source, and reports the provider's error, PROVIDER_ERROR at materialize.
+  affected_inputs: >-
+    SQL sources whose text time column holds values the engine reads as
+    dates and the source's CAST to TIMESTAMP does not.
+  cases: [time.text-us-date, time.text-one-bad-value]
+  refs: [P1B-1, DT-7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.25 on python-core and rust-host; until T1.25 the core
+    refused both at describe_source (text_time, P1B-2). The time family's
+    map lists it (materialize/text_time_cast, owner T1.32e, which settles
+    the code when it admits the cases). A refusal for a refusal under
+    another code, so for the owner, beside P1B-1.
+
+- id: DT-13
+  title: A zoned time column read in the fetching cursor's zone, as the reference reads it
+  kind: keep
+  old_behavior: >-
+    The reference's DuckDB reads run on cursors of the source's connection
+    (its table reads and its sampler alike), which do not carry the
+    session's SET TimeZone: a TIMESTAMPTZ column arrives in the machine's
+    zone and the sampler's CAST to TIMESTAMP gives the machine's wall clock,
+    so the labels and the related rows of time.timestamptz change with the
+    machine's zone (measured: its payload differs between TZ=America/New_York
+    and TZ=UTC or Asia/Tokyo; the committed reference observation is the
+    reference machine's zone's).
+  new_behavior: >-
+    Kept: both core hosts read on a cursor of their own, as the reference
+    does, and the core reads a zoned column's values at their UTC instants,
+    zone-independent, and renders the same CAST; no session zone reaches the
+    core. The description records the zone the cursor read in, the
+    machine's, which the family pin writes as one marker
+    (refusal_map.zone_free), kept for that reason.
+  affected_inputs: >-
+    TIMESTAMPTZ time columns of a DuckDB source whose session zone is not
+    the machine's.
+  cases: [time.timestamptz]
+  refs: [DT-2]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Settles the T1.23 note (subagent P3-4) at T1.25: the reference does not
+    read in the session's zone either, so a session zone given to the core
+    as a host fact would change the reference's answer, not match it. For
+    the owner: whether the core should read a zoned column in the source
+    session's zone (a change, which would make the answer machine-
+    independent) rather than keep the reference's machine dependence.
+    Recommendation: keep for Phase 1.
 
 # --- Orderings ----------------------------------------------------------------
 
@@ -866,7 +1004,7 @@ entries:
     Proposed: each path keeps its own reference policy until the disagreement
     is settled. Phase 1 runs only the SQL path; its policy is stated in the
     Neighbors request's window (NULL window times not returned) and TieBreak,
-    and pinned by L1 vectors in T1.26.
+    and pinned by L1 vectors in T1.26b (T1.26 split at T1.25).
   affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
   cases: [T1.26]
   status: proposed
@@ -922,7 +1060,8 @@ entries:
     can be approved by the reviewer; turning an accepted input into a refusal
     needs the owner. T1.21e's family maps (contract/refusal-maps/<seam>.json)
     show today's core route on each; the three outcomes it already changes
-    are P1B-6 to P1B-8.
+    are P1B-6 to P1B-8, and from T1.25 DT-12 (time.text-us-date and
+    time.text-one-bad-value, the source's CAST failure as PROVIDER_ERROR).
 
 - id: P1B-2
   title: Schema.from_source on the core route refuses what T1.11b's thin describe_source does not infer yet
@@ -957,12 +1096,27 @@ entries:
     named has a core route (schema.from-source/tables/duckdb), and the
     schema bridge refuses neither relationships nor a time column cleared
     (None), which the core takes (contract version 13): the rules
-    relationships and time_column_cleared are gone. Through that route a
+    relationships and time_column_cleared are gone. From T1.25 the core
+    reads text as dates as the reference's engine does (DT-7), over
+    date-rules.md's shapes, so text_time refuses only text whose reading
+    takes a rule outside them and that the values that never read do not
+    already decide: a zone written by name, white space around a value, a
+    free-form date (March 3 2020), a packed one (20240101), the year 0, more
+    than six fractional digits, a three-digit year, mixed separators, and
+    the clock's own now and today; offsets mixed are refused by name
+    (text_time_zones, DT-11). Measured at T1.25 over the T0.6 corpus's 121
+    column cases as source columns under a name that says time and one that
+    does not: the core describes 112 of the 242 as the reference does,
+    warnings included; on 66 it decides, as the reference does, that the
+    text is no timestamp and then refuses multicategorical; it refuses 58
+    by text_time (zone names, white space around a value) and 6 by
+    text_time_zones (DT-11), which the reference refuses unnamed. Through that route a
     DuckDB system view named as a table (pg_class; duckdb_columns over a
     source of one table, which the core describes over the shop base),
-    which the reference describes, is refused by text_time, as any text
-    whose values could be dates is (measured at T1.24, pinned by the
-    client's tests/test_the_schema_route.py). A key of one column given as
+    which the reference describes, is refused by text_time, its text
+    holding values the core's reading does not decide (measured at T1.24
+    and again at T1.25, pinned by the client's
+    tests/test_the_schema_route.py). A key of one column given as
     a sequence (['user_id'] or ('user_id',)), which the reference keeps as
     a tuple and infers no link to by name, is the column's name on the core
     route, whose description says no key's form, and a link to it is
@@ -1026,9 +1180,17 @@ entries:
     rule). In the core: composite_key, evaluate, explain, problem_type,
     assuming, entity_ids, entity_filter, static_target, aggregation,
     target_filter, open_window, month_window, entity_key, parent_table,
-    deeper_hop, text_column, anchor_zone, key_type, time_type, target_type,
+    deeper_hop, text_column, key_type, target_type,
     indices_type, context_coverage (in place of the once-per-process
     warning), keyless_neighbors, parent_lookup, wire_dtype and seed_size;
+    from T1.25, a time column of any type the reference reads is read (a
+    date, a timestamp with a zone, text), time_type lifted, a zoned anchor
+    time read at its UTC instant (anchor_zone lifted), and text the
+    fetches return is read as the provider declares (DT-7): refused where
+    the provider declares no reading (text_times), declares the client's
+    rules, which no map needs yet (text_time_rules), or holds a value
+    whose reading takes a rule outside date-rules.md's shapes (text_time);
+    offsets mixed are DT-11's;
     in the core from T1.24, the call's options, which the bridge passes
     through (contract version 13, E61), before anything is fetched: each
     sampling option by its name (the first in name order), unseeded (a
@@ -1050,7 +1212,7 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source's schema
     under a forced core route, with any of the inputs above; base.regression
     is none of them, and its payload is the reference's.
-  cases: [base.regression, base.adventureworks, T1.11c, T1.21b, T1.21e, T1.22, T1.26, T1.27, T1.28, T1.29]
+  cases: [base.regression, base.adventureworks, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.29]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -1065,14 +1227,14 @@ entries:
     reference's warning is held once per process by a module global, which a
     core holding no state across runs cannot promise; the host could hold
     it. Recommendation: approve as temporary, as P1B-2; T1.22 (seeds and
-    streams), T1.26 (sampling), T1.27 (labels) and T1.28 (the payload)
+    streams), T1.26a and T1.26b (sampling), T1.27 (labels) and T1.28 (the payload)
     remove each rule's refusal, and this entry is set to rejected when the
     last one goes. T1.21b's refusal map
     (contract/refusal-maps/base.adventureworks.json) records which of these
     E27's AdventureWorks journey reaches and which task removes each, and
     T1.21e's family maps which the inventory's cases reach (key_type in the
-    bridge; static_target, target_type, time_type and wire_dtype in the
-    core); they approve nothing. Measured at T1.24 (E61) by an old-against-
+    bridge; static_target, target_type and wire_dtype in the core, and
+    time_type until T1.25); they approve nothing. Measured at T1.24 (E61) by an old-against-
     core differential over 160 generated DuckDB sources through
     Schema.from_source, edits, materialize and predict: every refusal of
     materialize's on the core named its rule (text_column, keyless_neighbors,
@@ -1081,7 +1243,14 @@ entries:
     key of one column given as a sequence (P1B-2), the reference refuses
     the question's entity as no primary key (INVALID_REQUEST) and the core
     route materializes it; the fix gives the description the key's form, a
-    contract change for the owner's queue, not T1.24's fix round.
+    contract change for the owner's queue, not T1.24's fix round. The
+    contract field is needed only for the link inferred to it (P1B-2), not
+    for this half: the host's own check of the query already refuses a
+    tuple key. Options for the owner (recorded at T1.25): (a) the
+    description carries the key's form and the core matches the reference,
+    linking nothing to a one-column sequence key; (b) it carries a flag and
+    the core refuses a one-column sequence key by name; (c) approve reading
+    it as a plain name.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1419,7 +1588,12 @@ entries:
     column that is not a name (a number or a list), reach the contract's
     decoder, which refuses them INVALID_MESSAGE. Measured at T1.24's fix
     round 1, pinned both routes' by the client's
-    tests/test_the_schema_route.py. The default route is unchanged.
+    tests/test_the_schema_route.py. A value the contract's JSON cannot
+    encode fails on the core route with a raw TypeError or ValueError where
+    the reference gives INVALID_REQUEST: a time column given as a date, a
+    NaN or a NumPy bool, and a key member that is a NaN or another object
+    (found at T1.24's review, recorded at T1.25). The default route is
+    unchanged.
   affected_inputs: >-
     Schema.from_source over a DuckDB source under a forced core route, with
     primary_keys or time_columns holding a value of another type than a
