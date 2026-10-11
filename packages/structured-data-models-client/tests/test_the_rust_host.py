@@ -683,3 +683,43 @@ def test_every_warning_the_core_gives_is_worded_here() -> None:
     for code, variants in _native.WARNING_CODES:
         assert code == code.upper() and ' ' not in code, code
         assert len(set(variants)) == len(variants), code
+
+
+def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
+    # T1.23 fix 1 moved the sampler's three warnings to the host's table;
+    # their words are E41(i)'s, the core's own before T1.23, not the
+    # reference's: each variant word for word, so a template swapped or
+    # reworded fails (T1.23 fix 2, subagent P3-4).
+    tail = (
+        ' for optimal database querying; indices on primary and foreign keys '
+        'speed sampling up'
+    )
+    for variant, indices, tables, words in (
+        ('index_table', 1, 1, 'Missing 1 index in 1 table'),
+        ('index_tables', 1, 2, 'Missing 1 index in 2 tables'),
+        ('indices_table', 2, 1, 'Missing 2 indices in 1 table'),
+        ('indices_tables', 3, 2, 'Missing 3 indices in 2 tables'),
+    ):
+        assert _shown(
+            _warning(
+                'MISSING_INDICES',
+                indices=indices,
+                tables=tables,
+                variant=variant,
+            )
+        ) == [('UserWarning', f'[MISSING_INDICES] {words}{tail}')], variant
+    assert _shown(_warning('CONTEXT_BEFORE_DATA')) == [
+        (
+            'UserWarning',
+            "[CONTEXT_BEFORE_DATA] the context's anchor time is too early, or "
+            "the aggregation's window too long, for the data to reach back as "
+            'far as the examples need',
+        )
+    ]
+    assert _shown(_warning('ANCHOR_AFTER_DATA')) == [
+        (
+            'UserWarning',
+            '[ANCHOR_AFTER_DATA] the anchor time is after the latest time in '
+            'the data',
+        )
+    ]
