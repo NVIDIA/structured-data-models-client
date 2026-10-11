@@ -20,8 +20,9 @@ use arrow_array::{
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, Dialect, FetchPlan,
-    OptionalRequest, ProviderCapabilities, ProviderChoice, catalog_columns,
+    AttachmentId, BATCH_COLUMN, DataLayer, DataRequest, DescribePart, Determinism, Dialect,
+    FetchPlan, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, ProviderChoice,
+    catalog_columns,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -707,6 +708,95 @@ fn requests_to_the_sample(
     }
 }
 
+/// A column of `n` rows of the type the shop's column `name` holds, its
+/// values `values` where given (the keys), else nulls.
+fn shop_column(name: &str, n: usize, values: Option<ArrayRef>) -> ArrayRef {
+    if let Some(values) = values {
+        return values;
+    }
+    match name {
+        "order_id" | "user_id" => Arc::new(Int64Array::from(vec![None::<i64>; n])),
+        "price" => Arc::new(arrow_array::Float64Array::from(vec![None::<f64>; n])),
+        "ts" => Arc::new(TimestampMicrosecondArray::from(vec![None::<i64>; n])),
+        _ => Arc::new(StringArray::from(vec![None::<&str>; n])),
+    }
+}
+
+/// Runs `run` to its result over the renamed shop, answering every request:
+/// the catalog as [`catalog`] does, the sample with four users, the labels'
+/// and the first hop's neighbors with no row, the lookup with one row per
+/// seed; each request's kind and the table it names, in order.
+fn tables_to_the_result(run: &mut Run) -> Vec<(&'static str, String)> {
+    let mut seen = Vec::new();
+    loop {
+        let step = run.next().unwrap();
+        let _ = run.take_warnings();
+        let requests = match step {
+            Step::Fetch { requests } => requests,
+            Step::Done { .. } => return seen,
+            other => panic!("{other:?}"),
+        };
+        for asked in requests {
+            let answer = match &asked.request {
+                DataRequest::Describe { .. } => indexes(&[]),
+                DataRequest::TimeBounds { columns } => {
+                    seen.push(("time_bounds", columns[0].table.clone()));
+                    catalog(&asked.request).unwrap()
+                }
+                DataRequest::SampleEntities { table, columns, .. } => {
+                    seen.push(("sample_entities", table.clone()));
+                    let keys: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2, 3]));
+                    data(
+                        columns
+                            .iter()
+                            .map(|c| {
+                                let given = (c == "user_id").then(|| Arc::clone(&keys));
+                                (c.as_str(), shop_column(c, 4, given))
+                            })
+                            .collect(),
+                    )
+                }
+                DataRequest::Neighbors { table, columns, .. } => {
+                    seen.push(("neighbors", table.clone()));
+                    let mut answer: Vec<(&str, ArrayRef)> = columns
+                        .iter()
+                        .map(|c| (c.as_str(), shop_column(c, 0, None)))
+                        .collect();
+                    answer.push((BATCH_COLUMN, Arc::new(Int64Array::from(Vec::<i64>::new()))));
+                    data(answer)
+                }
+                DataRequest::Lookup {
+                    table,
+                    columns,
+                    seeds,
+                    ..
+                } => {
+                    seen.push(("lookup", table.clone()));
+                    let Some(Attachment::Arrow(seeds)) = run.take_attachment(seeds.attachment)
+                    else {
+                        panic!("the lookup's seeds are attached");
+                    };
+                    let seeds = &seeds.batches[0];
+                    let n = seeds.num_rows();
+                    let mut answer: Vec<(&str, ArrayRef)> = columns
+                        .iter()
+                        .map(|c| {
+                            let given = (c == "user_id").then(|| Arc::clone(seeds.column(0)));
+                            (c.as_str(), shop_column(c, n, given))
+                        })
+                        .collect();
+                    let rows: Vec<i64> = (0..n as i64).collect();
+                    answer.push((BATCH_COLUMN, Arc::new(Int64Array::from(rows))));
+                    answer.push((MATCHES_COLUMN, Arc::new(Int64Array::from(vec![1_i64; n]))));
+                    data(answer)
+                }
+                other => panic!("{other:?}"),
+            };
+            run.submit_fetch(asked.id, answer).unwrap();
+        }
+    }
+}
+
 #[test]
 fn a_table_named_otherwise_is_read_by_its_source_name() {
     // T1.24 (decision E61): a description may name a table otherwise than
@@ -727,6 +817,22 @@ fn a_table_named_otherwise_is_read_by_its_source_name() {
     assert_eq!(tables, ["app_orders", "app_users"]);
     // Orders' foreign key, which no index covers.
     assert_eq!(warnings, ["MISSING_INDICES"]);
+    // Every request kind of the run to its result, each answered, names
+    // the source's table (T1.24 fix 1, review P3-1): the time bounds, the
+    // sample, the labels' and the first hop's neighbors, and the lookup.
+    let mut run = materialize(host(), &renamed(), QUERY, None).unwrap();
+    let kinds = tables_to_the_result(&mut run);
+    let kinds: Vec<(&str, &str)> = kinds.iter().map(|(k, t)| (*k, t.as_str())).collect();
+    assert_eq!(
+        kinds,
+        [
+            ("time_bounds", "app_orders"),
+            ("sample_entities", "app_users"),
+            ("neighbors", "app_orders"),
+            ("lookup", "app_users"),
+            ("neighbors", "app_orders"),
+        ]
+    );
     // An index is the source's: one over the source table's column covers
     // the schema's table read from it, and none is warned of; seeded, the
     // same index under the schema's name of the table covers nothing.

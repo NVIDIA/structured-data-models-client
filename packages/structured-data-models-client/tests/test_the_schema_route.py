@@ -925,7 +925,9 @@ def test_keys_and_time_columns_named_are_applied_as_the_old_route_does(
     core, said, schema = _from_source(monkeypatch, setup, CORE_ANY, arguments)
     assert schema._core_description is not None
     for table, key in arguments.get('primary_keys', {}).items():
-        assert schema[table].primary_key == key
+        assert schema[table].primary_key == (
+            key if isinstance(key, str) else tuple(key)
+        )
     for table, column in arguments.get('time_columns', {}).items():
         assert schema[table].time_column == column
         if column is not None:
@@ -1348,3 +1350,76 @@ def test_a_system_view_named_as_a_table_is_pinned_on_both_routes(
         _named_view(monkeypatch, '', base, view)
     assert type(failed.value).__name__ == old
     assert not isinstance(failed.value, StructuredDataError)
+
+
+#: Keys and time columns of another type than a name or a sequence of
+#: names (register entry P1B-12, proposed): the core route's outcome and the
+#: reference's (the old route's), class and code, as measured at T1.24's
+#: fix round 1.
+WRONGLY_TYPED = [
+    (
+        {'time_columns': {'orders': 3}},
+        ('StructuredDataError', 'INVALID_MESSAGE'),
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+    (
+        {'time_columns': {'orders': 1.5}},
+        ('StructuredDataError', 'INVALID_MESSAGE'),
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+    (
+        {'time_columns': {'orders': ['ts']}},
+        ('StructuredDataError', 'INVALID_MESSAGE'),
+        ('TypeError', None),
+    ),
+    (
+        {'primary_keys': {'orders': None}},
+        ('TypeError', None),
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+    (
+        {'primary_keys': {'orders': 3}},
+        ('TypeError', None),
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+    (
+        {'primary_keys': {'orders': [['order_id']]}},
+        ('StructuredDataError', 'INVALID_MESSAGE'),
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+    (
+        {'primary_keys': {'orders': {'order_id'}}},
+        None,
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+    (
+        {'primary_keys': {'orders': {'order_id': 1}}},
+        None,
+        ('StructuredDataError', 'INVALID_REQUEST'),
+    ),
+]
+
+
+def _outcome_of(
+    monkeypatch: pytest.MonkeyPatch, routes: str, arguments: dict[str, Any]
+) -> tuple[str, str | None] | None:
+    try:
+        _from_source(monkeypatch, (), routes, arguments)
+    except Exception as failed:  # noqa: BLE001 - the outcome pinned
+        return type(failed).__name__, getattr(failed, 'code', None)
+    return None
+
+
+@pytest.mark.parametrize(('arguments', 'core', 'old'), WRONGLY_TYPED)
+def test_a_key_or_time_column_of_the_wrong_type_is_pinned_on_both_routes(
+    monkeypatch: pytest.MonkeyPatch,
+    arguments: dict[str, Any],
+    core: tuple[str, str | None] | None,
+    old: tuple[str, str | None] | None,
+) -> None:
+    # Pinned, naming both outcomes, so the divergence fails this test the
+    # day either changes (register entry P1B-12, proposed).
+    assert _outcome_of(monkeypatch, CORE_ANY, arguments) == core
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    assert _outcome_of(monkeypatch, '', arguments) == old

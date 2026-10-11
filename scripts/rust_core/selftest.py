@@ -1331,11 +1331,17 @@ def freeze_cases(results: list[Result]) -> None:
         declare={from_source: {'refactor': 'the local renamed again'}},
     )
     # Round 3: counts per entry; only entries declared moved net.
-    # A rule of _anchor's to move: from T1.24 the zoned anchor's
-    # conversion, the anchor_entity refusal having moved into the core.
+    # A rule of _anchor's to move, a raise among it, so a refactor's rise
+    # of raises could be paid by its drop only if netting were wrong: from
+    # T1.24 the non-Timestamp refusal, the anchor_entity refusal having
+    # moved into the core.
     anchor_rule = (
-        '    if value.tzinfo is not None:\n'
-        "        value = value.tz_convert('UTC').tz_localize(None)\n"
+        '    if not isinstance(value, pd.Timestamp):\n'
+        '        raise StructuredDataError(\n'
+        '            f"\'anchor_time\' must be a pandas.Timestamp or the literal "\n'
+        '            f"\'entity\' (got {type(value).__name__})",\n'
+        "            code='INVALID_REQUEST',\n"
+        '        )\n'
     )
     big = "    if len(indices) > 5:\n        raise _not_taken('big')\n"
     case(
