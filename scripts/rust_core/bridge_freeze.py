@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The bridge freeze: no change to the core route's Python bridge is silent.
+"""The bridge freeze: a tripwire for undeclared changes to the core route's bridge.
 
 Decision E50 (the owner, 2026-10-10): a new product rule on a core route
 lands in Rust, not in the Python bridge. This guard holds it over the files
@@ -58,7 +58,8 @@ frozen file's bytes, as the interpreter does, and refuses one declaring a
 source encoding other than UTF-8 (a ``raw_unicode_escape`` or ``utf-7``
 cookie runs what a UTF-8 reader takes for a comment); and it refuses a
 directory beside a frozen module with the module's name, whose package
-would be imported in the module's place. So no change to frozen code is silent, and review judges each
+would be imported in the module's place. So a change made to frozen code
+by ordinary means fails until it is declared, and review judges each
 reason's direction. A file joining ``FROZEN`` has every entry new.
 
 The counts, the secondary check: per entry the baseline also records its
@@ -95,6 +96,17 @@ another format, a field missing or retyped, an unreadable base, no merge
 base. A base that predates the baseline has nothing to compare, and the
 declarations must then be empty.
 
+Threat model (decision E56, checkpoint 4): the threat is honest drift by
+cooperating agents, a rule added to the bridge by ordinary means and not
+declared. Evasion that needs deliberate obfuscation (a source-encoding
+cookie, ``getattr`` or other dynamic dispatch, metaclass or dunder tricks,
+a shadowing package, names or code built from strings at run time) is
+review's, and a finding of that kind is P3 by rule; the refusals above that
+touch it are kept, not extended. The behavioural protection is the
+``python-core`` against ``rust-host`` parity on the cases: the pure-Rust host
+has no Python, so a rule the bridge alone holds that a case reaches shows as
+a divergence. This script is frozen at bug fixes (E56, extending E49(a)).
+
 What it does not see, review's to hold as it holds the ledger's owners and
 each declared reason:
 
@@ -114,6 +126,10 @@ runs ``--write``.
 cheap tier and CI's ``rust-lint``; ``selftest.py`` seeds a fault for each
 rule.
 
+The base branch is a setting (E56(c)): ``--base``, else the environment's
+``SDM_FREEZE_BASE``, else ``origin/rust-core-phase-1``, so the check keeps
+working once the phase branch has merged and gone; a blank one is refused.
+
     scripts/rust_core/bridge_freeze.py [--write] [--base REF]
 """
 
@@ -125,6 +141,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -138,7 +155,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINE = Path('scripts/rust_core/bridge_freeze.json')
 CHANGES = Path('scripts/rust_core/bridge_changes.json')
 DECISIONS = Path('docs/design/rust-core/phase-1/decisions.md')
+#: The base branch when neither ``--base`` nor ``BASE_ENV`` names one.
 BASE_REF = 'origin/rust-core-phase-1'
+#: The environment's setting of the base branch (E56(c)).
+BASE_ENV = 'SDM_FREEZE_BASE'
 FORMAT = 'sdm-bridge-freeze/2'
 CHANGES_FORMAT = 'sdm-bridge-changes/1'
 ABOUT = (
@@ -1271,8 +1291,22 @@ def base_baseline(root: Path, ref: str) -> Base | str:
     )
 
 
-def problems(root: Path = REPO_ROOT, ref: str = BASE_REF) -> list[str]:
-    """The check as ``l0_deps.py`` runs it."""
+def base_ref(
+    given: str | None = None, environ: Mapping[str, str] | None = None
+) -> str:
+    """The branch whose merge base with HEAD holds the baseline: ``given``
+    (``--base``), else ``BASE_ENV`` when it is set, even blank, else
+    ``BASE_REF``."""
+    if given is not None:
+        return given
+    return (os.environ if environ is None else environ).get(BASE_ENV, BASE_REF)
+
+
+def problems(root: Path = REPO_ROOT, ref: str | None = None) -> list[str]:
+    """The check as ``l0_deps.py`` runs it, against ``base_ref(ref)``."""
+    ref = base_ref(ref)
+    if not ref.strip():
+        return [f'the base branch is blank (--base or {BASE_ENV}): name one']
     return check(root, base_baseline(root, ref))
 
 
@@ -1304,9 +1338,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--root', type=Path, default=REPO_ROOT)
     parser.add_argument(
         '--base',
-        default=BASE_REF,
+        default=None,
         help='the branch whose merge base with HEAD holds the baseline to '
-        'compare with',
+        f'compare with (default: ${BASE_ENV}, else {BASE_REF})',
     )
     parser.add_argument(
         '--write',

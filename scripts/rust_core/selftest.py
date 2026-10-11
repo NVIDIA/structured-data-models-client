@@ -2134,6 +2134,73 @@ def freeze_cases(results: list[Result]) -> None:
             fails_with='no merge base of HEAD and no-such-branch',
         )
 
+        # The base branch is a setting (E56(c)): --base, else
+        # SDM_FREEZE_BASE, else the phase branch; a blank one is refused.
+        @contextmanager
+        def freeze_base(value: str | None) -> Iterator[None]:
+            saved = os.environ.pop(bridge_freeze.BASE_ENV, None)
+            if value is not None:
+                os.environ[bridge_freeze.BASE_ENV] = value
+            try:
+                yield
+            finally:
+                os.environ.pop(bridge_freeze.BASE_ENV, None)
+                if saved is not None:
+                    os.environ[bridge_freeze.BASE_ENV] = saved
+
+        with freeze_base(None):
+            chosen = bridge_freeze.base_ref()
+        expect(
+            results,
+            'bridge_freeze: unset, the base branch is the phase branch',
+            []
+            if chosen == 'origin/rust-core-phase-1'
+            else [f'chose {chosen!r}'],
+            fails_with=None,
+        )
+        with freeze_base('no-such-branch'):
+            found_problems = bridge_freeze.problems(REPO_ROOT)
+        expect(
+            results,
+            'bridge_freeze: SDM_FREEZE_BASE names the base branch the check reads',
+            found_problems,
+            fails_with='no merge base of HEAD and no-such-branch',
+        )
+        with freeze_base('phase'):
+            found = bridge_freeze.base_baseline(repo, bridge_freeze.base_ref())
+        expect(
+            results,
+            'bridge_freeze: SDM_FREEZE_BASE read as a branch, its merge base read',
+            []
+            if isinstance(found, bridge_freeze.Base)
+            and found.baseline == at_base[bridge_freeze.BASELINE]
+            else [f'read {found!r}'],
+            fails_with=None,
+        )
+        with freeze_base('no-such-branch'):
+            chosen = bridge_freeze.base_ref('phase')
+        expect(
+            results,
+            'bridge_freeze: --base wins over SDM_FREEZE_BASE',
+            [] if chosen == 'phase' else [f'chose {chosen!r}'],
+            fails_with=None,
+        )
+        for blank in ('', '  '):
+            with freeze_base(blank):
+                found_problems = bridge_freeze.problems(repo)
+            expect(
+                results,
+                f'bridge_freeze: a blank SDM_FREEZE_BASE ({blank!r}) refused',
+                found_problems,
+                fails_with='the base branch is blank',
+            )
+        expect(
+            results,
+            'bridge_freeze: a blank --base refused',
+            bridge_freeze.problems(repo, ''),
+            fails_with='the base branch is blank',
+        )
+
 
 # --- l0_scan.py ---------------------------------------------------------------
 

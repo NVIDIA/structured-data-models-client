@@ -93,6 +93,16 @@ graph; these check the text:
   ``call_model`` and ``done``, in the Rust source and in the locked schema:
   no step asks the host for language behavior (migration plan, L0).
 
+Threat model (decision E56, checkpoint 4): the threat is honest drift by
+cooperating agents, a term, a statement, a skip or an allow written by
+ordinary means. Evasion that needs deliberate obfuscation (text built at run
+time or from bytes, a macro that assembles what a check reads, an identifier
+spelled to slip a list, a lint cap smuggled through configuration the scan
+does not read) is review's, and a finding of that kind is P3 by rule, as
+E28 already holds for the SQL scan's lexical gaps. The behavioural
+protection is the ``python-core`` against ``rust-host`` parity on the cases.
+This script is frozen at bug fixes (E56, extending E49(a)).
+
 ``selftest.py`` holds each check to a seeded fixture it must fail on.
 """
 

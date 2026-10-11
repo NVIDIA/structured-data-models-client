@@ -38,13 +38,23 @@ features, every target platform) and checks:
   a rule a header names is for review, not this check. The parser
   is not bridge code (E18): nothing is asked of it, and it carries no such
   header;
-- the bridge freeze (decision E50, ``bridge_freeze.py``): no change to the
-  core route's Python bridge is silent: each frozen function's fingerprint
-  against the merge base with ``origin/rust-core-phase-1`` (``--base``
-  names another) changes only as ``bridge_changes.json`` declares, and its
-  rule counts rise only under an owner-approved allowance.
+- the bridge freeze (decision E50, ``bridge_freeze.py``), a tripwire for
+  undeclared changes to the core route's Python bridge: each frozen
+  function's fingerprint against the merge base with the base branch
+  (``--base``, else ``SDM_FREEZE_BASE``, else ``origin/rust-core-phase-1``)
+  changes only as ``bridge_changes.json`` declares, and its rule counts
+  rise only under an owner-approved allowance.
 
 ``selftest.py`` holds each rule to a seeded fixture it must fail on.
+
+Threat model (decision E56, checkpoint 4): the threat is honest drift by
+cooperating agents, an edge, a dependency or a header changed by ordinary
+means. Evasion that needs deliberate obfuscation (a dependency hidden behind
+a build script or a vendored copy, a renamed crate built to slip the lists,
+a header spelled to pass the pattern) is review's, and a finding of that
+kind is P3 by rule. The behavioural protection is the ``python-core`` against
+``rust-host`` parity on the cases. This script is frozen at bug fixes (E56,
+extending E49(a)).
 """
 
 from __future__ import annotations
@@ -497,9 +507,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         '--base',
-        default=bridge_freeze.BASE_REF,
+        default=None,
         help="the branch whose merge base with HEAD holds the bridge freeze's "
-        'baseline to ratchet against',
+        f'baseline to ratchet against (default: ${bridge_freeze.BASE_ENV}, '
+        f'else {bridge_freeze.BASE_REF})',
     )
     args = parser.parse_args(argv)
     metadata = (
