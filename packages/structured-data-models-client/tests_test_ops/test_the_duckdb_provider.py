@@ -256,3 +256,103 @@ def test_a_key_set_past_the_control_cap_travels_as_an_attachment() -> None:
     assert data.num_rows == large['rows']
     for row in data.to_pylist():
         assert row['name'] == f'r{row["__kumo_batch__"] % large["modulo"]}'
+
+
+KINDS = json.loads(
+    (
+        Path(__file__).resolve().parents[3] / 'contract/request-kinds.json'
+    ).read_text(encoding='utf-8')
+)
+
+
+def _cell(value: Any) -> Any:
+    r"""A cell as ``contract/request-kinds.json`` writes one."""
+    if value is None or isinstance(value, (bool, str)):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return value.hex()
+    if isinstance(value, list):
+        return [_cell(item) for item in value]
+    raise AssertionError(f'a cell of {type(value).__name__}')
+
+
+def _canonical(table: pa.Table) -> list[list[Any]]:
+    columns = []
+    for field, column in zip(table.schema, table.columns, strict=True):
+        if pa.types.is_timestamp(field.type):
+            column = column.cast(pa.int64())
+        elif pa.types.is_date32(field.type):
+            column = column.cast(pa.int32())
+        columns.append([_cell(value) for value in column.to_pylist()])
+    rows = [list(row) for row in zip(*columns, strict=True)]
+    return sorted(
+        rows,
+        key=lambda row: json.dumps(
+            row, separators=(',', ':'), ensure_ascii=False
+        ),
+    )
+
+
+def _base(name: str) -> Any:
+    import yaml
+
+    bases = yaml.safe_load(
+        (Path(__file__).resolve().parents[3] / 'contract/bases.yaml').read_text(
+            encoding='utf-8'
+        )
+    )['bases']
+    connection = duckdb.connect()
+    for statement in bases[name]:
+        connection.execute(statement)
+    return connection
+
+
+def test_every_request_kind_runs_on_every_base_as_the_vectors_say() -> None:
+    # T1.23: every data request kind, planned by the core's data layer for
+    # DuckDB, answered by this host's provider and admitted, is the Arrow
+    # schema and rows contract/request-kinds.json records, which the
+    # pure-Rust host's provider is held to as well.
+    fetches = KINDS['fetches']
+    kinds = {fetch['request']['request'] for fetch in fetches}
+    assert kinds == {
+        'describe',
+        'scan',
+        'preview',
+        'count_rows',
+        'key_counts',
+        'time_bounds',
+        'sample_entities',
+        'neighbors',
+        'lookup',
+    }
+    assert {fetch['base'] for fetch in fetches} == {
+        'shop',
+        'declared',
+        'adventureworks',
+    }
+    connections: dict[str, Any] = {}
+    for fetch in fetches:
+        connection = connections.setdefault(fetch['base'], _base(fetch['base']))
+        if 'keys' in fetch:
+            seeds = pa.table(
+                {
+                    'key': pa.array(fetch['keys'], pa.int64()),
+                    'batch': pa.array(range(len(fetch['keys'])), pa.int64()),
+                }
+            )
+            data, _ = _keyed(connection, fetch['request'], seeds)
+        else:
+            data, _ = _admitted(connection, fetch['request'])
+        where = f'{fetch["base"]}: {fetch["name"]}'
+        assert [[f.name, str(f.type)] for f in data.schema] == fetch[
+            'schema'
+        ], where
+        assert _canonical(data) == fetch['rows'], where
+    # Not vacuous: rows on every base, a key set bound on each.
+    assert all(
+        any(f['rows'] for f in fetches if f['base'] == base)
+        for base in connections
+    )
+    assert sum(1 for f in fetches if 'keys' in f and f['rows']) == 6

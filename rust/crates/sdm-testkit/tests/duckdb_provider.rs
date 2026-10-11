@@ -983,3 +983,197 @@ fn every_payload_rust_host_materializes_is_the_locked_definition_s() {
         );
     }
 }
+
+/// A type as pyarrow spells it, which `contract/request-kinds.json`
+/// records.
+fn spelled(data_type: &DataType) -> String {
+    match data_type {
+        DataType::Boolean => "bool".into(),
+        DataType::Int8 => "int8".into(),
+        DataType::Int16 => "int16".into(),
+        DataType::Int32 => "int32".into(),
+        DataType::Int64 => "int64".into(),
+        DataType::UInt8 => "uint8".into(),
+        DataType::UInt16 => "uint16".into(),
+        DataType::UInt32 => "uint32".into(),
+        DataType::UInt64 => "uint64".into(),
+        DataType::Float32 => "float".into(),
+        DataType::Float64 => "double".into(),
+        DataType::Utf8 => "string".into(),
+        DataType::Date32 => "date32[day]".into(),
+        DataType::Timestamp(unit, zone) => {
+            let unit = match unit {
+                duckdb::arrow::datatypes::TimeUnit::Second => "s",
+                duckdb::arrow::datatypes::TimeUnit::Millisecond => "ms",
+                duckdb::arrow::datatypes::TimeUnit::Microsecond => "us",
+                duckdb::arrow::datatypes::TimeUnit::Nanosecond => "ns",
+            };
+            match zone {
+                None => format!("timestamp[{unit}]"),
+                Some(zone) => format!("timestamp[{unit}, tz={zone}]"),
+            }
+        }
+        DataType::Decimal128(precision, scale) => format!("decimal128({precision}, {scale})"),
+        DataType::List(item) => format!("list<{}: {}>", item.name(), spelled(item.data_type())),
+        other => panic!("no spelling for {other}"),
+    }
+}
+
+/// Cell `i` of `array` as `contract/request-kinds.json` writes one: null,
+/// a boolean, text, an integer as its decimal text, a float as its
+/// hexadecimal form (Python's `float.hex`), a timestamp or date as its
+/// count, a list of such.
+fn cell(array: &dyn Array, i: usize) -> Value {
+    use duckdb::arrow::array::AsArray;
+    use duckdb::arrow::datatypes as t;
+    if array.is_null(i) {
+        return Value::Null;
+    }
+    let text = |v: String| Value::String(v);
+    match array.data_type() {
+        DataType::Boolean => Value::Bool(array.as_boolean().value(i)),
+        DataType::Int8 => text(array.as_primitive::<t::Int8Type>().value(i).to_string()),
+        DataType::Int16 => text(array.as_primitive::<t::Int16Type>().value(i).to_string()),
+        DataType::Int32 => text(array.as_primitive::<t::Int32Type>().value(i).to_string()),
+        DataType::Int64 => text(array.as_primitive::<t::Int64Type>().value(i).to_string()),
+        DataType::UInt8 => text(array.as_primitive::<t::UInt8Type>().value(i).to_string()),
+        DataType::UInt16 => text(array.as_primitive::<t::UInt16Type>().value(i).to_string()),
+        DataType::UInt32 => text(array.as_primitive::<t::UInt32Type>().value(i).to_string()),
+        DataType::UInt64 => text(array.as_primitive::<t::UInt64Type>().value(i).to_string()),
+        DataType::Float64 => text(hex_float(array.as_primitive::<t::Float64Type>().value(i))),
+        DataType::Float32 => text(hex_float(f64::from(
+            array.as_primitive::<t::Float32Type>().value(i),
+        ))),
+        DataType::Utf8 => text(array.as_string::<i32>().value(i).to_owned()),
+        DataType::Date32 => text(array.as_primitive::<t::Date32Type>().value(i).to_string()),
+        DataType::Timestamp(duckdb::arrow::datatypes::TimeUnit::Microsecond, _) => text(
+            array
+                .as_primitive::<t::TimestampMicrosecondType>()
+                .value(i)
+                .to_string(),
+        ),
+        DataType::Timestamp(duckdb::arrow::datatypes::TimeUnit::Nanosecond, _) => text(
+            array
+                .as_primitive::<t::TimestampNanosecondType>()
+                .value(i)
+                .to_string(),
+        ),
+        DataType::List(_) => {
+            let items = array.as_list::<i32>().value(i);
+            Value::Array((0..items.len()).map(|j| cell(items.as_ref(), j)).collect())
+        }
+        other => panic!("no cell of {other}"),
+    }
+}
+
+/// `value` as Python's `float.hex` writes it.
+fn hex_float(value: f64) -> String {
+    if value == 0.0 {
+        return if value.is_sign_negative() {
+            "-0x0.0p+0"
+        } else {
+            "0x0.0p+0"
+        }
+        .into();
+    }
+    let bits = value.to_bits();
+    let sign = if bits >> 63 == 1 { "-" } else { "" };
+    let exponent = ((bits >> 52) & 0x7ff) as i64;
+    let mantissa = bits & ((1 << 52) - 1);
+    let (lead, exponent) = if exponent == 0 {
+        (0, -1022)
+    } else {
+        (1, exponent - 1023)
+    };
+    format!("{sign}0x{lead}.{mantissa:013x}p{exponent:+}")
+}
+
+/// The rows of `data` as `contract/request-kinds.json` writes them, in
+/// sorted order.
+fn canonical(data: &ArrowData) -> Vec<Value> {
+    let mut rows = Vec::new();
+    for batch in &data.batches {
+        for i in 0..batch.num_rows() {
+            rows.push(Value::Array(
+                batch
+                    .columns()
+                    .iter()
+                    .map(|column| cell(column.as_ref(), i))
+                    .collect(),
+            ));
+        }
+    }
+    // Sorted by compact JSON, as the Python host sorts them.
+    rows.sort_by_key(|row| serde_json::to_string(row).unwrap());
+    rows
+}
+
+#[test]
+fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
+    // T1.23: every data request kind, planned by the root's data layer for
+    // DuckDB, answered by this host's provider and admitted, is the Arrow
+    // schema and rows contract/request-kinds.json records, which the
+    // Python host's provider is held to as well: the same fetch gives the
+    // same admitted Arrow on both hosts, on every base.
+    let kinds: Value =
+        serde_json::from_slice(&std::fs::read(contract().join("request-kinds.json")).unwrap())
+            .unwrap();
+    let fetches = kinds["fetches"].as_array().unwrap();
+    let names: std::collections::BTreeSet<&str> = fetches
+        .iter()
+        .map(|f| f["request"]["request"].as_str().unwrap())
+        .collect();
+    assert_eq!(names.len(), 9, "{names:?}");
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let mut held = 0;
+    for fetch in fetches {
+        let base = fetch["base"].as_str().unwrap();
+        let connection = duck::open().unwrap();
+        for statement in &bases[base] {
+            connection.execute_batch(statement).unwrap();
+        }
+        let data = match fetch.get("keys") {
+            Some(keys) => {
+                let keys: Vec<i64> = keys
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|k| k.as_i64().unwrap())
+                    .collect();
+                let rows = keys.len() as i64;
+                let seeds = RecordBatch::try_new(
+                    Arc::new(duckdb::arrow::datatypes::Schema::new(vec![
+                        duckdb::arrow::datatypes::Field::new("key", DataType::Int64, true),
+                        duckdb::arrow::datatypes::Field::new("batch", DataType::Int64, true),
+                    ])),
+                    vec![
+                        Arc::new(Int64Array::from(keys)),
+                        Arc::new(Int64Array::from_iter_values(0..rows)),
+                    ],
+                )
+                .unwrap();
+                // The key set the seeds travel as, which keyed names in full.
+                let mut request = fetch["request"].clone();
+                request["seeds"] = serde_json::json!({"attachment": 0, "columns": []});
+                let (batch, _) = keyed(&connection, &request, seeds);
+                ArrowData::new(batch.schema(), vec![batch])
+            }
+            None => {
+                let run = start(&fetch["request"]);
+                admitted(&run, |step| duck::answer(&connection, step).unwrap())
+            }
+        };
+        let place = format!("{base}: {}", fetch["name"]);
+        let schema: Vec<Value> = data
+            .schema
+            .fields()
+            .iter()
+            .map(|f| serde_json::json!([f.name(), spelled(f.data_type())]))
+            .collect();
+        assert_eq!(Value::from(schema), fetch["schema"], "{place}");
+        assert_eq!(Value::from(canonical(&data)), fetch["rows"], "{place}");
+        held += 1;
+    }
+    assert_eq!(held, fetches.len());
+    assert!(held >= 30);
+}

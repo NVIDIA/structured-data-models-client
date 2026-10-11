@@ -82,6 +82,7 @@ mod catalog {
 
 /// The optional requests this dialect renders.
 const RENDERED: &[OptionalRequest] = &[
+    OptionalRequest::CountRows,
     OptionalRequest::Preview,
     OptionalRequest::KeyCounts,
     OptionalRequest::TimeBounds,
@@ -199,9 +200,36 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             });
             lookup(request, table, key, columns)?
         }
-        DataRequest::Scan { .. } | DataRequest::CountRows { .. } => {
-            return Err(crate::not_rendered(request, NAME));
+        DataRequest::Scan {
+            table,
+            columns,
+            filters,
+            limit,
+        } => {
+            if columns.is_empty() {
+                return Err(sdm_contract::data::refused(
+                    request,
+                    "columns",
+                    "a scan names no columns",
+                ));
+            }
+            let mut text = format!(
+                "SELECT {} FROM {}{}",
+                identifiers(columns),
+                identifier(table),
+                conditions(request, filters)?
+            );
+            if let Some(limit) = limit {
+                text.push_str(&format!(" LIMIT {limit}"));
+            }
+            text
         }
+        DataRequest::CountRows { table, filters } => format!(
+            "SELECT COUNT(*) AS {} FROM {}{}",
+            identifier("rows"),
+            identifier(table),
+            conditions(request, filters)?
+        ),
     };
     Ok(FetchPlan::Sql {
         statements: vec![SqlStatement {
@@ -425,6 +453,26 @@ fn sample_entities(
             ));
         }
     };
+    let mut text = format!(
+        "SELECT {}\nFROM (SELECT * FROM {}",
+        identifiers(columns),
+        identifier(table)
+    );
+    let filtered = conditions(request, filters)?;
+    if !filtered.is_empty() {
+        text.push('\n');
+        text.push_str(filtered.trim_start());
+    }
+    text.push_str(&format!(
+        ")\nUSING SAMPLE reservoir({n} ROWS) REPEATABLE ({seed})"
+    ));
+    Ok(text)
+}
+
+/// The `WHERE` clause of `filters`, with its leading space, or nothing for
+/// none: each a not-null filter, as the reference's sampler writes one;
+/// another kind of filter is not taken.
+fn conditions(request: &DataRequest, filters: &[Filter]) -> Result<String, CoreError> {
     let mut conditions = Vec::with_capacity(filters.len());
     for filter in filters {
         let Filter::NotNull { column } = filter else {
@@ -436,18 +484,10 @@ fn sample_entities(
         };
         conditions.push(format!(" {} IS NOT NULL", identifier(column)));
     }
-    let mut text = format!(
-        "SELECT {}\nFROM (SELECT * FROM {}",
-        identifiers(columns),
-        identifier(table)
-    );
-    if !conditions.is_empty() {
-        text.push_str(&format!("\nWHERE{}", conditions.join(" AND")));
+    if conditions.is_empty() {
+        return Ok(String::new());
     }
-    text.push_str(&format!(
-        ")\nUSING SAMPLE reservoir({n} ROWS) REPEATABLE ({seed})"
-    ));
-    Ok(text)
+    Ok(format!(" WHERE{}", conditions.join(" AND")))
 }
 
 /// The table's columns asked for, read from its alias, after the seed's

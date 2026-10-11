@@ -216,15 +216,42 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
+/// A scan and a count of rows render on DuckDB from T1.23, so every
+/// request kind does: what a not-null filter keeps, and a scan's limit;
+/// a filter of another kind is not taken, by name.
 #[test]
-fn the_requests_without_a_rendering_are_refused_by_name() {
-    let scan = DataRequest::Scan {
-        table: "t".into(),
-        columns: vec!["c".into()],
-        filters: vec![],
-        limit: None,
+fn a_scan_and_a_count_of_rows_render() {
+    let text = |request: &DataRequest| match Data::new().plan(request, &duckdb()).unwrap() {
+        FetchPlan::Sql { statements, .. } => statements[0].text.clone(),
+        other => panic!("{other:?}"),
     };
-    let err = Data::new().plan(&scan, &duckdb()).unwrap_err();
+    let not_null = || vec![sdm_contract::data::Filter::NotNull { column: "k".into() }];
+    let scan = |filters, limit| DataRequest::Scan {
+        table: "t".into(),
+        columns: vec!["c".into(), "k".into()],
+        filters,
+        limit,
+    };
+    assert_eq!(text(&scan(vec![], None)), r#"SELECT "c", "k" FROM "t""#);
+    assert_eq!(
+        text(&scan(not_null(), Some(5))),
+        r#"SELECT "c", "k" FROM "t" WHERE "k" IS NOT NULL LIMIT 5"#
+    );
+    assert_eq!(
+        text(&DataRequest::CountRows {
+            table: "t".into(),
+            filters: not_null(),
+        }),
+        r#"SELECT COUNT(*) AS "rows" FROM "t" WHERE "k" IS NOT NULL"#
+    );
+    let ranged = vec![sdm_contract::data::Filter::TimeRange {
+        column: "ts".into(),
+        lower: None,
+        upper: None,
+    }];
+    let err = Data::new()
+        .plan(&scan(ranged, None), &duckdb())
+        .unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
 }
 

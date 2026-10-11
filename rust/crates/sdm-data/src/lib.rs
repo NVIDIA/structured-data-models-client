@@ -138,14 +138,3 @@ fn no_dialect(dialect: &Dialect) -> CoreError {
         None => error,
     }
 }
-
-/// The refusal of a request the dialect has no rendering for yet.
-fn not_rendered(request: &DataRequest, dialect: &str) -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        "this build renders no SQL for this request in the dialect asked for",
-    )
-    .with_field("request", Detail::text(request.name()))
-    .with_field("dialect", Detail::text(dialect))
-}

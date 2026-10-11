@@ -307,23 +307,23 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
         dialect: Dialect::new("duckdb"),
     };
     let access = root.data_access(&duckdb).unwrap();
-    // The dialect declares what sdm-data renders for it; an undeclared
-    // optional request is refused by name before it is planned.
-    let err = access.plan(&count()).unwrap_err();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-    );
-    assert_eq!(named(&err, "request"), "count_rows");
+    // The dialect declares what sdm-data renders for it: every request
+    // kind from T1.23, a count of rows and a scan among them (an
+    // undeclared optional request is refused by name before it is
+    // planned: a_host_provider_is_asked_only_for_what_it_declared).
+    let FetchPlan::Sql { statements, .. } = access.plan(&count()).unwrap() else {
+        panic!("DuckDB answers with SQL");
+    };
+    assert_eq!(statements[0].text, r#"SELECT COUNT(*) AS "rows" FROM "t""#);
     let err = access.plan(&scan()).unwrap_err();
-    assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(named(&err, "request"), "scan");
-    assert_eq!(named(&err, "dialect"), "duckdb");
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(named(&err, "field"), "columns");
     // It renders the catalog (T1.11b), each plan expecting the answer's
     // fixed shape.
     assert_eq!(
         access.capabilities().optional,
         BTreeSet::from([
+            OptionalRequest::CountRows,
             OptionalRequest::Preview,
             OptionalRequest::KeyCounts,
             OptionalRequest::TimeBounds,
