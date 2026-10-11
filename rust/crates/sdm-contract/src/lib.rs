@@ -40,12 +40,17 @@ pub use scalar::Scalar;
 pub use types::{ColumnType, Field, Unit};
 
 /// The contract version this build speaks.
-pub const CONTRACT_VERSION: u32 = 10;
+pub const CONTRACT_VERSION: u32 = 11;
 
 /// The JSON Schema of [`ControlMessage`], as committed: pretty-printed, with
-/// a trailing newline.
+/// a trailing newline. Its `$defs` hold [`ops::Attachments`] too, the JSON
+/// of each bytes attachment a control message names, which the root's
+/// `x-attachments` refers to, so the lock covers them (T1.22).
 pub fn schema_json() -> String {
-    let mut schema = schemars::schema_for!(ControlMessage);
+    let mut generator = schemars::SchemaGenerator::default();
+    let attachments = generator.subschema_for::<ops::Attachments>();
+    let mut schema = generator.into_root_schema_for::<ControlMessage>();
+    schema.insert("x-attachments".into(), attachments.into());
     schema.insert(
         "$id".into(),
         format!("sdm-contract/{CONTRACT_VERSION}").into(),

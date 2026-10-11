@@ -746,6 +746,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::new(),
             max_keys_per_request: None,
+            max_seed: None,
             sampling: Determinism::Unseeded,
         },
     };

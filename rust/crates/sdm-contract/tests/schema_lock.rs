@@ -17,6 +17,11 @@
 //! working entry of a phase is rewritten at each bump (decision H4). That
 //! no entry merged into `rust-core` changes, and that a lock holds at most
 //! one working entry, is checked by `scripts/rust_core/contract_lock.py`.
+//!
+//! From T1.22 the contract's schema holds the JSON of the attachments the
+//! control messages name (`$defs/Attachments`): every field naming an
+//! attachment is accounted for, and a field added to an attachment's
+//! definitions fails the lock, each seeded below.
 
 #![allow(
     clippy::disallowed_methods,
@@ -321,4 +326,184 @@ fn a_doc_comment_change_keeps_the_hash_and_a_property_named_description_does_not
     let reworded = generated.replacen("\"description\": \"", "\"description\": \"Reworded. ", 1);
     assert_ne!(reworded, generated);
     assert_eq!(sha256(&reworded), sha256(&generated));
+}
+
+// --- The attachments the control messages name (T1.22) -----------------------
+
+/// Whether `node` refers to an attachment id, directly, as one of a union's
+/// members or as a list's items.
+fn names_attachment(node: &Value) -> bool {
+    if node.get("$ref").and_then(Value::as_str) == Some("#/$defs/AttachmentId") {
+        return true;
+    }
+    ["anyOf", "oneOf"].iter().any(|key| {
+        node.get(*key)
+            .and_then(Value::as_array)
+            .is_some_and(|members| members.iter().any(names_attachment))
+    }) || node.get("items").is_some_and(names_attachment)
+}
+
+/// Every field of a control message that names an attachment, as
+/// `<definition>[/<tag>].<field>`, the tag being the variant's constant.
+fn attachment_fields(node: &Value, at: &str, found: &mut Vec<String>) {
+    match node {
+        Value::Object(map) => {
+            if let Some(Value::Object(properties)) = map.get("properties") {
+                let tag = properties
+                    .values()
+                    .find_map(|p| p.get("const").and_then(Value::as_str));
+                for (name, property) in properties {
+                    if names_attachment(property) {
+                        found.push(match tag {
+                            Some(tag) => format!("{at}/{tag}.{name}"),
+                            None => format!("{at}.{name}"),
+                        });
+                    }
+                }
+            }
+            for (key, value) in map {
+                if key != "$defs" {
+                    attachment_fields(value, at, found);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                attachment_fields(item, at, found);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The attachment fields of `schema` the classification below does not
+/// account for, and the classified ones it no longer has.
+fn unaccounted(schema: &Value) -> Result<(), String> {
+    let mut found = Vec::new();
+    attachment_fields(schema, "ControlMessage", &mut found);
+    for (name, definition) in schema["$defs"].as_object().ok_or("no $defs")? {
+        if name != "Attachments" {
+            attachment_fields(definition, name, &mut found);
+        }
+    }
+    let listed: Vec<&str> = schema["$defs"]["Attachments"]["properties"]
+        .as_object()
+        .ok_or("no attachments listed")?
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let mut known: Vec<&str> = OTHER.iter().map(|(field, _)| *field).collect();
+    for (field, attachment) in JSON {
+        if !listed.contains(&attachment) {
+            return Err(format!("{field}'s JSON ({attachment}) is not in the lock"));
+        }
+        known.push(field);
+    }
+    if listed.len() != JSON.len() {
+        return Err("the lock lists an attachment no field names".into());
+    }
+    for field in &found {
+        if !known.contains(&field.as_str()) {
+            return Err(format!(
+                "{field} names an attachment the lock does not account for"
+            ));
+        }
+    }
+    for field in known {
+        if !found.iter().any(|f| f == field) {
+            return Err(format!("{field} is accounted for and not in the schema"));
+        }
+    }
+    Ok(())
+}
+
+/// The fields whose attachment is JSON of the contract's, with the entry of
+/// `$defs/Attachments` that locks it.
+const JSON: [(&str, &str); 9] = [
+    ("Operation/validate_query.query", "ValidateQuery.query"),
+    ("Operation/validate_query.schema", "ValidateQuery.schema"),
+    ("Operation/describe_source.source", "DescribeSource.source"),
+    ("Operation/materialize.schema", "Materialize.schema"),
+    ("Operation/materialize.query", "Materialize.query"),
+    ("RequestState.payload", "RequestState.payload"),
+    ("RequestState.query", "RequestState.query"),
+    (
+        "OperationResult/describe_source.description",
+        "DescribedSource.description",
+    ),
+    ("OperationResult/predict.metadata", "Predicted.metadata"),
+];
+
+/// The other fields naming an attachment, and why the lock needs no entry.
+const OTHER: [(&str, &str); 7] = [
+    (
+        "ControlMessage/attached.attachment",
+        "a control message: the root schema",
+    ),
+    ("ControlMessage/call_model.body", "the endpoint's bytes"),
+    ("ModelOutcome/response.body", "the endpoint's bytes"),
+    ("Operation/materialize.indices", "Arrow, with its schema"),
+    ("FetchOutcome/data.data", "Arrow, with its schema"),
+    ("KeySet.attachment", "Arrow, with its schema"),
+    ("OperationResult/predict.result", "Arrow, with its schema"),
+];
+
+fn generated() -> Value {
+    serde_json::from_str(&schema_json()).expect("the schema is JSON")
+}
+
+#[test]
+fn the_lock_accounts_for_every_attachment_a_message_names() {
+    assert_eq!(unaccounted(&generated()), Ok(()));
+    // Seeded: a field naming a new attachment, unaccounted for, fails; so
+    // does an attachment the lock lists that no field names, and a JSON
+    // attachment the lock lost.
+    let mut added = generated();
+    added["$defs"]["SourceSpec"]["properties"]["extra"] =
+        serde_json::json!({"$ref": "#/$defs/AttachmentId"});
+    let err = unaccounted(&added).unwrap_err();
+    assert!(err.contains("SourceSpec.extra"), "{err}");
+    let mut listed = generated();
+    listed["$defs"]["Attachments"]["properties"]["Spare.json"] = serde_json::json!({});
+    assert!(unaccounted(&listed).unwrap_err().contains("no field names"));
+    let mut lost = generated();
+    lost["$defs"]["Attachments"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("DescribeSource.source");
+    assert!(unaccounted(&lost).unwrap_err().contains("not in the lock"));
+}
+
+#[test]
+fn a_field_added_to_an_attachment_fails_the_lock() {
+    let lock = read(&schema_dir().join(CONTRACT.lock));
+    let text = schema_json();
+    verify(&CONTRACT, &text, &lock, CONTRACT.version).unwrap();
+    // The JSON each locked attachment holds, and the definitions it is
+    // made of: a field added to any of them is a new shape.
+    for definition in [
+        "SourceSpec",
+        "SourceDescription",
+        "DescribedTable",
+        "DescribedColumn",
+        "QuerySchema",
+        "QueryTable",
+        "QueryColumn",
+        "ColumnRef",
+        "StatePayload",
+        "EndpointMetadata",
+    ] {
+        let mut schema = generated();
+        let node = &mut schema["$defs"][definition];
+        assert!(node.is_object(), "{definition} is not in the schema");
+        node["properties"]["added"] = serde_json::json!({"type": "string"});
+        let changed = serde_json::to_string_pretty(&schema).unwrap();
+        let err = verify(&CONTRACT, &changed, &lock, CONTRACT.version).unwrap_err();
+        assert!(err.contains("bump the version"), "{definition}: {err}");
+    }
+    // A new request state format is a new shape too.
+    let mut schema = generated();
+    schema["$defs"]["StatePayload"]["x-request-state-version"] = serde_json::json!(2);
+    let changed = serde_json::to_string_pretty(&schema).unwrap();
+    assert!(verify(&CONTRACT, &changed, &lock, CONTRACT.version).is_err());
 }

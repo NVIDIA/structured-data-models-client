@@ -94,8 +94,9 @@ pub fn start(
             };
             // The decoder takes a seed of any size and sign; which seeds a
             // run takes is the core's rule (decision H7): not a negative
-            // one, and a provider's own range (RS-7) is its data layer's,
-            // which plans the sample.
+            // one, and none past the largest the provider declares (RS-7),
+            // which the core reads when it plans the sample
+            // (`DataAccess::plan`).
             if request.seed.as_ref().is_some_and(|seed| seed.is_negative()) {
                 return Err(CoreError::new(
                     ErrorKind::InvalidRequest,

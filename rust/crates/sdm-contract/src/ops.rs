@@ -558,3 +558,67 @@ pub struct Predicted {
     /// A bytes attachment of the endpoint's `metadata` object as JSON.
     pub metadata: AttachmentId,
 }
+
+// --- attachments ----------------------------------------------------------------
+
+/// What each bytes attachment holds that a control message names and the
+/// core reads or writes as JSON, by `<type>.<field>` of the field naming
+/// it: part of the locked schema (`$defs/Attachments`, put there by
+/// [`crate::schema_json`]), so a change to an attachment's shape needs a
+/// version bump as a change to a control message's does. A model call's
+/// body and the endpoint's answer are the endpoint's bytes, and an Arrow
+/// attachment carries its own schema; neither is listed.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct Attachments {
+    #[schemars(rename = "ValidateQuery.query")]
+    pub validate_query_query: String,
+    #[schemars(rename = "ValidateQuery.schema")]
+    pub validate_query_schema: QuerySchema,
+    #[schemars(rename = "DescribeSource.source")]
+    pub describe_source_source: SourceSpec,
+    #[schemars(rename = "DescribedSource.description")]
+    pub described_source_description: SourceDescription,
+    #[schemars(rename = "Materialize.schema")]
+    pub materialize_schema: SourceDescription,
+    #[schemars(rename = "Materialize.query")]
+    pub materialize_query: String,
+    #[schemars(rename = "RequestState.payload")]
+    pub request_state_payload: StatePayload,
+    #[schemars(rename = "RequestState.query")]
+    pub request_state_query: String,
+    #[schemars(rename = "Predicted.metadata")]
+    pub predicted_metadata: EndpointMetadata,
+}
+
+/// [`RequestState`]'s payload: the request as JSON, in the format of the
+/// state's version, which the schema records, so a new state format is a
+/// new contract schema too.
+pub struct StatePayload;
+
+impl JsonSchema for StatePayload {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "StatePayload".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "object",
+            "x-request-state-version": REQUEST_STATE_VERSION
+        })
+    }
+}
+
+/// [`Predicted`]'s metadata: the endpoint's `metadata` object, as it gave
+/// it.
+pub struct EndpointMetadata;
+
+impl JsonSchema for EndpointMetadata {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EndpointMetadata".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": "object" })
+    }
+}

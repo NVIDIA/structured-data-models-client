@@ -109,8 +109,10 @@ pub(crate) fn seeds_for(table: &str) -> String {
 }
 
 /// The largest seed DuckDB's `REPEATABLE` takes: its parser refuses one
-/// from 2**31 (register entry RS-7).
-const MAX_SEED: i128 = (1 << 31) - 1;
+/// from 2**31 (register entry RS-7). The dialect declares it as its
+/// capability ([`capabilities`]), and the core refuses a larger seed by
+/// reading it, before the sample is planned.
+const MAX_SEED: u64 = (1 << 31) - 1;
 
 /// The catalog's own tables of the database and schema an unquoted name
 /// resolves in, which is where each table is read from.
@@ -124,6 +126,7 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         max_keys_per_request: None,
         // DuckDB's reservoir sampling repeats under a seed (REPEATABLE).
         sampling: Determinism::SeededStable,
+        max_seed: Some(MAX_SEED),
     }
 }
 
@@ -377,8 +380,9 @@ fn integer(seed: &Scalar) -> Option<i128> {
 /// on DuckDB): the columns asked for, from the rows that meet each not-null
 /// filter, `n` rows under the seed. The key names the columns the entities
 /// are told apart by, which the sample projects, and which the core keeps
-/// one row of each of, as the reference does. A seed DuckDB's parser
-/// refuses, from 2**31, is refused here by name (register entry RS-7).
+/// one row of each of, as the reference does. A seed past the range the
+/// dialect declares never reaches here: the core refuses it first (register
+/// entry RS-7), so one that does is the core's error, not the caller's.
 fn sample_entities(
     request: &DataRequest,
     table: &str,
@@ -403,12 +407,12 @@ fn sample_entities(
         ));
     }
     let seed = match integer(seed) {
-        Some(seed) if (0..=MAX_SEED).contains(&seed) => seed,
+        Some(seed) if (0..=i128::from(MAX_SEED)).contains(&seed) => seed,
         Some(seed) if seed >= 0 => {
             return Err(CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
-                "DuckDB samples repeatably with a seed below 2**31 only",
+                ErrorKind::Internal,
+                ErrorCode::InternalError,
+                "a seed past the range the dialect declares reached its rendering",
             )
             .with_field("request", Detail::text(request.name()))
             .with_field("field", Detail::text("seed")));

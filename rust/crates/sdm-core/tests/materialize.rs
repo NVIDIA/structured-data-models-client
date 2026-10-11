@@ -4,8 +4,9 @@
 
 //! `materialize` on the core, through `sdm_core::start`, with a host
 //! provider whose answers the tests give: a seed of any size reaches the
-//! sample it seeds as that exact integer, and DuckDB's data layer refuses
-//! one its parser refuses (RS-7); the sampler's index check warns of the
+//! sample it seeds as that exact integer, and the core refuses one past the
+//! largest the provider declares, DuckDB's from 2**31 among them (RS-7);
+//! the sampler's index check warns of the
 //! keys no index covers; and what the core does not materialize yet is
 //! refused by the rule's name. `sdm-testkit`'s `duckdb_provider.rs` runs
 //! the whole of `base.regression` on DuckDB.
@@ -17,9 +18,10 @@ use arrow_array::{
     ArrayRef, Int64Array, ListArray, RecordBatch, StringArray, TimestampMicrosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    AttachmentId, DataRequest, DescribePart, Determinism, Dialect, OptionalRequest,
-    ProviderCapabilities, ProviderChoice, catalog_columns,
+    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, Dialect, FetchPlan,
+    OptionalRequest, ProviderCapabilities, ProviderChoice, catalog_columns,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -147,6 +149,7 @@ fn host() -> ProviderChoice {
                 OptionalRequest::Lookup,
             ]),
             max_keys_per_request: None,
+            max_seed: None,
             sampling: Determinism::SeededStable,
         },
     }
@@ -163,6 +166,17 @@ fn materialize(
     query: &str,
     seed: Option<Seed>,
 ) -> Result<Run, CoreError> {
+    let (operation, attachments) = materialize_start(provider, description, query, seed);
+    materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
+}
+
+/// The operation and attachments of a `materialize` start.
+fn materialize_start(
+    provider: ProviderChoice,
+    description: &SourceDescription,
+    query: &str,
+    seed: Option<Seed>,
+) -> (Operation, Attachments) {
     let operation = Operation::Materialize(Materialize {
         provider,
         schema: AttachmentId(1),
@@ -198,7 +212,15 @@ fn materialize(
             Attachment::Arrow(ArrowData::new(indices.schema(), vec![indices])),
         ),
     ]);
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    (operation, attachments)
+}
+
+fn materialize_on(
+    layer: Arc<dyn DataLayer>,
+    operation: Operation,
+    attachments: Attachments,
+) -> Result<Run, CoreError> {
+    let root = CompositionRoot::new(layer);
     start(
         &root,
         StartRun {
@@ -335,52 +357,143 @@ fn a_seed_of_2_to_the_70_reaches_the_sample_as_that_exact_integer() {
     }
 }
 
-#[test]
-fn duckdb_refuses_a_seed_its_parser_refuses_by_name() {
-    let duckdb = ProviderChoice::Sql {
+/// How `run` ends at the sample: `Ok` when the sample is asked for, the
+/// error otherwise, answering the catalog requests before it with
+/// `answer`.
+fn at_the_sample(
+    mut run: Run,
+    answer: fn(&DataRequest) -> Option<FetchResult>,
+) -> Result<DataRequest, CoreError> {
+    for _ in 0..4 {
+        match run.next() {
+            Err(err) => return Err(err),
+            Ok(Step::Fetch { requests }) => {
+                for asked in requests {
+                    if let DataRequest::SampleEntities { .. } = asked.request {
+                        return Ok(asked.request);
+                    }
+                    let answer = answer(&asked.request).unwrap();
+                    run.submit_fetch(asked.id, answer).unwrap();
+                }
+            }
+            Ok(other) => panic!("{other:?}"),
+        }
+    }
+    panic!("the run never reached the sample");
+}
+
+fn duckdb() -> ProviderChoice {
+    ProviderChoice::Sql {
         dialect: Dialect::new("duckdb"),
-    };
+    }
+}
+
+#[test]
+fn the_core_refuses_a_seed_past_the_largest_duckdb_declares() {
     for (seed, refused) in [
         ((1_u128 << 31) - 1, false),
         (1 << 31, true),
         (1 << 70, true),
     ] {
-        let mut run = materialize(duckdb.clone(), &shop(), QUERY, Some(Seed::from(seed))).unwrap();
-        let mut outcome = None;
-        for _ in 0..4 {
-            match run.next() {
-                Err(err) => {
-                    outcome = Some(Err(err));
-                    break;
-                }
-                Ok(Step::Fetch { requests }) => {
-                    let mut sample = false;
-                    for asked in requests {
-                        if let DataRequest::SampleEntities { .. } = asked.request {
-                            sample = true;
-                            break;
-                        }
-                        let answer = duckdb_catalog(&asked.request).unwrap();
-                        run.submit_fetch(asked.id, answer).unwrap();
-                    }
-                    if sample {
-                        outcome = Some(Ok(()));
-                        break;
-                    }
-                }
-                Ok(other) => panic!("{other:?}"),
-            }
-        }
-        match outcome.unwrap() {
-            Ok(()) => assert!(!refused, "{seed} was sampled"),
+        let run = materialize(duckdb(), &shop(), QUERY, Some(Seed::from(seed))).unwrap();
+        match at_the_sample(run, duckdb_catalog) {
+            Ok(_) => assert!(!refused, "{seed} was sampled"),
             Err(err) => {
                 assert!(refused, "{seed}: {err:?}");
                 assert_eq!(err.code, ErrorCode::InvalidRequest);
                 assert_eq!(err.fields["request"], Detail::text("sample_entities"));
                 assert_eq!(err.fields["field"], Detail::text("seed"));
+                // The core's refusal, read from the capability, naming the
+                // largest seed and no provider.
+                assert_eq!(
+                    err.fields["max_seed"],
+                    Detail::Scalar(Scalar::UInt64((1 << 31) - 1))
+                );
+                assert!(!err.message.to_lowercase().contains("duckdb"), "{err:?}");
             }
         }
     }
+}
+
+/// A host provider declaring the requests materialize asks, and `max_seed`.
+fn host_up_to(max_seed: Option<u64>) -> ProviderChoice {
+    let ProviderChoice::Host { mut capabilities } = host() else {
+        unreachable!()
+    };
+    capabilities.max_seed = max_seed;
+    ProviderChoice::Host { capabilities }
+}
+
+#[test]
+fn a_host_provider_s_declared_range_is_the_one_the_core_holds_it_to() {
+    for (max_seed, seed, refused) in [
+        (Some(100), 100_u128, false),
+        (Some(100), 101, true),
+        (Some(0), 0, false),
+        (Some(0), 1, true),
+        (Some(u64::MAX), u128::from(u64::MAX), false),
+        (Some(u64::MAX), 1 << 64, true),
+        (None, 1 << 70, false),
+    ] {
+        let run =
+            materialize(host_up_to(max_seed), &shop(), QUERY, Some(Seed::from(seed))).unwrap();
+        match at_the_sample(run, catalog) {
+            Ok(_) => assert!(!refused, "{seed} was sampled under {max_seed:?}"),
+            Err(err) => {
+                assert!(refused, "{seed} under {max_seed:?}: {err:?}");
+                assert_eq!(err.code, ErrorCode::InvalidRequest);
+                assert_eq!(err.fields["field"], Detail::text("seed"));
+                assert_eq!(
+                    err.fields["max_seed"],
+                    Detail::Scalar(Scalar::UInt64(max_seed.unwrap()))
+                );
+            }
+        }
+    }
+}
+
+/// The shipped data layer, but for the seed range it gives DuckDB, which
+/// it forgets: a seeded fault in the capability.
+struct Forgetful(sdm_data::Data);
+
+impl DataLayer for Forgetful {
+    fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
+        let mut capabilities = self.0.capabilities(provider)?;
+        capabilities.max_seed = None;
+        Ok(capabilities)
+    }
+
+    fn plan(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+    ) -> Result<FetchPlan, CoreError> {
+        self.0.plan(request, provider)
+    }
+
+    fn read(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        self.0.read(request, provider, batches)
+    }
+}
+
+#[test]
+fn without_the_capability_no_invalid_request_is_given() {
+    // Seeded: DuckDB's declared range forgotten, a seed of 2**31 is no
+    // longer the caller's error: it reaches the dialect's rendering, which
+    // never renders a seed its parser refuses and calls that the core's
+    // error. So the refusal above is the capability's, not a fallback.
+    let (operation, attachments) =
+        materialize_start(duckdb(), &shop(), QUERY, Some(Seed::from(1_u128 << 31)));
+    let layer: Arc<dyn DataLayer> = Arc::new(Forgetful(sdm_data::Data::new()));
+    let forgetful = materialize_on(layer, operation, attachments).unwrap();
+    let err = at_the_sample(forgetful, duckdb_catalog).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InternalError, "{err:?}");
+    assert!(!err.fields.contains_key("max_seed"));
 }
 
 /// The error `run` ends with, answering the catalog requests it asks

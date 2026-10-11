@@ -11,14 +11,16 @@
 //! it, asks for data only through [`DataAccess::plan`], and reads a
 //! catalog answer only through [`DataAccess::read`], into the contract's
 //! dialect-neutral shape (decision E54). Nothing in the core matches on a
-//! backend's name.
+//! backend's name: what a provider takes is what its capabilities say, and
+//! the core refuses by reading them (the requests it declared; from T1.22,
+//! the largest seed it samples with, register entry RS-7).
 
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderCapabilities, ProviderChoice};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 /// What a binding starts its runs with.
 #[derive(Clone)]
@@ -66,16 +68,24 @@ impl DataAccess {
     }
 
     /// How the run's provider answers `request`. A request whose fields
-    /// contradict each other is refused with `INVALID_REQUEST`, and an
-    /// optional request the provider did not declare with
-    /// `UNSUPPORTED_REQUEST` naming the request; a provider's declared
-    /// capability is never replaced by a fallback (design, "Data access").
+    /// contradict each other is refused with `INVALID_REQUEST`, an optional
+    /// request the provider did not declare with `UNSUPPORTED_REQUEST`
+    /// naming the request, and a sample seeded past the largest seed the
+    /// provider declares with `INVALID_REQUEST` naming the seed (RS-7); a
+    /// provider's declared capability is never replaced by a fallback
+    /// (design, "Data access").
     pub fn plan(&self, request: &DataRequest) -> Result<FetchPlan, CoreError> {
         request.check()?;
         if let Some(optional) = request.optional()
             && !self.capabilities.optional.contains(&optional)
         {
             return Err(undeclared(optional.name()));
+        }
+        if let DataRequest::SampleEntities { seed, .. } = request
+            && let Some(max) = self.capabilities.max_seed
+            && integer(seed).is_some_and(|seed| seed > i128::from(max))
+        {
+            return Err(past_seed_range(request, max));
         }
         self.layer.plan(request, &self.provider)
     }
@@ -101,4 +111,34 @@ fn undeclared(request: &str) -> CoreError {
         "the provider did not declare this request",
     )
     .with_field("request", Detail::text(request))
+}
+
+/// A seed's value, when the scalar it travels as is an integer: the
+/// narrowest exact scalar `materialize` writes, a `u64` or a decimal of
+/// scale 0, or any other integer scalar.
+fn integer(seed: &Scalar) -> Option<i128> {
+    Some(match seed {
+        Scalar::Int32(v) => i128::from(*v),
+        Scalar::Int64(v) => i128::from(*v),
+        Scalar::UInt32(v) => i128::from(*v),
+        Scalar::UInt64(v) => i128::from(*v),
+        Scalar::Decimal128 {
+            scale: 0, value, ..
+        } => *value,
+        _ => return None,
+    })
+}
+
+/// The refusal of a sample whose seed is past the largest the provider
+/// declares (register entry RS-7), naming the request, the seed and the
+/// provider's largest, never the provider.
+fn past_seed_range(request: &DataRequest, max: u64) -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "the provider samples with no seed larger than the largest it declares",
+    )
+    .with_field("request", Detail::text(request.name()))
+    .with_field("field", Detail::text("seed"))
+    .with_field("max_seed", Detail::Scalar(Scalar::UInt64(max)))
 }

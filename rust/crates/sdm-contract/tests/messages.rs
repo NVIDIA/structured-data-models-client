@@ -33,6 +33,7 @@ fn provider_choices_round_trip() {
             capabilities: ProviderCapabilities {
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
                 max_keys_per_request: Some(10_000),
+                max_seed: None,
                 sampling: Determinism::SeededStable,
             },
         },

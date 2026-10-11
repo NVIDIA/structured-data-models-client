@@ -207,6 +207,7 @@ fn every_operation_dispatches_to_a_run() {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::new(),
             max_keys_per_request: None,
+            max_seed: None,
             sampling: Determinism::Unseeded,
         },
     };
@@ -253,6 +254,7 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
     ProviderCapabilities {
         optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
+        max_seed: None,
         sampling: Determinism::SeededStable,
     }
 }
@@ -582,6 +584,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
             capabilities: ProviderCapabilities {
                 optional: BTreeSet::new(),
                 max_keys_per_request: None,
+                max_seed: None,
                 sampling: Determinism::SeededStable,
             },
         },

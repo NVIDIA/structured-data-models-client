@@ -334,6 +334,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
                 ],
                 'max_keys_per_request': None,
                 'sampling': 'seeded_stable',
+                'max_seed': None,
             },
         },
         'schema': 1,
@@ -361,12 +362,15 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
 def test_duckdb_refuses_a_seed_its_parser_refuses_by_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # RS-7: the core refuses a seed past the largest DuckDB's dialect
+    # declares, reading the capability, before the sample is planned.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     for seed in (2**31, 2**70):
         with pytest.raises(StructuredDataError) as refused:
             _materialize(random_seed=seed)
         assert refused.value.code == 'INVALID_REQUEST'
         assert refused.value.details['field'] == 'seed'
+        assert refused.value.details['max_seed'] == 2**31 - 1
     # The largest DuckDB takes is taken.
     _materialize(random_seed=2**31 - 1)
 

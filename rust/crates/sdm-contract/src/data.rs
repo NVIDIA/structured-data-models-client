@@ -412,7 +412,8 @@ pub enum Determinism {
     Unseeded,
 }
 
-/// What a host provider declares it answers.
+/// What a provider answers: a host provider declares it, and the data
+/// layer gives it for each SQL dialect it renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderCapabilities {
@@ -420,6 +421,12 @@ pub struct ProviderCapabilities {
     /// The most keys one request may carry; `None` is no limit.
     pub max_keys_per_request: Option<u64>,
     pub sampling: Determinism,
+    /// The largest seed the provider samples with (register entry RS-7);
+    /// `None` takes any non-negative integer. The core refuses a sample
+    /// with a larger seed, `INVALID_REQUEST` naming the seed, before the
+    /// sample is planned; which seeds a provider takes is the provider's
+    /// to declare, never a name the core matches.
+    pub max_seed: Option<u64>,
 }
 
 /// A built-in SQL dialect, by the name the host gives it. The contract
