@@ -1195,6 +1195,102 @@ entries:
     rust-host. Both refuse; the class and code change. T1.32e resolves it
     when it admits the case. Never self-approved.
 
+- id: P1B-9
+  title: nested.fixed-array is described on the core route where the reference fails with an unnamed RuntimeError
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a users table with a fixed-size
+    list feature (BIGINT[2]) raises an unnamed RuntimeError: its reading of
+    DuckDB's catalog type takes BIGINT[2] for an integer (only a type
+    ending [] is a list to it), and the stype inference then fails on the
+    list values, naming the wrong type.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    column is left out of its table with the reference's warning for a
+    list ("users leaves out f (intlist): a request carries one scalar value
+    per cell, and these hold none", COLUMNS_LEFT_OUT), as the reference
+    leaves out a variable-size list (nested.list-int): the host layer
+    admits a fixed-size list as a list (the plan's type set holds no
+    fixed-size list), and the core reads types from the admitted Arrow, so
+    it cannot tell the two apart without reading DuckDB's type text, which
+    is sdm-data's. The case reaches predict's result on python-core and
+    rust-host. The default route is unchanged.
+  affected_inputs: >-
+    A DuckDB source holding a fixed-size list column (an ARRAY type), under
+    a forced core route.
+  cases: [nested.fixed-array, T1.23, T1.32c]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.23: the reference observation of the diagnostic case
+    contract/cases/s1/nested.fixed-array.json (from_source, RuntimeError)
+    and the case's probe in contract/refusal-maps/nested.json, which now
+    expects success on both runners. A new success, which a reviewer may
+    approve (P1B-1's process); T1.32c resolves it when it admits the nested
+    family. Never self-approved.
+
+- id: P1B-10
+  title: nested.map and nested.struct are refused by name on the core route where the reference raises an unnamed RuntimeError
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a users table with a MAP or a
+    STRUCT feature raises an unnamed RuntimeError naming the wrong type: its
+    reading of DuckDB's catalog type finds INTEGER inside MAP(VARCHAR,
+    INTEGER) and STRUCT(a INTEGER, ...) and takes the column for an
+    integer, whose stype inference then fails.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same call is refused at from_source with UnsupportedRequestError, code
+    UNSUPPORTED_REQUEST, fields operation describe_source and rule
+    column_type: sdm-schema describes no struct or map column (T1.23 kept
+    the refusal, following the reference, which takes neither). The
+    default route is unchanged.
+  affected_inputs: >-
+    A DuckDB source holding a MAP or STRUCT column, under a forced core
+    route.
+  cases: [nested.map, nested.struct, T1.21e, T1.23, T1.32c]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.21e and kept at T1.23: the reference observations of the
+    diagnostic cases and the entry describe_source/column_type of
+    contract/refusal-maps/nested.json, on python-core and rust-host, owned
+    by T1.32c from T1.23 (it was T1.23's, under P1B-2). Both refuse; the
+    class and code change, as P1B-7's union. T1.32c resolves it when it
+    admits the cases. Never self-approved.
+
+- id: P1B-11
+  title: empty.fact-table is refused by name on the core route where the reference raises an unnamed RuntimeError
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a source holding an empty table
+    raises an unnamed RuntimeError ("Table 'orders' is empty") from its
+    engine's preview.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same call is refused at from_source with UnsupportedRequestError, code
+    UNSUPPORTED_REQUEST, fields operation describe_source and rule
+    empty_table, naming no table (decision H17). The default route is
+    unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source holding a table with no rows,
+    under a forced core route.
+  cases: [empty.fact-table, T1.21e, T1.23, T1.32d]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Kept refused at T1.23, as the reference refuses it, and owned by T1.32d
+    from T1.23 (it was T1.23's, under P1B-2): the entry
+    describe_source/empty_table of contract/refusal-maps/empty-null.json.
+    For the owner: the class and code. UNSUPPORTED_REQUEST says the core
+    does not take the input yet, where the reference refuses it for good;
+    INVALID_REQUEST, which the reference gives a table it cannot read,
+    would say that. Recommendation: INVALID_REQUEST with the rule kept, at
+    T1.32d. Never self-approved.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1

@@ -41,29 +41,6 @@
       }
     },
     {
-      "id": "describe_source/time_several",
-      "operation": "describe_source",
-      "rule": "time_several",
-      "owner": "T1.23",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:674",
-      "why": "Two candidate time columns on users (f_date and f_ts); the reference takes the one whose values start earliest, with a warning. Without f_ts, f_date meets materialize's time_type",
-      "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "time_several"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "time_several"
-        }
-      }
-    },
-    {
       "id": "admission/interval",
       "operation": "admission (the host layer, before inference)",
       "rule": "UNSUPPORTED_TYPE: an interval, outside the type set",
@@ -88,58 +65,12 @@
       }
     },
     {
-      "id": "describe_source/time_of_day",
-      "operation": "describe_source",
-      "rule": "time_of_day",
-      "owner": "T1.23",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:625",
-      "why": "A TIME column among the time candidates; the reference refuses it as a time column for its values, with a warning, and keeps it as a feature. The probe without it reaches predict's result on both runners",
-      "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "time_of_day"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "time_of_day"
-        }
-      }
-    },
-    {
-      "id": "describe_source/time_columns",
-      "operation": "describe_source",
-      "rule": "time_columns",
-      "owner": "T1.23",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-core/src/describe.rs:57",
-      "why": "A time column passed to Schema.from_source (time.text-declared); without it, the text column meets text_time",
-      "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "time_columns"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "describe_source",
-          "rule": "time_columns"
-        }
-      }
-    },
-    {
       "id": "describe_source/text_time",
       "operation": "describe_source",
       "rule": "text_time",
       "owner": "T1.25",
       "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:411",
+      "where": "rust/crates/sdm-schema/src/infer.rs:532",
       "why": "Text that holds dates: ISO dates, US dates and ISO dates with one unreadable value. The reference infers each as the time column, and its sampling SQL's CAST then fails the US dates and the bad value (INTERNAL_ERROR, P1B-1), which the core's refusal masks; T1.25 reads text dates by date-rules.md and DT-7",
       "observed": {
         "python-core": {
@@ -153,6 +84,29 @@
           "code": "UNSUPPORTED_REQUEST",
           "operation": "describe_source",
           "rule": "text_time"
+        }
+      }
+    },
+    {
+      "id": "materialize/wire_dtype",
+      "operation": "materialize",
+      "rule": "wire_dtype",
+      "owner": "T1.28a",
+      "register": "P1B-3",
+      "where": "rust/crates/sdm-request/src/payload.rs:123",
+      "why": "A time-of-day (TIME) feature, described from T1.23 as the reference describes it (a timestamp column its engine reads as holding no time), has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "wire_dtype"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "wire_dtype"
         }
       }
     }
@@ -292,7 +246,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/time_several"
+        "expect": "materialize/time_type"
       },
       "rust-host": {
         "derive": {
@@ -343,7 +297,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/time_several"
+        "expect": "materialize/time_type"
       }
     },
     {
@@ -690,7 +644,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/time_of_day"
+        "expect": "materialize/wire_dtype"
       },
       "rust-host": {
         "derive": {
@@ -741,7 +695,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/time_of_day"
+        "expect": "materialize/wire_dtype"
       }
     },
     {
@@ -895,7 +849,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/time_columns"
+        "expect": "describe_source/text_time"
       },
       "rust-host": {
         "derive": {
@@ -949,7 +903,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/time_columns"
+        "expect": "describe_source/text_time"
       }
     },
     {

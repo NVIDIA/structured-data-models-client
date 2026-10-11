@@ -7,17 +7,17 @@
     "nested.map",
     "nested.struct"
   ],
-  "reading": "The first refusal of each probe; each case of the nested family probed as it is and then without its nested column, which reaches predict's result on both runners. describe_source refuses all four columns, so what materialize and the payload make of nested values is masked until T1.23 describes them.",
+  "reading": "The first refusal of each probe; each case of the nested family probed as it is and then without its nested column, which reaches predict's result on both runners. From T1.23 describe_source leaves a list column out with the reference's warning, so nested.list-int and nested.fixed-array reach predict's result as they are (the fixed-size list a new success, P1B-9), and refuses a struct and a map by name (P1B-10).",
   "gaps": [],
   "entries": [
     {
       "id": "describe_source/column_type",
       "operation": "describe_source",
       "rule": "column_type",
-      "owner": "T1.23",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:259",
-      "why": "describe_source infers no semantic type for a list, fixed-size list, struct or map column; the reference takes the list (nested.list-int) and refuses the other three with an unnamed RuntimeError naming the wrong type (P1B-1). Each probe without the column reaches predict's result on both runners; what materialize and the payload make of a nested column shows only once T1.23 describes it",
+      "owner": "T1.32c",
+      "register": "P1B-10",
+      "where": "rust/crates/sdm-schema/src/infer.rs:380",
+      "why": "A struct or map column, which the reference fails with an unnamed RuntimeError naming the wrong type (P1B-1): refused by name (P1B-10) until T1.32c admits the case and settles its outcome with the owner. From T1.23 a list column, of a fixed size or not, is left out with the reference's warning, as the reference leaves out a list (nested.list-int); the reference fails a fixed-size one (P1B-9). Each probe without the column reaches predict's result on both runners",
       "observed": {
         "python-core": {
           "stage": "from_source",
@@ -75,7 +75,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/column_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -126,7 +126,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/column_type"
+        "expect": "success"
       }
     },
     {
@@ -274,7 +274,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "describe_source/column_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -325,7 +325,7 @@
           }
         },
         "until": "predict",
-        "expect": "describe_source/column_type"
+        "expect": "success"
       }
     },
     {

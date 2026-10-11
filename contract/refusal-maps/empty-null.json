@@ -22,10 +22,10 @@
       "id": "describe_source/empty_table",
       "operation": "describe_source",
       "rule": "empty_table",
-      "owner": "T1.23",
-      "register": "P1B-2",
-      "where": "rust/crates/sdm-schema/src/infer.rs:165",
-      "why": "An empty table refused by name in place of the reference's unnamed RuntimeError (\"Table 'orders' is empty\", P1B-1); T1.23 keeps the refusal and settles its code and class with the owner",
+      "owner": "T1.32d",
+      "register": "P1B-11",
+      "where": "rust/crates/sdm-schema/src/infer.rs:226",
+      "why": "An empty table, which the reference refuses with an unnamed RuntimeError (\"Table 'orders' is empty\", P1B-1): kept refused by name at T1.23 (P1B-11), its code and class for the owner, settled when T1.32d admits the case",
       "observed": {
         "python-core": {
           "stage": "from_source",
