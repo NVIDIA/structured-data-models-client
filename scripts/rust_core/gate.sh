@@ -118,6 +118,13 @@ if [ "$harness" = 0 ]; then
   resolved=$("$PYTHON" "$candidate/scripts/rust_core/ratchet.py" checkpoint \
     --repo "$candidate" "${where[@]}") || exit 1
   read -r checkpoint _ kind <<<"$resolved"
+  # The bootstrap only where the checkpoint's own tree has no ratchet.py
+  # (T1.18): a ratchet that reads it otherwise does not skip the harness.
+  if [ "$kind" = bootstrap ] &&
+    git -C "$candidate" cat-file -e "$checkpoint:scripts/rust_core/ratchet.py" 2>/dev/null; then
+    echo "gate.sh: the checkpoint $checkpoint holds ratchet.py, so its harness judges, not the bootstrap" >&2
+    exit 1
+  fi
   if [ "$kind" = harness ]; then
     git -C "$candidate" worktree add --quiet --detach "$scratch/checkpoint" "$checkpoint" || exit 1
     worktrees+=("$scratch/checkpoint")

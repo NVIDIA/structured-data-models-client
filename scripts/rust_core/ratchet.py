@@ -11,6 +11,8 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
     ratchet.py check [--repo DIR] --checkpoint SHA [--protected-paths TEXT]
         [--observations FILE]... [--effective-out FILE]
     ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
+    ratchet.py effective [--repo DIR] (--base REV | --phase-push BEFORE)
+        --out FILE
     ratchet.py where
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
@@ -81,6 +83,15 @@ runner given: each case every runner meets, its effective expectation where
 ``--checkpoint``'s baselines hold it, and the committed reference's
 projection otherwise (the first baselines, T1.14, had only the latter); it
 is the package's to commit and the reviewer's to review (H3).
+
+``effective`` writes the effective expectations ``check --effective-out``
+writes, for the checkpoint ``checkpoint`` resolves, with no other rule run:
+the comparisons outside the gate (``contract/tests``, T1.18) hand them to
+``compare.py --expect`` as the gate does, so an approved outcome change
+passes there too and an unapproved one fails. It fails on a register
+``register.py validate`` refuses, since only a valid register's approved
+entries count; a checkpoint before the ratchet (the bootstrap) has no
+baselines, and so no expectations.
 
 ``where`` prints the gate's ``--base`` or ``--phase-push`` for the CI run
 it is in, from GitHub's environment, or nothing outside the phase branch and
@@ -167,7 +178,7 @@ def git(repo: Path, *args: str) -> str:
     done = subprocess.run(
         ['git', '-C', str(repo), *args],
         capture_output=True,
-        text=True,
+        encoding='utf-8',
         check=False,
     )
     if done.returncode != 0:
@@ -214,8 +225,12 @@ class Tree:
         return text
 
     def files(self, prefix: str) -> list[str]:
-        out = git(self.repo, 'ls-tree', '-r', '--name-only', self.sha, prefix)
-        return sorted(line for line in out.splitlines() if line)
+        # NUL-separated: under git's default core.quotePath a path with a
+        # byte past ASCII is printed quoted and escaped, never its name.
+        out = git(
+            self.repo, 'ls-tree', '-r', '-z', '--name-only', self.sha, prefix
+        )
+        return sorted(name for name in out.split('\0') if name)
 
     def __del__(self) -> None:
         if self._batch is not None:
@@ -675,7 +690,8 @@ def protects(rules: list[tuple[bool, re.Pattern[str]]], path: str) -> bool:
 def named(path: str, text: str) -> bool:
     r"""``text`` names ``path``: the path itself, or a directory holding it
     written with a trailing ``/`` or ``/**``."""
-    for token in re.findall(r'[A-Za-z0-9_.*/-]+', text):
+    # Word characters past ASCII too, as a path may hold them (T1.18).
+    for token in re.findall(r'[\w.*/-]+', text):
         token = token.rstrip('.')
         if token == path:
             return True
@@ -1160,10 +1176,11 @@ def check(
             found.get(key, '') for key in ('Reviewed-by', 'Protected-paths')
         )
     # Without rename detection, a move lists both its paths, so a protected
-    # file moved out of (or onto) a protected path is seen at both.
+    # file moved out of (or onto) a protected path is seen at both; and
+    # NUL-separated, so a path past ASCII is its name, not git's quoting.
     changed = git(
-        repo, 'diff', '--name-only', '--no-renames', checkpoint_sha, head
-    ).split('\n')
+        repo, 'diff', '--name-only', '--no-renames', '-z', checkpoint_sha, head
+    ).split('\0')
     changed = [path for path in changed if path]
     try:
         mine = check_register(report, checkpoint, candidate, repo)
@@ -1324,6 +1341,32 @@ def accept(
     return found
 
 
+def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
+    r"""Writes :func:`effective`'s expectations for the candidate, ``repo``'s
+    ``HEAD``, to ``out`` as :func:`check` does; returns the register's
+    problems, writing nothing when there are any."""
+    candidate = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
+    before = Tree(repo, checkpoint)
+    module = register_module()
+    mine = _yaml(candidate.read(REGISTER), REGISTER)
+    try:
+        problems = list(
+            module.problems(mine, repo, _yaml(before.read(REGISTER), REGISTER))
+        )
+    except module.runner().RunnerFailure as error:
+        problems = [str(error)]
+    if problems:
+        return problems
+    out.write_text(
+        json.dumps(
+            outcomes(effective(baselines(before), approved(mine))),
+            sort_keys=True,
+        ),
+        encoding='utf-8',
+    )
+    return []
+
+
 def ci_base(environ: dict[str, str]) -> str:
     r"""The gate's base for a CI run, from GitHub's environment: on a push
     to the phase branch, ``--phase-push`` and the push's previous tip (from
@@ -1367,6 +1410,12 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--observations', type=Path, action='append', default=[])
     judge.add_argument('--effective-out', type=Path)
     commands.add_parser('where')
+    expect = commands.add_parser('effective')
+    expect.add_argument('--repo', type=Path, default=Path('.'))
+    among = expect.add_mutually_exclusive_group(required=True)
+    among.add_argument('--base')
+    among.add_argument('--phase-push')
+    expect.add_argument('--out', type=Path, required=True)
     take = commands.add_parser('accept')
     take.add_argument('--repo', type=Path, default=Path('.'))
     take.add_argument('--checkpoint')
@@ -1394,6 +1443,17 @@ def main(argv: list[str] | None = None) -> int:
                 'bootstrap' if found.bootstrap else 'harness',
             )
             return 0
+        if arguments.command == 'effective':
+            found, problems = resolve(
+                arguments.repo, arguments.base, arguments.phase_push
+            )
+            if found is not None:
+                problems = write_effective(
+                    arguments.repo, found.sha, arguments.out
+                )
+            for problem in problems:
+                print(f'effective: {problem}', file=sys.stderr)
+            return 1 if problems else 0
         if arguments.command == 'accept':
             for runner, lines in accept(
                 arguments.repo, arguments.observations, arguments.checkpoint

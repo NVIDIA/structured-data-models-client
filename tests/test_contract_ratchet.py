@@ -902,6 +902,29 @@ def test_a_protected_file_renamed_out_of_protection_or_onto_it_fails(
     ]
 
 
+def test_a_protected_file_with_a_name_past_ascii_fails_unless_named(
+    repo: Path,
+) -> None:
+    r"""Git quotes a path past ASCII under its default ``core.quotePath``,
+    so read line by line a new protected file's name never matched the
+    list; the ratchet reads git's paths NUL-separated (T1.18)."""
+    landed = checkpoint_of(repo)
+    added = 'contract/runners/na\u00efve_r\u00e9sum\u00e9.py'
+    git(repo, 'config', 'core.quotePath', 'true')
+
+    def write(r: Path) -> None:
+        (r / added).write_text('# a new runner file\n', encoding='utf-8')
+
+    commit(repo, edit=write)
+    assert check(repo, landed, protected='') == [
+        f'protected: {added}: changed, and the Reviewed-by and '
+        'Protected-paths trailers do not name it'
+    ]
+    assert check(repo, landed, protected=f'{added} (new)') == []
+    tree = ratchet.Tree(repo, git(repo, 'rev-parse', 'HEAD'))
+    assert added in tree.files('contract/runners')
+
+
 def test_the_protected_list_holds_the_corpus_test_and_the_stream_vectors() -> (
     None
 ):
