@@ -11,7 +11,8 @@ use std::collections::BTreeSet;
 use corpus::messages;
 use sdm_contract::ControlMessage;
 use sdm_contract::data::{
-    Determinism, Dialect, OptionalRequest, ProviderCapabilities, ProviderChoice,
+    Determinism, Dialect, IndexAdvice, NullOrder, OptionalRequest, ProviderCapabilities,
+    ProviderChoice,
 };
 
 #[test]
@@ -35,6 +36,8 @@ fn provider_choices_round_trip() {
                 max_keys_per_request: Some(10_000),
                 max_seed: None,
                 text_times: None,
+                null_order: Some(NullOrder::First),
+                index_advice: Some(IndexAdvice::SingleColumn),
                 sampling: Determinism::SeededStable,
             },
         },
@@ -43,6 +46,49 @@ fn provider_choices_round_trip() {
         assert_eq!(
             serde_json::from_str::<ProviderChoice>(&text).unwrap(),
             choice
+        );
+    }
+}
+
+/// The sampling policies a host provider declares (T1.26a), by their wire
+/// spelling; a provider leaving them out declares none, which the core
+/// reads as no null order (an ordered read refused, `null_order`) and no
+/// index advice (no index read, no warning), never as DuckDB's.
+#[test]
+fn the_sampling_policies_are_spelled_and_default_to_none() {
+    let declared: ProviderChoice = serde_json::from_str(
+        r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
+            "sampling":"seeded_stable","max_seed":null,"text_times":null,
+            "null_order":"first","index_advice":"single_column"}}"#,
+    )
+    .unwrap();
+    let ProviderChoice::Host { capabilities } = declared else {
+        panic!("not a host provider");
+    };
+    assert_eq!(capabilities.null_order, Some(NullOrder::First));
+    assert_eq!(capabilities.index_advice, Some(IndexAdvice::SingleColumn));
+    let silent: ProviderChoice = serde_json::from_str(
+        r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
+            "sampling":"seeded_stable","max_seed":null}}"#,
+    )
+    .unwrap();
+    let ProviderChoice::Host { capabilities } = silent else {
+        panic!("not a host provider");
+    };
+    assert_eq!(capabilities.null_order, None);
+    assert_eq!(capabilities.index_advice, None);
+    for wrong in [
+        r#""null_order":"nulls_first""#,
+        r#""null_order":true"#,
+        r#""index_advice":"multi_column""#,
+        r#""index_advice":true"#,
+    ] {
+        let text = format!(
+            r#"{{"provider":"host","capabilities":{{"optional":[],"max_keys_per_request":null,"sampling":"seeded_stable","max_seed":null,{wrong}}}}}"#
+        );
+        assert!(
+            serde_json::from_str::<ProviderChoice>(&text).is_err(),
+            "{text}"
         );
     }
 }

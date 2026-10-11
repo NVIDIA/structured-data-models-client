@@ -48,6 +48,8 @@ where
             max_keys_per_request: None,
             max_seed: None,
             text_times: None,
+            null_order: None,
+            index_advice: None,
             sampling: Determinism::Unseeded,
         },
     };

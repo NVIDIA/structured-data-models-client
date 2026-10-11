@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit as ArrowUnit};
-use sdm_contract::data::{SEED_BATCH, SEED_KEY, TieBreak, TieTerm};
+use sdm_contract::data::{NullOrder, SEED_BATCH, SEED_KEY, TieBreak, TieTerm};
 use sdm_contract::pql::TimeUnit;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -210,17 +210,23 @@ pub fn seeds(keys: ArrayRef, times: Vec<(&str, Vec<i64>)>) -> Result<RecordBatch
 
 /// The order `_by_fkey` keeps a table's neighbors in (design, "Data
 /// access"): the time column as a timestamp, latest first, then the key;
-/// with no key, every other non-list column by name. All terms nulls last,
-/// DuckDB's default the reference relies on. Without a key the order is not
-/// sampled yet.
-pub fn tie_break(table: &Table) -> Result<TieBreak, CoreError> {
+/// with no key, every other non-list column by name. The reference writes
+/// no null order, so each term's is the source's own, `nulls`, which the
+/// provider declares (`ProviderCapabilities::null_order`), never a
+/// dialect's default written here. Without a key the order is not sampled
+/// yet.
+pub fn tie_break(table: &Table, nulls: NullOrder) -> Result<TieBreak, CoreError> {
+    let nulls_last = match nulls {
+        NullOrder::First => false,
+        NullOrder::Last => true,
+    };
     let mut terms = Vec::new();
     if let Some(time) = &table.time_column {
         terms.push(TieTerm {
             column: time.clone(),
             as_timestamp: true,
             descending: true,
-            nulls_last: true,
+            nulls_last,
         });
     }
     let Some(key) = &table.primary_key else {
@@ -230,7 +236,7 @@ pub fn tie_break(table: &Table) -> Result<TieBreak, CoreError> {
         column: key.clone(),
         as_timestamp: false,
         descending: false,
-        nulls_last: true,
+        nulls_last,
     });
     Ok(TieBreak(terms))
 }

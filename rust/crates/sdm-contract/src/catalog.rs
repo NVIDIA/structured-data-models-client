@@ -11,8 +11,9 @@
 //! [`CatalogAnswer`] after the core has admitted it (decision H16, check
 //! (b)), so the core and `sdm-schema` read a column's name, type,
 //! nullability and key flag, a key's kind and columns, a foreign key's
-//! column pairs and an index's columns, and never a dialect's spelling of
-//! them. These types never travel: a host answers in Arrow.
+//! column pairs and an index's columns, resolved or not, and never a
+//! dialect's spelling of them. These types never travel: a host answers in
+//! Arrow.
 
 use crate::data::DescribePart;
 
@@ -92,7 +93,18 @@ pub struct CatalogForeignKey {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogIndex {
     pub table: String,
-    /// The columns the index covers, in order, as the dialect's reader
-    /// tells them apart; one column for an index over exactly one.
-    pub columns: Vec<String>,
+    pub columns: IndexColumns,
+}
+
+/// The columns an index covers, as the dialect's reader resolves them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexColumns {
+    /// The columns, in order, each resolved; one for an index over exactly
+    /// one.
+    Resolved(Vec<String>),
+    /// What the index covers is not resolved: an expression list the
+    /// reader cannot split without guessing (DuckDB's, holding a comma), or
+    /// a list naming a column it does not give. It covers no column the
+    /// core counts, never a guess at its pieces.
+    Unresolved,
 }

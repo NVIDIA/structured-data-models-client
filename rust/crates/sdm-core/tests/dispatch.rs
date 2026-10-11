@@ -213,6 +213,8 @@ fn every_operation_dispatches_to_a_run() {
             max_keys_per_request: None,
             max_seed: None,
             text_times: None,
+            null_order: None,
+            index_advice: None,
             sampling: Determinism::Unseeded,
         },
     };
@@ -275,6 +277,8 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
         max_keys_per_request: None,
         max_seed: None,
         text_times: None,
+        null_order: None,
+        index_advice: None,
         sampling: Determinism::SeededStable,
     }
 }
@@ -606,6 +610,8 @@ fn materialize(seed: Option<Seed>) -> Operation {
                 max_keys_per_request: None,
                 max_seed: None,
                 text_times: None,
+                null_order: None,
+                index_advice: None,
                 sampling: Determinism::SeededStable,
             },
         },

@@ -17,7 +17,8 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, KeyKind,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    KeyKind,
 };
 use sdm_contract::data::{DescribePart, catalog_columns as c};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
@@ -94,6 +95,20 @@ pub(crate) fn names(lists: &ListArray, row: usize) -> Vec<String> {
         .filter(|&i| !strings.is_null(i))
         .map(|i| strings.value(i).to_owned())
         .collect()
+}
+
+/// Row `row`'s index columns as a host provider gives them: resolved when
+/// the list and each name in it are given, unresolved where the list or a
+/// name is null, never the names left over.
+fn index_columns(lists: &ListArray, row: usize) -> IndexColumns {
+    if lists.is_null(row) {
+        return IndexColumns::Unresolved;
+    }
+    let items = lists.value(row);
+    match items.as_string_opt::<i32>() {
+        Some(strings) if strings.null_count() == 0 => IndexColumns::Resolved(names(lists, row)),
+        _ => IndexColumns::Unresolved,
+    }
 }
 
 /// Row `row`'s flag, false where it is null.
@@ -237,7 +252,7 @@ pub(crate) fn host(
                     if let Some(table) = text(table, row) {
                         found.push(CatalogIndex {
                             table,
-                            columns: names(lists, row),
+                            columns: index_columns(lists, row),
                         });
                     }
                 }

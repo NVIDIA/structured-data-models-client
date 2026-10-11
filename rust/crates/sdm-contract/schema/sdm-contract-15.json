@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/14",
+  "$id": "sdm-contract/15",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -2347,6 +2347,28 @@
               "type": "null"
             }
           ]
+        },
+        "null_order": {
+          "description": "Where the source puts a null when it orders (`NullOrder`); `None`\ndeclares none, and the core refuses to ask it for rows in an order\n(`UNSUPPORTED_REQUEST`, rule `null_order`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NullOrder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index_advice": {
+          "description": "Which indexes serve the sampler's reads (`IndexAdvice`); `None`\ndeclares no meaningful index advice: the core neither reads the\nsource's indexes nor warns of missing ones.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndexAdvice"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -2396,6 +2418,31 @@
           "description": "The column by the client's rules (`date-rules.md`, \"The client\nrules\"), as the reference reads a frame's time column.",
           "type": "string",
           "const": "client_rules"
+        }
+      ]
+    },
+    "NullOrder": {
+      "description": "Where a provider's source puts a null among the values it orders, in\neither direction: the order the reference's neighbor reads get from the\nsource, which writes no null order of its own (`_neighbor_order_by`).\nThe provider declares it; the core writes it into the tie-break it asks\nfor ([`TieTerm::nulls_last`]), never by a dialect. A source whose order\ndepends on the direction is not declarable yet: the dialect that needs\none adds it under a new contract version.",
+      "oneOf": [
+        {
+          "description": "Nulls first, ascending or descending.",
+          "type": "string",
+          "const": "first"
+        },
+        {
+          "description": "Nulls last, ascending or descending.",
+          "type": "string",
+          "const": "last"
+        }
+      ]
+    },
+    "IndexAdvice": {
+      "description": "Which of the source's indexes the reference's sampler counts as serving\na read on a key or foreign key, for its warning of the indexes it would\nuse and finds missing. The provider declares it; the core reads the\nsource's indexes, and warns, only when it is declared.",
+      "oneOf": [
+        {
+          "description": "An index over exactly that one column, its coverage resolved; one\nover several columns, or one the reader cannot resolve, serves none.",
+          "type": "string",
+          "const": "single_column"
         }
       ]
     },
@@ -3195,6 +3242,7 @@
           "type": "boolean"
         },
         "nulls_last": {
+          "description": "Nulls after every value; the core writes the order the provider\ndeclares (`ProviderCapabilities::null_order`).",
           "type": "boolean"
         }
       },

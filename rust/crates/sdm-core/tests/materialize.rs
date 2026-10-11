@@ -21,8 +21,8 @@ use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataLayer, DataRequest, DescribePart, Determinism, Dialect,
-    FetchPlan, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, ProviderChoice, TextTimes,
-    catalog_columns,
+    FetchPlan, IndexAdvice, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
+    ProviderChoice, TextTimes, catalog_columns,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -154,6 +154,8 @@ fn host() -> ProviderChoice {
             max_keys_per_request: None,
             max_seed: None,
             text_times: None,
+            null_order: Some(NullOrder::Last),
+            index_advice: Some(IndexAdvice::SingleColumn),
             sampling: Determinism::SeededStable,
         },
     }
@@ -728,24 +730,49 @@ fn shop_column(name: &str, n: usize, values: Option<ArrayRef>) -> ArrayRef {
 /// and the first hop's neighbors with no row, the lookup with one row per
 /// seed; each request's kind and the table it names, in order.
 fn tables_to_the_result(run: &mut Run) -> Vec<(&'static str, String)> {
+    steps_to_the_result(run, &|| indexes(&[]))
+        .0
+        .into_iter()
+        .filter_map(|(request, _)| match request {
+            DataRequest::Describe { .. } => None,
+            DataRequest::TimeBounds { columns } => Some(("time_bounds", columns[0].table.clone())),
+            DataRequest::SampleEntities { table, .. } => Some(("sample_entities", table)),
+            DataRequest::Neighbors { table, .. } => Some(("neighbors", table)),
+            DataRequest::Lookup { table, .. } => Some(("lookup", table)),
+            other => panic!("{other:?}"),
+        })
+        .collect()
+}
+
+/// Every request a run asked with its plan, in order, and the warnings it
+/// gave.
+type Steps = (Vec<(DataRequest, FetchPlan)>, Vec<String>);
+
+/// Runs `run` to its result as [`tables_to_the_result`] does, the indexes
+/// answered as `index_answer`: every request with its plan, in order, and
+/// the warnings given on the way.
+fn steps_to_the_result(run: &mut Run, index_answer: &dyn Fn() -> FetchResult) -> Steps {
+    try_steps(run, index_answer).unwrap()
+}
+
+/// What [`steps_to_the_result`] gives, or the error the run ends with.
+fn try_steps(run: &mut Run, index_answer: &dyn Fn() -> FetchResult) -> Result<Steps, CoreError> {
     let mut seen = Vec::new();
+    let mut warnings = Vec::new();
     loop {
-        let step = run.next().unwrap();
-        let _ = run.take_warnings();
+        let step = run.next()?;
+        warnings.extend(run.take_warnings().into_iter().map(|w| w.code));
         let requests = match step {
             Step::Fetch { requests } => requests,
-            Step::Done { .. } => return seen,
+            Step::Done { .. } => return Ok((seen, warnings)),
             other => panic!("{other:?}"),
         };
         for asked in requests {
+            seen.push((asked.request.clone(), asked.plan.clone()));
             let answer = match &asked.request {
-                DataRequest::Describe { .. } => indexes(&[]),
-                DataRequest::TimeBounds { columns } => {
-                    seen.push(("time_bounds", columns[0].table.clone()));
-                    catalog(&asked.request).unwrap()
-                }
-                DataRequest::SampleEntities { table, columns, .. } => {
-                    seen.push(("sample_entities", table.clone()));
+                DataRequest::Describe { .. } => index_answer(),
+                DataRequest::TimeBounds { .. } => catalog(&asked.request).unwrap(),
+                DataRequest::SampleEntities { columns, .. } => {
                     let keys: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2, 3]));
                     data(
                         columns
@@ -757,8 +784,7 @@ fn tables_to_the_result(run: &mut Run) -> Vec<(&'static str, String)> {
                             .collect(),
                     )
                 }
-                DataRequest::Neighbors { table, columns, .. } => {
-                    seen.push(("neighbors", table.clone()));
+                DataRequest::Neighbors { columns, .. } => {
                     let mut answer: Vec<(&str, ArrayRef)> = columns
                         .iter()
                         .map(|c| (c.as_str(), shop_column(c, 0, None)))
@@ -766,13 +792,7 @@ fn tables_to_the_result(run: &mut Run) -> Vec<(&'static str, String)> {
                     answer.push((BATCH_COLUMN, Arc::new(Int64Array::from(Vec::<i64>::new()))));
                     data(answer)
                 }
-                DataRequest::Lookup {
-                    table,
-                    columns,
-                    seeds,
-                    ..
-                } => {
-                    seen.push(("lookup", table.clone()));
+                DataRequest::Lookup { columns, seeds, .. } => {
                     let Some(Attachment::Arrow(seeds)) = run.take_attachment(seeds.attachment)
                     else {
                         panic!("the lookup's seeds are attached");
@@ -1173,4 +1193,270 @@ fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
             Detail::List(vec![Scalar::Utf8("not a date".into())])
         );
     }
+}
+
+/// The shop's host provider, its sampling policies as given (T1.26a).
+fn host_with(null_order: Option<NullOrder>, index_advice: Option<IndexAdvice>) -> ProviderChoice {
+    let ProviderChoice::Host { mut capabilities } = host() else {
+        unreachable!()
+    };
+    capabilities.null_order = null_order;
+    capabilities.index_advice = index_advice;
+    ProviderChoice::Host { capabilities }
+}
+
+/// The shipped data layer, its DuckDB capabilities changed by `change`: a
+/// test provider declaring other sampling policies than DuckDB's, or, as a
+/// seeded fault, forgetting one.
+struct Changed(fn(&mut ProviderCapabilities));
+
+impl DataLayer for Changed {
+    fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
+        let mut capabilities = sdm_data::Data::new().capabilities(provider)?;
+        (self.0)(&mut capabilities);
+        Ok(capabilities)
+    }
+
+    fn plan(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+    ) -> Result<FetchPlan, CoreError> {
+        sdm_data::Data::new().plan(request, provider)
+    }
+
+    fn read(
+        &self,
+        request: &DataRequest,
+        provider: &ProviderChoice,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        sdm_data::Data::new().read(request, provider, batches)
+    }
+}
+
+/// DuckDB's index answer, in its own catalog's shape: one row per index
+/// of `orders`, its `expressions` as DuckDB writes them.
+fn duckdb_indexes(expressions: &[&str]) -> FetchResult {
+    data(vec![
+        (
+            "table_name",
+            Arc::new(StringArray::from(vec!["orders"; expressions.len()])),
+        ),
+        (
+            "expressions",
+            Arc::new(StringArray::from(expressions.to_vec())),
+        ),
+    ])
+}
+
+/// The order and the statements of every neighbor read `run` asks with
+/// a row limit per seed, run to its result.
+fn ordered_reads(steps: &[(DataRequest, FetchPlan)]) -> Vec<(Vec<bool>, Vec<String>)> {
+    steps
+        .iter()
+        .filter_map(|(request, plan)| match request {
+            DataRequest::Neighbors {
+                order: Some(order), ..
+            } => {
+                let texts = match plan {
+                    FetchPlan::Sql { statements, .. } => {
+                        statements.iter().map(|s| s.text.clone()).collect()
+                    }
+                    FetchPlan::Host { .. } => vec![],
+                };
+                Some((order.0.iter().map(|t| t.nulls_last).collect(), texts))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_sampler_s_null_order_is_the_one_the_provider_declares() {
+    // A host provider declaring nulls first is asked for its neighbors
+    // with every term nulls first; one declaring nulls last, every term
+    // nulls last; the order is the provider's, never a default.
+    for (declared, nulls_last) in [(NullOrder::First, false), (NullOrder::Last, true)] {
+        let provider = host_with(Some(declared), Some(IndexAdvice::SingleColumn));
+        let mut run = materialize(provider, &renamed(), QUERY, None).unwrap();
+        let (steps, _) = steps_to_the_result(&mut run, &|| indexes(&[]));
+        let reads = ordered_reads(&steps);
+        assert_eq!(reads.len(), 1, "{declared:?}");
+        // The time column, latest first, then the key.
+        assert_eq!(reads[0].0, [nulls_last, nulls_last], "{declared:?}");
+    }
+    // A SQL provider: DuckDB as `sdm-data` declares it orders nulls last,
+    // its statement unchanged (H9's traces hold its text and rows); a test
+    // provider rendering DuckDB's SQL but declaring nulls first is asked
+    // for nulls first in both its window's order and the result's.
+    let duckdb_order = |layer: Arc<dyn DataLayer>| -> Vec<(Vec<bool>, Vec<String>)> {
+        let (operation, attachments) = materialize_start(duckdb(), &renamed(), QUERY, None);
+        let mut run = materialize_on(layer, operation, attachments).unwrap();
+        let (steps, _) = steps_to_the_result(&mut run, &|| duckdb_indexes(&[]));
+        ordered_reads(&steps)
+    };
+    let shipped = duckdb_order(Arc::new(sdm_data::Data::new()));
+    assert_eq!(shipped.len(), 1);
+    assert_eq!(shipped[0].0, [true, true]);
+    let text = &shipped[0].1[0];
+    assert_eq!(text.matches("NULLS LAST").count(), 4, "{text}");
+    assert!(!text.contains("NULLS FIRST"), "{text}");
+    let first = duckdb_order(Arc::new(Changed(|c| {
+        c.null_order = Some(NullOrder::First);
+    })));
+    assert_eq!(first[0].0, [false, false]);
+    let text = &first[0].1[0];
+    assert_eq!(text.matches("NULLS FIRST").count(), 4, "{text}");
+    assert!(!text.contains("NULLS LAST"), "{text}");
+    // The statements differ in their null order only.
+    assert_eq!(
+        text.replace("NULLS FIRST", "NULLS LAST"),
+        shipped[0].1[0],
+        "{text}"
+    );
+}
+
+#[test]
+fn a_provider_declaring_no_null_order_is_not_asked_for_an_order() {
+    // Seeded fault, failing closed: a provider declaring no null order is
+    // refused by name where the sampler would ask it for rows in an order,
+    // never given DuckDB's; the same for DuckDB's rendering with its
+    // declaration forgotten.
+    let mut run = materialize(
+        host_with(None, Some(IndexAdvice::SingleColumn)),
+        &renamed(),
+        QUERY,
+        None,
+    )
+    .unwrap();
+    let err = run_to_error(&mut run, &|| indexes(&[]));
+    assert_eq!(rule(&err), "null_order");
+    let (operation, attachments) = materialize_start(duckdb(), &renamed(), QUERY, None);
+    let layer: Arc<dyn DataLayer> = Arc::new(Changed(|c| c.null_order = None));
+    let mut run = materialize_on(layer, operation, attachments).unwrap();
+    let err = run_to_error(&mut run, &|| duckdb_indexes(&[]));
+    assert_eq!(rule(&err), "null_order");
+}
+
+/// Runs `run` as [`steps_to_the_result`] does, to the error it ends with.
+fn run_to_error(run: &mut Run, index_answer: &dyn Fn() -> FetchResult) -> CoreError {
+    try_steps(run, index_answer).expect_err("the run reached its result")
+}
+
+#[test]
+fn a_provider_without_index_advice_is_neither_asked_for_indexes_nor_warned() {
+    // With the advice, the run reads the indexes once, first, and warns
+    // of the foreign key no index covers; without it, it asks one request
+    // fewer, none of them the index read, and warns of nothing.
+    let mut run = materialize(
+        host_with(Some(NullOrder::Last), Some(IndexAdvice::SingleColumn)),
+        &renamed(),
+        QUERY,
+        None,
+    )
+    .unwrap();
+    let (advised, warnings) = steps_to_the_result(&mut run, &|| indexes(&[]));
+    assert!(matches!(
+        advised[0].0,
+        DataRequest::Describe {
+            part: DescribePart::Indexes,
+            ..
+        }
+    ));
+    assert_eq!(warnings, ["MISSING_INDICES"]);
+    let mut run = materialize(
+        host_with(Some(NullOrder::Last), None),
+        &renamed(),
+        QUERY,
+        None,
+    )
+    .unwrap();
+    let (silent, warnings) =
+        steps_to_the_result(&mut run, &|| panic!("the indexes were asked for"));
+    assert_eq!(silent.len(), advised.len() - 1);
+    assert!(
+        !silent
+            .iter()
+            .any(|(r, _)| matches!(r, DataRequest::Describe { .. })),
+        "{silent:?}"
+    );
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(
+        silent.iter().map(|(r, _)| r).collect::<Vec<_>>(),
+        advised[1..].iter().map(|(r, _)| r).collect::<Vec<_>>()
+    );
+    // DuckDB as `sdm-data` declares it reads its indexes, in one statement;
+    // with the declaration forgotten (seeded), no statement reads them and
+    // nothing is warned of: the read and the warning are the capability's.
+    let duckdb_run = |layer: Arc<dyn DataLayer>| {
+        let (operation, attachments) = materialize_start(duckdb(), &renamed(), QUERY, None);
+        let mut run = materialize_on(layer, operation, attachments).unwrap();
+        steps_to_the_result(&mut run, &|| duckdb_indexes(&[]))
+    };
+    let statements = |steps: &[(DataRequest, FetchPlan)]| -> Vec<String> {
+        steps
+            .iter()
+            .flat_map(|(_, plan)| match plan {
+                FetchPlan::Sql { statements, .. } => {
+                    statements.iter().map(|s| s.text.clone()).collect()
+                }
+                FetchPlan::Host { .. } => vec![],
+            })
+            .collect()
+    };
+    let (shipped, warnings) = duckdb_run(Arc::new(sdm_data::Data::new()));
+    assert_eq!(warnings, ["MISSING_INDICES"]);
+    let shipped = statements(&shipped);
+    assert!(shipped[0].contains("duckdb_indexes()"), "{shipped:?}");
+    let (forgotten, warnings) = duckdb_run(Arc::new(Changed(|c| c.index_advice = None)));
+    let forgotten = statements(&forgotten);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(forgotten, shipped[1..]);
+}
+
+#[test]
+fn an_index_the_reader_cannot_resolve_covers_nothing() {
+    // DuckDB's index over the foreign key alone covers it, and nothing is
+    // warned of; an index whose expressions hold a comma, between columns
+    // or inside one expression, is unresolved and covers nothing, as the
+    // reference reads no column from it: the foreign key is warned of.
+    let warned = |expressions: &[&str]| -> Vec<String> {
+        let (operation, attachments) = materialize_start(duckdb(), &shop(), QUERY, None);
+        let mut run =
+            materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+        let answer = duckdb_indexes(expressions);
+        steps_to_the_result(&mut run, &|| answer.clone()).1
+    };
+    assert!(warned(&["[user_id]"]).is_empty());
+    assert!(warned(&["['\"user_id\"']"]).is_empty());
+    for unresolved in [
+        "[user_id, ts]",
+        "[ts, user_id]",
+        "['(COALESCE(user_id, 0))', '(lower(\\',\\'))']",
+        "['(COALESCE(user_id, 0))']",
+    ] {
+        assert_eq!(warned(&[unresolved]), ["MISSING_INDICES"], "{unresolved}");
+    }
+    // A host provider's list naming a null column is unresolved too.
+    let mut builder =
+        arrow_array::builder::ListBuilder::new(arrow_array::builder::StringBuilder::new())
+            .with_field(Arc::new(Field::new(
+                catalog_columns::LIST_ITEM,
+                DataType::Utf8,
+                true,
+            )));
+    builder.values().append_value("user_id");
+    builder.values().append_null();
+    builder.append(true);
+    let with_null = data(vec![
+        (
+            catalog_columns::TABLE,
+            Arc::new(StringArray::from(vec!["orders"])),
+        ),
+        (catalog_columns::COLUMNS, Arc::new(builder.finish())),
+    ]);
+    let mut run = materialize(host(), &shop(), QUERY, None).unwrap();
+    let (_, warnings) = steps_to_the_result(&mut run, &|| with_null.clone());
+    assert_eq!(warnings, ["MISSING_INDICES"]);
 }

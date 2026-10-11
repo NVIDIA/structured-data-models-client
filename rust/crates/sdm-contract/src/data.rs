@@ -159,6 +159,8 @@ pub struct TieTerm {
     /// rather than the column's own values.
     pub as_timestamp: bool,
     pub descending: bool,
+    /// Nulls after every value; the core writes the order the provider
+    /// declares (`ProviderCapabilities::null_order`).
     pub nulls_last: bool,
 }
 
@@ -435,6 +437,38 @@ pub enum TextTimes {
     ClientRules,
 }
 
+/// Where a provider's source puts a null among the values it orders, in
+/// either direction: the order the reference's neighbor reads get from the
+/// source, which writes no null order of its own (`_neighbor_order_by`).
+/// The provider declares it; the core writes it into the tie-break it asks
+/// for ([`TieTerm::nulls_last`]), never by a dialect. A source whose order
+/// depends on the direction is not declarable yet: the dialect that needs
+/// one adds it under a new contract version.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum NullOrder {
+    /// Nulls first, ascending or descending.
+    First,
+    /// Nulls last, ascending or descending.
+    Last,
+}
+
+/// Which of the source's indexes the reference's sampler counts as serving
+/// a read on a key or foreign key, for its warning of the indexes it would
+/// use and finds missing. The provider declares it; the core reads the
+/// source's indexes, and warns, only when it is declared.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexAdvice {
+    /// An index over exactly that one column, its coverage resolved; one
+    /// over several columns, or one the reader cannot resolve, serves none.
+    SingleColumn,
+}
+
 /// What a provider answers: a host provider declares it, and the data
 /// layer gives it for each SQL dialect it renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -454,6 +488,14 @@ pub struct ProviderCapabilities {
     /// `None` declares no reading, and the core refuses to read text times
     /// from it (`UNSUPPORTED_REQUEST`, rule `text_times`).
     pub text_times: Option<TextTimes>,
+    /// Where the source puts a null when it orders (`NullOrder`); `None`
+    /// declares none, and the core refuses to ask it for rows in an order
+    /// (`UNSUPPORTED_REQUEST`, rule `null_order`).
+    pub null_order: Option<NullOrder>,
+    /// Which indexes serve the sampler's reads (`IndexAdvice`); `None`
+    /// declares no meaningful index advice: the core neither reads the
+    /// source's indexes nor warns of missing ones.
+    pub index_advice: Option<IndexAdvice>,
 }
 
 /// A built-in SQL dialect, by the name the host gives it. The contract

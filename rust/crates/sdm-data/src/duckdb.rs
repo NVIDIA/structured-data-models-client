@@ -40,11 +40,12 @@
 use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
-use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, KeyKind};
+use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, IndexColumns, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, MATCHES_COLUMN, OptionalRequest, ProviderCapabilities, SEED_BATCH, SEED_KEY, SqlParam,
-    SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm, Window, field,
+    Filter, IndexAdvice, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
+    SEED_BATCH, SEED_KEY, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak,
+    TieTerm, Window, field,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -131,6 +132,13 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         // The reference's engine reads a SQL source's text times one by
         // one (register DT-7).
         text_times: Some(TextTimes::ValueByValue),
+        // DuckDB's default null order, which the reference's neighbor
+        // order relies on, writing none: last, in either direction.
+        null_order: Some(NullOrder::Last),
+        // The reference's DuckDB sampler counts an index over exactly one
+        // column (an ART index serves a scan only then) and warns of the
+        // rest (`_get_missing_index_dict`).
+        index_advice: Some(IndexAdvice::SingleColumn),
     }
 }
 
@@ -351,23 +359,25 @@ fn key_kind(constraint_type: &str) -> KeyKind {
 
 /// The columns an index's `expressions` name, as the reference reads them
 /// (`_indexed_column` of its DuckDB sampler): a list in brackets of one
-/// expression, quoted or not, is that one column, its quotes taken off; a
-/// list holding a comma is read as its pieces, each so unquoted, so it is
-/// never one column, as the reference reads none from it; text not in
-/// brackets names none.
-pub(crate) fn indexed_columns(expressions: &str) -> Vec<String> {
+/// expression, quoted or not, is that one column, its quotes taken off.
+/// A list holding a comma is unresolved, never split: DuckDB writes a comma
+/// between expressions and inside one alike (`[a, b]`,
+/// `['(COALESCE(b, \',\'))']`, `['"a,b"']`), so its pieces would be a
+/// guess, and the reference reads no column from it either. Text not in
+/// brackets is unresolved too, the reference reading none.
+pub(crate) fn indexed_columns(expressions: &str) -> IndexColumns {
     let expression = expressions.trim();
     let Some(inner) = expression
         .strip_prefix('[')
         .and_then(|e| e.strip_suffix(']'))
     else {
-        return vec![];
+        return IndexColumns::Unresolved;
     };
-    inner
-        .trim()
-        .split(',')
-        .map(|piece| unquoted(piece.trim()))
-        .collect()
+    let inner = inner.trim();
+    if inner.contains(',') {
+        return IndexColumns::Unresolved;
+    }
+    IndexColumns::Resolved(vec![unquoted(inner)])
 }
 
 /// One expression with its single quotes, then its double quotes, taken

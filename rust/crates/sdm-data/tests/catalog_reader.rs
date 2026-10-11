@@ -15,7 +15,8 @@ use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, BooleanArray, Int32Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::{
-    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, KeyKind,
+    CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexColumns,
+    KeyKind,
 };
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
@@ -37,6 +38,8 @@ fn host() -> ProviderChoice {
             max_keys_per_request: None,
             max_seed: None,
             text_times: None,
+            null_order: None,
+            index_advice: None,
             sampling: Determinism::SeededStable,
         },
     }
@@ -217,14 +220,16 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
     );
 
     let indexes = describe(DescribePart::Indexes);
+    // DuckDB's index over two columns is unresolved, never split on its
+    // comma; a host provider names the two columns, which it resolves.
     let expected = CatalogAnswer::Indexes(vec![
         CatalogIndex {
             table: "orders".into(),
-            columns: vec!["user_id".into()],
+            columns: IndexColumns::Resolved(vec!["user_id".into()]),
         },
         CatalogIndex {
             table: "orders".into(),
-            columns: vec!["a".into(), "b".into()],
+            columns: IndexColumns::Unresolved,
         },
     ]);
     let expressions = vec![
@@ -243,19 +248,46 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
         strings(&[Some("orders"), Some("orders")]),
         lists("item", &[&["user_id"], &["a", "b"]]),
     ];
+    let CatalogAnswer::Indexes(mut resolved) = expected else {
+        unreachable!()
+    };
+    resolved[1].columns = IndexColumns::Resolved(vec!["a".into(), "b".into()]);
     assert_eq!(
         read(&indexes, &host(), &answer(&indexes, &host(), neutral)),
-        expected
+        CatalogAnswer::Indexes(resolved)
+    );
+    // A host's list naming a null column is unresolved, never the names
+    // left over (one name left would read as an index over that column).
+    let mut builder = ListBuilder::new(StringBuilder::new()).with_field(Arc::new(Field::new(
+        "item",
+        DataType::Utf8,
+        true,
+    )));
+    builder.values().append_value("user_id");
+    builder.values().append_null();
+    builder.append(true);
+    let with_null = vec![
+        strings(&[Some("orders")]),
+        Arc::new(builder.finish()) as ArrayRef,
+    ];
+    assert_eq!(
+        read(&indexes, &host(), &answer(&indexes, &host(), with_null)),
+        CatalogAnswer::Indexes(vec![CatalogIndex {
+            table: "orders".into(),
+            columns: IndexColumns::Unresolved,
+        }])
     );
 }
 
 /// DuckDB's index expressions, read as the reference's `_indexed_column`
 /// reads them: one column, its quotes taken off, only from a bracketed
-/// list without a comma.
+/// list without a comma; a list holding a comma, between expressions or
+/// inside one, is unresolved, never split (T1.26a), as is text not in
+/// brackets. Each text is the one DuckDB 1.5.6 writes for the index named.
 #[test]
 fn duckdb_s_index_expressions_read_as_the_reference_reads_them() {
     let indexes = describe(DescribePart::Indexes);
-    let read_one = |expressions: &str| -> Vec<String> {
+    let read_one = |expressions: &str| -> IndexColumns {
         let batches = answer(
             &indexes,
             &duckdb(),
@@ -266,17 +298,35 @@ fn duckdb_s_index_expressions_read_as_the_reference_reads_them() {
             other => panic!("{other:?}"),
         }
     };
-    assert_eq!(read_one("[user_id]"), ["user_id"]);
-    assert_eq!(read_one(" ['\"a\"\"b\"'] "), ["a\"b"]);
-    assert_eq!(read_one("['user id']"), ["user id"]);
+    let one = |name: &str| IndexColumns::Resolved(vec![name.into()]);
+    assert_eq!(read_one("[user_id]"), one("user_id"));
+    assert_eq!(read_one(" ['\"a\"\"b\"'] "), one("a\"b"));
+    assert_eq!(read_one("['\"Q\"\"q\"']"), one("Q\"q"));
+    assert_eq!(read_one("['user id']"), one("user id"));
+    assert_eq!(read_one("['\"x y\"']"), one("x y"));
     // The reference's slice of a lone double quote is the empty name.
-    assert_eq!(read_one("['\"']"), [""]);
-    // A comma: never one column, as the reference reads none.
-    assert_eq!(read_one("[a, b]"), ["a", "b"]);
-    assert_eq!(read_one("['\"a,b\"']").len(), 2);
-    // Not a bracketed list: no column.
-    assert!(read_one("a").is_empty());
-    assert!(read_one("[a").is_empty());
+    assert_eq!(read_one("['\"']"), one(""));
+    // An expression without a comma reads as the reference reads it, a
+    // name no column has.
+    assert_eq!(read_one("['(lower(a))']"), one("(lower(a))"));
+    // A comma: unresolved, as the reference reads no column from it.
+    for comma in [
+        // `CREATE INDEX ON t(a, b)`
+        "[a, b]",
+        // `ON t("a,b")`, one column whose name holds a comma
+        "['\"a,b\"']",
+        // `ON t((lower(a)), (coalesce(b, ',')))`
+        "['(lower(a))', '(COALESCE(b, \\',\\'))']",
+        // `ON t((coalesce(b, ',')))`, one expression
+        "['(COALESCE(b, \\',\\'))']",
+        // `ON t((concat(a, b)))`, a function of two arguments
+        "['(concat(a, b))']",
+    ] {
+        assert_eq!(read_one(comma), IndexColumns::Unresolved, "{comma}");
+    }
+    // Not a bracketed list: unresolved.
+    assert_eq!(read_one("a"), IndexColumns::Unresolved);
+    assert_eq!(read_one("[a"), IndexColumns::Unresolved);
 }
 
 fn internal(err: &CoreError) -> (ErrorKind, ErrorCode) {

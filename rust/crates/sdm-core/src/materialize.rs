@@ -10,11 +10,13 @@
 //! The steps are the reference's, in its order, one data request for each
 //! statement it runs (design, T1.11a row): the source's indexes, for the
 //! sampler's "Missing N indices" warning, when a key or foreign key is not
-//! one the source enforces; the time bounds of the aggregated table; the
+//! one the source enforces and the provider declares index advice
+//! (T1.26a); the time bounds of the aggregated table; the
 //! reservoir sample of the entity table (`sample_entities`); the windowed
 //! rows each example's label sums (`neighbors` with a window); the entity
 //! rows of every example (`lookup`); and the latest rows referring to each
-//! (`neighbors` with a row limit and an order). The examples' order is
+//! (`neighbors` with a row limit and an order, nulls placed as the
+//! provider declares its source places them). The examples' order is
 //! numpy's (`sdm_engine::random`), the labels the reference executor's
 //! (`sdm_engine::sample`), the payload the engine's layout
 //! (`sdm_request::payload`).
@@ -37,10 +39,10 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32Array};
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
-use sdm_contract::catalog::CatalogAnswer;
+use sdm_contract::catalog::{CatalogAnswer, IndexColumns};
 use sdm_contract::data::{
-    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, KeySet, MATCHES_COLUMN,
-    SeedBound, TableColumn, TextTimes, Window,
+    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, IndexAdvice, KeySet,
+    MATCHES_COLUMN, NullOrder, SeedBound, TableColumn, TextTimes, Window,
 };
 use sdm_contract::ops::{
     ColumnRef, Materialized, OperationResult, ProfileName, ProfileSpec, QueryColumn, QuerySchema,
@@ -608,12 +610,32 @@ async fn time_bounds(asker: &Asker, table: &Table) -> Result<Bounds, CoreError> 
     })
 }
 
-/// The sampler's check of the indexes its reads would use: every key and
-/// foreign key the source does not enforce as unique, less those an index
-/// over that one column covers, warned of as the reference warns of them.
-/// The data layer reads the source's indexes (decision E54): which column
-/// an index covers is its dialect's reading, never this module's.
-async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> {
+/// Where the provider's source puts a null when it orders, as it declares
+/// it (`ProviderCapabilities::null_order`); a provider declaring none is
+/// not asked for rows in an order, refused by name (`null_order`).
+fn null_order(asker: &Asker) -> Result<NullOrder, CoreError> {
+    asker
+        .capabilities()?
+        .null_order
+        .ok_or_else(|| not_yet("null_order"))
+}
+
+/// The sampler's check of the indexes its reads would use, under the
+/// provider's index advice (`ProviderCapabilities::index_advice`): every
+/// key and foreign key the source does not enforce as unique, less those
+/// an index the advice counts covers, warned of as the reference warns of
+/// them. A provider declaring no advice is not asked for its indexes and
+/// gets no warning. The data layer reads the source's indexes (decision
+/// E54): which columns an index covers, or that it cannot tell, is its
+/// dialect's reading, never this module's.
+async fn missing_indexes(
+    asker: &Asker,
+    graph: &Graph,
+    advice: Option<IndexAdvice>,
+) -> Result<(), CoreError> {
+    let Some(IndexAdvice::SingleColumn) = advice else {
+        return Ok(());
+    };
     let mut missing: Vec<(String, Vec<String>)> = Vec::new();
     let mut add = |table: &str, column: &str| match missing.iter_mut().find(|(t, _)| t == table) {
         Some((_, columns)) => {
@@ -657,7 +679,13 @@ async fn missing_indexes(asker: &Asker, graph: &Graph) -> Result<(), CoreError> 
     // An index is the source's, named by the source's name of its table:
     // it covers each table of the graph read from that one.
     for index in indexes {
-        let [column] = index.columns.as_slice() else {
+        // Only an index over exactly one column, resolved, serves a read;
+        // one the reader could not resolve serves none, as the reference
+        // reads no column from it.
+        let IndexColumns::Resolved(columns) = &index.columns else {
+            continue;
+        };
+        let [column] = columns.as_slice() else {
             continue;
         };
         for table in graph.tables.iter().filter(|t| t.source == index.table) {
@@ -835,14 +863,15 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             "query",
         ));
     };
-    // The index read, the sampler's check of the indexes it would use,
-    // comes before anything of the task is read, as the reference builds
+    // The index read, the sampler's check of the indexes it would use
+    // (only under the provider's index advice), comes before anything of
+    // the task is read, as the reference builds
     // its sampler, and gives its warning, before its task table. The checks
     // after it (null entities, then the seed, then the task's shape) are in
     // this core's own order, not the reference's: an input with several
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
-    missing_indexes(&asker, &graph).await?;
+    missing_indexes(&asker, &graph, asker.capabilities()?.index_advice).await?;
     if indices.null_count() > 0 {
         return Err(invalid("an entity to predict for is missing", "indices"));
     }
@@ -1225,7 +1254,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                         seeds: key_set(&asker, sample::seeds(Arc::clone(&entity_keys), times)?)?,
                         window,
                         per_seed: Some(NEIGHBORS[0]),
-                        order: Some(sample::tie_break(table)?),
+                        order: Some(sample::tie_break(table, null_order(&asker)?)?),
                     },
                 )
                 .await?,
