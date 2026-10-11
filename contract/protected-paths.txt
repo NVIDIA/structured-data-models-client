@@ -38,13 +38,17 @@ tests/test_contract_*.py
 scripts/rust_core/**
 
 # The L1 expectation files: the PQL corpus and journey queries, the zone,
-# stream and hash vectors, the vendored tzdata, the layout and value vectors,
+# stream and hash vectors (sdm-engine's rs1), the vendored tzdata, the layout and value vectors,
 # the contract's locked schemas, the goldens.
 rust/crates/sdm-core/tests/pql/**
 rust/testdata/**
 rust/crates/sdm-contract/schema/**
 rust/crates/sdm-contract/tests/*.json
 rust/crates/sdm-engine/tests/*.json
+# The stream vectors' check and recorder (T1.22): rs1.json and rs1-draws.json
+# are the line above.
+rust/crates/sdm-engine/tests/rs1.rs
+rust/crates/sdm-engine/tests/rs1_record.py
 rust/crates/sdm-schema/tests/*.json
 tests/golden/**
 
