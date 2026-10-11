@@ -43,6 +43,31 @@ pub const COLUMNS_LEFT_OUT: &str = "COLUMNS_LEFT_OUT";
 /// The warning that a time of day's values were read as no time.
 pub const TIME_VALUES_UNREAD: &str = "TIME_VALUES_UNREAD";
 
+/// The schema's warnings, each with the variants it gives (none: one
+/// sentence), which a host words (decision E59(d)); `tests/assemble.rs`
+/// holds what the assembly gives to this list, every pair given.
+pub const WARNINGS: &[(&str, &[&str])] = &[
+    (
+        TIME_COLUMNS_GUESSED,
+        &[
+            "taken_earliest",
+            "taken_edit_stamp",
+            "refused_empty",
+            "refused_sparse",
+            "refused_constant",
+            "refused_constant_where_held",
+            "refused_load_stamp",
+            "refused_edit_stamp",
+            "refused_birth_date",
+        ],
+    ),
+    (LINK_CANNOT_JOIN, &["not_the_key", "no_key", "types"]),
+    (TABLES_NAME_EACH_OTHER, &[]),
+    (TWO_WAYS_TO_A_TABLE, &[]),
+    (COLUMNS_LEFT_OUT, &[]),
+    (TIME_VALUES_UNREAD, &[]),
+];
+
 /// A schema assembled: its description and the warnings given, in order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Assembled {
@@ -76,6 +101,28 @@ fn can_identify(dtype: Dtype) -> bool {
             | Dtype::Float64
             | Dtype::String
     )
+}
+
+/// The characters a table's name in the schema may not hold, as the
+/// reference's `_TableShape._check_name` refuses them: a backtick, a
+/// newline, a carriage return and a dot.
+pub const NOT_IN_A_NAME: [char; 4] = ['`', '\n', '\r', '.'];
+
+/// Refuses a name the schema may not give a table (`_check_name`): empty,
+/// or holding a character of [`NOT_IN_A_NAME`], `INVALID_REQUEST` naming
+/// the field. A rule on the schema's names, never on the source's, which
+/// may hold any character its catalog does.
+pub fn check_table_name(name: &str) -> Result<(), CoreError> {
+    if name.is_empty() {
+        return Err(invalid("a table's name is empty", "tables"));
+    }
+    if name.contains(NOT_IN_A_NAME) {
+        return Err(invalid(
+            "a table's name holds a character a name may not: a backtick, a newline, a carriage return or a dot",
+            "tables",
+        ));
+    }
+    Ok(())
 }
 
 /// Keys each keyless table by the column declared foreign keys refer to,

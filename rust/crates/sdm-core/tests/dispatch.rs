@@ -640,3 +640,63 @@ fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
         assert_eq!(err.fields["field"], sdm_contract::Detail::text("indices"));
     }
 }
+
+/// A start of `describe_source` naming `tables` (`[name, source]`).
+fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
+    let operation = describe(ProviderChoice::Sql {
+        dialect: Dialect::new("duckdb"),
+    });
+    let spec = SourceSpec {
+        tables: tables
+            .iter()
+            .map(|(name, source)| NamedTable {
+                name: (*name).into(),
+                source: (*source).into(),
+            })
+            .collect(),
+        primary_keys: BTreeMap::new(),
+        time_columns: BTreeMap::new(),
+        relationships: None,
+    };
+    start(
+        &root(),
+        StartRun {
+            contract: CONTRACT_VERSION,
+            facts: facts(),
+            operation,
+        },
+        Attachments::from([(AttachmentId(7), json(&spec))]),
+    )
+}
+
+#[test]
+fn tables_named_wrongly_are_refused_before_anything_is_fetched() {
+    // T1.23: as the reference refuses a mapping of tables (its
+    // `_require_table_names`) and a name the schema may not give a table
+    // (`_check_name`): each `INVALID_REQUEST` naming the field, never the
+    // source's name held to the schema's rules.
+    for tables in [
+        vec![("", "t")],
+        vec![("t", "")],
+        vec![("t", "a"), ("t", "b")],
+        vec![("a.b", "t")],
+        vec![("a`b", "t")],
+        vec![("a\nb", "t")],
+        vec![("a\rb", "t")],
+    ] {
+        let err = describe_named(&tables).unwrap().next().unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidRequest, "{tables:?}");
+        assert_eq!(named(&err, "field"), "tables", "{tables:?}");
+    }
+    // A source name holding those characters is the source's to hold: the
+    // run asks for its columns.
+    for source in ["a.b", "a`b", "a\nb", "\"q\""] {
+        assert!(
+            matches!(
+                describe_named(&[("ok", source)]).unwrap().next(),
+                Ok(Step::Fetch { .. })
+            ),
+            "{source:?}"
+        );
+    }
+}

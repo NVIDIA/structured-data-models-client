@@ -51,6 +51,7 @@ pub(crate) async fn run(
     // source's (`_require_table_names`); none named, every table the
     // source lists, under its own name.
     let named = named_tables(&spec)?;
+    let caller_named = !named.is_empty();
     let names: Vec<NamedTable> = if named.is_empty() {
         let listed = table_names(
             describe(
@@ -70,13 +71,17 @@ pub(crate) async fn run(
             )
             .with_field("field", Detail::text("tables")));
         }
-        listed
-            .into_iter()
-            .map(|name| NamedTable {
+        // Each listed under its own name, which must be one the schema
+        // may give a table.
+        let mut tables = Vec::with_capacity(listed.len());
+        for name in listed {
+            assemble::check_table_name(&name)?;
+            tables.push(NamedTable {
                 source: name.clone(),
                 name,
-            })
-            .collect()
+            });
+        }
+        tables
     } else {
         named
     };
@@ -84,7 +89,7 @@ pub(crate) async fn run(
     let mut tables = Vec::with_capacity(names.len());
     for table in &names {
         let one = || vec![table.source.clone()];
-        let [columns, keys] = describe_all(
+        let asked = describe_all(
             &asker,
             [
                 DataRequest::Describe {
@@ -97,17 +102,28 @@ pub(crate) async fn run(
                 },
             ],
         )
-        .await?;
+        .await;
+        let [columns, keys] = match asked {
+            Ok(answers) => answers,
+            // A table the caller named that the source does not hold: a
+            // dialect may fail reading its columns rather than answer none
+            // (DuckDB's pragma does). The source's table list, asked only
+            // then, says which, so the caller's naming is refused as the
+            // reference refuses it, and any other failure stays the
+            // provider's.
+            Err(failed) if caller_named && failed.code == ErrorCode::ProviderError => {
+                if holds(&asker, &table.source).await? {
+                    return Err(failed);
+                }
+                return Err(not_held());
+            }
+            Err(failed) => return Err(failed),
+        };
         let declared = declared_columns(columns)?;
         if declared.is_empty() {
-            // A table the source does not hold, or holds with no columns,
-            // as the reference refuses one it cannot read.
-            return Err(CoreError::new(
-                ErrorKind::InvalidRequest,
-                ErrorCode::InvalidRequest,
-                "a table to describe has no columns in the source",
-            )
-            .with_field("field", Detail::text("tables")));
+            // A table the source answers with no columns, as the reference
+            // refuses one it cannot read.
+            return Err(not_held());
         }
         let constraints = declared_keys(keys)?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
@@ -209,9 +225,41 @@ pub(crate) async fn run(
     }))
 }
 
+/// The refusal of a table to describe that the source does not hold, or
+/// holds with no columns: `INVALID_REQUEST`, as the reference refuses a
+/// table it cannot read (its `TableNotFoundError`).
+fn not_held() -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "a table to describe is not one the source holds, or has no columns there",
+    )
+    .with_field("field", Detail::text("tables"))
+}
+
+/// Whether the source's table list holds `source`, by its exact name or in
+/// any case, as a catalog may fold names.
+async fn holds(asker: &Asker, source: &str) -> Result<bool, CoreError> {
+    let listed = table_names(
+        describe(
+            asker,
+            DataRequest::Describe {
+                tables: vec![],
+                part: DescribePart::Tables,
+            },
+        )
+        .await?,
+    )?;
+    Ok(listed
+        .iter()
+        .any(|name| name == source || name.to_lowercase() == source.to_lowercase()))
+}
+
 /// The tables `spec` names, checked as the reference checks a mapping of
-/// them (`_require_table_names`): each name and source name non-empty, no
-/// name twice. Refusals are `INVALID_REQUEST` naming the field.
+/// them (`_require_table_names`): each source name non-empty, no name
+/// twice, and each name one the schema may give a table
+/// ([`assemble::check_table_name`]). Refusals are `INVALID_REQUEST`
+/// naming the field.
 fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
     let refuse = |message: &'static str| {
         CoreError::new(
@@ -223,9 +271,7 @@ fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
     };
     let mut seen = std::collections::BTreeSet::new();
     for table in &spec.tables {
-        if table.name.is_empty() {
-            return Err(refuse("a table's name is empty"));
-        }
+        assemble::check_table_name(&table.name)?;
         if table.source.is_empty() {
             return Err(refuse("a table's name in the source is empty"));
         }
@@ -239,15 +285,30 @@ fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
 /// The foreign keys `table` declares to tables of the source, as links
 /// `[foreign key, referenced key]` by the schema's names: a constraint of
 /// one column pair whose referenced table, a name in the source, is a
-/// table described, by its exact source name or, failing that, by the one
-/// source name equal to it in any case (`_table_named`), and whose columns
-/// both tables hold. A column declared twice keeps its first place and its
+/// table described, and whose columns both tables hold. The referenced
+/// table is found as the reference finds it (`_declared_links`,
+/// `_table_named`): through a map from each source name to the schema's
+/// name, the last table described under a source name holding it, then by
+/// the exact source name or, failing that, the one source name equal to
+/// it in any case. A column declared twice keeps its first place and its
 /// last constraint, as the reference's mapping by column does.
 fn declared_links(
     table: &InferredTable,
     parts: &[CatalogForeignKey],
     tables: &[InferredTable],
 ) -> Vec<Vec<ColumnRef>> {
+    // Source name to the table described under it, the last one winning,
+    // in the order each source name first appears.
+    let mut by_source: Vec<(&str, &InferredTable)> = Vec::new();
+    for described in tables {
+        match by_source
+            .iter_mut()
+            .find(|(source, _)| *source == described.source)
+        {
+            Some(slot) => slot.1 = described,
+            None => by_source.push((&described.source, described)),
+        }
+    }
     let mut keys: Vec<(&String, &CatalogForeignKey)> = Vec::new();
     for part in parts {
         let pairs = parts.iter().filter(|p| p.key == part.key).count();
@@ -265,18 +326,18 @@ fn declared_links(
     }
     let mut links = Vec::new();
     for (column, part) in keys {
-        let folded: Vec<&InferredTable> = tables
+        let exact = by_source
             .iter()
-            .filter(|t| t.source.to_lowercase() == part.referenced_table.to_lowercase())
+            .find(|(source, _)| *source == part.referenced_table);
+        let folded: Vec<&(&str, &InferredTable)> = by_source
+            .iter()
+            .filter(|(source, _)| source.to_lowercase() == part.referenced_table.to_lowercase())
             .collect();
-        let target = tables
-            .iter()
-            .find(|t| t.source == part.referenced_table)
-            .or(match folded.as_slice() {
-                [one] => Some(*one),
-                _ => None,
-            });
-        let Some(target) = target else { continue };
+        let target = match (exact, folded.as_slice()) {
+            (Some((_, target)), _) => *target,
+            (None, [(_, target)]) => *target,
+            _ => continue,
+        };
         let referenced = &part.referenced_columns[0];
         if table.column(column).is_none() || target.column(referenced).is_none() {
             continue;

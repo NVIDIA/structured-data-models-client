@@ -426,13 +426,13 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
 ) -> None:
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     refusals = [
-        # An empty table, which the reference refuses unnamed (P1B-10).
+        # An empty table, which the reference refuses unnamed (P1B-11).
         (
             lambda: _connection('CREATE TABLE z (z_id BIGINT)'),
             {},
             'empty_table',
         ),
-        # A struct column, which the reference fails unnamed (P1B-9).
+        # A struct column, which the reference fails unnamed (P1B-10).
         (
             lambda: _connection(
                 "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 1} AS s "
@@ -586,6 +586,26 @@ SCHEMA_RULES = {
             "AS f, ['a', country] AS g FROM users",
         ),
     ),
+    # T1.23 fix 1 (subagent P2-1): the reasons and variant no source above
+    # reached: a date of birth, one value where values are held, and a
+    # declared foreign key to a table with no key.
+    'more reasons': (
+        {'TIME_COLUMNS_GUESSED', 'LINK_CANNOT_JOIN'},
+        (
+            'CREATE TABLE people (person_id BIGINT, birth_date TIMESTAMP, '
+            'stamped TIMESTAMP)',
+            "INSERT INTO people SELECT i, TIMESTAMP '1980-01-01' + "
+            'to_days(CAST(i AS INTEGER)), CASE WHEN i % 3 = 0 THEN NULL ELSE '
+            "TIMESTAMP '2024-01-01 08:00:00' END FROM range(9) t(i)",
+            'CREATE TABLE visits (visit_id BIGINT, person_id BIGINT)',
+            'INSERT INTO visits SELECT i, i % 9 FROM range(12) t(i)',
+            'CREATE TABLE codes (u1 BIGINT UNIQUE, u2 BIGINT UNIQUE)',
+            'INSERT INTO codes SELECT i, i + 10 FROM range(5) t(i)',
+            'CREATE TABLE coded (coded_id BIGINT, c1 BIGINT REFERENCES codes '
+            '(u1), c2 BIGINT REFERENCES codes (u2))',
+            'INSERT INTO coded SELECT i, i % 5, i % 5 + 10 FROM range(7) t(i)',
+        ),
+    ),
     'a key by reference': (
         set(),
         (
@@ -735,13 +755,13 @@ def test_a_table_named_with_a_dot_is_refused_on_both_routes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The pragma reads `a.b` as table b of schema a too, and the reference
-    # refuses it; the core reads its columns by name, and the client's own
-    # rule on names then refuses it with the same code, so the routes agree
-    # (T1.22).
+    # refuses it; from T1.23 the core refuses a table the schema would name
+    # so, by the reference's rule on names (`_check_name`), with the same
+    # code, so the routes agree.
     with pytest.raises(StructuredDataError) as core:
         _described_with(monkeypatch, CORE, 'a.b')
     assert core.value.code == 'INVALID_REQUEST'
-    assert 'invalid characters' in str(core.value)
+    assert core.value.details['field'] == 'tables'
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return
     with pytest.raises(StructuredDataError) as old:
@@ -848,4 +868,156 @@ def test_a_key_or_time_column_named_wrongly_is_refused_as_the_old_route_does(
         return
     with pytest.raises(StructuredDataError) as old:
         _from_source(monkeypatch, (), '', arguments)
+    assert old.value.code == 'INVALID_REQUEST'
+
+
+def _named_on_the_core(
+    connection: Any, tables: dict[str, str]
+) -> tuple[dict[str, Any], list[tuple[str, str]]]:
+    r"""The core's ``describe_source`` over ``tables`` named (T1.23), built
+    into today's ``Schema`` by the schema bridge, as T1.24's route will:
+    the public call with tables named has no core route yet."""
+    from sdm_client._rust import codec
+    from sdm_client._rust import schema as bridge
+    from sdm_client._rust.run import run
+
+    spec = {
+        'tables': [{'name': n, 'source': s} for n, s in tables.items()],
+        'primary_keys': {},
+        'time_columns': {},
+    }
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        finished = run(
+            {
+                'op': 'describe_source',
+                'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+                'source': 1,
+                'check_keys': True,
+            },
+            {1: codec.attachment(spec)},
+            provider=DuckDBProvider(connection),
+        )
+        described = json.loads(finished.take(finished.result['description']))
+        schema = bridge.build(Schema, DuckDBSource(connection), described)
+    said = [
+        (type(w.message).__name__, str(w.message).split('] ', 1)[1])
+        for w in shown
+    ]
+    return _projection(schema), said
+
+
+def _named_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch, connection: Any, tables: dict[str, str]
+) -> tuple[dict[str, Any], list[tuple[str, str]]]:
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(DuckDBSource(connection), tables)
+    return _projection(schema), [
+        (type(w.message).__name__, str(w.message)) for w in shown
+    ]
+
+
+#: Sources one physical table of which is named twice (T1.23 fix 1, Codex
+#: P2): a declared foreign key to it joins the last name it was given, as
+#: the reference maps source names to the schema's (`_declared_links`),
+#: found by its exact name or, where the catalog folds it, by the one name
+#: equal in any case.
+REPEATED = {
+    'exact': (
+        (
+            'CREATE TABLE parent (id BIGINT PRIMARY KEY)',
+            'INSERT INTO parent SELECT i FROM range(4) t(i)',
+            'CREATE TABLE child (child_id BIGINT PRIMARY KEY, parent_id BIGINT '
+            'REFERENCES parent (id))',
+            'INSERT INTO child SELECT i, i % 4 FROM range(9) t(i)',
+        ),
+        {'first': 'parent', 'second': 'parent', 'children': 'child'},
+    ),
+    'folded': (
+        (
+            'CREATE TABLE "Parent" (id BIGINT PRIMARY KEY)',
+            'INSERT INTO "Parent" SELECT i FROM range(4) t(i)',
+            'CREATE TABLE child (child_id BIGINT PRIMARY KEY, parent_id BIGINT '
+            'REFERENCES parent (id))',
+            'INSERT INTO child SELECT i, i % 4 FROM range(9) t(i)',
+        ),
+        {'p1': 'Parent', 'kids': 'child', 'p2': 'Parent'},
+    ),
+}
+
+
+@pytest.mark.parametrize('name', sorted(REPEATED))
+def test_a_source_table_named_twice_is_joined_as_the_old_route_joins_it(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    setup, tables = REPEATED[name]
+    connection = duckdb.connect()
+    for statement in setup:
+        connection.execute(statement)
+    core, said = _named_on_the_core(connection, tables)
+    last = [n for n, s in tables.items() if s.lower() == 'parent'][-1]
+    assert [last, 'id'] in [link[2:] for link in core['links']], core['links']
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    old, old_said = _named_on_the_old_route(monkeypatch, connection, tables)
+    assert core == old
+    assert said == old_said
+
+
+@pytest.mark.parametrize('alias', ['a.b', 'a`b', 'a\nb', 'a\rb'])
+def test_a_name_the_schema_may_not_give_a_table_is_refused_as_the_old_route_does(
+    monkeypatch: pytest.MonkeyPatch, alias: str
+) -> None:
+    # T1.23 fix 1 (Codex P2): the schema's names are held to the
+    # reference's rule (`_check_name`), the source's are not.
+    with pytest.raises(StructuredDataError) as core:
+        _named_on_the_core(_connection(), {alias: 'users'})
+    assert core.value.code == 'INVALID_REQUEST'
+    assert core.value.details['field'] == 'tables'
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    with pytest.raises(StructuredDataError) as old:
+        _named_on_the_old_route(monkeypatch, _connection(), {alias: 'users'})
+    assert old.value.code == 'INVALID_REQUEST'
+
+
+def test_a_name_over_a_quoted_source_table_is_taken_as_the_old_route_takes_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The source's name may hold what the schema's may not; a plain name
+    # over it is the schema's.
+    connection = _connection(
+        'CREATE TABLE "odd`name" (thing_id BIGINT PRIMARY KEY, label VARCHAR)',
+        "INSERT INTO \"odd`name\" VALUES (1, 'a'), (2, 'b'), (3, 'c')",
+    )
+    core, said = _named_on_the_core(connection, {'things': 'odd`name'})
+    assert [t['name'] for t in core['tables']] == ['things']
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    old, old_said = _named_on_the_old_route(
+        monkeypatch, connection, {'things': 'odd`name'}
+    )
+    assert core == old
+    assert said == old_said
+
+
+def test_a_source_table_that_is_not_there_is_refused_as_the_old_route_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.23 fix 1 (subagent P2-2): DuckDB fails reading a missing table's
+    # columns; the core asks the source's table list then, and refuses the
+    # caller's naming with the reference's code, not the provider's.
+    with pytest.raises(StructuredDataError) as core:
+        _named_on_the_core(_connection(), {'x': 'nope'})
+    assert core.value.code == 'INVALID_REQUEST'
+    assert core.value.details['field'] == 'tables'
+    # A table that is there, in another case, is read.
+    core_schema, _ = _named_on_the_core(_connection(), {'x': 'USERS'})
+    assert [t['name'] for t in core_schema['tables']] == ['x']
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    with pytest.raises(StructuredDataError) as old:
+        _named_on_the_old_route(monkeypatch, _connection(), {'x': 'nope'})
     assert old.value.code == 'INVALID_REQUEST'

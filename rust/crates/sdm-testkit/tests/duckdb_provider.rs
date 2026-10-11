@@ -1124,6 +1124,17 @@ fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
         .map(|f| f["request"]["request"].as_str().unwrap())
         .collect();
     assert_eq!(names.len(), 9, "{names:?}");
+    // Every kind on every base, not only every kind and every base.
+    let pairs: std::collections::BTreeSet<(&str, &str)> = fetches
+        .iter()
+        .map(|f| {
+            (
+                f["request"]["request"].as_str().unwrap(),
+                f["base"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(pairs.len(), names.len() * 3, "{pairs:?}");
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let mut held = 0;
     for fetch in fetches {
@@ -1220,4 +1231,72 @@ fn a_source_of_5000_columns_is_described_and_materialized_through_host_run() {
         "{:?}",
         observed.answer
     );
+}
+
+/// `base.regression` described with `source` as its core's SourceSpec,
+/// over `setup`: what this host observed.
+fn described_as(source: Value, setup: Vec<String>) -> host::Observed {
+    let mut loaded = case::load(&[contract().join("cases/s1/base.regression.json")])
+        .unwrap()
+        .remove(0)
+        .case;
+    loaded.input.setup = Some(setup);
+    let core = loaded.core.as_mut().unwrap();
+    core.materialize = None;
+    core.predict = None;
+    core.describe_source.as_mut().unwrap().source = source;
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    host::run(&loaded, &bases).unwrap()
+}
+
+#[test]
+fn a_named_table_the_source_lacks_is_the_caller_s_naming_refused() {
+    // T1.23 fix 1 (subagent P2-2): DuckDB fails reading a missing table's
+    // columns; the core asks the table list then and refuses the naming
+    // with the reference's INVALID_REQUEST, on this host as on python-core.
+    let observed = described_as(
+        serde_json::json!({"tables": [{"name": "x", "source": "nope"}], "primary_keys": {}, "time_columns": {}}),
+        vec![],
+    );
+    let Answer::Error { code, fields, .. } = &observed.answer else {
+        panic!("{:?}", observed.answer);
+    };
+    assert_eq!(code, "INVALID_REQUEST");
+    assert_eq!(fields["field"], "tables");
+}
+
+#[test]
+fn a_source_table_named_twice_is_joined_under_its_last_name() {
+    // T1.23 fix 1 (Codex P2): as the reference maps source names to the
+    // schema's (`_declared_links`), a declared foreign key to a table named
+    // twice joins the last name, by its exact source name or the one equal
+    // in any case.
+    for (parent, referenced) in [("parent", "parent"), ("\"Parent\"", "Parent")] {
+        let observed = described_as(
+            serde_json::json!({
+                "tables": [
+                    {"name": "first", "source": referenced},
+                    {"name": "children", "source": "child"},
+                    {"name": "second", "source": referenced},
+                ],
+                "primary_keys": {},
+                "time_columns": {},
+            }),
+            vec![
+                format!("CREATE TABLE {parent} (id BIGINT PRIMARY KEY)"),
+                format!("INSERT INTO {parent} SELECT i FROM range(4) t(i)"),
+                "CREATE TABLE child (child_id BIGINT PRIMARY KEY, parent_id BIGINT REFERENCES parent (id))".into(),
+                "INSERT INTO child SELECT i, i % 4 FROM range(9) t(i)".into(),
+            ],
+        );
+        let described = observed.described.expect("described");
+        assert_eq!(
+            described["links"],
+            serde_json::json!([[
+                {"table": "children", "column": "parent_id"},
+                {"table": "second", "column": "id"}
+            ]]),
+            "{parent}"
+        );
+    }
 }
