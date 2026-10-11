@@ -178,6 +178,7 @@ def test_an_owner_approved_refusal_and_a_proposed_one_pass() -> None:
             "fails 'additionalProperties'",
         ),
     ],
+    ids=['deep', 'not-yaml', 'wide'],
 )
 def test_a_register_it_cannot_read_is_refused_by_name(
     tmp_path: Path, text: str, wanted: str

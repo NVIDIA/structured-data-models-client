@@ -1175,6 +1175,17 @@ def test_a_removed_register_id_fails(repo: Path) -> None:
             ('a file not of its format',),
         ),
     ],
+    # Short IDs: pytest puts the test's ID in each subprocess's environment,
+    # and a 200,000-character one is past what exec takes.
+    ids=[
+        'register-deep',
+        'availability-deep',
+        'availability-retyped',
+        'baseline-deep',
+        'baseline-retyped',
+        'baseline-empty',
+        'known-differing-retyped',
+    ],
 )
 def test_an_unreadable_or_retyped_file_is_refused_by_name(
     repo: Path, tmp_path: Path, path: str, text: str, wanted: tuple[str, ...]
