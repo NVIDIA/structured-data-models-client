@@ -112,7 +112,9 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     named = given.get('from_source', {})
     if source != {
         'tables': list(named.get('tables', [])),
-        'primary_keys': {t: [k] for t, k in named.get('primary_keys', {}).items()},
+        'primary_keys': {
+            t: [k] for t, k in named.get('primary_keys', {}).items()
+        },
         'time_columns': named.get('time_columns', {}),
     }:
         problems.append('describe_source is not of its source')
@@ -148,9 +150,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     committed = {
         case['id']: case for case, _ in run_python.load_cases([CASES / 's1'])
     }
-    assert set(committed) == {
-        entry['id'] for entry in inventory['cases']
-    } | {'base.adventureworks'}
+    assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
+        'base.adventureworks'
+    }
     for entry in inventory['cases']:
         case = committed[entry['id']]
         assert case['status'] == 'diagnostic', entry['id']

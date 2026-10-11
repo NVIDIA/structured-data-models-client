@@ -540,10 +540,21 @@ fn a_probe_that_succeeds_or_hits_another_entry_fails() {
 #[test]
 fn the_family_maps_are_held_on_the_rust_host() {
     let maps = family_maps();
-    let families: Vec<&str> = maps.iter().map(|(_, map)| map["family"].as_str().unwrap()).collect();
+    let families: Vec<&str> = maps
+        .iter()
+        .map(|(_, map)| map["family"].as_str().unwrap())
+        .collect();
     assert_eq!(
         families.iter().copied().collect::<BTreeSet<_>>(),
-        BTreeSet::from(["baseline", "decimal", "empty-null", "keys", "nested", "refusal", "time"])
+        BTreeSet::from([
+            "baseline",
+            "decimal",
+            "empty-null",
+            "keys",
+            "nested",
+            "refusal",
+            "time"
+        ])
     );
     let observed = families_observed();
     // What refusal_map.py write --rust-observed reads, every map's probes
