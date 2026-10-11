@@ -31,7 +31,7 @@ use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, Materialize, Operation, OperationResult, Predict, ProfileSpec, QuerySchema,
-    RequestState, Seed, SourceDescription, SourceSpec, ValidateQuery,
+    RequestState, SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -293,23 +293,23 @@ fn take_warnings(handle: &HostRun, into: &mut Vec<Value>) -> Result<()> {
 
 /// Runs a started operation to its result, answering each fetch with the
 /// DuckDB provider and the key sets the step names, and recording each
-/// fetch in `fetches`: the result and the run, or the core's error.
+/// fetch in `fetches`: the result, or the core's error.
 fn drive(
     case: &Case,
-    handle: HostRun,
+    handle: &HostRun,
     connection: &duckdb::Connection,
     observed: &mut Observed,
     log: &mut DriverLog,
-) -> Result<std::result::Result<(OperationResult, HostRun), Answer>> {
+) -> Result<std::result::Result<OperationResult, Answer>> {
     loop {
         let next = handle.next();
-        take_warnings(&handle, &mut observed.warnings)?;
+        take_warnings(handle, &mut observed.warnings)?;
         let out = match next {
             Ok(out) => out,
             Err(failed) => return Ok(Err(error_of(&failed)?)),
         };
         match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
-            ControlMessage::Step(Step::Done { result }) => return Ok(Ok((result, handle))),
+            ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
                     observed
@@ -450,12 +450,12 @@ fn describe_on(
         }
     };
     log.stage = "from_source";
-    let described = match drive(case, handle, connection, &mut observed, log)? {
+    let described = match drive(case, &handle, connection, &mut observed, log)? {
         Err(answer) => {
             observed.answer = answer;
             return Ok(observed);
         }
-        Ok((OperationResult::DescribeSource(described), handle)) => {
+        Ok(OperationResult::DescribeSource(described)) => {
             let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(described.description)
             else {
                 bail!("{}: the description is not attached", case.id);
@@ -474,7 +474,8 @@ fn describe_on(
     let described: SourceDescription = serde_json::from_value(described)
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
     let schema = edits::edited(&described, edits).with_context(|| case.id.clone())?;
-    let Some(state) = materialize(case, spec, &schema, connection, &mut observed, log)? else {
+    let Some(state) = materialize(case, spec, &schema, connection, &mut observed, log, None)?
+    else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
@@ -560,9 +561,15 @@ pub struct HeldState {
     pub query: Vec<u8>,
 }
 
+/// A materializer's sampler state as this host keeps it between runs
+/// (decision E52): its version and its memo's bytes, as the run left them.
+pub type HeldSampler = (u32, Vec<u8>);
+
 /// `materialize` over the case's DuckDB base, after its `describe_source`,
 /// sampling `schema`: the request state it answered, held for `predict`,
-/// or none when it answered an error.
+/// or none when it answered an error. With `sampler`, the sampler state
+/// held there is handed to the run, and the one the run leaves, done or
+/// failed, is put there in its place.
 fn materialize(
     case: &Case,
     spec: &MaterializeInput,
@@ -570,6 +577,7 @@ fn materialize(
     connection: &duckdb::Connection,
     observed: &mut Observed,
     log: &mut DriverLog,
+    sampler: Option<&mut Option<HeldSampler>>,
 ) -> Result<Option<HeldState>> {
     log.stage = "materialize";
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
@@ -619,11 +627,17 @@ fn materialize(
             anchor_entity: false,
             num_context_samples: None,
             options: vec![],
-            sampler_state: None,
+            sampler_state: sampler
+                .as_ref()
+                .and_then(|held| held.as_ref())
+                .map(|(version, _)| SamplerState {
+                    version: *version,
+                    memo: AttachmentId(4),
+                }),
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
-    let attachments = BTreeMap::from([
+    let mut attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(schema_bytes)),
         (AttachmentId(2), Attachment::Bytes(query_bytes)),
         (
@@ -631,6 +645,9 @@ fn materialize(
             Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
         ),
     ]);
+    if let Some(Some((_, memo))) = sampler.as_ref().map(|held| held.as_ref()) {
+        attachments.insert(AttachmentId(4), Attachment::Bytes(memo.clone()));
+    }
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
@@ -638,12 +655,16 @@ fn materialize(
             return Ok(None);
         }
     };
-    match drive(case, handle, connection, observed, log)? {
+    let driven = drive(case, &handle, connection, observed, log)?;
+    if let Some(held) = sampler {
+        keep_sampler(&handle, held)?;
+    }
+    match driven {
         Err(answer) => {
             observed.answer = answer;
             Ok(None)
         }
-        Ok((OperationResult::Materialize(materialized), handle)) => {
+        Ok(OperationResult::Materialize(materialized)) => {
             let state = materialized.state;
             let bytes = |id| -> Result<Vec<u8>> {
                 match handle.take_attachment(id) {
@@ -667,6 +688,80 @@ fn materialize(
         }
         Ok(_) => bail!("{}: materialize answered another operation", case.id),
     }
+}
+
+/// Puts the sampler state `handle`'s run left in `held`, as it was taken.
+fn keep_sampler(handle: &HostRun, held: &mut Option<HeldSampler>) -> Result<()> {
+    let Some(out) = handle
+        .take_sampler_state()
+        .map_err(|_| anyhow!("the sampler state could not be taken"))?
+    else {
+        return Ok(());
+    };
+    let ControlMessage::SamplerState { state } =
+        read(&out).map_err(|_| anyhow!("an unreadable sampler state"))?
+    else {
+        bail!("the run left a message that is not a sampler state");
+    };
+    let Ok(Some(Attachment::Bytes(memo))) = handle.take_attachment(state.memo) else {
+        bail!("the sampler state's memo is not attached");
+    };
+    *held = Some((state.version, memo));
+    Ok(())
+}
+
+/// `case`'s `describe_source`, then its `materialize` `calls` times on one
+/// materializer, each run handed the sampler state the one before it left
+/// (decision E52), over one DuckDB base: what each call observed, its
+/// fetches and warnings, as a binding's materializer makes its calls.
+pub fn materialize_repeatedly(case: &Case, bases: &Bases, calls: usize) -> Result<Vec<Observed>> {
+    let core = case.core.as_ref();
+    let (Some(describe_spec), Some(spec)) = (
+        core.and_then(|c| c.describe_source.as_ref()),
+        core.and_then(|c| c.materialize.as_ref()),
+    ) else {
+        bail!("{}: names no describe_source and materialize", case.id);
+    };
+    let connection = database(case, bases)?;
+    let mut log = DriverLog::default();
+    // The description alone: the calls below are this function's.
+    let mut describing = case.clone();
+    if let Some(core) = describing.core.as_mut() {
+        core.materialize = None;
+        core.predict = None;
+    }
+    let mut first = describe_on(&describing, describe_spec, &connection, &mut log, &[])?;
+    let described: SourceDescription = serde_json::from_value(
+        first
+            .described
+            .take()
+            .ok_or_else(|| anyhow!("{}: nothing was described", case.id))?,
+    )?;
+    let mut held = None;
+    let mut seen = Vec::with_capacity(calls);
+    for _ in 0..calls {
+        let mut observed = Observed {
+            operations: Vec::new(),
+            inputs: Vec::new(),
+            fetches: Vec::new(),
+            described: None,
+            materialized: None,
+            answer: Answer::Validated(false),
+            warnings: Vec::new(),
+            driver: None,
+        };
+        materialize(
+            case,
+            spec,
+            &described,
+            &connection,
+            &mut observed,
+            &mut log,
+            Some(&mut held),
+        )?;
+        seen.push(observed);
+    }
+    Ok(seen)
 }
 
 /// The id this host's `predict` requests carry. The reference's client

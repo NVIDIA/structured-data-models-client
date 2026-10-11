@@ -1358,3 +1358,55 @@ fn a_listed_table_the_schema_may_not_name_is_refused() {
     assert_eq!(code, "INVALID_REQUEST");
     assert_eq!(fields["field"], "tables");
 }
+
+/// Decision E52 on this host, the parity of the Python host's
+/// `test_a_second_call_runs_the_reference_s_statements`: one materializer's
+/// three calls on `base.regression`, each handed the sampler state the one
+/// before it left, run the reference's statements (6, then 4: the index
+/// read and the time bounds the first made are skipped), warn of the
+/// missing indexes once, and answer the same request each time.
+#[test]
+fn a_materializer_s_later_calls_skip_what_its_first_read() {
+    let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    let calls = host::materialize_repeatedly(&loaded[0].case, &bases, 3).unwrap();
+    let kinds: Vec<Vec<String>> = calls
+        .iter()
+        .map(|call| {
+            call.fetches
+                .iter()
+                .map(|f| f["request"]["request"].as_str().unwrap().to_owned())
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        kinds[0],
+        [
+            "describe",
+            "time_bounds",
+            "sample_entities",
+            "neighbors",
+            "lookup",
+            "neighbors"
+        ]
+    );
+    for later in &kinds[1..] {
+        assert_eq!(
+            later,
+            &["sample_entities", "neighbors", "lookup", "neighbors"]
+        );
+    }
+    let warned: Vec<Vec<String>> = calls
+        .iter()
+        .map(|call| {
+            call.warnings
+                .iter()
+                .map(|w| w["code"].as_str().unwrap().to_owned())
+                .collect()
+        })
+        .collect();
+    assert_eq!(warned, [vec!["MISSING_INDICES".to_owned()], vec![], vec![]]);
+    let answered: Vec<&Option<Value>> = calls.iter().map(|call| &call.materialized).collect();
+    assert!(answered[0].is_some());
+    assert!(answered.iter().all(|a| *a == answered[0]));
+}
