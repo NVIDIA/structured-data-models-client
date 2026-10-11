@@ -161,12 +161,28 @@ def run(
     try:
         handle = core.Run.start(start, attachments)
     except core.CoreError as refused:
+        if state is not None and held is not None and _names_the_state(refused):
+            # A state the core refuses is no state to hand back again: the
+            # next run starts without one.
+            state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
         return _steps(core, handle, provider, model, quiet, given)
     finally:
         if state is not None:
             _keep(core, handle, state)
+
+
+def _names_the_state(refused: Any) -> bool:
+    r"""Whether the core's refusal of a start names the sampler state
+    handed to it (``field`` ``sampler_state``, or a field of it)."""
+    try:
+        message = codec.read(refused.control, refused.attachments)
+        field = message['error']['fields'].get('field') or {}
+    except (codec.CodecError, KeyError, TypeError, AttributeError):
+        return False
+    value = field.get('v') if isinstance(field, dict) else None
+    return isinstance(value, str) and value.split('.')[0] == 'sampler_state'
 
 
 def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:

@@ -24,13 +24,13 @@
 //! rows once; its columns cut to its features (and the entity table's key);
 //! and each text feature as its words ([`sdm_engine::words`]).
 //!
-//! A null where the walk tells rows apart is refused by name (register
-//! P1B-13): a foreign key it looks up holding one (`null_foreign_key`),
-//! which the reference takes for the last key it looked up whenever that
-//! key was found, and a key of a table it samples holding one
-//! (`null_key`), every such row of which the reference numbers as one; it
-//! then numbers the rows it adds out of step with the rows it keeps, so the
-//! request it builds links rows across examples.
+//! A null where the walk tells rows apart is no link (register P1B-13,
+//! approved by the owner): a null foreign key the walk looks up adds no
+//! row and is sent as null, and a row of a table read by foreign key whose
+//! key is null is no other row's, reached anew. The reference takes such a
+//! null for the last key it looked up, or numbers every such row as one,
+//! and then numbers the rows it adds out of step with the rows it keeps,
+//! so its request links rows across examples.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -42,7 +42,6 @@ use sdm_contract::data::NullOrder;
 use sdm_contract::ops::Stype;
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
-use sdm_engine::not_yet;
 use sdm_engine::sample::{self, SEED_TIME};
 use sdm_request::payload::{SampledColumn, SampledLink, SampledTable};
 
@@ -231,28 +230,13 @@ impl Walk<'_> {
         let visit = &mut visits[at];
         let frame = concat(&visit.frames[visit.offset..])?;
         let batch: Vec<usize> = visit.batches[visit.offset..].concat();
+        // Each row's number is its place among the table's rows, in the
+        // order they were reached (the reference's `Mapper` numbers a row
+        // reached anew next, and a row of a table without a key, or whose
+        // key is null, is always reached anew).
+        let start: usize = visit.batches[..visit.offset].iter().map(Vec::len).sum();
+        let index: Vec<usize> = (start..start + batch.len()).collect();
         visit.offset = visit.frames.len();
-        let pkeys = match &table.primary_key {
-            Some(key) => Some(keys::read(named(&frame, key)?)?),
-            None => None,
-        };
-        // Each row's number: by its key and example, or, for a table
-        // without a key, in the order this hop's rows were reached.
-        let index: Vec<usize> = match &pkeys {
-            Some(pkeys) => pkeys
-                .iter()
-                .zip(&batch)
-                .map(|(key, &example)| {
-                    key.clone()
-                        .and_then(|key| visit.nodes.get(&(key, example)).copied())
-                        .ok_or_else(|| internal("a visited row has no number"))
-                })
-                .collect::<Result<_, _>>()?,
-            None => {
-                let start: usize = visit.counts[..hop].iter().sum();
-                (start..start + batch.len()).collect()
-            }
-        };
 
         // The foreign keys: each key not yet reached for its example looked
         // up in the table it refers to.
@@ -270,19 +254,20 @@ impl Walk<'_> {
                 .collect();
             let missing: Vec<usize> = (0..row.len()).filter(|&i| row[i].is_none()).collect();
             if !missing.is_empty() {
-                if missing.iter().any(|&i| values[i].is_none()) {
-                    return Err(not_yet("null_foreign_key"));
-                }
                 // The distinct (key, example) pairs, in the order first
-                // reached; the distinct keys among them, likewise.
+                // reached, and the distinct keys among them, likewise; a
+                // null refers to nothing, so it is looked up for no row and
+                // adds none (register P1B-13), though a lookup is still
+                // made, of no key when every one missing is null, as the
+                // reference makes it.
                 let mut pairs: Vec<(Key, usize)> = Vec::new();
                 let mut paired: BTreeSet<(Key, usize)> = BTreeSet::new();
                 let mut distinct: BTreeMap<Key, usize> = BTreeMap::new();
                 let mut first_row: Vec<usize> = Vec::new();
                 for &i in &missing {
-                    let key = values[i]
-                        .clone()
-                        .ok_or_else(|| internal("a null key reached the lookup"))?;
+                    let Some(key) = values[i].clone() else {
+                        continue;
+                    };
                     if !distinct.contains_key(&key) {
                         distinct.insert(key.clone(), first_row.len());
                         first_row.push(i);
@@ -333,10 +318,16 @@ impl Walk<'_> {
                     let added_keys = keys::read(named(&added, dst_key)?)?;
                     let dst_at = reach(visits, dst);
                     let dst_visit = &mut visits[dst_at];
-                    for (key, &example) in added_keys.into_iter().zip(&examples) {
+                    let known = dst_visit.rows();
+                    for (added_row, (key, &example)) in
+                        added_keys.into_iter().zip(&examples).enumerate()
+                    {
                         let key = key.ok_or_else(|| internal("a key looked up is null"))?;
-                        let next = dst_visit.nodes.len();
-                        if dst_visit.nodes.insert((key, example), next).is_some() {
+                        if dst_visit
+                            .nodes
+                            .insert((key, example), known + added_row)
+                            .is_some()
+                        {
                             return Err(internal("a row looked up was already reached"));
                         }
                     }
@@ -415,16 +406,18 @@ impl Walk<'_> {
             let known = src_visit.rows();
             let (rows, kept) = match &src_table.primary_key {
                 Some(key) => {
-                    if src_visit.nodes.len() != known {
-                        return Err(internal("a table's rows and numbers disagree"));
-                    }
                     let values = keys::read(named(&fetched, key)?)?;
                     let mut rows = Vec::with_capacity(values.len());
                     let mut kept = Vec::new();
                     for (i, (value, &example)) in values.into_iter().zip(&examples).enumerate() {
-                        let value = value.ok_or_else(|| not_yet("null_key"))?;
-                        let next = src_visit.nodes.len();
-                        let number = *src_visit.nodes.entry((value, example)).or_insert(next);
+                        let next = known + kept.len();
+                        // A null key is no row's but its own: the row is
+                        // reached anew, never one already reached (register
+                        // P1B-13).
+                        let number = match value {
+                            None => next,
+                            Some(value) => *src_visit.nodes.entry((value, example)).or_insert(next),
+                        };
                         if number == next {
                             kept.push(i);
                         }
@@ -580,13 +573,21 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
 /// them (`inverse_dict`).
 fn first_of_each_key(frame: RecordBatch, key: &str) -> Result<RecordBatch, CoreError> {
     let values = keys::read(named(&frame, key)?)?;
-    let mut first: BTreeMap<Option<Key>, usize> = BTreeMap::new();
+    let mut first: BTreeMap<Key, usize> = BTreeMap::new();
+    let mut nulls = 0;
+    // A null key is no other row's: each such row is its own.
     let rows: Vec<usize> = values
         .into_iter()
         .enumerate()
-        .map(|(row, value)| *first.entry(value).or_insert(row))
+        .map(|(row, value)| match value {
+            Some(value) => *first.entry(value).or_insert(row),
+            None => {
+                nulls += 1;
+                row
+            }
+        })
         .collect();
-    if (rows.len() as f64) > 1.05 * first.len() as f64 {
+    if (rows.len() as f64) > 1.05 * (first.len() + nulls) as f64 {
         take(&frame, &rows)
     } else {
         Ok(frame)

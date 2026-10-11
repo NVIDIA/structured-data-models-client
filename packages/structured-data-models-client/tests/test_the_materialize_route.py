@@ -1116,37 +1116,96 @@ def _crossing(payload: dict[str, Any]) -> int:
     return crossing
 
 
+def _unreferenced(payload: dict[str, Any]) -> int:
+    r"""How many rows of ``payload``'s items no order of their own example
+    refers to."""
+    unreferenced = 0
+    for half in ('context', 'predict'):
+        tables = payload[half]['related_tables']
+        if 'items' not in tables:
+            continue
+        orders = tables['orders']
+        at = orders['columns'].index('item_id')
+        referred = {
+            (row[0], int(row[at]))
+            for row in orders['rows']
+            if row[at] is not None
+        }
+        items = tables['items']
+        key = items['columns'].index('__node_id')
+        unreferenced += sum(
+            (row[0], row[key]) not in referred for row in items['rows']
+        )
+    return unreferenced
+
+
 @pytest.mark.parametrize(
-    ('setup', 'rule'),
+    'setup',
     [
         # A foreign key the walk looks up, null in some rows.
-        (
-            ('UPDATE orders SET item_id = NULL WHERE order_id % 3 = 0',),
-            'null_foreign_key',
-        ),
+        ('UPDATE orders SET item_id = NULL WHERE order_id % 3 = 0',),
         # A key of a table the walk samples, null in some rows.
-        (
-            ('UPDATE orders SET order_id = NULL WHERE order_id % 13 = 6',),
-            'null_key',
-        ),
+        ('UPDATE orders SET order_id = NULL WHERE order_id % 13 = 6',),
     ],
 )
-def test_a_null_key_the_walk_reaches_is_refused_by_name(
-    monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...], rule: str
+def test_a_null_key_the_walk_reaches_links_nothing(
+    monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...]
 ) -> None:
-    # Register P1B-13: the reference numbers such rows out of step (a null
-    # foreign key taken for the last key it looked up, every null key as
-    # one row), so the request it builds links rows across examples; the
-    # core refuses by name. Diagnostic: the old route's crossing links are
-    # held where the engine is installed.
+    # Register P1B-13, approved by the owner (2026-10-11): a null is no
+    # link. The core adds no row for a null foreign key and sends it as
+    # null, and takes a row whose key is null as no other row; every link
+    # it sends names a row of its own example, and every row it adds is
+    # referred to. The reference numbers such rows out of step, so its
+    # request links rows across examples (held on the old route where the
+    # engine is installed).
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with pytest.raises(StructuredDataError) as refused:
-        _deeper(*setup, edit=False)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['rule'] == rule
+    core = _deeper(*setup, edit=False)._payloads[0]
+    assert _crossing(core) == 0
+    assert _unreferenced(core) == 0
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if importlib.util.find_spec('sdm_relational_engine') is not None:
-        assert _crossing(_deeper(*setup, edit=False)._payloads[0]) > 0
+        old = _deeper(*setup, edit=False)._payloads[0]
+        assert _crossing(old) > 0
+
+
+def test_every_foreign_key_looked_up_null_is_the_reference_s_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Where the reference is clean, the core is it: every item key null,
+    # the reference looks up no key (one statement, no row) and sends each
+    # null; so does the core, statement for statement.
+    def made() -> list[tuple[int, int]]:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            connection = _connection(
+                *_DEEPER, 'UPDATE orders SET item_id = NULL'
+            )
+            schema = Schema.from_source(
+                DuckDBSource(connection),
+                primary_keys={
+                    'users': 'user_id',
+                    'orders': 'order_id',
+                    'items': 'item_id',
+                },
+            )
+        connection.execute("CALL enable_logging('QueryLog')")
+        query = PredictiveQuery(QUERY, schema)
+        return _calls([query, query], connection, indices=[0, 1])
+
+    found = _on_both_routes(monkeypatch, made)
+    assert found[0] == [(7, 1), (5, 0)]
+    assert all(each == found[0] for each in found)
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[0]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    assert 'items' not in core['context']['related_tables']
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        old = _deeper('UPDATE orders SET item_id = NULL', edit=False)._payloads[
+            0
+        ]
+        assert json.loads(json.dumps(core)) == json.loads(
+            json.dumps(old, default=str)
+        )
 
 
 #: The shop with a second time column, a second key and a second table
@@ -1260,3 +1319,30 @@ def test_a_schema_edited_between_two_calls_is_sampled_as_edited(
             ._payloads[0]
         )
     assert json.dumps(fresh, sort_keys=True, default=str) == core[1][2]
+
+
+@pytest.mark.parametrize(
+    'held',
+    [
+        {'version': 99, 'memo': b'{}'},
+        {'version': 1, 'memo': b'not a memo'},
+    ],
+)
+def test_a_state_the_core_refuses_is_not_handed_back_again(
+    monkeypatch: pytest.MonkeyPatch, held: dict[str, Any]
+) -> None:
+    # A state of another version, or a memo that does not read, is refused
+    # by name at the start, and dropped: the next call starts afresh, as a
+    # materializer's first does, rather than being refused the same way.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    connection, schema = _shop_logged()
+    query = PredictiveQuery(QUERY, schema)
+    query._relational_materializer._core_sampler_state['held'] = held
+    with pytest.raises(StructuredDataError) as refused:
+        query.materialize(indices=[0, 1], anchor_time=ANCHOR)
+    assert refused.value.code in ('INVALID_REQUEST', 'INVALID_MESSAGE')
+    assert 'held' not in query._relational_materializer._core_sampler_state
+    assert _calls([query, query], connection, indices=[0, 1]) == [
+        (6, 1),
+        (4, 0),
+    ]

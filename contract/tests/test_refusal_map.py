@@ -142,6 +142,14 @@ def test_the_case_asks_for_the_product_most_sold() -> None:
 # --- the map ----------------------------------------------------------------------
 
 
+def _awaits_or_the_owner_s(entry: dict[str, Any]) -> bool:
+    r"""Whether a register entry waits for the owner or the owner approved
+    it: never one approved by anyone else."""
+    return entry['status'] == 'proposed' or (
+        entry['status'] == 'approved' and entry['approved_by'] == 'owner'
+    )
+
+
 def test_every_entry_names_its_rule_operation_owner_and_proposed_entry() -> (
     None
 ):
@@ -156,8 +164,8 @@ def test_every_entry_names_its_rule_operation_owner_and_proposed_entry() -> (
     for entry in document['entries']:
         assert refusal_map.OWNER.fullmatch(entry['owner']), entry['id']
         # Never self-approved: the entry the refusal is under waits for the
-        # owner.
-        assert register[entry['register']]['status'] == 'proposed', entry['id']
+        # owner, or the owner approved it (E66's class rule).
+        assert _awaits_or_the_owner_s(register[entry['register']]), entry['id']
         path, _, lines = entry['where'].partition(':')
         assert (ROOT / path).is_file(), entry['id']
         first, last = re.match(r'(\d+)(?:-(\d+))?', lines).groups()
@@ -718,8 +726,8 @@ def test_every_family_entry_is_owned_cited_and_registered_or_the_reference_s() -
                 )
             else:
                 # Never self-approved: the entry the refusal is under
-                # waits for the owner.
-                assert register[entry['register']]['status'] == 'proposed', (
+                # waits for the owner, or the owner approved it.
+                assert _awaits_or_the_owner_s(register[entry['register']]), (
                     where
                 )
         for gap in document['gaps']:
