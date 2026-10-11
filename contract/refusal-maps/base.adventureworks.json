@@ -1,7 +1,7 @@
 {
   "format": "sdm-refusal-map/1",
   "case": "base.adventureworks",
-  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is; its tables named as the source names them; then without the relationships, the keys and the time columns passed in; then with the columns dropped from the data whose inference the core refuses, one rule at a time, until describe_source succeeds; then the notebook's schema made by editing what the core described (keys, relationships, the products' time column cleared, rowguid deleted) and materialized with inference_config, without it, with one hop, and without the text column, which reaches predict's result on both runners. What the probes removed is the scope this map gives T1.23 to T1.28; a rule no probe reached past (predict with inference_config, a time column cleared in Schema.from_source) is not in it and stays refused (P1B). rust-host starts the core operations, so it has a probe only where the contract can carry the input (gaps).",
+  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is; its tables named as the source names them; then without the relationships, the keys and the time columns passed in; then with the columns dropped from the data whose inference the core refuses, one rule at a time, until describe_source succeeds; then the notebook's schema made by editing what the core described (keys, relationships, the products' time column cleared, rowguid deleted) and materialized with inference_config, without it, with one hop, and without the text column, which reaches predict's result on both runners. What the probes removed is the scope this map gives T1.23 to T1.28a; a rule no probe reached past (predict with inference_config, a time column cleared in Schema.from_source) is not in it and stays refused (P1B). rust-host starts the core operations, so it has a probe only where the contract can carry the input (gaps).",
   "gaps": [
     {
       "input": "tables named by another name than their source's ({'customers': 'adventureworks_customers'})",
@@ -16,7 +16,7 @@
     {
       "input": "materialize's inference_config",
       "contract": "neither materialize's nor predict's input carries inference options",
-      "owner": "T1.28"
+      "owner": "T1.28a"
     }
   ],
   "entries": [
@@ -212,11 +212,11 @@
       "id": "materialize/inference_config",
       "operation": "materialize (refused by the materialize bridge before the core runs)",
       "rule": "inference_config",
-      "owner": "T1.28",
+      "owner": "T1.28a",
       "register": "P1B-3",
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:243-245",
       "holds": "raise _not_taken(name)",
-      "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28); the contract's materialize and predict inputs have no place for them yet, and T1.24 passes the option through to the core rather than refuse it in the bridge",
+      "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28a); the contract's materialize and predict inputs have no place for them yet, and T1.24 passes the option through to the core rather than refuse it in the bridge",
       "observed": {
         "python-core": {
           "stage": "materialize",

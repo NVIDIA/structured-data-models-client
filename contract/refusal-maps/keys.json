@@ -13,7 +13,7 @@
     "key.varchar",
     "null.some-foreign-keys"
   ],
-  "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. The integer, unsigned and text keys reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-1); the uint64 keys past int64 are refused as the reference refuses them; the decimal keys are described on both runners and refused by the bridge's cast on python-core, rust-host not carrying their entities (gap).",
+  "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. The integer, unsigned and text keys reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-6); the uint64 keys past int64 are refused as the reference refuses them; the decimal keys are described on both runners and refused by the bridge's cast on python-core, rust-host not carrying their entities (gap).",
   "gaps": [
     {
       "input": "a decimal key's entities (key.hugeint, key.decimal-18-0, key.decimal-38-10)",

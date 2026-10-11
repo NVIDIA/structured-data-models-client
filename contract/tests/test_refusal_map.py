@@ -498,13 +498,14 @@ def test_the_reader_refuses_deep_and_wide_maps_by_name(tmp_path: Path) -> None:
 
 def test_the_owners_a_map_may_name() -> None:
     # E50 (T1.10e): T1.21c and T1.21d join T1.22 to T1.28; T1.21e adds the
-    # inventory's families, T1.32a to T1.32e, and T1.28's halves; their
-    # neighbours, a landed package and a later one stay refused.
+    # inventory's families, T1.32a to T1.32e, and T1.28's halves, which
+    # replace it (T1.12b); their neighbours, a landed package, a later one
+    # and the T1.28 the split left behind stay refused.
     for task in (
         'T1.21c',
         'T1.21d',
         'T1.22',
-        'T1.28',
+        'T1.27',
         'T1.28a',
         'T1.28b',
         'T1.32a',
@@ -516,6 +517,7 @@ def test_the_owners_a_map_may_name() -> None:
         'T1.21b',
         'T1.21e',
         'T1.21cd',
+        'T1.28',
         'T1.28c',
         'T1.29',
         'T1.32',
@@ -1002,6 +1004,44 @@ def test_the_writer_s_script_fails_on_supplied_rust_evidence_it_lacks(
     )
     assert run.returncode != 0
     assert problem in run.stdout + run.stderr
+    # Subagent Nit-1 (fix round 2): the map is left as it was; what the
+    # run would make is beside it, as a draft.
+    assert target.read_text() == (MAPS / 'baseline.json').read_text()
+    if 'not observed' in problem:
+        draft = tmp_path / 'baseline.json.draft'
+        assert 'left as it was' in run.stdout
+        assert json.loads(draft.read_text())['family'] == 'baseline'
+
+
+def test_the_writer_s_script_rewrites_a_map_its_run_holds(
+    tmp_path: Path,
+) -> None:
+    # The control: given the whole of its evidence, the script rewrites
+    # the map, the same, and leaves no draft.
+    import subprocess
+
+    document = _family_maps()['baseline']
+    target = tmp_path / 'baseline.json'
+    target.write_text((MAPS / 'baseline.json').read_text())
+    evidence = tmp_path / 'observed.json'
+    evidence.write_text(json.dumps({'baseline.json': _rust_run(document)}))
+    run = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(RUNNERS / 'refusal_map.py'),
+            'write',
+            str(target),
+            '--rust-observed',
+            str(evidence),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert target.read_text() == (MAPS / 'baseline.json').read_text()
+    assert not (tmp_path / 'baseline.json.draft').exists()
 
 
 def test_a_family_all_of_whose_refusals_are_lifted_round_trips(

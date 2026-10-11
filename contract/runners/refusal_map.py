@@ -59,7 +59,9 @@ every map's rust-host probes when run as::
         --test refusal_map the_family_maps_are_held_on_the_rust_host
 
 Without FILE the map's rust-host observations are kept; with it, every
-rust-host probe must be observed there, and nothing else.
+rust-host probe must be observed there, and nothing else. A run that
+leaves anything to report leaves MAP as it was and writes the map it would
+make beside it, as MAP.draft, for a person to finish.
 
 A map whose every probe succeeds on every runner it names has no entries:
 its probes stay, as the evidence that nothing is refused.
@@ -85,9 +87,10 @@ FIELDS = {
 }
 STAGES = ('from_source', 'materialize', 'predict')
 #: The tasks a refusal of a map may name as its owner: T1.21c and T1.21d
-#: (E50, added at T1.10e), T1.22 to T1.28 (T1.28a and T1.28b, its halves
-#: from T1.12b) and the inventory's families, T1.32a to T1.32e (T1.21e).
-OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-7]|28[ab]?|32[a-e])$')
+#: (E50, added at T1.10e), T1.22 to T1.27, T1.28a and T1.28b (T1.28's
+#: halves from T1.12b, which leave no T1.28) and the inventory's families,
+#: T1.32a to T1.32e (T1.21e).
+OWNER = re.compile(r'^T1\.(?:21[cd]|2[2-7]|28[ab]|32[a-e])$')
 #: The family maps' families: the inventory's seams.
 FAMILIES = (
     'keys',
@@ -1015,16 +1018,23 @@ def _main(argv: list[str] | None = None) -> int:
         raise MapFailure(
             f'{arguments.map.name}: not a map or its skeleton'
         ) from None
-    arguments.map.write_text(
-        json.dumps(written, indent=2, ensure_ascii=False) + '\n',
-        encoding='utf-8',
-    )
     for line in report:
         print(line)
     problem = shape(written)
     if problem is not None:
         print(f'not yet a map: {problem}')
-    return 1 if report or problem else 0
+    # The map is rewritten only when the run is the whole of its evidence
+    # and nothing is left to write by hand; otherwise the file is left as
+    # it was, and the map the run would make is beside it, for a person to
+    # finish.
+    text = json.dumps(written, indent=2, ensure_ascii=False) + '\n'
+    if report or problem:
+        draft = arguments.map.with_name(arguments.map.name + '.draft')
+        draft.write_text(text, encoding='utf-8')
+        print(f'{arguments.map.name} left as it was; the draft is {draft.name}')
+        return 1
+    arguments.map.write_text(text, encoding='utf-8')
+    return 0
 
 
 if __name__ == '__main__':
