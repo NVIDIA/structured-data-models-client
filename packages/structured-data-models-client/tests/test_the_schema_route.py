@@ -878,8 +878,25 @@ def test_a_key_or_time_column_named_wrongly_is_refused_as_the_old_route_does(
     assert old.value.code == 'INVALID_REQUEST'
 
 
+def _failing(provider: Any, table: str | None) -> Any:
+    r"""``provider``, but failing, as a driver fails, the reading of
+    ``table``'s columns: a provider's error the core did not cause."""
+
+    def answer(step: dict[str, Any], keys: Any) -> Any:
+        request = step['request']
+        if (
+            table is not None
+            and request.get('part') == 'columns'
+            and request.get('tables') == [table]
+        ):
+            raise duckdb.IOException('the source went away')
+        return provider(step, keys)
+
+    return answer
+
+
 def _named_on_the_core(
-    connection: Any, tables: dict[str, str]
+    connection: Any, tables: dict[str, str], fail_columns_of: str | None = None
 ) -> tuple[dict[str, Any], list[tuple[str, str]]]:
     r"""The core's ``describe_source`` over ``tables`` named (T1.23), built
     into today's ``Schema`` by the schema bridge, as T1.24's route will:
@@ -903,7 +920,7 @@ def _named_on_the_core(
                 'check_keys': True,
             },
             {1: codec.attachment(spec)},
-            provider=DuckDBProvider(connection),
+            provider=_failing(DuckDBProvider(connection), fail_columns_of),
         )
         described = json.loads(finished.take(finished.result['description']))
         schema = bridge.build(Schema, DuckDBSource(connection), described)
@@ -1028,3 +1045,123 @@ def test_a_source_table_that_is_not_there_is_refused_as_the_old_route_does(
     with pytest.raises(StructuredDataError) as old:
         _named_on_the_old_route(monkeypatch, _connection(), {'x': 'nope'})
     assert old.value.code == 'INVALID_REQUEST'
+
+
+#: A source holding a table and a view of it, and a table named with a
+#: capital that is not ASCII, which DuckDB does not fold.
+HELD = (
+    'CREATE TABLE parent (id BIGINT PRIMARY KEY, label VARCHAR)',
+    "INSERT INTO parent VALUES (1, 'a'), (2, 'b'), (3, 'c')",
+    'CREATE VIEW parent_view AS SELECT * FROM parent',
+    'CREATE TABLE "Äpfel" (apfel_id BIGINT PRIMARY KEY)',
+    'INSERT INTO "Äpfel" VALUES (1), (2)',
+)
+
+
+def test_a_relation_the_source_holds_keeps_its_provider_s_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.23 fix 2 (Codex P2, subagent P3-5): the source says whether it
+    # holds a relation of the name, a table or a view, by its own matching
+    # of names (sdm-data's rendering); the core matches none, and calls
+    # the caller's naming wrong only where the source holds nothing of it.
+    def held() -> Any:
+        connection = duckdb.connect()
+        for statement in HELD:
+            connection.execute(statement)
+        return connection
+
+    # A view is described, as on the old route.
+    core, _ = _named_on_the_core(held(), {'valid': 'parent_view'})
+    assert [t['name'] for t in core['tables']] == ['valid']
+    # A failure reading a view's or a table's columns stays the provider's.
+    for source in ('parent_view', 'parent', 'PARENT'):
+        with pytest.raises(StructuredDataError) as failed:
+            _named_on_the_core(held(), {'x': source}, fail_columns_of=source)
+        assert failed.value.code == 'PROVIDER_ERROR', source
+    # A table the source does not hold, or holds under a name DuckDB does
+    # not fold to the one given, is the caller's naming, as on the old
+    # route.
+    for source in ('nope', 'äpfel'):
+        with pytest.raises(StructuredDataError) as missing:
+            _named_on_the_core(held(), {'x': source})
+        assert missing.value.code == 'INVALID_REQUEST', source
+        assert missing.value.details['field'] == 'tables'
+        if importlib.util.find_spec('sdm_relational_engine') is None:
+            continue
+        with pytest.raises(StructuredDataError) as old:
+            _named_on_the_old_route(monkeypatch, held(), {'x': source})
+        assert old.value.code == 'INVALID_REQUEST', source
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    old_schema, _ = _named_on_the_old_route(
+        monkeypatch, held(), {'valid': 'parent_view'}
+    )
+    assert core == old_schema
+
+
+def test_where_the_core_and_the_old_route_differ_on_names_both_are_pinned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register P1B-5 (tables named, T1.23 fix 2) and P1B-11 (two faults of
+    # one input), proposed: each outcome on both routes, so a change to
+    # either fails here.
+    dotted = (
+        'CREATE TABLE "a.b" (id BIGINT PRIMARY KEY)',
+        'INSERT INTO "a.b" VALUES (1), (2)',
+    )
+    # A plain name over a source table named with a dot: described on the
+    # core, refused on the old route, whose pragma reads it as another name.
+    core, _ = _named_on_the_core(_connection(*dotted), {'ok': 'a.b'})
+    assert [t['name'] for t in core['tables']] == ['ok']
+    # A qualified or quoted source name: the core reads it by name, finds
+    # nothing and refuses the naming; the old route fails in its engine,
+    # unnamed (GraphConstructionError).
+    for source in ('main.users', '"users"'):
+        with pytest.raises(StructuredDataError) as named:
+            _named_on_the_core(_connection(), {'x': source})
+        assert named.value.code == 'INVALID_REQUEST', source
+    # An empty table under a name the schema may not give: the core checks
+    # the names first (INVALID_REQUEST), the old route reads the table
+    # first (an unnamed RuntimeError).
+    empty = ('CREATE TABLE "a`b" (id BIGINT)',)
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as both:
+        Schema.from_source(DuckDBSource(_connection(*empty)))
+    assert both.value.code == 'INVALID_REQUEST'
+    if importlib.util.find_spec('sdm_relational_engine') is None:
+        return
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    with pytest.raises(StructuredDataError) as old_dotted:
+        _named_on_the_old_route(
+            monkeypatch, _connection(*dotted), {'ok': 'a.b'}
+        )
+    assert old_dotted.value.code == 'INVALID_REQUEST'
+    for source in ('main.users', '"users"'):
+        with pytest.raises(Exception) as old_named:
+            _named_on_the_old_route(monkeypatch, _connection(), {'x': source})
+        assert type(old_named.value).__name__ == 'GraphConstructionError'
+        assert not isinstance(old_named.value, StructuredDataError)
+    with pytest.raises(RuntimeError) as old_empty:
+        Schema.from_source(DuckDBSource(_connection(*empty)))
+    assert not isinstance(old_empty.value, StructuredDataError)
+
+
+def test_a_listed_table_is_held_to_the_schema_s_rule_on_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.23 fix 1, the listed path: a table the source lists under a name
+    # the schema may not give is refused by the core, as the old route
+    # refuses it.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as core:
+        Schema.from_source(
+            DuckDBSource(
+                _connection(
+                    'CREATE TABLE "a`b" (id BIGINT PRIMARY KEY)',
+                    'INSERT INTO "a`b" VALUES (1), (2)',
+                )
+            )
+        )
+    assert core.value.code == 'INVALID_REQUEST'
+    assert core.value.details['field'] == 'tables'

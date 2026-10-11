@@ -93,7 +93,12 @@ pub enum Filter {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum DescribePart {
-    /// The source's table names: one row per table.
+    /// The source's table names: one row per table. With tables named,
+    /// the relations, tables or views, the source would read under any of
+    /// those names, by its own resolution of a name: none when it holds
+    /// none, which is how the core learns a name the caller gave is not
+    /// the source's, never by matching names itself (T1.23, decision
+    /// E59).
     Tables,
     /// Each table's columns, with their declared types, nullability and
     /// primary-key flags.

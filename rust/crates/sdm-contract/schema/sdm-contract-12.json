@@ -2877,7 +2877,7 @@
       "description": "Which part of the catalog a `describe` reads.",
       "oneOf": [
         {
-          "description": "The source's table names: one row per table.",
+          "description": "The source's table names: one row per table. With tables named,\nthe relations, tables or views, the source would read under any of\nthose names, by its own resolution of a name: none when it holds\nnone, which is how the core learns a name the caller gave is not\nthe source's, never by matching names itself (T1.23, decision\nE59).",
           "type": "string",
           "const": "tables"
         },

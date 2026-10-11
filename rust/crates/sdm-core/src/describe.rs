@@ -107,15 +107,17 @@ pub(crate) async fn run(
             Ok(answers) => answers,
             // A table the caller named that the source does not hold: a
             // dialect may fail reading its columns rather than answer none
-            // (DuckDB's pragma does). The source's table list, asked only
-            // then, says which, so the caller's naming is refused as the
-            // reference refuses it, and any other failure stays the
-            // provider's.
+            // (DuckDB's pragma does). The source, asked only then whether
+            // it holds a relation of that name, says which, so the caller's
+            // naming is refused as the reference refuses it, and any other
+            // failure stays the provider's.
             Err(failed) if caller_named && failed.code == ErrorCode::ProviderError => {
-                if holds(&asker, &table.source).await? {
-                    return Err(failed);
-                }
-                return Err(not_held());
+                // Absence only where the source says so; the provider's
+                // first error stands otherwise, the probe's failure too.
+                return Err(match holds(&asker, &table.source).await {
+                    Ok(false) => not_held(),
+                    Ok(true) | Err(_) => failed,
+                });
             }
             Err(failed) => return Err(failed),
         };
@@ -237,22 +239,23 @@ fn not_held() -> CoreError {
     .with_field("field", Detail::text("tables"))
 }
 
-/// Whether the source's table list holds `source`, by its exact name or in
-/// any case, as a catalog may fold names.
+/// Whether the source holds a relation, a table or a view, under `source`,
+/// as the source itself resolves the name: `describe` of the tables with
+/// `source` named, whose answer is empty when it holds none (sdm-data's
+/// rendering decides how the dialect matches a name; the core matches
+/// none).
 async fn holds(asker: &Asker, source: &str) -> Result<bool, CoreError> {
-    let listed = table_names(
+    let held = table_names(
         describe(
             asker,
             DataRequest::Describe {
-                tables: vec![],
+                tables: vec![source.to_owned()],
                 part: DescribePart::Tables,
             },
         )
         .await?,
     )?;
-    Ok(listed
-        .iter()
-        .any(|name| name == source || name.to_lowercase() == source.to_lowercase()))
+    Ok(!held.is_empty())
 }
 
 /// The tables `spec` names, checked as the reference checks a mapping of

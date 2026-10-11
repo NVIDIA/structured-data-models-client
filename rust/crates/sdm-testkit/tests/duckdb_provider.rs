@@ -1300,3 +1300,53 @@ fn a_source_table_named_twice_is_joined_under_its_last_name() {
         );
     }
 }
+
+#[test]
+fn the_source_says_which_relations_it_holds_under_a_name() {
+    // T1.23 fix 2 (Codex P2): asked only once reading a named table's
+    // columns has failed, the table list with the name asked answers the
+    // relations, tables or views, DuckDB would read under it, matched as
+    // DuckDB folds a name (ASCII letters only): the core matches no name
+    // itself.
+    let connection = duck::open().unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE parent (id BIGINT); CREATE VIEW parent_view AS SELECT * FROM parent; \
+             CREATE TABLE \"Äpfel\" (id BIGINT)",
+        )
+        .unwrap();
+    for (name, held) in [
+        ("parent", 1),
+        ("PARENT", 1),
+        ("parent_view", 1),
+        ("Parent_View", 1),
+        ("Äpfel", 1),
+        ("äpfel", 0),
+        ("nope", 0),
+    ] {
+        let run =
+            start(&serde_json::json!({"request": "describe", "tables": [name], "part": "tables"}));
+        let data = admitted(&run, |step| duck::answer(&connection, step).unwrap());
+        let rows: usize = data.batches.iter().map(RecordBatch::num_rows).sum();
+        assert_eq!(rows, held, "{name}");
+    }
+}
+
+#[test]
+fn a_listed_table_the_schema_may_not_name_is_refused() {
+    // T1.23 fix 1, the listed path: a table the source lists under a name
+    // the schema may not give (here a backtick) is refused, INVALID_REQUEST
+    // naming the field, as the reference refuses it.
+    let observed = described_as(
+        serde_json::json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
+        vec![
+            "CREATE TABLE \"a`b\" (id BIGINT PRIMARY KEY)".into(),
+            "INSERT INTO \"a`b\" VALUES (1), (2)".into(),
+        ],
+    );
+    let Answer::Error { code, fields, .. } = &observed.answer else {
+        panic!("{:?}", observed.answer);
+    };
+    assert_eq!(code, "INVALID_REQUEST");
+    assert_eq!(fields["field"], "tables");
+}

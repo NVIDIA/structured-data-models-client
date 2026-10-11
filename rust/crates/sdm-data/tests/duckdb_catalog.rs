@@ -204,14 +204,26 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
             );
         }
     }
-    // The table list and the indexes are read whole, as the reference
-    // reads them; tables named arrive with the overrides (T1.24).
-    for part in [DescribePart::Tables, DescribePart::Indexes] {
-        let err = Data::new()
-            .plan(&describe(&["a"], part), &duckdb())
-            .unwrap_err();
-        assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-    }
+    // The indexes are read whole, as the reference reads them.
+    let err = Data::new()
+        .plan(&describe(&["a"], DescribePart::Indexes), &duckdb())
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::UnsupportedRequest);
+    // The table list with a name asked: the relations, tables or views,
+    // DuckDB would read under it, matched as DuckDB folds a name (T1.23
+    // fix 2; sdm-testkit's duckdb_provider.rs runs it).
+    let FetchPlan::Sql { statements, .. } = Data::new()
+        .plan(&describe(&["O'Brien"], DescribePart::Tables), &duckdb())
+        .unwrap()
+    else {
+        panic!("DuckDB answers with SQL");
+    };
+    let text = &statements[0].text;
+    assert!(
+        text.contains("duckdb_tables()") && text.contains("duckdb_views()"),
+        "{text}"
+    );
+    assert!(text.contains("'O''Brien'"), "{text}");
     let err = Data::new().plan(&preview("t", &[]), &duckdb()).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }

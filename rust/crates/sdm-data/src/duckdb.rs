@@ -631,12 +631,10 @@ fn describe(
         }
     };
     Ok(match part {
-        DescribePart::Tables => {
-            whole()?;
-            format!(
-                "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
-            )
-        }
+        DescribePart::Tables if tables.is_empty() => format!(
+            "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
+        ),
+        DescribePart::Tables => held(tables),
         DescribePart::Columns => columns(one()?),
         DescribePart::Keys => format!(
             "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = {}\n  AND {IN_CURRENT_SCHEMA}",
@@ -651,6 +649,29 @@ fn describe(
             "SELECT table_name, expressions FROM duckdb_indexes()".to_owned()
         }
     })
+}
+
+/// The relations, tables or views, temporary or not, in any schema, that
+/// DuckDB would read under any of `names`: a catalog name equal to one of
+/// them once each of their ASCII letters is lowered, as DuckDB resolves a
+/// name (it folds ASCII letters only, so `"Äpfel"` is not read as
+/// `äpfel`). Asked only when reading a named table's columns has failed:
+/// no row says the source holds no such relation, so the caller named
+/// one it lacks; any row, that the failure was another (T1.23 fix 2).
+fn held(names: &[String]) -> String {
+    let fold = |text: &str| {
+        format!("translate({text}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')")
+    };
+    let asked = names
+        .iter()
+        .map(|name| fold(&self::text(name)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "SELECT table_name FROM duckdb_tables() WHERE NOT internal AND {} IN ({asked})\nUNION ALL\nSELECT view_name AS table_name FROM duckdb_views() WHERE NOT internal AND {} IN ({asked})",
+        fold("table_name"),
+        fold("view_name"),
+    )
 }
 
 /// The columns of `table`, in `PRAGMA table_info`'s columns and order.
