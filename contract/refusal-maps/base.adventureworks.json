@@ -13,7 +13,11 @@
       "contract": "SourceSpec has no relationships; the description's links are the declared ones",
       "owner": "T1.23"
     },
-    {"input": "materialize's inference_config", "contract": "neither materialize's nor predict's input carries inference options", "owner": "T1.28"}
+    {
+      "input": "materialize's inference_config",
+      "contract": "neither materialize's nor predict's input carries inference options",
+      "owner": "T1.28"
+    }
   ],
   "entries": [
     {
@@ -25,7 +29,15 @@
       "where": "packages/structured-data-models-client/src/sdm_client/_routing.py:283 (FROM_SOURCE_DUCKDB_TABLES), :317 (CORE_ROUTED); schema.py:1182-1184",
       "holds": "FROM_SOURCE_DUCKDB_TABLES = (",
       "why": "T1.24 routes Schema.from_source with tables named onto the core, once T1.23's describe_source takes them (describe_source/tables_named)",
-      "observed": {"python-core": {"stage": "from_source", "error": "RouteError", "code": null, "operation": null, "rule": null}}
+      "observed": {
+        "python-core": {
+          "stage": "from_source",
+          "error": "RouteError",
+          "code": null,
+          "operation": null,
+          "rule": null
+        }
+      }
     },
     {
       "id": "route/materialize-old-schema",
@@ -36,7 +48,15 @@
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:103",
       "holds": "raise RouteError(",
       "why": "Reached only by forcing materialize without Schema.from_source; the journey's schema is described on the core once T1.24 routes Schema.from_source with tables named",
-      "observed": {"python-core": {"stage": "materialize", "error": "RouteError", "code": null, "operation": null, "rule": null}}
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "RouteError",
+          "code": null,
+          "operation": null,
+          "rule": null
+        }
+      }
     },
     {
       "id": "describe_source/tables_named",
@@ -46,7 +66,13 @@
       "register": "P1B-2",
       "where": "rust/crates/sdm-core/src/describe.rs:51",
       "why": "describe_source's overrides, applied between inference and the key count as the reference applies them; the notebook names each table by another name than its source's, which SourceSpec.tables (source names only) cannot carry, so T1.23 adds the name each table is given",
-      "observed": {"rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "tables_named"}}
+      "observed": {
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "tables_named"
+        }
+      }
     },
     {
       "id": "from_source/relationships",
@@ -57,7 +83,15 @@
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:72-77",
       "holds": "if relationships is not None:",
       "why": "The ledger's option refusals pass through to the core (T1.24), which takes the links given once T1.23's describe_source checks and keeps them; SourceSpec has no place for them yet",
-      "observed": {"python-core": {"stage": "from_source", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": null, "rule": "relationships"}}
+      "observed": {
+        "python-core": {
+          "stage": "from_source",
+          "error": "StructuredDataError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": null,
+          "rule": "relationships"
+        }
+      }
     },
     {
       "id": "describe_source/primary_keys",
@@ -68,8 +102,18 @@
       "where": "rust/crates/sdm-core/src/describe.rs:54",
       "why": "describe_source's key overrides",
       "observed": {
-        "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "primary_keys"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "primary_keys"}
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "primary_keys"
+        },
+        "python-core": {
+          "stage": "from_source",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "primary_keys"
+        }
       }
     },
     {
@@ -81,8 +125,18 @@
       "where": "rust/crates/sdm-core/src/describe.rs:57",
       "why": "describe_source's time-column overrides",
       "observed": {
-        "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_columns"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_columns"}
+        "python-core": {
+          "stage": "from_source",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "time_columns"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "time_columns"
+        }
       }
     },
     {
@@ -94,8 +148,18 @@
       "where": "rust/crates/sdm-schema/src/infer.rs:411",
       "why": "Text whose values could be dates (seven AdventureWorks columns of codes with digits, such as AccountNumber), which reading dates (DT-7, text_shapes) decides",
       "observed": {
-        "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "text_time"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "text_time"}
+        "python-core": {
+          "stage": "from_source",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "text_time"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "text_time"
+        }
       }
     },
     {
@@ -107,8 +171,18 @@
       "where": "rust/crates/sdm-schema/src/infer.rs:647",
       "why": "A timestamp held in fewer than half the rows (products' SellEndDate and DiscontinuedDate), or one value in every row (customers' and products' ModifiedDate: edit stamps by name, which the core passes over from T1.21d, refused for their values first, as the reference refuses them before their name)",
       "observed": {
-        "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_values"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_values"}
+        "python-core": {
+          "stage": "from_source",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "time_values"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "time_values"
+        }
       }
     },
     {
@@ -120,8 +194,18 @@
       "where": "rust/crates/sdm-schema/src/infer.rs:674",
       "why": "Several timestamps in one table (the order headers' OrderDate, DueDate and ShipDate)",
       "observed": {
-        "python-core": {"stage": "from_source", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_several"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "describe_source", "rule": "time_several"}
+        "python-core": {
+          "stage": "from_source",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "time_several"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "describe_source",
+          "rule": "time_several"
+        }
       }
     },
     {
@@ -133,7 +217,15 @@
       "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:243-245",
       "holds": "raise _not_taken(name)",
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28); the contract's materialize and predict inputs have no place for them yet, and T1.24 passes the option through to the core rather than refuse it in the bridge",
-      "observed": {"python-core": {"stage": "materialize", "error": "StructuredDataError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "inference_config"}}
+      "observed": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "inference_config"
+        }
+      }
     },
     {
       "id": "materialize/deeper_hop",
@@ -144,8 +236,18 @@
       "where": "rust/crates/sdm-core/src/materialize.rs:665",
       "why": "The order lines refer to customers as well as products, so the sample walks past the first hop",
       "observed": {
-        "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "deeper_hop"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "deeper_hop"}
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "deeper_hop"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "deeper_hop"
+        }
       }
     },
     {
@@ -157,8 +259,18 @@
       "where": "rust/crates/sdm-core/src/materialize.rs:679",
       "why": "A text feature in a sampled table (products' Name), which the reference's sampler normalizes (rfm/base/sampler.py:329-331)",
       "observed": {
-        "python-core": {"stage": "materialize", "error": "UnsupportedRequestError", "code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "text_column"},
-        "rust-host": {"code": "UNSUPPORTED_REQUEST", "operation": "materialize", "rule": "text_column"}
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "text_column"
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": "materialize",
+          "rule": "text_column"
+        }
       }
     }
   ],
@@ -196,25 +308,71 @@
               "sales_order_headers": "adventureworks_sales_order_headers",
               "sales_order_details": "adventureworks_sales_order_details"
             },
-            "primary_keys": {"customers": "CustomerID", "products": "ProductID", "sales_order_details": "SalesOrderDetailID"},
-            "time_columns": {"sales_order_headers": "OrderDate", "sales_order_details": "OrderDate"},
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
             "relationships": [
-              {"source_table": "sales_order_headers", "source_column": "CustomerID", "target_table": "customers", "target_column": "CustomerID"},
-              {"source_table": "sales_order_details", "source_column": "CustomerID", "target_table": "customers", "target_column": "CustomerID"},
-              {"source_table": "sales_order_details", "source_column": "ProductID", "target_table": "products", "target_column": "ProductID"}
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
             ]
           },
           "edits": [
-            {"op": "clear_time_column", "table": "products"},
-            {"op": "delete_column", "table": "customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "products", "column": "rowguid"},
-            {"op": "delete_column", "table": "sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           }
         },
         "until": "predict",
@@ -228,15 +386,32 @@
         "setup": null,
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
-              "tables": ["adventureworks_customers", "adventureworks_products", "adventureworks_sales_order_headers", "adventureworks_sales_order_details"],
+              "tables": [
+                "adventureworks_customers",
+                "adventureworks_products",
+                "adventureworks_sales_order_headers",
+                "adventureworks_sales_order_details"
+              ],
               "primary_keys": {
-                "adventureworks_customers": ["CustomerID"],
-                "adventureworks_products": ["ProductID"],
-                "adventureworks_sales_order_details": ["SalesOrderDetailID"]
+                "adventureworks_customers": [
+                  "CustomerID"
+                ],
+                "adventureworks_products": [
+                  "ProductID"
+                ],
+                "adventureworks_sales_order_details": [
+                  "SalesOrderDetailID"
+                ]
               },
-              "time_columns": {"adventureworks_sales_order_headers": "OrderDate", "adventureworks_sales_order_details": "OrderDate"}
+              "time_columns": {
+                "adventureworks_sales_order_headers": "OrderDate",
+                "adventureworks_sales_order_details": "OrderDate"
+              }
             },
             "check_keys": true
           }
@@ -276,25 +451,71 @@
               "sales_order_headers": "adventureworks_sales_order_headers",
               "sales_order_details": "adventureworks_sales_order_details"
             },
-            "primary_keys": {"customers": "CustomerID", "products": "ProductID", "sales_order_details": "SalesOrderDetailID"},
-            "time_columns": {"sales_order_headers": "OrderDate", "sales_order_details": "OrderDate"},
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
             "relationships": [
-              {"source_table": "sales_order_headers", "source_column": "CustomerID", "target_table": "customers", "target_column": "CustomerID"},
-              {"source_table": "sales_order_details", "source_column": "CustomerID", "target_table": "customers", "target_column": "CustomerID"},
-              {"source_table": "sales_order_details", "source_column": "ProductID", "target_table": "products", "target_column": "ProductID"}
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
             ]
           },
           "edits": [
-            {"op": "clear_time_column", "table": "products"},
-            {"op": "delete_column", "table": "customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "products", "column": "rowguid"},
-            {"op": "delete_column", "table": "sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           }
         },
         "until": "predict",
@@ -307,7 +528,11 @@
       "python-core": {
         "derive": {
           "from": "notebook-old-schema",
-          "steps": [{"remove": "materialize.inference_config"}]
+          "steps": [
+            {
+              "remove": "materialize.inference_config"
+            }
+          ]
         },
         "routes": [
           "query.materialize/indices-binary/duckdb",
@@ -332,24 +557,67 @@
               "sales_order_headers": "adventureworks_sales_order_headers",
               "sales_order_details": "adventureworks_sales_order_details"
             },
-            "primary_keys": {"customers": "CustomerID", "products": "ProductID", "sales_order_details": "SalesOrderDetailID"},
-            "time_columns": {"sales_order_headers": "OrderDate", "sales_order_details": "OrderDate"},
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
             "relationships": [
-              {"source_table": "sales_order_headers", "source_column": "CustomerID", "target_table": "customers", "target_column": "CustomerID"},
-              {"source_table": "sales_order_details", "source_column": "CustomerID", "target_table": "customers", "target_column": "CustomerID"},
-              {"source_table": "sales_order_details", "source_column": "ProductID", "target_table": "products", "target_column": "ProductID"}
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
             ]
           },
           "edits": [
-            {"op": "clear_time_column", "table": "products"},
-            {"op": "delete_column", "table": "customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "products", "column": "rowguid"},
-            {"op": "delete_column", "table": "sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
           "materialize": {
-            "indices": [709]
+            "indices": [
+              709
+            ]
           }
         },
         "until": "predict",
@@ -362,7 +630,11 @@
       "python-core": {
         "derive": {
           "from": "notebook",
-          "steps": [{"rename_tables": true}]
+          "steps": [
+            {
+              "rename_tables": true
+            }
+          ]
         },
         "routes": [
           "schema.from-source/all-tables/duckdb",
@@ -383,25 +655,71 @@
         "input": {
           "base": "adventureworks",
           "from_source": {
-            "primary_keys": {"adventureworks_customers": "CustomerID", "adventureworks_products": "ProductID", "adventureworks_sales_order_details": "SalesOrderDetailID"},
-            "time_columns": {"adventureworks_sales_order_headers": "OrderDate", "adventureworks_sales_order_details": "OrderDate"},
+            "primary_keys": {
+              "adventureworks_customers": "CustomerID",
+              "adventureworks_products": "ProductID",
+              "adventureworks_sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "adventureworks_sales_order_headers": "OrderDate",
+              "adventureworks_sales_order_details": "OrderDate"
+            },
             "relationships": [
-              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-              {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+              {
+                "source_table": "adventureworks_sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "adventureworks_products",
+                "target_column": "ProductID"
+              }
             ]
           },
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           }
         },
         "until": "predict",
@@ -410,20 +728,36 @@
       "rust-host": {
         "derive": {
           "from": "notebook",
-          "steps": [{"clear": "tables"}]
+          "steps": [
+            {
+              "clear": "tables"
+            }
+          ]
         },
         "setup": null,
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {
-                "adventureworks_customers": ["CustomerID"],
-                "adventureworks_products": ["ProductID"],
-                "adventureworks_sales_order_details": ["SalesOrderDetailID"]
+                "adventureworks_customers": [
+                  "CustomerID"
+                ],
+                "adventureworks_products": [
+                  "ProductID"
+                ],
+                "adventureworks_sales_order_details": [
+                  "SalesOrderDetailID"
+                ]
               },
-              "time_columns": {"adventureworks_sales_order_headers": "OrderDate", "adventureworks_sales_order_details": "OrderDate"}
+              "time_columns": {
+                "adventureworks_sales_order_headers": "OrderDate",
+                "adventureworks_sales_order_details": "OrderDate"
+              }
             },
             "check_keys": true
           }
@@ -438,7 +772,11 @@
       "python-core": {
         "derive": {
           "from": "no-table-names",
-          "steps": [{"remove": "from_source.relationships"}]
+          "steps": [
+            {
+              "remove": "from_source.relationships"
+            }
+          ]
         },
         "routes": [
           "schema.from-source/all-tables/duckdb",
@@ -459,20 +797,51 @@
         "input": {
           "base": "adventureworks",
           "from_source": {
-            "primary_keys": {"adventureworks_customers": "CustomerID", "adventureworks_products": "ProductID", "adventureworks_sales_order_details": "SalesOrderDetailID"},
-            "time_columns": {"adventureworks_sales_order_headers": "OrderDate", "adventureworks_sales_order_details": "OrderDate"}
+            "primary_keys": {
+              "adventureworks_customers": "CustomerID",
+              "adventureworks_products": "ProductID",
+              "adventureworks_sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "adventureworks_sales_order_headers": "OrderDate",
+              "adventureworks_sales_order_details": "OrderDate"
+            }
           },
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           }
         },
         "until": "predict",
@@ -485,7 +854,11 @@
       "python-core": {
         "derive": {
           "from": "no-relationships",
-          "steps": [{"remove": "from_source.primary_keys"}]
+          "steps": [
+            {
+              "remove": "from_source.primary_keys"
+            }
+          ]
         },
         "routes": [
           "schema.from-source/all-tables/duckdb",
@@ -505,18 +878,47 @@
         ],
         "input": {
           "base": "adventureworks",
-          "from_source": {"time_columns": {"adventureworks_sales_order_headers": "OrderDate", "adventureworks_sales_order_details": "OrderDate"}},
+          "from_source": {
+            "time_columns": {
+              "adventureworks_sales_order_headers": "OrderDate",
+              "adventureworks_sales_order_details": "OrderDate"
+            }
+          },
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           }
         },
         "until": "predict",
@@ -525,16 +927,26 @@
       "rust-host": {
         "derive": {
           "from": "no-table-names",
-          "steps": [{"clear": "primary_keys"}]
+          "steps": [
+            {
+              "clear": "primary_keys"
+            }
+          ]
         },
         "setup": null,
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
-              "time_columns": {"adventureworks_sales_order_headers": "OrderDate", "adventureworks_sales_order_details": "OrderDate"}
+              "time_columns": {
+                "adventureworks_sales_order_headers": "OrderDate",
+                "adventureworks_sales_order_details": "OrderDate"
+              }
             },
             "check_keys": true
           }
@@ -549,7 +961,11 @@
       "python-core": {
         "derive": {
           "from": "no-keys",
-          "steps": [{"remove": "from_source.time_columns"}]
+          "steps": [
+            {
+              "remove": "from_source.time_columns"
+            }
+          ]
         },
         "routes": [
           "schema.from-source/all-tables/duckdb",
@@ -570,16 +986,40 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           }
         },
         "until": "from_source",
@@ -588,12 +1028,19 @@
       "rust-host": {
         "derive": {
           "from": "no-keys",
-          "steps": [{"clear": "time_columns"}]
+          "steps": [
+            {
+              "clear": "time_columns"
+            }
+          ]
         },
         "setup": null,
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -615,13 +1062,34 @@
           "steps": [
             {
               "drop_columns": [
-                ["adventureworks_customers", "AccountNumber"],
-                ["adventureworks_products", "ProductNumber"],
-                ["adventureworks_sales_order_headers", "SalesOrderNumber"],
-                ["adventureworks_sales_order_headers", "PurchaseOrderNumber"],
-                ["adventureworks_sales_order_headers", "AccountNumber"],
-                ["adventureworks_sales_order_headers", "CreditCardApprovalCode"],
-                ["adventureworks_sales_order_details", "CarrierTrackingNumber"]
+                [
+                  "adventureworks_customers",
+                  "AccountNumber"
+                ],
+                [
+                  "adventureworks_products",
+                  "ProductNumber"
+                ],
+                [
+                  "adventureworks_sales_order_headers",
+                  "SalesOrderNumber"
+                ],
+                [
+                  "adventureworks_sales_order_headers",
+                  "PurchaseOrderNumber"
+                ],
+                [
+                  "adventureworks_sales_order_headers",
+                  "AccountNumber"
+                ],
+                [
+                  "adventureworks_sales_order_headers",
+                  "CreditCardApprovalCode"
+                ],
+                [
+                  "adventureworks_sales_order_details",
+                  "CarrierTrackingNumber"
+                ]
               ]
             }
           ]
@@ -645,16 +1113,40 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -685,7 +1177,10 @@
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -707,8 +1202,14 @@
           "steps": [
             {
               "drop_columns": [
-                ["adventureworks_customers", "ModifiedDate"],
-                ["adventureworks_products", "ModifiedDate"]
+                [
+                  "adventureworks_customers",
+                  "ModifiedDate"
+                ],
+                [
+                  "adventureworks_products",
+                  "ModifiedDate"
+                ]
               ]
             }
           ]
@@ -732,16 +1233,40 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -776,7 +1301,10 @@
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -798,8 +1326,14 @@
           "steps": [
             {
               "drop_columns": [
-                ["adventureworks_products", "SellEndDate"],
-                ["adventureworks_products", "DiscontinuedDate"]
+                [
+                  "adventureworks_products",
+                  "SellEndDate"
+                ],
+                [
+                  "adventureworks_products",
+                  "DiscontinuedDate"
+                ]
               ]
             }
           ]
@@ -823,16 +1357,40 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -871,7 +1429,10 @@
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -893,8 +1454,14 @@
           "steps": [
             {
               "drop_columns": [
-                ["adventureworks_sales_order_headers", "DueDate"],
-                ["adventureworks_sales_order_headers", "ShipDate"]
+                [
+                  "adventureworks_sales_order_headers",
+                  "DueDate"
+                ],
+                [
+                  "adventureworks_sales_order_headers",
+                  "ShipDate"
+                ]
               ]
             }
           ]
@@ -918,16 +1485,40 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -970,7 +1561,10 @@
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -991,7 +1585,10 @@
           "from": "one-order-time",
           "steps": [
             {
-              "edit_in": ["primary_keys", "relationships"]
+              "edit_in": [
+                "primary_keys",
+                "relationships"
+              ]
             }
           ]
         },
@@ -1014,27 +1611,78 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-            {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-            {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_customers",
+              "column": "CustomerID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_products",
+              "column": "ProductID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_sales_order_details",
+              "column": "SalesOrderDetailID"
+            },
             {
               "op": "set_relationships",
               "relationships": [
-                {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-                {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-                {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+                {
+                  "source_table": "adventureworks_sales_order_headers",
+                  "source_column": "CustomerID",
+                  "target_table": "adventureworks_customers",
+                  "target_column": "CustomerID"
+                },
+                {
+                  "source_table": "adventureworks_sales_order_details",
+                  "source_column": "CustomerID",
+                  "target_table": "adventureworks_customers",
+                  "target_column": "CustomerID"
+                },
+                {
+                  "source_table": "adventureworks_sales_order_details",
+                  "source_column": "ProductID",
+                  "target_table": "adventureworks_products",
+                  "target_column": "ProductID"
+                }
               ]
             },
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709],
-            "inference_config": {"num_estimators": 4, "column_shuffle": true}
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -1062,7 +1710,11 @@
       "python-core": {
         "derive": {
           "from": "notebook-schema-by-edits",
-          "steps": [{"remove": "materialize.inference_config"}]
+          "steps": [
+            {
+              "remove": "materialize.inference_config"
+            }
+          ]
         },
         "routes": [
           "schema.from-source/all-tables/duckdb",
@@ -1083,26 +1735,74 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-            {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-            {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_customers",
+              "column": "CustomerID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_products",
+              "column": "ProductID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_sales_order_details",
+              "column": "SalesOrderDetailID"
+            },
             {
               "op": "set_relationships",
               "relationships": [
-                {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-                {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-                {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+                {
+                  "source_table": "adventureworks_sales_order_headers",
+                  "source_column": "CustomerID",
+                  "target_table": "adventureworks_customers",
+                  "target_column": "CustomerID"
+                },
+                {
+                  "source_table": "adventureworks_sales_order_details",
+                  "source_column": "CustomerID",
+                  "target_table": "adventureworks_customers",
+                  "target_column": "CustomerID"
+                },
+                {
+                  "source_table": "adventureworks_sales_order_details",
+                  "source_column": "ProductID",
+                  "target_table": "adventureworks_products",
+                  "target_column": "ProductID"
+                }
               ]
             },
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709]
+            "indices": [
+              709
+            ]
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -1145,26 +1845,75 @@
         ],
         "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
         "edits": [
-          {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-          {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-          {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_customers",
+            "column": "CustomerID"
+          },
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_products",
+            "column": "ProductID"
+          },
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_sales_order_details",
+            "column": "SalesOrderDetailID"
+          },
           {
             "op": "set_relationships",
             "relationships": [
-              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-              {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+              {
+                "source_table": "adventureworks_sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "adventureworks_products",
+                "target_column": "ProductID"
+              }
             ]
           },
-          {"op": "clear_time_column", "table": "adventureworks_products"},
-          {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+          {
+            "op": "clear_time_column",
+            "table": "adventureworks_products"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_sales_order_details",
+            "column": "rowguid"
+          }
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -1173,12 +1922,22 @@
             "check_keys": true
           },
           "materialize": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
-            "indices": [{"t": "i64", "v": "709"}],
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
             "anchor_time": null,
             "seed": null
           },
-          "predict": {"model": "kumo-relational"}
+          "predict": {
+            "model": "kumo-relational"
+          }
         },
         "until": "predict",
         "expect": "materialize/deeper_hop"
@@ -1192,7 +1951,12 @@
           "from": "no-inference-config",
           "steps": [
             {
-              "drop_relationship": {"source_table": "adventureworks_sales_order_details", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"}
+              "drop_relationship": {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              }
             }
           ]
         },
@@ -1215,25 +1979,68 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-            {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-            {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_customers",
+              "column": "CustomerID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_products",
+              "column": "ProductID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_sales_order_details",
+              "column": "SalesOrderDetailID"
+            },
             {
               "op": "set_relationships",
               "relationships": [
-                {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-                {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+                {
+                  "source_table": "adventureworks_sales_order_headers",
+                  "source_column": "CustomerID",
+                  "target_table": "adventureworks_customers",
+                  "target_column": "CustomerID"
+                },
+                {
+                  "source_table": "adventureworks_sales_order_details",
+                  "source_column": "ProductID",
+                  "target_table": "adventureworks_products",
+                  "target_column": "ProductID"
+                }
               ]
             },
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709]
+            "indices": [
+              709
+            ]
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -1276,25 +2083,69 @@
         ],
         "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
         "edits": [
-          {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-          {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-          {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_customers",
+            "column": "CustomerID"
+          },
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_products",
+            "column": "ProductID"
+          },
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_sales_order_details",
+            "column": "SalesOrderDetailID"
+          },
           {
             "op": "set_relationships",
             "relationships": [
-              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+              {
+                "source_table": "adventureworks_sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "adventureworks_products",
+                "target_column": "ProductID"
+              }
             ]
           },
-          {"op": "clear_time_column", "table": "adventureworks_products"},
-          {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"}
+          {
+            "op": "clear_time_column",
+            "table": "adventureworks_products"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_sales_order_details",
+            "column": "rowguid"
+          }
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -1303,12 +2154,22 @@
             "check_keys": true
           },
           "materialize": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
-            "indices": [{"t": "i64", "v": "709"}],
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
             "anchor_time": null,
             "seed": null
           },
-          "predict": {"model": "kumo-relational"}
+          "predict": {
+            "model": "kumo-relational"
+          }
         },
         "until": "predict",
         "expect": "materialize/text_column"
@@ -1322,7 +2183,10 @@
           "from": "one-hop",
           "steps": [
             {
-              "delete_column": ["adventureworks_products", "Name"]
+              "delete_column": [
+                "adventureworks_products",
+                "Name"
+              ]
             }
           ]
         },
@@ -1345,26 +2209,73 @@
         "input": {
           "base": "adventureworks",
           "edits": [
-            {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-            {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-            {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_customers",
+              "column": "CustomerID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_products",
+              "column": "ProductID"
+            },
+            {
+              "op": "set_primary_key",
+              "table": "adventureworks_sales_order_details",
+              "column": "SalesOrderDetailID"
+            },
             {
               "op": "set_relationships",
               "relationships": [
-                {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-                {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+                {
+                  "source_table": "adventureworks_sales_order_headers",
+                  "source_column": "CustomerID",
+                  "target_table": "adventureworks_customers",
+                  "target_column": "CustomerID"
+                },
+                {
+                  "source_table": "adventureworks_sales_order_details",
+                  "source_column": "ProductID",
+                  "target_table": "adventureworks_products",
+                  "target_column": "ProductID"
+                }
               ]
             },
-            {"op": "clear_time_column", "table": "adventureworks_products"},
-            {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"},
-            {"op": "delete_column", "table": "adventureworks_products", "column": "Name"}
+            {
+              "op": "clear_time_column",
+              "table": "adventureworks_products"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_sales_order_details",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "adventureworks_products",
+              "column": "Name"
+            }
           ],
           "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
           "materialize": {
-            "indices": [709]
+            "indices": [
+              709
+            ]
           },
           "setup": [
             "ALTER TABLE adventureworks_customers DROP COLUMN \"AccountNumber\"",
@@ -1407,26 +2318,74 @@
         ],
         "pql": "PREDICT SUM(adventureworks_sales_order_details.OrderQty, 0, 30, days) FOR EACH adventureworks_products.ProductID",
         "edits": [
-          {"op": "set_primary_key", "table": "adventureworks_customers", "column": "CustomerID"},
-          {"op": "set_primary_key", "table": "adventureworks_products", "column": "ProductID"},
-          {"op": "set_primary_key", "table": "adventureworks_sales_order_details", "column": "SalesOrderDetailID"},
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_customers",
+            "column": "CustomerID"
+          },
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_products",
+            "column": "ProductID"
+          },
+          {
+            "op": "set_primary_key",
+            "table": "adventureworks_sales_order_details",
+            "column": "SalesOrderDetailID"
+          },
           {
             "op": "set_relationships",
             "relationships": [
-              {"source_table": "adventureworks_sales_order_headers", "source_column": "CustomerID", "target_table": "adventureworks_customers", "target_column": "CustomerID"},
-              {"source_table": "adventureworks_sales_order_details", "source_column": "ProductID", "target_table": "adventureworks_products", "target_column": "ProductID"}
+              {
+                "source_table": "adventureworks_sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "adventureworks_customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "adventureworks_sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "adventureworks_products",
+                "target_column": "ProductID"
+              }
             ]
           },
-          {"op": "clear_time_column", "table": "adventureworks_products"},
-          {"op": "delete_column", "table": "adventureworks_customers", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_products", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_sales_order_headers", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_sales_order_details", "column": "rowguid"},
-          {"op": "delete_column", "table": "adventureworks_products", "column": "Name"}
+          {
+            "op": "clear_time_column",
+            "table": "adventureworks_products"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_sales_order_details",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "adventureworks_products",
+            "column": "Name"
+          }
         ],
         "core": {
           "describe_source": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
             "source": {
               "tables": [],
               "primary_keys": {},
@@ -1435,12 +2394,22 @@
             "check_keys": true
           },
           "materialize": {
-            "provider": {"provider": "sql", "dialect": "duckdb"},
-            "indices": [{"t": "i64", "v": "709"}],
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
             "anchor_time": null,
             "seed": null
           },
-          "predict": {"model": "kumo-relational"}
+          "predict": {
+            "model": "kumo-relational"
+          }
         },
         "until": "predict",
         "expect": "success"
