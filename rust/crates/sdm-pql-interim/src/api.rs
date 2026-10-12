@@ -46,25 +46,35 @@ pub enum Resolved {
     Refused(ValidationResponse),
 }
 
-/// What parsing gives: the parsed query, or a refusal, one diagnostic
-/// without a span; and D4's warning for each day-first date literal read,
-/// in the order read, whether or not the query parses.
+/// What parsing gives: the parsed query, or why not; and D4's warning for
+/// each day-first date literal read, in the order read, whether or not the
+/// query parses.
 #[derive(Debug)]
 pub struct Parse {
-    pub outcome: Result<Parsed, ValidationResponse>,
+    pub outcome: Result<Parsed, Unparsed>,
     pub warnings: Vec<DateWarning>,
+}
+
+/// Why text is no parsed query.
+#[derive(Debug)]
+pub enum Unparsed {
+    /// Refused: one diagnostic without a span.
+    Refused(ValidationResponse),
+    /// A date literal's two-digit year, with no current year to place it
+    /// (`Reader::year` none): never a diagnostic about the query.
+    Unplaced,
 }
 
 /// `text` parsed for `mode`, date literals read with `reader`.
 pub fn parse(text: &str, mode: Mode, reader: Reader) -> Parse {
     let (parsed, warnings) = parse_query(text, mode, reader);
-    let outcome =
-        match parsed {
-            Ok(query) => Ok(Parsed { query }),
-            Err(ParseError::Failure(failure)) => Err(ValidationResponse::error(
-                ValidationError::new(failure.title, failure.message, failure.code, None),
-            )),
-        };
+    let outcome = match parsed {
+        Ok(query) => Ok(Parsed { query }),
+        Err(ParseError::Failure(failure)) => Err(Unparsed::Refused(ValidationResponse::error(
+            ValidationError::new(failure.title, failure.message, failure.code, None),
+        ))),
+        Err(ParseError::Unplaced) => Err(Unparsed::Unplaced),
+    };
     Parse { outcome, warnings }
 }
 

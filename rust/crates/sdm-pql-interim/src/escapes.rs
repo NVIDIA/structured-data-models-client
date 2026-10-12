@@ -115,12 +115,12 @@ mod tests {
                 &query,
                 crate::Mode::Inference,
                 crate::dates::Reader {
-                    year: 2026,
+                    year: Some(2026),
                     pads_year: false,
                 },
             )
             .outcome;
-            let Err(refused) = parsed else {
+            let Err(crate::Unparsed::Refused(refused)) = parsed else {
                 panic!("{escape:?} reached the reader");
             };
             assert_eq!(

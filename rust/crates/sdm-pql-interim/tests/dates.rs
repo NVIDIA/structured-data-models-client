@@ -39,6 +39,7 @@ fn answer(reader: Reader, literal: &str) -> Answer {
             day_first.map(|d| d.format()),
         ),
         Reading::Refused => (None, None, None),
+        Reading::Unplaced => panic!("{literal}: unplaced, with a year given"),
     }
 }
 
@@ -88,7 +89,7 @@ fn the_t06_literals_read_as_the_reference_reads_them() {
     let vectors: Value = serde_json::from_str(&here("../../testdata/t06-vectors.json")).unwrap();
     let year = vectors["meta"]["chrono"]["today_year"].as_i64().unwrap();
     let reader = Reader {
-        year: i16::try_from(year).unwrap(),
+        year: Some(i16::try_from(year).unwrap()),
         pads_year: true,
     };
     let mut failures = Vec::new();
@@ -137,7 +138,7 @@ fn the_generated_literals_read_as_the_reference_reads_them() {
     let vectors: Value = serde_json::from_str(&here("tests/dates.json")).unwrap();
     assert_eq!(vectors["format"], "sdm-pql-dates/1");
     let reader = Reader {
-        year: i16::try_from(vectors["year"].as_i64().unwrap()).unwrap(),
+        year: Some(i16::try_from(vectors["year"].as_i64().unwrap()).unwrap()),
         pads_year: vectors["pads_year"].as_bool().unwrap(),
     };
     let mut failures = Vec::new();
@@ -193,7 +194,7 @@ fn a_padded_year_warns_only_where_strftime_pads_it() {
         assert!(format.is_some(), "{literal}: every row warns where %Y pads");
         for (pads, want) in [(true, format.clone()), (false, None)] {
             let reader = Reader {
-                year: 2026,
+                year: Some(2026),
                 pads_year: pads,
             };
             let got = answer(reader, literal);
@@ -214,7 +215,7 @@ fn a_padded_year_warns_only_where_strftime_pads_it() {
 fn a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named() {
     let vectors: Value = serde_json::from_str(&here("tests/dates.json")).unwrap();
     let reader = Reader {
-        year: i16::try_from(vectors["year"].as_i64().unwrap()).unwrap(),
+        year: Some(i16::try_from(vectors["year"].as_i64().unwrap()).unwrap()),
         pads_year: vectors["pads_year"].as_bool().unwrap(),
     };
     let rows = vectors["format_guess"].as_array().unwrap();

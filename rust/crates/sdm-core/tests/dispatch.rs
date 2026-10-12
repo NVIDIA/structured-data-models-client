@@ -770,14 +770,39 @@ fn a_day_first_date_literal_warns_on_the_run_s_warnings_channel() {
 }
 
 #[test]
-fn a_local_zone_the_run_cannot_resolve_is_refused_by_name() {
+fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
+    // The current year is read only for a two-digit year (D5): with a zone
+    // the run cannot resolve, a query that places none is answered as
+    // ever, and one that does is refused by name.
     let mut facts = facts();
     facts.local_zone = Some(sdm_contract::facts::LocalZone::Iana("Mars/Olympus".into()));
-    let mut run = validate_run("PREDICT t.c FOR EACH t.id", facts).unwrap();
-    let err = run.next().unwrap_err();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest)
-    );
-    assert_eq!(named(&err, "field"), "facts.local_zone");
+    for query in [
+        "PREDICT t.c FOR EACH t.id",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 2024-01-13",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 20240101-01-01",
+    ] {
+        let Step::Done {
+            result: OperationResult::ValidateQuery(validation),
+        } = validate_run(query, facts.clone()).unwrap().next().unwrap()
+        else {
+            panic!("{query}: no answer");
+        };
+        assert!(validation.accepted, "{query}: {:?}", validation.diagnostics);
+    }
+    for query in [
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 1/2/76",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 760101-01-01",
+    ] {
+        let err = validate_run(query, facts.clone())
+            .unwrap()
+            .next()
+            .unwrap_err();
+        assert_eq!(
+            (err.kind, err.code),
+            (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest),
+            "{query}"
+        );
+        assert_eq!(named(&err, "field"), "facts.local_zone", "{query}");
+    }
 }

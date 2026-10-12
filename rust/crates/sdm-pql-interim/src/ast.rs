@@ -264,12 +264,16 @@ pub struct Node {
 pub enum BuildError {
     Syntax(String),
     Literal(String),
+    /// A date literal with a two-digit year, and no current year to place
+    /// it (`Reading::Unplaced`): no diagnostic, and never the literal.
+    Unplaced,
 }
 
 impl BuildError {
     pub fn message(&self) -> &str {
         match self {
             BuildError::Syntax(m) | BuildError::Literal(m) => m,
+            BuildError::Unplaced => "a two-digit year cannot be placed without the current year",
         }
     }
 }
@@ -332,6 +336,7 @@ pub fn constant(
             match reader.read(text) {
                 Reading::Read { stamp, day_first } => (Some(stamp), day_first),
                 Reading::Refused => (None, None),
+                Reading::Unplaced => return Err(BuildError::Unplaced),
             }
         }
         _ => (None, None),
@@ -958,7 +963,7 @@ mod tests {
     use crate::types::TimeUnit;
 
     const READER: Reader = Reader {
-        year: 2026,
+        year: Some(2026),
         pads_year: false,
     };
 

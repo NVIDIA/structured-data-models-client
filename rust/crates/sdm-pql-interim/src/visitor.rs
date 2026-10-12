@@ -43,10 +43,12 @@ impl ParseFailure {
     }
 }
 
-/// Why text is not a parsed query: a diagnostic.
+/// Why text is not a parsed query: a diagnostic, or a two-digit year with
+/// no current year to place it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Failure(ParseFailure),
+    Unplaced,
 }
 
 impl ParseError {
@@ -64,6 +66,7 @@ impl From<BuildError> for ParseError {
                 title: "Invalid constant",
                 message,
             }),
+            BuildError::Unplaced => ParseError::Unplaced,
         }
     }
 }

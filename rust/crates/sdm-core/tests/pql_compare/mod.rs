@@ -427,6 +427,26 @@ pub fn differences(
             }
         })
         .collect();
+    // The core gives one warning per day-first literal (PQL-3): two at one
+    // literal's place are a doubled warning, whatever the reference's count.
+    let places: Vec<String> = got
+        .warnings
+        .iter()
+        .map(|w| {
+            format!(
+                "{:?} {:?}",
+                w.fields.get("start_row"),
+                w.fields.get("start_col")
+            )
+        })
+        .collect();
+    let distinct: BTreeSet<&String> = places.iter().collect();
+    if distinct.len() != places.len() {
+        out.insert(
+            "warnings",
+            format!("a day-first literal warned more than once: {places:?}"),
+        );
+    }
     if case.get("tree").is_some()
         && (validator_warnings != want_validator || want_formats != found_formats)
     {

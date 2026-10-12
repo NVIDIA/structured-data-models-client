@@ -140,8 +140,11 @@ fn resolve_here(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
+    // The current year is read only for a literal that needs it (D5): a
+    // zone or clock the run cannot read refuses only such a query.
+    let year = local_year(facts, zones);
     let reader = parser::dates::Reader {
-        year: local_year(facts, zones)?,
+        year: year.as_ref().ok().copied(),
         pads_year: facts.platform.strftime_pads_year,
     };
     let mode = match profile.mode {
@@ -152,7 +155,14 @@ fn resolve_here(
     let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
     let parsed = match parse.outcome {
         Ok(parsed) => parsed,
-        Err(response) => return Ok(Validation::refused(diagnostics(&response), warnings)),
+        Err(parser::Unparsed::Refused(response)) => {
+            return Ok(Validation::refused(diagnostics(&response), warnings));
+        }
+        Err(parser::Unparsed::Unplaced) => {
+            return Err(year.err().unwrap_or_else(|| {
+                internal("a two-digit year went unplaced with the current year known")
+            }));
+        }
     };
     let refused = check_parsed_capabilities(parsed.target_has_time_range(), profile);
     if !refused.is_empty() {

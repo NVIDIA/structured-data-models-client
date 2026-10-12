@@ -32,8 +32,9 @@ use jiff::civil::Date;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Reader {
     /// The current year, in the host's local zone, which places a two-digit
-    /// year (D5).
-    pub year: i16,
+    /// year (D5); `None` where the host's facts give none, so a literal that
+    /// needs it reads as [`Reading::Unplaced`] and every other reads as ever.
+    pub year: Option<i16>,
     /// Whether the platform's `strftime` writes a year below 1000 with four
     /// digits (`HostFacts.platform.strftime_pads_year`); without it D4 gives
     /// no warning for such a year.
@@ -112,6 +113,9 @@ pub enum Reading {
     },
     /// Not a date (D9): the reference refuses it too.
     Refused,
+    /// A two-digit year the reader cannot place: the reader was given no
+    /// current year (D5).
+    Unplaced,
 }
 
 /// A run of this many digits or more is read by D8.
@@ -161,6 +165,8 @@ struct Fields {
     minute: Option<u64>,
     second: Option<u64>,
     offset: Option<i64>,
+    /// A two-digit year that needed the current year, which was not given.
+    unplaced: bool,
 }
 
 impl Reader {
@@ -190,6 +196,9 @@ impl Reader {
         } else {
             self.plain(date, sep, time)
         };
+        if read.is_some_and(|(fields, _)| fields.unplaced) {
+            return Reading::Unplaced;
+        }
         match read.and_then(|(fields, day_first)| checked(fields).map(|s| (s, day_first))) {
             Some((stamp, day_first)) => Reading::Read { stamp, day_first },
             None => Reading::Refused,
@@ -198,8 +207,12 @@ impl Reader {
 
     /// A two-digit year placed in the hundred years around the current
     /// year, from 50 years before it to 49 after (D5).
-    fn century(&self, year: u64) -> u64 {
-        let now = i64::from(self.year);
+    fn century(&self, year: u64, unplaced: &mut bool) -> u64 {
+        let Some(now) = self.year else {
+            *unplaced = true;
+            return year;
+        };
+        let now = i64::from(now);
         let mut y = i64::try_from(year).unwrap_or(i64::MAX) + now.div_euclid(100) * 100;
         if y >= now + 50 {
             y -= 100;
@@ -229,7 +242,15 @@ impl Reader {
         // D5: with no field of three digits or more, a year below 100 is
         // placed around the current year.
         if !date.iter().any(|f| long(f)) && year < 100 {
-            year = self.century(year);
+            let mut unplaced = false;
+            year = self.century(year, &mut unplaced);
+            if unplaced {
+                let fields = Fields {
+                    unplaced,
+                    ..Fields::default()
+                };
+                return Some((fields, None));
+            }
         }
         // D7: the year 0 only as `0000` first, then a month and a day of one
         // or two digits, and a time of day, if any, of fields of one or two.
@@ -257,6 +278,7 @@ impl Reader {
             minute,
             second: second_of,
             offset: None,
+            unplaced: false,
         };
         Some((
             fields,
@@ -276,7 +298,8 @@ impl Reader {
             if first.len() == 6 {
                 // `YYMMDD` in D2's order, its year placed by D5.
                 let (year, month, day) = in_order([at(0, 2), at(2, 4), at(4, 6)], false);
-                (read.year, read.month, read.day) = (self.century(year), month, day);
+                (read.year, read.month, read.day) =
+                    (self.century(year, &mut read.unplaced), month, day);
             } else {
                 // `YYYYMMDD`, then `HHMM`, then `SS`.
                 (read.year, read.month, read.day) = (at(0, 4), at(4, 6), at(6, 8));
@@ -321,7 +344,7 @@ impl Reader {
             // three digits or more (the long run is then in the time).
             (read.year, read.month, read.day) = in_order(date.map(value), long(first));
             if !date.iter().any(|f| long(f)) && read.year < 100 {
-                read.year = self.century(read.year);
+                read.year = self.century(read.year, &mut read.unplaced);
             }
         }
         if let Some([h, m, s]) = time {
@@ -334,7 +357,7 @@ impl Reader {
                 (Some(value(h)), Some(value(m)), Some(value(s)));
         }
         // D7: the year 0 is read only from a plain `0000`.
-        (read.year != 0).then_some(read)
+        (read.year != 0 || read.unplaced).then_some(read)
     }
 }
 
@@ -372,7 +395,7 @@ mod tests {
     use super::*;
 
     const IN_2026: Reader = Reader {
-        year: 2026,
+        year: Some(2026),
         pads_year: false,
     };
 
@@ -383,6 +406,7 @@ mod tests {
                 None => stamp.to_string(),
             },
             Reading::Refused => "refused".into(),
+            Reading::Unplaced => "unplaced".into(),
         }
     }
 
@@ -465,12 +489,12 @@ mod tests {
     #[test]
     fn two_digit_years_follow_the_host_year() {
         let at = |year: i16| Reader {
-            year,
+            year: Some(year),
             pads_year: false,
         };
         let year = |reader: Reader, text: &str| match reader.read(text) {
             Reading::Read { stamp, .. } => stamp.at.year,
-            Reading::Refused => panic!("{text}: refused"),
+            other => panic!("{text}: {other:?}"),
         };
         assert_eq!(year(at(2026), "1/1/75"), 2075);
         assert_eq!(year(at(2026), "1/1/76"), 1976);
@@ -483,7 +507,7 @@ mod tests {
     #[test]
     fn a_year_below_1000_warns_only_where_strftime_pads_it() {
         let pads = Reader {
-            year: 2026,
+            year: Some(2026),
             pads_year: true,
         };
         assert_eq!(read(IN_2026, "13/01/0999"), "0999-01-13T00:00:00");
@@ -499,5 +523,35 @@ mod tests {
         // No warning where the format cannot be named.
         assert_eq!(read(pads, "13/001/2024"), "refused");
         assert_eq!(read(pads, "13/01/2024 001:02:03"), "2024-01-13T01:02:03");
+    }
+
+    #[test]
+    fn a_two_digit_year_without_a_current_year_is_unplaced_and_nothing_else() {
+        let none = Reader {
+            year: None,
+            pads_year: false,
+        };
+        // A year to place, in a plain literal and a packed one: unplaced.
+        for literal in [
+            "1/2/76",
+            "13/1/24",
+            "24-01-05",
+            "760101-01-01",
+            "1/2/3 00001:0:0",
+        ] {
+            assert_eq!(read(none, literal), "unplaced", "{literal}");
+        }
+        // Every literal that places no year reads as with a year.
+        for literal in [
+            "2024-01-31",
+            "13/01/2024",
+            "20240101/00/123456",
+            "00001/1/2",
+            "02/015/75",
+            "2024-13-01",
+            "0000-01-01",
+        ] {
+            assert_eq!(read(none, literal), read(IN_2026, literal), "{literal}");
+        }
     }
 }

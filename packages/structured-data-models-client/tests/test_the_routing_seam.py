@@ -288,15 +288,26 @@ def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
     core: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A local zone the run cannot read is the core's refusal of the host's
-    # facts, raised as its code maps, never as a refusal of the query.
+    # facts, raised as its code maps, never as a refusal of the query; it is
+    # read only for a two-digit year (D5), so a query without one is
+    # answered.
     from sdm_client._rust import facts
 
     monkeypatch.setattr(
         facts, 'local_zone', lambda *_: {'iana': 'Mars/Olympus'}
     )
-    text = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
+    schema = _orders_schema()
+    PredictiveQuery(
+        'PREDICT COUNT(orders.* WHERE orders.ts > 2024-01-13, 0, 30, days) '
+        'FOR EACH users.user_id',
+        schema,
+    )._resolve(RELATIONAL)
+    text = (
+        'PREDICT COUNT(orders.* WHERE orders.ts > 1/2/76, 0, 30, days) '
+        'FOR EACH users.user_id'
+    )
     with pytest.raises(StructuredDataError) as raised:
-        PredictiveQuery(text, _orders_schema())._resolve(RELATIONAL)
+        PredictiveQuery(text, schema)._resolve(RELATIONAL)
     assert raised.value.code == 'INVALID_REQUEST'
     assert raised.value.details['field'] == 'facts.local_zone'
     assert raised.value.__cause__ is None

@@ -88,7 +88,7 @@ fn every_validator_option_row_answers_as_the_reference_does() {
     let rows = table["options"].as_array().unwrap();
     assert_eq!(rows.len(), 56);
     let reader = Reader {
-        year: 2026,
+        year: Some(2026),
         pads_year: false,
     };
     let mut failures = Vec::new();
