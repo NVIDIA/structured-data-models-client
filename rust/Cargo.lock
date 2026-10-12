@@ -1508,6 +1508,7 @@ name = "sdm-pql"
 version = "1.0.0"
 dependencies = [
  "jiff",
+ "serde_json",
 ]
 
 [[package]]

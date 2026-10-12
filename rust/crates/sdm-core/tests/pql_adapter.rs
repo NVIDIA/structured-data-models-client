@@ -499,3 +499,75 @@ fn resolution_s_capability_diagnostics_come_in_the_reference_s_order() {
         assert_eq!(codes_of(query, profile), want, "{query}");
     }
 }
+
+/// Zones from the database bundled with `jiff`.
+struct Bundled;
+
+impl sdm_core::Zones for Bundled {
+    fn zone(&self, name: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
+        jiff::tz::TimeZoneDatabase::bundled()
+            .get(name)
+            .map_err(|_| sdm_core::UnknownZone)
+    }
+}
+
+#[test]
+fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
+    // `sdm-pql/tests/dates.json`'s `local_year`: 2026-12-31T23:30 in New
+    // York, 2027-01-01T04:30Z, where the reference's dateutil places a
+    // two-digit year by the local year, 2026, not UTC's.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sdm-pql/tests/dates.json");
+    let vectors: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let local = &vectors["local_year"];
+    assert_eq!(local["now"], "2027-01-01T04:30:00Z");
+    assert_eq!(local["zone"], "America/New_York");
+    assert_eq!(local["year"], 2026);
+    let at = |zone: Option<sdm_contract::facts::LocalZone>| HostFacts {
+        now: Scalar::Timestamp {
+            unit: Unit::Us,
+            zone: Some("UTC".into()),
+            value: 1_798_777_800_000_000,
+        },
+        local_zone: zone,
+        ..facts()
+    };
+    let new_york = at(Some(sdm_contract::facts::LocalZone::Iana(
+        "America/New_York".into(),
+    )));
+    assert_eq!(
+        sdm_core::pql::local_year(&new_york, &Bundled).unwrap(),
+        2026
+    );
+    assert_eq!(
+        sdm_core::pql::local_year(&at(None), &Bundled).unwrap(),
+        2027
+    );
+    let rows = local["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 8);
+    let mut moved = 0;
+    for row in rows {
+        let literal = row[0].as_str().unwrap();
+        let query = format!(
+            "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH \
+             users.user_id"
+        );
+        let read = |facts: &HostFacts| {
+            let validation = resolve(
+                &query,
+                &shop(),
+                &profile(ProfileName::Relational, &[]),
+                facts,
+                &Bundled,
+            )
+            .unwrap();
+            let target = format!("{:?}", validation.query.expect("accepted").target);
+            let start = target.find("value: \"").unwrap() + 8;
+            target[start..start + 19].to_owned()
+        };
+        assert_eq!(read(&new_york), row[1].as_str().unwrap(), "{literal}");
+        moved += usize::from(read(&at(None)) != read(&new_york));
+    }
+    // In UTC's year, 76 is 2076, not 1976: the zone decides.
+    assert!(moved >= 1, "no literal reads otherwise in UTC's year");
+}

@@ -44,6 +44,10 @@ scripts/rust_core/**
 rust/crates/sdm-core/tests/pql/**
 # The test that holds the corpus to its expectations and KNOWN_DIFFERING.
 rust/crates/sdm-core/tests/pql_corpus.rs
+rust/crates/sdm-core/tests/pql_compare/**
+rust/crates/sdm-core/tests/pql_quirks.rs
+rust/crates/sdm-core/tests/pql_custom_profiles.rs
+rust/crates/sdm-pql/tests/**
 rust/testdata/**
 rust/crates/sdm-contract/schema/**
 rust/crates/sdm-contract/tests/*.json

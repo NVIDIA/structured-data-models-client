@@ -1,0 +1,1022 @@
+{
+ "format": "sdm-pql-validator-options/1",
+ "source": "rust-core-reference at b413e9ad6c613e82e5f1fc2ad0bc152870f59e74: the inputs of the first attempt's custom_profiles.json (archive/rust-core-attempt-1, rust/crates/pql/tests), answered again by the reference, recorded by record_quirks.py",
+ "schema": {
+  "tables": {
+   "users": {
+    "cols": [
+     {
+      "name": "user_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "age",
+      "stype": "numerical",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "country",
+      "stype": "categorical",
+      "dtype": "string",
+      "timestamp_format": null
+     },
+     {
+      "name": "vip",
+      "stype": "categorical",
+      "dtype": "bool",
+      "timestamp_format": null
+     },
+     {
+      "name": "bio",
+      "stype": "text",
+      "dtype": "string",
+      "timestamp_format": null
+     },
+     {
+      "name": "signup",
+      "stype": "timestamp",
+      "dtype": "time",
+      "timestamp_format": null
+     }
+    ],
+    "pkey": "user_id",
+    "time_col": null,
+    "end_time_col": null
+   },
+   "products": {
+    "cols": [
+     {
+      "name": "product_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "category",
+      "stype": "categorical",
+      "dtype": "string",
+      "timestamp_format": null
+     },
+     {
+      "name": "price",
+      "stype": "numerical",
+      "dtype": "float",
+      "timestamp_format": null
+     },
+     {
+      "name": "tags",
+      "stype": "multicategorical",
+      "dtype": "stringlist",
+      "timestamp_format": null
+     }
+    ],
+    "pkey": "product_id",
+    "time_col": null,
+    "end_time_col": null
+   },
+   "orders": {
+    "cols": [
+     {
+      "name": "order_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "user_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "product_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "quantity",
+      "stype": "numerical",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "amount",
+      "stype": "numerical",
+      "dtype": "float",
+      "timestamp_format": null
+     },
+     {
+      "name": "status",
+      "stype": "categorical",
+      "dtype": "string",
+      "timestamp_format": null
+     },
+     {
+      "name": "ordered_at",
+      "stype": "timestamp",
+      "dtype": "time",
+      "timestamp_format": null
+     }
+    ],
+    "pkey": "order_id",
+    "time_col": "ordered_at",
+    "end_time_col": null
+   },
+   "reviews": {
+    "cols": [
+     {
+      "name": "review_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "user_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "product_id",
+      "stype": "ID",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "rating",
+      "stype": "numerical",
+      "dtype": "int",
+      "timestamp_format": null
+     },
+     {
+      "name": "created_at",
+      "stype": "timestamp",
+      "dtype": "time",
+      "timestamp_format": null
+     }
+    ],
+    "pkey": "review_id",
+    "time_col": "created_at",
+    "end_time_col": null
+   }
+  },
+  "col_groups": [
+   {
+    "columns": [
+     {
+      "table_name": "orders",
+      "col_name": "user_id"
+     },
+     {
+      "table_name": "reviews",
+      "col_name": "user_id"
+     },
+     {
+      "table_name": "users",
+      "col_name": "user_id"
+     }
+    ]
+   },
+   {
+    "columns": [
+     {
+      "table_name": "orders",
+      "col_name": "product_id"
+     },
+     {
+      "table_name": "products",
+      "col_name": "product_id"
+     },
+     {
+      "table_name": "reviews",
+      "col_name": "product_id"
+     }
+    ]
+   }
+  ]
+ },
+ "options": [
+  {
+   "id": "arrays-False/timestamps-True/inference/timestamps",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/inference/timestamps-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/inference/ids-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-True/inference/ids",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-True/inference/categories",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/inference/categories-classified",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/inference/compared",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_UNSUPPORTED_COLUMN_OPERATION",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    },
+    {
+     "code": "PQL_MODEL_AGGREGATION_NEEDS_FOREIGN_KEY",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 48
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/timestamps",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 63,
+      "end_row": 1,
+      "end_col": 63
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/timestamps-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/ids-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/ids",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 63,
+      "end_row": 1,
+      "end_col": 63
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/categories",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 59,
+      "end_row": 1,
+      "end_col": 59
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/categories-classified",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-True/training/compared",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/timestamps",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/timestamps-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/ids-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/ids",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/categories",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/categories-classified",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/inference/compared",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_UNSUPPORTED_COLUMN_OPERATION",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    },
+    {
+     "code": "PQL_MODEL_AGGREGATION_NEEDS_FOREIGN_KEY",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 48
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/timestamps",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 63,
+      "end_row": 1,
+      "end_col": 63
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/timestamps-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/ids-ranked",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/ids",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 63,
+      "end_row": 1,
+      "end_col": 63
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/categories",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 59,
+      "end_row": 1,
+      "end_col": 59
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/categories-classified",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-False/timestamps-False/training/compared",
+   "allow_array_targets": false,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/timestamps",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/timestamps-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/ids-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/ids",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/categories",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/categories-classified",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/inference/compared",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_CONSTANT_MISMATCH",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/timestamps",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/timestamps-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/ids-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/ids",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 63,
+      "end_row": 1,
+      "end_col": 63
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/categories",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 59,
+      "end_row": 1,
+      "end_col": 59
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/categories-classified",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-True/training/compared",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": true,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_CONSTANT_MISMATCH",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/timestamps",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_AGGREGATION_ON_TIMESTAMP_UNSUPPORTED",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    },
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/timestamps-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_AGGREGATION_ON_TIMESTAMP_UNSUPPORTED",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    },
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/ids-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/ids",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/categories",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/categories-classified",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_MODEL_NO_MULTILABEL",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/inference/compared",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "INFERENCE",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_CONSTANT_MISMATCH",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/timestamps",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_AGGREGATION_ON_TIMESTAMP_UNSUPPORTED",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    },
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/timestamps-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.ordered_at, 0, 30, days) RANK TOP 3 FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_AGGREGATION_ON_TIMESTAMP_UNSUPPORTED",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    },
+    {
+     "code": "PQL_TYPE_TARGET_DTYPE_NOT_PREDICTABLE",
+     "span": null
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/ids-ranked",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/ids",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 63,
+      "end_row": 1,
+      "end_col": 63
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/categories",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TASK_PROBLEM_TYPE_REQUIRED",
+     "span": {
+      "start_row": 1,
+      "start_col": 59,
+      "end_row": 1,
+      "end_col": 59
+     }
+    }
+   ]
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/categories-classified",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) CLASSIFY FOR EACH users.user_id",
+   "accepted": true,
+   "errors": []
+  },
+  {
+   "id": "arrays-True/timestamps-False/training/compared",
+   "allow_array_targets": true,
+   "allow_timestamp_arrays": false,
+   "mode": "TRAINING",
+   "query": "PREDICT LIST_DISTINCT(orders.status, 0, 30, days) = 'shipped' FOR EACH users.user_id",
+   "accepted": false,
+   "errors": [
+    {
+     "code": "PQL_TYPE_CONSTANT_MISMATCH",
+     "span": {
+      "start_row": 1,
+      "start_col": 8,
+      "end_row": 1,
+      "end_col": 52
+     }
+    }
+   ]
+  }
+ ]
+}
