@@ -15,9 +15,13 @@
 //! As built at T1.11d it is thin: a regression, asked for its default
 //! output, answered by `kumo-relational`; everything else is refused with
 //! `UNSUPPORTED_REQUEST` naming the rule ([`not_yet`], register entry
-//! P1B-4), never guessed. The client's checks before the call (an empty
-//! context, a constant target) and its presentation of the answer stay in
-//! the host (decision E45).
+//! P1B-4), never guessed. From T1.28a the call is written for a
+//! classification too, asked for its default outputs, with the inference
+//! options the model reads, and an option the caller set that it does not
+//! read refused before the call (the adapter's `_inference`); the answer to
+//! a classification is still refused (`problem_type`, T1.28b). The client's
+//! checks before the call (an empty context, a constant target) and its
+//! presentation of the answer stay in the host (decision E45).
 
 use std::sync::Arc;
 
@@ -35,6 +39,16 @@ pub const TABULAR: &str = "kumo-tabular";
 
 /// The output a regression asks for when the caller names none.
 pub const REGRESSION_FIELDS: [&str; 1] = ["prediction"];
+
+/// The outputs a classification asks for when the caller names none.
+pub const CLASSIFICATION_FIELDS: [&str; 2] = ["prediction", "probabilities"];
+
+/// The task kinds whose call this build writes.
+const CALLED: [&str; 3] = [
+    "regression",
+    "binary_classification",
+    "multiclass_classification",
+];
 
 /// The statistic a regression's point prediction reports unless one was
 /// chosen.
@@ -126,15 +140,57 @@ pub fn check_model(model: &str) -> Result<(), CoreError> {
     }
 }
 
-/// The call one gathered payload makes of `model`, with `request_id`.
-pub fn body(payload: &Value, model: &str, request_id: &str) -> Result<Value, CoreError> {
+/// The task's kind, when it is one whose call this build writes.
+fn called(payload: &Value) -> Result<&str, CoreError> {
+    let Value::Object(_) = payload else {
+        return Err(bad_payload("not_an_object"));
+    };
+    match payload.get("task").and_then(|task| task.get("kind")) {
+        Some(Value::Text(kind)) if CALLED.contains(&kind.as_str()) => Ok(kind),
+        _ => Err(not_yet("problem_type")),
+    }
+}
+
+/// The outputs this build asks for of a payload: its task's default, and
+/// any other list refused by name (`outputs`, decision E61).
+pub fn check_outputs(payload: &Value, outputs: &[String]) -> Result<(), CoreError> {
+    let default: &[&str] = if called(payload)? == "regression" {
+        &REGRESSION_FIELDS
+    } else {
+        &CLASSIFICATION_FIELDS
+    };
+    if outputs != default {
+        return Err(not_yet("outputs"));
+    }
+    Ok(())
+}
+
+/// The call one gathered payload makes of `model`, with `request_id`,
+/// asking `outputs`; `asked` names the inference options the caller set,
+/// of which one the model does not read is refused before the call, as
+/// the adapter refuses it (`_inference`): `UNSUPPORTED_REQUEST` naming the
+/// model and those options.
+pub fn body(
+    payload: &Value,
+    model: &str,
+    request_id: &str,
+    outputs: &[String],
+    asked: &[String],
+) -> Result<Value, CoreError> {
     check_model(model)?;
-    regression(payload)?;
+    let kind = called(payload)?;
     let mut envelope = payload.clone();
     envelope.set("model", Value::text(model));
 
     // The outputs, and a regression's statistic: the one the payload
-    // carries, the median unless one was chosen.
+    // carries, the median unless one was chosen (`_output_for`).
+    let fields = Value::Array(outputs.iter().map(|f| Value::text(f)).collect());
+    if kind != "regression" {
+        envelope.set(
+            "output",
+            Value::Object(vec![("fields".to_owned(), fields.clone())]),
+        );
+    }
     let chosen = match payload.get("output") {
         None | Some(Value::Null) => None,
         Some(output @ Value::Object(_)) => match output.get("prediction_statistic") {
@@ -145,19 +201,18 @@ pub fn body(payload: &Value, model: &str, request_id: &str) -> Result<Value, Cor
         },
         Some(_) => return Err(bad_payload("output")),
     };
-    envelope.set(
-        "output",
-        Value::Object(vec![
-            (
-                "fields".to_owned(),
-                Value::Array(REGRESSION_FIELDS.iter().map(|f| Value::text(f)).collect()),
-            ),
-            (
-                "prediction_statistic".to_owned(),
-                Value::Text(chosen.unwrap_or_else(|| DEFAULT_STATISTIC.to_owned())),
-            ),
-        ]),
-    );
+    if kind == "regression" {
+        envelope.set(
+            "output",
+            Value::Object(vec![
+                ("fields".to_owned(), fields),
+                (
+                    "prediction_statistic".to_owned(),
+                    Value::Text(chosen.unwrap_or_else(|| DEFAULT_STATISTIC.to_owned())),
+                ),
+            ]),
+        );
+    }
 
     // The payload's own metadata, copied, with the call's id.
     let mut metadata = match payload.get("metadata") {
@@ -168,15 +223,39 @@ pub fn body(payload: &Value, model: &str, request_id: &str) -> Result<Value, Cor
     metadata.set("request_id", Value::text(request_id));
     envelope.set("metadata", metadata);
 
-    // Only the inference options the model reads. No option is the
-    // caller's on this route (the bridge takes none), so every one left
-    // out is the engine's default.
+    // Only the inference options the model reads: one the caller set and
+    // the model does not read is refused; the engine's defaults of the
+    // others are left out.
     match envelope.get("inference") {
         Some(Value::Object(_)) => {
             if let Some(Value::Object(config)) = envelope
                 .get("inference")
                 .and_then(|i| i.get("inference_config"))
             {
+                let mut refused: Vec<&String> = config
+                    .iter()
+                    .map(|(name, _)| name)
+                    .filter(|name| !INFERENCE_OPTIONS.contains(&name.as_str()))
+                    .filter(|name| asked.contains(name))
+                    .collect();
+                refused.sort();
+                if !refused.is_empty() {
+                    return Err(CoreError::new(
+                        ErrorKind::Unsupported,
+                        ErrorCode::UnsupportedRequest,
+                        "the model does not read an inference option the call set",
+                    )
+                    .with_field("model", Detail::text(model))
+                    .with_field(
+                        "unsupported",
+                        Detail::List(
+                            refused
+                                .iter()
+                                .map(|n| sdm_contract::Scalar::Utf8((*n).clone()))
+                                .collect(),
+                        ),
+                    ));
+                }
                 let trimmed = Value::Object(
                     config
                         .iter()

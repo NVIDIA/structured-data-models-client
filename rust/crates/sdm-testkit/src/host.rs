@@ -781,6 +781,10 @@ fn start_materialize(
             unseeded: false,
             anchor_entity: false,
             num_context_samples: None,
+            num_hops: None,
+            num_neighbors: None,
+            prediction_statistic: None,
+            inference_config: None,
             options: vec![],
             sampler_state: sampler
                 .as_ref()
@@ -1037,6 +1041,7 @@ fn predict(
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
             outputs: vec!["prediction".into()],
+            inference_asked: vec![],
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;

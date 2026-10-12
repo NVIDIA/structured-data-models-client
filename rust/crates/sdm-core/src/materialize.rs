@@ -37,14 +37,20 @@
 //! windowed `SUM`, `COUNT`, `AVG`, `MIN` or `MAX` of a table referring to
 //! it, a comparison of one with a number or `NULL` (binary), or a column
 //! of the entity's own row (static: multiclass or regression), from T1.27;
-//! it materializes the windowed regression's request, with the
-//! reference's defaults (a fast run, two hops of 32 neighbors, the default
-//! seed or the one given), the classification and static tasks' layout
-//! being T1.28a's (`classification_task`, `target_leakage`); and it
-//! refuses with `UNSUPPORTED_REQUEST` naming the rule
-//! ([`sdm_engine::not_yet`]) every input whose request takes a rule it does
-//! not port yet (register entry P1B-3), and the requests and policies it
-//! needs of its provider before anything is fetched.
+//! from T1.28a it materializes each of those tasks' requests, with the
+//! client's rules the core holds (design, "Host-held semantics"): the run
+//! mode the context size selects (a fast run of 1,000 examples and two
+//! hops of 32 neighbors, or a best run of 10,000 and 64), the context
+//! narrowed to the size asked, the hops the options ask bounded, the
+//! entity count, the reserved names, the statistic, the inference
+//! options, a static target's columns kept out of what is read and sent,
+//! the subgraph's 15 tables, the payload's layout and byte limit
+//! ([`sdm_request::payload`]), and the notices of what the request leaves
+//! out, each a code and fields the host words; and it refuses with
+//! `UNSUPPORTED_REQUEST` naming the rule ([`sdm_engine::not_yet`]) every
+//! input whose request takes a rule it does not port yet (register entry
+//! P1B-3), and the requests and policies it needs of its provider before
+//! anything is fetched.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -81,7 +87,8 @@ use sdm_engine::sample::{self, SEED_END, SEED_START};
 use sdm_engine::time::Instant;
 use sdm_engine::time::offset::{Offset, timeframe};
 use sdm_engine::time::text::{Reader, Unread};
-use sdm_request::payload::{self, Sampled};
+use sdm_request::options::{self, Kind as Task};
+use sdm_request::payload::{self, RESERVED, Sampled};
 
 use crate::describe::{ask, describe};
 use crate::profiles::Profile;
@@ -119,20 +126,38 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     (CONTEXT_BEFORE_DATA, &[]),
     (ANCHOR_AFTER_DATA, &[]),
     (CONTEXT_COVERAGE, &[]),
+    (CONTEXT_CAPPED, &[]),
+    (TABLES_UNLINKED, &["one", "several"]),
+    (TABLES_UNREACHED, &["one", "several"]),
+    (COLUMNS_UNREAD, &["one", "several"]),
+    (CONTEXT_ANSWERS, &["windowed", "static"]),
 ];
+/// The notice that the default run mode gathered as many context examples
+/// as it takes (the client's `_warn_of_a_context_the_default_mode_capped`).
+pub const CONTEXT_CAPPED: &str = "CONTEXT_CAPPED";
+/// The notice that tables of the schema no relationship connects to the
+/// entity table are not in the request (`_warn_of_tables_left_out`).
+pub const TABLES_UNLINKED: &str = "TABLES_UNLINKED";
+/// The notice that tables linked into the schema were reached by no row
+/// the sampler read (`_warn_of_tables_left_out`).
+pub const TABLES_UNREACHED: &str = "TABLES_UNREACHED";
+/// The notice that columns the request sends are of a meaning the model
+/// does not read (`_warn_of_columns_the_model_does_not_read`).
+pub const COLUMNS_UNREAD: &str = "COLUMNS_UNREAD";
+/// The notice that context examples answering the question were taken out
+/// (`_drop_context_that_answers_the_question`).
+pub const CONTEXT_ANSWERS: &str = "CONTEXT_ANSWERS";
 /// The seed the reference samples with when none is given.
 const DEFAULT_SEED: u128 = 42;
-/// A fast run's most context examples (`_MAX_CONTEXT_SIZE`).
-const CONTEXT_EXAMPLES: usize = 1_000;
 /// How many times as many candidates as examples a run tries
 /// (`max_pq_iterations`' default).
 const ITERATIONS: usize = 10;
+/// The most tables a request's subgraph carries (`_MAX_SUBGRAPH_TABLES`).
+const SUBGRAPH_TABLES: usize = 15;
 /// The most entities one request predicts for.
 const PREDICT_ROWS: usize = 1_000;
 /// The most rows an instance table may hold (`MAX_TABLE_ROWS`).
 const TABLE_ROWS: usize = 10_000;
-/// The largest payload the endpoint takes, in bytes (`_MAX_SIZE`).
-const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 /// `pd.Timestamp.max` and `min`, in nanoseconds: the bounds of a table
 /// whose time column holds no value.
 const TIME_MAX: i64 = i64::MAX;
@@ -151,7 +176,12 @@ pub(crate) struct Inputs {
     pub seed: Option<Seed>,
     pub unseeded: bool,
     pub anchor_entity: bool,
-    pub num_context_samples: Option<u64>,
+    pub num_context_samples: Option<Box<Seed>>,
+    pub num_hops: Option<Box<Seed>>,
+    pub num_neighbors: Option<Box<Seed>>,
+    pub prediction_statistic: Option<String>,
+    /// The caller's inference options, as read.
+    pub inference_config: Option<sdm_wire::json::Value>,
     pub options: Vec<String>,
     pub facts: HostFacts,
     /// The zones the run resolves names with: the host's local zone, which
@@ -297,14 +327,6 @@ fn query_schema(description: &SourceDescription) -> QuerySchema {
             })
             .collect(),
     }
-}
-
-/// The task a query's target makes (`_get_task_type`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Task {
-    Regression,
-    Binary,
-    Multiclass,
 }
 
 /// A windowed aggregation of a table referring to the entity's.
@@ -482,6 +504,20 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
             let target = shape(target, entity_table)?;
             if matches!(target, Shape::Condition { .. }) {
                 return Err(not_yet("condition"));
+            }
+            // An average compared with `NULL`, which the reference fails
+            // with an internal error, is refused by name (register P1B-21,
+            // the class of decision E66(b)), not labelled.
+            if constant.is_none()
+                && matches!(
+                    &target,
+                    Shape::Aggregated(Windowed {
+                        aggregation: labels::Aggregation::Avg,
+                        ..
+                    })
+                )
+            {
+                return Err(not_yet("average_null"));
             }
             Ok(Shape::Condition {
                 target: Box::new(target),
@@ -1207,7 +1243,6 @@ fn option_not_taken(name: &str) -> CoreError {
     match name {
         "context_anchor_time" => not_yet("context_anchor_time"),
         "exclude_cols_dict" => not_yet("exclude_cols_dict"),
-        "inference_config" => not_yet("inference_config"),
         "lag_timesteps" => not_yet("lag_timesteps"),
         "max_pq_iterations" => not_yet("max_pq_iterations"),
         "num_hops" => not_yet("num_hops"),
@@ -1225,9 +1260,9 @@ fn option_not_taken(name: &str) -> CoreError {
 /// The call's options this core does not take yet, each refused by its
 /// name before anything else of the call is read, as the host's bridge
 /// refused them before the core ran until T1.24 (decision E61): the other
-/// sampling options, the first in name order; an unseeded sample; a
-/// context size, whose run mode is T1.28a's; and an anchor at each
-/// entity's own time.
+/// sampling options, the first in name order; an unseeded sample; and an
+/// anchor at each entity's own time; the hops they ask bounded first
+/// ([`options::hops`]).
 fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
     if let Some(first) = inputs.options.iter().min() {
         return Err(option_not_taken(first));
@@ -1235,13 +1270,172 @@ fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
     if inputs.unseeded {
         return Err(not_yet("unseeded"));
     }
-    if inputs.num_context_samples.is_some() {
-        return Err(not_yet("num_context_samples"));
-    }
     if inputs.anchor_entity {
         return Err(not_yet("anchor_entity"));
     }
     Ok(())
+}
+
+/// Refuses a column of the schema named as the wire names a column of its
+/// own (`instance_id`, `__kumo_anchor_time`), as the client refuses it
+/// (`_refuse_a_name_the_wire_reserves`): `INVALID_SCHEMA`, naming each
+/// table and column, in order.
+fn reserved(description: &SourceDescription) -> Result<(), CoreError> {
+    let mut taken: Vec<(&str, &str)> = description
+        .tables
+        .iter()
+        .flat_map(|t| {
+            t.columns
+                .iter()
+                .filter(|c| RESERVED.contains(&c.name.as_str()))
+                .map(move |c| (t.name.as_str(), c.name.as_str()))
+        })
+        .collect();
+    if taken.is_empty() {
+        return Ok(());
+    }
+    taken.sort_unstable();
+    let list = |names: Vec<&str>| {
+        Detail::List(
+            names
+                .into_iter()
+                .map(|n| Scalar::Utf8(n.to_owned()))
+                .collect(),
+        )
+    };
+    Err(CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidSchema,
+        "a column of the schema has a name the request needs for its own",
+    )
+    .with_field("tables", list(taken.iter().map(|(t, _)| *t).collect()))
+    .with_field("columns", list(taken.iter().map(|(_, c)| *c).collect())))
+}
+
+/// A list of names as a warning's field.
+fn names<'a>(names: impl IntoIterator<Item = &'a str>) -> Detail {
+    Detail::List(
+        names
+            .into_iter()
+            .map(|n| Scalar::Utf8(n.to_owned()))
+            .collect(),
+    )
+}
+
+/// The notices of what the request leaves out, given as the client gives
+/// them after it gathers, each a code and fields the host words: the
+/// schema's tables the request does not carry, those no relationship
+/// connects to the entity table apart from those linked and reached by no
+/// row (`_warn_of_tables_left_out`); the columns it sends that the model
+/// does not read, text (`_warn_of_columns_the_model_does_not_read`, a
+/// static target's columns left out); and the context examples that
+/// answered the question, taken out (`_drop_context_that_answers_the_question`).
+fn notices(
+    asker: &Asker,
+    description: &SourceDescription,
+    asked: &Asked,
+    sent: &BTreeSet<String>,
+    excluded: &[(String, String)],
+    answering: usize,
+    windowed: bool,
+) {
+    let mut missing: Vec<&str> = description
+        .tables
+        .iter()
+        .map(|t| t.name.as_str())
+        .filter(|n| !sent.contains(*n))
+        .collect();
+    missing.sort_unstable();
+    // The tables a relationship path connects to the entity table, read in
+    // both directions (`_tables_linked_to`).
+    let mut linked = BTreeSet::from([asked.entity_table.as_str()]);
+    let mut queue = vec![asked.entity_table.as_str()];
+    while let Some(at) = queue.pop() {
+        for link in &description.links {
+            if let [a, b] = link.as_slice() {
+                for (from, to) in [(a, b), (b, a)] {
+                    if from.table == at && linked.insert(to.table.as_str()) {
+                        queue.push(to.table.as_str());
+                    }
+                }
+            }
+        }
+    }
+    let (unreached, unlinked): (Vec<&str>, Vec<&str>) =
+        missing.into_iter().partition(|n| linked.contains(n));
+    let several = |n: usize| if n > 1 { "several" } else { "one" };
+    if !unlinked.is_empty() {
+        asker.warn(CoreWarning {
+            code: TABLES_UNLINKED.into(),
+            message: "tables of the schema no relationship connects are not in the request".into(),
+            fields: [
+                ("variant".to_owned(), Detail::text(several(unlinked.len()))),
+                ("tables".to_owned(), names(unlinked.iter().copied())),
+                (
+                    "entity_table".to_owned(),
+                    Detail::text(asked.entity_table.as_str()),
+                ),
+            ]
+            .into(),
+        });
+    }
+    if !unreached.is_empty() {
+        asker.warn(CoreWarning {
+            code: TABLES_UNREACHED.into(),
+            message: "tables linked into the schema were reached by no row sampled".into(),
+            fields: [
+                ("variant".to_owned(), Detail::text(several(unreached.len()))),
+                ("tables".to_owned(), names(unreached.iter().copied())),
+            ]
+            .into(),
+        });
+    }
+    let mut unread: Vec<String> = description
+        .tables
+        .iter()
+        .filter(|t| sent.contains(&t.name))
+        .flat_map(|t| {
+            t.columns
+                .iter()
+                .filter(|c| c.stype == Stype::Text)
+                .filter(|c| {
+                    !excluded
+                        .iter()
+                        .any(|(et, ec)| *et == t.name && *ec == c.name)
+                })
+                .map(move |c| format!("{}.{}", t.name, c.name))
+        })
+        .collect();
+    unread.sort_unstable();
+    if !unread.is_empty() {
+        asker.warn(CoreWarning {
+            code: COLUMNS_UNREAD.into(),
+            message: "columns the request sends are of a meaning the model does not read".into(),
+            fields: [
+                ("variant".to_owned(), Detail::text(several(unread.len()))),
+                (
+                    "columns".to_owned(),
+                    names(unread.iter().map(String::as_str)),
+                ),
+                ("stypes".to_owned(), names(["text"])),
+            ]
+            .into(),
+        });
+    }
+    if answering > 0 {
+        asker.warn(CoreWarning {
+            code: CONTEXT_ANSWERS.into(),
+            message: "context examples answering the question were taken out".into(),
+            fields: [
+                (
+                    "variant".to_owned(),
+                    Detail::text(if windowed { "windowed" } else { "static" }),
+                ),
+                ("examples".to_owned(), count(answering)),
+            ]
+            .into(),
+        });
+    }
 }
 
 /// The body of a `materialize` run.
@@ -1256,6 +1450,21 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         }),
     };
     memo.keep();
+    // The context size's bound and the run mode it selects, first, as the
+    // client bounds it before anything else of the call (T1.28a).
+    let integer = |n: &Seed| {
+        (
+            n.is_negative(),
+            u128::from_str_radix(n.magnitude_hex(), 16).ok(),
+        )
+    };
+    let mode = options::run_mode(inputs.num_context_samples.as_deref().map(integer))?;
+    // The hops the sampling options ask, bounded as the client bounds them,
+    // before the options this core does not take are refused by name.
+    options::hops(
+        inputs.num_hops.as_deref().map(integer),
+        inputs.num_neighbors.as_deref().map(integer),
+    )?;
     options_taken(&inputs)?;
     #[cfg(feature = "test-ops")]
     let labels_only = inputs.labels_only;
@@ -1267,8 +1476,18 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         seed,
         facts,
         zones,
+        num_context_samples,
+        prediction_statistic,
+        inference_config,
         ..
     } = inputs;
+    // The most context examples asked for, which narrows the context the
+    // mode gathers (`_narrow_context`); the bound above holds it to the
+    // best mode's.
+    let asked_examples = num_context_samples
+        .as_deref()
+        .and_then(Seed::to_u128)
+        .and_then(|n| usize::try_from(n).ok());
     // A table the schema names otherwise than the source does is read by
     // its source name (`Table::source`), as the reference's engine reads
     // it; the query and the payload name it as the schema does.
@@ -1305,6 +1524,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         )
         .with_field("field", Detail::text("indices")));
     }
+    // The statistic the caller chose, one the endpoint reports, and no
+    // column named as the wire names its own (the client's checks before
+    // it gathers, in its order).
+    let statistic = options::statistic(prediction_statistic.as_deref())?;
+    reserved(&description)?;
 
     let graph = Graph::new(&description)?;
     let profile = Profile::resolve(&ProfileSpec {
@@ -1345,6 +1569,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     }
     let seed_value = seed_scalar(&seed)?;
     let asked = asked(&validated)?;
+    options::statistic_for(asked.task, statistic.as_ref())?;
     let entity = graph
         .table(&asked.entity_table)
         .ok_or_else(|| internal("the query's entity table is not in the graph"))?;
@@ -1476,7 +1701,8 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // The examples: a reservoir sample of the entity table, kept one row
     // per entity, with the entity table's columns the query reads; for a
     // temporal query, walked back from the context's anchor by the window.
-    let trials = ITERATIONS * CONTEXT_EXAMPLES;
+    let context_examples = mode.context_examples();
+    let trials = ITERATIONS * context_examples;
     let mut entity_columns = BTreeSet::from([key.clone()]);
     if let Some(time) = &entity.time_column {
         entity_columns.insert(time.clone());
@@ -1566,11 +1792,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
         .filter(|&row| labelled.mask[row])
         .collect();
-    let num_train = labelled_rows.len().min(CONTEXT_EXAMPLES);
-    if num_train == 0 {
+    let gathered = labelled_rows.len().min(context_examples);
+    if gathered == 0 {
         return Err(invalid("no context example was collected", "anchor_time"));
     }
-    if kept.len() >= trials && num_train < CONTEXT_EXAMPLES / 2 {
+    if kept.len() >= trials && gathered < context_examples / 2 {
         // The reference warns of it once in a process: given on every run
         // that meets it, and once in a process by the host
         // ([`ONCE_PER_PROCESS`], decision E52).
@@ -1578,12 +1804,33 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             code: CONTEXT_COVERAGE.into(),
             message: "fewer than half the context examples asked for were collected".into(),
             fields: [
-                ("examples".to_owned(), count(CONTEXT_EXAMPLES)),
+                ("examples".to_owned(), count(context_examples)),
                 ("candidates".to_owned(), count(trials)),
             ]
             .into(),
         });
     }
+    // The default mode capped the context at as many examples as it takes:
+    // said, as the client says it, the caller having chosen no size.
+    if num_context_samples.is_none() && gathered >= options::RunMode::Fast.context_examples() {
+        asker.warn(CoreWarning {
+            code: CONTEXT_CAPPED.into(),
+            message: "the default run mode gathered as many context examples as it takes".into(),
+            fields: [
+                (
+                    "cap".to_owned(),
+                    count(options::RunMode::Fast.context_examples()),
+                ),
+                (
+                    "most".to_owned(),
+                    count(options::RunMode::Best.context_examples()),
+                ),
+            ]
+            .into(),
+        });
+    }
+    // Then narrowed to the size asked for (`_narrow_context`).
+    let num_train = asked_examples.map_or(gathered, |n| gathered.min(n));
     let train_rows: Vec<usize> = labelled_rows[..num_train]
         .iter()
         .map(|&row| examples.index[row])
@@ -1598,18 +1845,26 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     if labels_only {
         return labels_result(&asker, &train_keys, &anchors, &labels);
     }
-    // The task's layout in the payload is T1.28a's: a classification's
-    // classes, their order and its positive class, and a static target's
-    // column kept out of what the request sends (`get_exclude_cols_dict`).
-    if asked.task != Task::Regression {
-        return Err(not_yet("classification_task"));
+    // The inference options, read for the task's config class, as the
+    // engine reads them before it lays out any request.
+    let options = options::options(asked.task, inference_config.as_ref())?;
+    // A static target's columns, kept out of what the request reads and
+    // sends (`get_exclude_cols_dict`); each must be one of its table's
+    // features, as the reference's sampler requires.
+    let mut excluded_columns = BTreeSet::new();
+    asked.target.entity_columns(&mut excluded_columns);
+    let excluded: Vec<(String, String)> = excluded_columns
+        .into_iter()
+        .map(|column| (entity.name.clone(), column))
+        .collect();
+    for (_, column) in &excluded {
+        if !graph.features(entity).iter().any(|(n, _)| n == column) {
+            return Err(invalid(
+                "the column a static target reads is not one of its table's features",
+                "query",
+            ));
+        }
     }
-    if aggregated.is_none() {
-        return Err(not_yet("target_leakage"));
-    }
-    let labels::Labels::Float(targets) = labels else {
-        return Err(internal("a windowed aggregation's labels are not float32"));
-    };
     let num_test = indices.len();
     let examples_total = num_train + num_test;
     if num_train > TABLE_ROWS {
@@ -1623,7 +1878,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     anchors.extend(std::iter::repeat_n(anchor, num_test));
 
     // The subgraph: each example's entity row.
-    let entity_names = crate::subgraph::sample_columns(&graph, entity);
+    let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
     let looked_up = read_times.read(
         &asker,
         entity,
@@ -1691,27 +1946,51 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         anchors: &anchors,
         nulls,
         entity,
+        neighbors: mode.neighbors(),
+        excluded: &excluded,
     }
     .run(entity_rows)
     .await?;
+    // The subgraph carries at most as many tables as the endpoint reads,
+    // refused as the reference's engine refuses it (`_get_context`).
+    if walked.tables.len() > SUBGRAPH_TABLES {
+        return Err(invalid(
+            "the request's subgraph carries more tables than the endpoint reads",
+            "tables",
+        )
+        .with_field("tables", count(walked.tables.len()))
+        .with_field("limit", count(SUBGRAPH_TABLES)));
+    }
+    let sent: BTreeSet<String> = walked.tables.iter().map(|t| t.name.clone()).collect();
 
-    let payload = payload::regression(&Sampled {
+    let built = payload::build(&Sampled {
         num_train,
         num_test,
         anchors,
-        targets,
+        kind: asked.task,
+        labels,
+        windowed: aggregated.is_some(),
         tables: walked.tables,
         links: walked.links,
         entity_table: entity.name.clone(),
         source_query: source_query.clone(),
+        run_mode: mode,
+        options,
+        statistic,
     })?;
-    if payload.len() > PAYLOAD_BYTES {
-        return Err(invalid(
-            "the request is larger than the endpoint takes",
-            "query",
-        ));
-    }
-    let payload = asker.attach(Attachment::Bytes(payload))?;
+    // What the request leaves out, said as the client says it, in its
+    // order: the tables, the columns the model does not read, and the
+    // context that answers the question.
+    notices(
+        &asker,
+        &description,
+        &asked,
+        &sent,
+        &excluded,
+        built.answering,
+        aggregated.is_some(),
+    );
+    let payload = asker.attach(Attachment::Bytes(built.bytes))?;
     let query = asker.attach(Attachment::Bytes(
         serde_json::to_vec(&source_query).map_err(|_| internal("a query does not serialize"))?,
     ))?;

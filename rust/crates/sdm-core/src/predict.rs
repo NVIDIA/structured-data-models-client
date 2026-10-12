@@ -23,7 +23,7 @@
 use sdm_contract::ops::{OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
-use sdm_request::predict::{bad_response, body, layout, refused};
+use sdm_request::predict::{bad_response, body, check_outputs, layout, refused};
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
 
@@ -37,12 +37,9 @@ pub(crate) struct Inputs {
     pub request_id: String,
     /// The outputs asked for, by the wire's names.
     pub outputs: Vec<String>,
+    /// The inference options the caller set at `materialize`.
+    pub inference_asked: Vec<String>,
 }
-
-/// The outputs this core predicts: a regression's default alone. Any other
-/// list is refused by name before the state is read, as the host's bridge
-/// refused it before the core ran until T1.24 (decision E61).
-const OUTPUTS: [&str; 1] = ["prediction"];
 
 /// The JSON a request state's payload holds, or a refusal naming where in
 /// it and what kind of fault, never the text.
@@ -62,11 +59,17 @@ fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
 }
 
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
-    if inputs.outputs != OUTPUTS {
-        return Err(sdm_request::predict::not_yet("outputs"));
-    }
+    // The outputs this core asks for: the task's default alone, any other
+    // list refused by name (decision E61), once the state's task is read.
     let payload = payload(&inputs.payload)?;
-    let call = body(&payload, &inputs.model, &inputs.request_id)?;
+    check_outputs(&payload, &inputs.outputs)?;
+    let call = body(
+        &payload,
+        &inputs.model,
+        &inputs.request_id,
+        &inputs.outputs,
+        &inputs.inference_asked,
+    )?;
     let reply = asker
         .call_model(
             Endpoint::Predict,

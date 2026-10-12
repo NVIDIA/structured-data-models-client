@@ -19,10 +19,15 @@
 //! refuses a key it does not name. What is open is the data: the tables
 //! named by the source (`related_tables`, a table's `columns`), kept in the
 //! order written, and the cells of each row, any JSON value, each number
-//! the token written ([`Value`]). Two optional keys are the reader's, not
-//! the writer's: `output.prediction_statistic`, which the Python host
-//! records, and `inference_config.class_shuffle`; `predict` reads each when
-//! a state carries it.
+//! the token written ([`Value`]).
+//!
+//! The task's target and the inference options take one shape per kind of
+//! task (T1.28a): a regression's ([`Target`], [`InferenceConfig`], the
+//! defaults of [`StatePayload`]'s parameters) and a classification's
+//! ([`ClassTarget`], with its classes and positive class, and
+//! [`ClassificationConfig`]). The schema is derived once, over both
+//! ([`AnyTarget`], [`AnyConfig`]: what either writes, the members one kind
+//! alone writes optional), so it names every member either writes.
 
 use schemars::JsonSchema;
 use sdm_contract::ops::Stype;
@@ -64,30 +69,32 @@ impl<T: JsonSchema> JsonSchema for Named<T> {
     }
 }
 
-/// The payload of one prediction request.
+/// The payload of one prediction request: a regression's by default, a
+/// classification's with [`ClassTarget`] and [`ClassificationConfig`].
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
-#[schemars(deny_unknown_fields)]
-pub struct StatePayload {
+#[schemars(deny_unknown_fields, rename = "StatePayload")]
+pub struct StatePayload<T = Target, C = InferenceConfig> {
     /// The model the request was laid out for.
     pub model: String,
-    pub task: Task,
+    pub task: Task<T>,
     pub schema: PayloadSchema,
     /// The examples with a label, and the rows sampled for them.
     pub context: Half,
     /// The examples to predict, and the rows sampled for them.
     pub predict: Half,
     pub output: Output,
-    pub inference: Inference,
+    pub inference: Inference<C>,
     pub metadata: Metadata,
 }
 
 /// What is predicted, of which entity.
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
-#[schemars(deny_unknown_fields)]
-pub struct Task {
-    /// The task's kind, as the engine names it (`regression`).
+#[schemars(deny_unknown_fields, rename = "Task")]
+pub struct Task<T = Target> {
+    /// The task's kind, as the engine names it (`regression`,
+    /// `binary_classification`, `multiclass_classification`).
     pub kind: String,
-    pub target: Target,
+    pub target: T,
     pub entity_table_names: Vec<String>,
     /// The instance table's column holding each example's anchor time,
     /// where the examples have one.
@@ -96,12 +103,44 @@ pub struct Task {
     pub anchor_time_column: Option<String>,
 }
 
-/// The label column of the instance table.
+/// The label column of the instance table: a regression's.
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Target {
     pub column_name: String,
     pub dtype: Dtype,
+}
+
+/// A classification's label column, with its classes in the order the
+/// engine writes them (`_task_spec`): a binary task's `false` and `true`,
+/// `true` its positive class; a multiclass task's labels in the order the
+/// context first holds them, as text.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct ClassTarget {
+    pub column_name: String,
+    pub dtype: Dtype,
+    pub classes: Vec<String>,
+    /// A binary task's positive class; a multiclass task names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub positive_class: Option<String>,
+}
+
+/// The label column of the instance table; a classification's names its
+/// classes, and a binary task's its positive class. The schema of
+/// [`Target`] and [`ClassTarget`] at once, for the schema only.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields, rename = "Target")]
+pub struct AnyTarget {
+    pub column_name: String,
+    pub dtype: Dtype,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Vec<String>")]
+    pub classes: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub positive_class: Option<String>,
 }
 
 /// A column's type on the wire, as the reference's engine names it
@@ -226,8 +265,7 @@ pub enum Format {
 #[schemars(deny_unknown_fields)]
 pub struct Output {
     pub fields: Vec<String>,
-    /// A regression's statistic, as the caller chose it: the reader's, not
-    /// the writer's (the Python host records it on the payload).
+    /// A regression's statistic, where the caller chose one (T1.28a).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub prediction_statistic: Option<String>,
@@ -235,14 +273,15 @@ pub struct Output {
 
 /// How the model is run.
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
-#[schemars(deny_unknown_fields)]
-pub struct Inference {
+#[schemars(deny_unknown_fields, rename = "Inference")]
+pub struct Inference<C = InferenceConfig> {
     pub run_mode: String,
     pub use_prediction_time: bool,
-    pub inference_config: InferenceConfig,
+    pub inference_config: C,
 }
 
-/// The engine's inference options, as it writes them.
+/// A regression's inference options, as the engine writes them
+/// (`_inference_config_to_json`).
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct InferenceConfig {
@@ -251,12 +290,47 @@ pub struct InferenceConfig {
     pub column_shuffle: bool,
     pub category_shuffle: bool,
     pub hop_shuffle: bool,
-    /// The reader's, not the writer's.
+    /// The reader's, not the writer's: a regression's options hold none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "bool")]
     pub class_shuffle: Option<bool>,
     pub target_transforms: Vec<String>,
     pub output_type: String,
+}
+
+/// A classification's inference options, as the engine writes them.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct ClassificationConfig {
+    pub kind: String,
+    pub num_estimators: u64,
+    pub column_shuffle: bool,
+    pub category_shuffle: bool,
+    pub hop_shuffle: bool,
+    pub class_shuffle: bool,
+}
+
+/// The engine's inference options, as it writes them: a classification's
+/// with its class shuffle, a regression's with its target transforms and
+/// output type. The schema of [`InferenceConfig`] and
+/// [`ClassificationConfig`] at once, for the schema only.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields, rename = "InferenceConfig")]
+pub struct AnyConfig {
+    pub kind: String,
+    pub num_estimators: u64,
+    pub column_shuffle: bool,
+    pub category_shuffle: bool,
+    pub hop_shuffle: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "bool")]
+    pub class_shuffle: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Vec<String>")]
+    pub target_transforms: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub output_type: Option<String>,
 }
 
 /// What the request was made from.
@@ -271,7 +345,7 @@ pub struct Metadata {
     pub num_prediction_examples: u64,
 }
 
-impl StatePayload {
+impl<T: Serialize, C: Serialize> StatePayload<T, C> {
     /// The payload's UTF-8 JSON text: compact, members in the order the
     /// types declare them, open maps in the order written, each cell's
     /// number its token.
@@ -285,7 +359,8 @@ impl StatePayload {
     }
 }
 
-/// The JSON Schema of [`StatePayload`], every definition inlined, as
+/// The JSON Schema of [`StatePayload`] of either kind of task (over
+/// [`AnyTarget`] and [`AnyConfig`]), every definition inlined, as
 /// committed in `sdm-contract`'s `schema/state-payload.json`:
 /// pretty-printed, with a trailing newline, with no `$schema`, since the
 /// contract holds it as one of its own definitions.
@@ -293,7 +368,7 @@ pub fn schema_json() -> String {
     let generator = schemars::generate::SchemaSettings::draft2020_12()
         .with(|settings| settings.inline_subschemas = true)
         .into_generator();
-    let mut schema = generator.into_root_schema_for::<StatePayload>();
+    let mut schema = generator.into_root_schema_for::<StatePayload<AnyTarget, AnyConfig>>();
     schema.remove("$schema");
     let mut text = serde_json::to_string_pretty(&schema).unwrap_or_default();
     text.push('\n');

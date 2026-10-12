@@ -130,6 +130,7 @@ pub fn start(
                 model: request.model,
                 request_id: request.request_id,
                 outputs: request.outputs,
+                inference_asked: request.inference_asked,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }
@@ -210,6 +211,26 @@ pub(crate) fn materialize(
                     Some(memo)
                 }
             };
+            // The caller's inference options, as the host attached them: read
+            // with the wire's bounded reader, so text nested past its depth
+            // is refused by name, never read recursively (decision E49).
+            let inference_config = match request.inference_config {
+                None => None,
+                Some(id) => {
+                    let Some(Attachment::Bytes(bytes)) = attachments.remove(&id) else {
+                        return Err(internal("the inference options are not the bytes named"));
+                    };
+                    Some(sdm_wire::json::read(&bytes).map_err(|e| {
+                        CoreError::new(
+                            ErrorKind::InvalidRequest,
+                            ErrorCode::InvalidRequest,
+                            "the inference options are not JSON this core reads",
+                        )
+                        .with_field("field", Detail::text("inference_config"))
+                        .with_field("category", Detail::text(e.category))
+                    })?)
+                }
+            };
             let source = crate::materialize::fingerprint(&request.provider, &description)?;
             let access = root.data_access(&request.provider)?;
             let inputs = crate::materialize::Inputs {
@@ -223,6 +244,10 @@ pub(crate) fn materialize(
                 unseeded: request.unseeded,
                 anchor_entity: request.anchor_entity,
                 num_context_samples: request.num_context_samples,
+                num_hops: request.num_hops,
+                num_neighbors: request.num_neighbors,
+                prediction_statistic: request.prediction_statistic,
+                inference_config,
                 options: request.options,
                 facts,
                 zones: Arc::clone(&zones),

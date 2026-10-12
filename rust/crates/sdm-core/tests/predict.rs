@@ -86,6 +86,7 @@ fn predict_run_asking(
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),
         outputs: outputs.iter().map(|o| (*o).to_owned()).collect(),
+        inference_asked: vec![],
     });
     let attachments = Attachments::from([
         (AttachmentId(1), Attachment::Bytes(payload.into_bytes())),
@@ -458,12 +459,44 @@ fn what_predict_does_not_port_yet_is_refused_by_name() {
         (ErrorKind::NotFound, ErrorCode::UnknownModel)
     );
     assert!(!written(&error).contains(CANARY));
-    // A task other than a regression.
-    let payload = payload_text().replace(
+    // A task this build writes no call for, before any call.
+    let forecast = payload_text().replace(
+        r#""kind":"regression","target""#,
+        r#""kind":"forecasting","target""#,
+    );
+    let mut run = predict_run(REQUEST_STATE_VERSION, forecast, "kumo-relational").unwrap();
+    assert_eq!(rule(&run.next().unwrap_err()), Some(&text("problem_type")));
+    // A classification (T1.28a): asked for a regression's outputs, refused
+    // by name before the call; asked for its own, the call is made and the
+    // answer refused, its layout T1.28b's.
+    let binary = payload_text().replace(
         r#""kind":"regression","target""#,
         r#""kind":"binary_classification","target""#,
     );
-    let mut run = predict_run(REQUEST_STATE_VERSION, payload, "kumo-relational").unwrap();
+    let mut run = predict_run(REQUEST_STATE_VERSION, binary.clone(), "kumo-relational").unwrap();
+    assert_eq!(rule(&run.next().unwrap_err()), Some(&text("outputs")));
+    let mut run = predict_run_asking(
+        REQUEST_STATE_VERSION,
+        binary,
+        "kumo-relational",
+        &["prediction", "probabilities"],
+    )
+    .unwrap();
+    let (id, body) = call(&mut run);
+    let sent: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        sent["output"],
+        json!({"fields": ["prediction", "probabilities"]})
+    );
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[]}"#.to_vec(),
+        },
+    )
+    .unwrap();
     assert_eq!(rule(&run.next().unwrap_err()), Some(&text("problem_type")));
     // An entity of a key whose type the result does not lay out yet.
     let payload = payload_text().replace(

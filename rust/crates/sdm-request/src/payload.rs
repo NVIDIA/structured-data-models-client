@@ -13,28 +13,50 @@
 //!
 //! Each column's wire dtype comes from the Arrow type sampled, by the
 //! reference's rule for that type (`_dtype_name`): integers as `int64`,
-//! floats at their width, text as `string`, booleans, and times with no
-//! zone as `timestamp[us]`; every cell is written under its column's dtype
-//! (`_cell_json_value`): an integer past the JSON-safe range as its
-//! digits, a missing value or a float NaN as null, a time as its UTC wall
-//! clock to the microsecond. Any other type is refused by name, as is a
-//! value the dtype cannot hold, as the reference refuses it.
+//! floats at their width, text as `string`, booleans, times with no zone
+//! as `timestamp[us]` (a time of day too, each cell null, as the
+//! reference's engine reads it as no time), and a `DECIMAL(38, s)` by what it holds
+//! (`_decimal_dtype_name`): a fraction's scale as `float64`, whole numbers
+//! as `int64` where every value fits, else as `string`, its digits kept;
+//! every cell is written under its column's dtype (`_cell_json_value`): an
+//! integer past the JSON-safe range as its digits, a missing value or a
+//! float NaN as null, a time as its UTC wall clock to the microsecond, a
+//! decimal float64 does not hold exactly refused as the caller's error, as
+//! the reference refuses it. Any other type is refused by name.
+//!
+//! From T1.28a the layout is the task's (`_task_spec`, `_target_dtype`): a
+//! regression's target at the labels' type, a binary task's as booleans
+//! with the classes `false` and `true`, a multiclass task's as text where
+//! the labels are booleans (`'False'`, `'True'`) and its classes in the
+//! order the context first holds them; the outputs the task answers, the
+//! regression's statistic where one was chosen, the run mode and the
+//! inference options ([`crate::options`]). And the context that answers
+//! the question is taken out, as the reference's client takes it out
+//! (`_drop_context_that_answers_the_question`): a context row whose entity
+//! is one predicted for, at the same anchor for a windowed target and at
+//! any for a static one, with the related rows that hang off it; how many
+//! is [`Built::answering`], which the core gives as its notice.
+
+use std::collections::BTreeSet;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
-    Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, TimestampMicrosecondType,
-    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type,
-    UInt32Type, UInt64Type,
+    Decimal128Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type,
+    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
 use sdm_wire::payload::{
-    ColumnSpec, Dtype, Format, Half, Inference, InferenceConfig, Metadata, Named, Output,
+    ClassTarget, ColumnSpec, Dtype, Format, Half, Inference, Metadata, Named, Output,
     PayloadSchema, PrimaryKey, Relationship, Rows, StatePayload, TableSchema, Target, Task,
 };
+
+use crate::options::{Kind, Options, RunMode};
 
 /// The column of every table that names the example a row belongs to.
 pub const INSTANCE_ID: &str = "instance_id";
@@ -46,11 +68,19 @@ pub const ENTITY_REFERENCE: &str = "__kumo_entity_ref";
 pub const ANCHOR_TIME: &str = "__kumo_anchor_time";
 /// The instance table's label column.
 pub const TARGET: &str = "TARGET";
+/// The names the wire gives its own columns, which a column of the data
+/// may not take (the client's `_RESERVED`).
+pub const RESERVED: [&str; 2] = [INSTANCE_ID, ANCHOR_TIME];
 /// `pd.Timestamp.min` in nanoseconds: an anchor every example has at this
 /// value is no anchor at all.
 const NO_ANCHOR: i64 = -9_223_372_036_854_775_807;
 /// The largest integer a JSON number carries exactly in every reader.
 const JSON_SAFE: i128 = 9_007_199_254_740_991;
+/// The largest payload the endpoint takes, in bytes (`_MAX_SIZE`), counted
+/// as the bytes the payload is written as and sent, UTF-8 (register PD-2),
+/// not the reference's `json.dumps` count, which escapes every character
+/// past ASCII.
+pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 
 /// One column of a sampled table: as sampled, or a text feature as the
 /// reference's sampler sends it, each value its words
@@ -99,7 +129,7 @@ pub struct SampledLink {
     pub pairs: Vec<(usize, usize)>,
 }
 
-/// What a regression's request is built from.
+/// What a request is built from.
 #[derive(Debug, Clone)]
 pub struct Sampled {
     /// The examples with a label, then those to predict.
@@ -107,8 +137,15 @@ pub struct Sampled {
     pub num_test: usize,
     /// Each example's anchor time, nanoseconds since the epoch.
     pub anchors: Vec<i64>,
-    /// The labels of the examples with one, at float32.
-    pub targets: Vec<f32>,
+    /// The task's kind.
+    pub kind: Kind,
+    /// The labels of the examples with one, in order, as the reference's
+    /// executor gives them.
+    pub labels: Labels,
+    /// Whether the target is a window over time: then only a context row at
+    /// a predicted row's own anchor answers its question; a static
+    /// target's answers it at any anchor (`windowed`).
+    pub windowed: bool,
     /// The entity table first, then each table sampled, in the order
     /// sampled.
     pub tables: Vec<SampledTable>,
@@ -116,6 +153,19 @@ pub struct Sampled {
     pub entity_table: String,
     /// The query, as the reference writes it back.
     pub source_query: String,
+    pub run_mode: RunMode,
+    /// The inference options, read for this task ([`crate::options`]).
+    pub options: Options,
+    /// The regression's statistic the caller chose.
+    pub statistic: Option<String>,
+}
+
+/// A payload built: its JSON text, the bytes the request sends, and how
+/// many context examples answered the question and were taken out.
+#[derive(Debug, Clone)]
+pub struct Built {
+    pub bytes: Vec<u8>,
+    pub answering: usize,
 }
 
 fn invalid(message: &str, column: &str) -> CoreError {
@@ -131,8 +181,9 @@ fn internal(message: &str) -> CoreError {
     CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
 }
 
-/// The wire dtype of a column of `data_type`, or a refusal naming the rule.
-pub fn wire_dtype(data_type: &DataType) -> Result<Dtype, CoreError> {
+/// The wire dtype of a column of `data_type`, or a refusal naming the rule:
+/// the types whose dtype does not depend on the values.
+fn type_dtype(data_type: &DataType) -> Result<Dtype, CoreError> {
     Ok(match data_type {
         DataType::Int8
         | DataType::Int16
@@ -146,9 +197,32 @@ pub fn wire_dtype(data_type: &DataType) -> Result<Dtype, CoreError> {
         DataType::Float64 => Dtype::Float64,
         DataType::Utf8 => Dtype::String,
         DataType::Boolean => Dtype::Bool,
-        DataType::Timestamp(_, None) => Dtype::TimestampMicros,
+        // A time of day is a timestamp column the reference's engine reads
+        // as holding no time: every cell null ([`cell`]).
+        DataType::Timestamp(_, None) | DataType::Time32(_) | DataType::Time64(_) => {
+            Dtype::TimestampMicros
+        }
         _ => return Err(sdm_engine::not_yet("wire_dtype")),
     })
+}
+
+/// The wire dtype of `array`, as the reference names a column by what it
+/// holds (`_dtype_name`): a `DECIMAL(38, s)` with a scale as `float64`;
+/// with none as `int64` where every value fits, and as `string` where one
+/// does not (`_decimal_dtype_name`). A decimal of another precision is
+/// refused by name (`wire_dtype`, register P1B-3): the reference's
+/// decimal sums fail at the column's declared precision, which this core
+/// does not check yet, and such a column is sent beside them.
+pub fn wire_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
+    match array.data_type() {
+        DataType::Decimal128(38, scale) if *scale > 0 => Ok(Dtype::Float64),
+        DataType::Decimal128(38, 0) => {
+            let values = array.as_primitive::<Decimal128Type>();
+            let fits = values.iter().flatten().all(|v| i64::try_from(v).is_ok());
+            Ok(if fits { Dtype::Int64 } else { Dtype::String })
+        }
+        other => type_dtype(other),
+    }
 }
 
 /// An integer cell: past the JSON-safe range, its digits as text; past
@@ -173,6 +247,36 @@ fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
             column,
         )
     })
+}
+
+/// A decimal's unscaled `value` at `scale` as the float64 the reference
+/// sends (`_cell_json_value`'s float branch over `_json_value`): a whole
+/// value only where float64 holds it exactly, a fraction only within the
+/// JSON-safe range, rounded to the nearest double; anything else refused
+/// as the caller's error ("cannot be sent as float64").
+fn decimal_float(value: i128, scale: i8, column: &str) -> Result<Value, CoreError> {
+    let lost = || {
+        invalid(
+            "a decimal cannot be sent as float64 without losing precision",
+            column,
+        )
+    };
+    let unit = 10_i128.pow(u32::from(scale.unsigned_abs()));
+    if value % unit == 0 {
+        let whole = value / unit;
+        let float = whole as f64;
+        // Whole and under 10**38, so the double converts back exactly when
+        // it is the same integer.
+        if float as i128 != whole {
+            return Err(lost());
+        }
+        return Value::float(float).ok_or_else(lost);
+    }
+    if value.unsigned_abs() > (JSON_SAFE as u128) * unit as u128 {
+        return Err(lost());
+    }
+    let float: f64 = format!("{value}e-{scale}").parse().map_err(|_| lost())?;
+    Value::float(float).ok_or_else(lost)
 }
 
 /// `ns` nanoseconds since the epoch as the reference writes a time:
@@ -221,8 +325,8 @@ fn to_ns(value: i64, unit: TimeUnit, column: &str) -> Result<i64, CoreError> {
     })
 }
 
-/// Row `row` of `array`, written under its wire dtype.
-pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Value, CoreError> {
+/// Row `row` of `array`, written under its column's wire dtype `dtype`.
+fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Value, CoreError> {
     if array.is_null(row) {
         return Ok(Value::Null);
     }
@@ -259,6 +363,18 @@ pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Value, CoreErr
                 TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().value(row),
             };
             Ok(Value::Text(iso_microseconds(to_ns(value, *unit, column)?)))
+        }
+        // A time of day, which the reference's engine reads as no time.
+        DataType::Time32(_) | DataType::Time64(_) => Ok(Value::Null),
+        DataType::Decimal128(_, scale) => {
+            let value = array.as_primitive::<Decimal128Type>().value(row);
+            match dtype {
+                // A whole decimal's own digits (`_decimal_text`).
+                Dtype::String => Ok(Value::Text(value.to_string())),
+                Dtype::Int64 => int_cell(value, column),
+                Dtype::Float64 => decimal_float(value, *scale, column),
+                _ => Err(internal("a decimal's dtype is not one a decimal takes")),
+            }
         }
         _ => Err(sdm_engine::not_yet("wire_dtype")),
     }
@@ -350,12 +466,13 @@ fn int_column(name: &str, values: impl Iterator<Item = usize>) -> FrameColumn {
 }
 
 fn arrow_column(name: &str, array: &ArrayRef, rows: &[usize]) -> Result<FrameColumn, CoreError> {
+    let dtype = wire_dtype(array)?;
     Ok(FrameColumn {
         name: name.to_owned(),
-        dtype: wire_dtype(array.data_type())?,
+        dtype,
         cells: rows
             .iter()
-            .map(|&row| cell(array, row, name))
+            .map(|&row| cell(array, row, name, dtype))
             .collect::<Result<_, _>>()?,
     })
 }
@@ -414,13 +531,128 @@ fn table_schema(frame: &Frame, stypes: &[(String, Stype)], key: &[String]) -> Ta
     }
 }
 
-/// The payload of a regression's request, as the reference's engine
-/// builds it for one batch (`predict_request_to_json`), as its JSON text.
-pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
+/// The label column of the context, as the reference writes it for `kind`
+/// (`_target_dtype`, `_target_json_value`): its dtype and one cell per
+/// label; and a classification's classes, in the order the context first
+/// holds them (`pd.unique`), as their text (`_class_label`). A multiclass
+/// float target is refused by name (`target_type`): its classes' text is
+/// Python's `repr` of a float32's double, which this layout does not write.
+fn target(kind: Kind, labels: &Labels) -> Result<(Dtype, Vec<Value>, Vec<String>), CoreError> {
+    let classes = |texts: Vec<String>| {
+        let mut seen = BTreeSet::new();
+        texts
+            .into_iter()
+            .filter(|t| seen.insert(t.clone()))
+            .collect::<Vec<_>>()
+    };
+    Ok(match (kind, labels) {
+        (Kind::Binary, Labels::Bool(values)) => (
+            Dtype::Bool,
+            values.iter().map(|v| Value::Bool(*v)).collect(),
+            vec!["false".to_owned(), "true".to_owned()],
+        ),
+        (Kind::Binary, _) => return Err(internal("a binary task's labels are not booleans")),
+        (Kind::Multiclass, Labels::Bool(values)) => {
+            let texts: Vec<String> = values
+                .iter()
+                .map(|v| if *v { "True" } else { "False" }.to_owned())
+                .collect();
+            (
+                Dtype::String,
+                texts.iter().map(|t| Value::text(t)).collect(),
+                classes(texts),
+            )
+        }
+        (Kind::Multiclass, Labels::Text(values)) => (
+            Dtype::String,
+            values.iter().map(|t| Value::text(t)).collect(),
+            classes(values.clone()),
+        ),
+        (Kind::Multiclass, Labels::Int(values)) => (
+            Dtype::Int64,
+            values
+                .iter()
+                .map(|v| int_cell(i128::from(*v), TARGET))
+                .collect::<Result<_, _>>()?,
+            classes(values.iter().map(i64::to_string).collect()),
+        ),
+        (Kind::Multiclass, Labels::Float(_)) => return Err(sdm_engine::not_yet("target_type")),
+        (Kind::Regression, Labels::Float(values)) => (
+            Dtype::Float32,
+            values
+                .iter()
+                .map(|v| float_cell(f64::from(*v), TARGET))
+                .collect::<Result<_, _>>()?,
+            vec![],
+        ),
+        (Kind::Regression, Labels::Int(values)) => (
+            Dtype::Int64,
+            values
+                .iter()
+                .map(|v| int_cell(i128::from(*v), TARGET))
+                .collect::<Result<_, _>>()?,
+            vec![],
+        ),
+        (Kind::Regression, Labels::Bool(values)) => (
+            Dtype::Bool,
+            values.iter().map(|v| Value::Bool(*v)).collect(),
+            vec![],
+        ),
+        (Kind::Regression, Labels::Text(_)) => {
+            return Err(internal("a regression's labels are text"));
+        }
+    })
+}
+
+/// The instance ids of the context examples that answer the question: a
+/// context row whose entity is a predicted row's, at that row's anchor
+/// for a windowed target and at any anchor for a static one
+/// (`_entities_at_anchors`, `_instances_matching`). A windowed target with
+/// no anchor column takes none out.
+fn answering(
+    instance: &Frame,
+    num_train: usize,
+    windowed: bool,
+    anchor: Option<&str>,
+    reference: &str,
+) -> Result<BTreeSet<usize>, CoreError> {
+    let entities = &instance
+        .column(reference)
+        .ok_or_else(|| internal("the instance table has no entity column"))?
+        .cells;
+    let anchors = match (windowed, anchor) {
+        (true, None) => return Ok(BTreeSet::new()),
+        (true, Some(name)) => Some(
+            &instance
+                .column(name)
+                .ok_or_else(|| internal("the instance table has no anchor column"))?
+                .cells,
+        ),
+        (false, _) => None,
+    };
+    let key = |row: usize| {
+        let mut key = entities[row].to_bytes();
+        if let Some(anchors) = anchors {
+            key.push(0);
+            key.extend(anchors[row].to_bytes());
+        }
+        key
+    };
+    let asked: BTreeSet<Vec<u8>> = (num_train..instance.rows).map(key).collect();
+    Ok((0..num_train)
+        .filter(|&row| asked.contains(&key(row)))
+        .collect())
+}
+
+/// The payload of one batch's request, as the reference's engine builds it
+/// (`predict_request_to_json`) and its client then sends it, the context
+/// that answers the question taken out.
+pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     let examples = sampled.num_train + sampled.num_test;
-    if sampled.anchors.len() != examples || sampled.targets.len() != sampled.num_train {
+    if sampled.anchors.len() != examples || sampled.labels.len() != sampled.num_train {
         return Err(internal("the examples, anchors and labels do not align"));
     }
+    let kind = sampled.kind;
 
     // The instance table: one row per example.
     let entity = sampled
@@ -453,16 +685,17 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         columns: vec![int_column(INSTANCE_ID, 0..examples)],
         rows: examples,
     };
+    let reference_dtype = wire_dtype(key_array)?;
     let reference_cells = first
         .iter()
         .map(|row| match row {
-            Some(row) => cell(key_array, *row, &reference),
+            Some(row) => cell(key_array, *row, &reference, reference_dtype),
             None => Ok(Value::Null),
         })
         .collect::<Result<Vec<_>, _>>()?;
     instance.columns.push(FrameColumn {
         name: reference.clone(),
-        dtype: wire_dtype(key_array.data_type())?,
+        dtype: reference_dtype,
         cells: reference_cells,
     });
     let anchor_column =
@@ -482,14 +715,11 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         } else {
             None
         };
-    let mut target_cells = Vec::with_capacity(examples);
-    for value in &sampled.targets {
-        target_cells.push(float_cell(f64::from(*value), TARGET)?);
-    }
+    let (target_dtype, mut target_cells, classes) = target(kind, &sampled.labels)?;
     target_cells.resize(examples, Value::Null);
     instance.columns.push(FrameColumn {
         name: TARGET.to_owned(),
-        dtype: Dtype::Float32,
+        dtype: target_dtype,
         cells: target_cells,
     });
 
@@ -611,7 +841,14 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
     if let Some(anchor) = &anchor_column {
         instance_stypes.push((anchor.clone(), Stype::Timestamp));
     }
-    instance_stypes.push((TARGET.to_owned(), Stype::Numerical));
+    instance_stypes.push((
+        TARGET.to_owned(),
+        if kind.is_classification() {
+            Stype::Categorical
+        } else {
+            Stype::Numerical
+        },
+    ));
     let mut instance_schema = table_schema(&instance, &instance_stypes, &[INSTANCE_ID.to_owned()]);
     if let Some(anchor) = &anchor_column
         && let Some((_, spec)) = instance_schema
@@ -631,8 +868,20 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             )
         })
         .collect();
+
+    // The context that answers the question, taken out of both the
+    // instance table and the related rows that hang off it.
+    let answered = answering(
+        &instance,
+        num_train,
+        sampled.windowed,
+        anchor_column.as_deref(),
+        &reference,
+    )?;
     let half = |context: bool| -> Half {
-        let in_half = |instance: usize| (instance < num_train) == context;
+        let in_half = |instance: usize| {
+            (instance < num_train) == context && !(context && answered.contains(&instance))
+        };
         let instance_table = if context {
             instance.table(in_half, None)
         } else {
@@ -654,54 +903,106 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         }
     };
 
-    let payload = StatePayload {
-        model: "kumo-relational".to_owned(),
-        task: Task {
-            kind: "regression".to_owned(),
-            target: Target {
-                column_name: TARGET.to_owned(),
-                dtype: Dtype::Float32,
-            },
-            entity_table_names: vec![sampled.entity_table.clone()],
-            anchor_time_column: anchor_column,
-        },
-        schema: PayloadSchema {
-            instance_table: instance_schema,
-            related_tables: Named(related_schema),
-            relationships,
-        },
-        context: half(true),
-        predict: half(false),
-        output: Output {
-            fields: vec!["prediction".to_owned()],
-            prediction_statistic: None,
-        },
-        inference: Inference {
-            run_mode: "fast".to_owned(),
-            use_prediction_time: false,
-            inference_config: InferenceConfig {
-                kind: "regression".to_owned(),
-                num_estimators: 1,
-                column_shuffle: false,
-                category_shuffle: false,
-                hop_shuffle: false,
-                class_shuffle: None,
-                target_transforms: vec!["quantile".to_owned()],
-                output_type: "median".to_owned(),
-            },
-        },
-        metadata: Metadata {
-            source_query: (!sampled.source_query.is_empty()).then(|| sampled.source_query.clone()),
-            num_context_examples: num_train as u64,
-            num_prediction_examples: sampled.num_test as u64,
-        },
+    let fields: Vec<String> = match kind {
+        Kind::Regression if sampled.options.output_type == "quantiles" => vec!["quantiles".into()],
+        Kind::Regression => vec!["prediction".into()],
+        Kind::Binary | Kind::Multiclass => vec!["prediction".into(), "probabilities".into()],
     };
-    Ok(payload.to_bytes())
+    // The task's and the inference's sections, typed by the task's kind.
+    macro_rules! task {
+        ($target:expr) => {
+            Task {
+                kind: kind.wire_name().to_owned(),
+                target: $target,
+                entity_table_names: vec![sampled.entity_table.clone()],
+                anchor_time_column: anchor_column.clone(),
+            }
+        };
+    }
+    macro_rules! inference {
+        ($config:expr) => {
+            Inference {
+                run_mode: sampled.run_mode.wire_name().to_owned(),
+                use_prediction_time: false,
+                inference_config: $config,
+            }
+        };
+    }
+    let schema = PayloadSchema {
+        instance_table: instance_schema,
+        related_tables: Named(related_schema),
+        relationships,
+    };
+    let output = Output {
+        fields,
+        prediction_statistic: sampled.statistic.clone(),
+    };
+    let metadata = Metadata {
+        source_query: (!sampled.source_query.is_empty()).then(|| sampled.source_query.clone()),
+        num_context_examples: num_train as u64,
+        num_prediction_examples: sampled.num_test as u64,
+    };
+    let model = "kumo-relational".to_owned();
+    let bytes = if kind.is_classification() {
+        StatePayload {
+            model,
+            task: task!(ClassTarget {
+                column_name: TARGET.to_owned(),
+                dtype: target_dtype,
+                classes,
+                positive_class: (kind == Kind::Binary).then(|| "true".to_owned()),
+            }),
+            schema,
+            context: half(true),
+            predict: half(false),
+            output,
+            inference: inference!(sampled.options.classification()),
+            metadata,
+        }
+        .to_bytes()
+    } else {
+        StatePayload {
+            model,
+            task: task!(Target {
+                column_name: TARGET.to_owned(),
+                dtype: target_dtype,
+            }),
+            schema,
+            context: half(true),
+            predict: half(false),
+            output,
+            inference: inference!(sampled.options.regression()),
+            metadata,
+        }
+        .to_bytes()
+    };
+    // The limit counts the bytes the request sends, as written (PD-2).
+    if bytes.len() > PAYLOAD_BYTES {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "the request is larger than the endpoint takes",
+        )
+        .with_field("field", Detail::text("payload"))
+        .with_field(
+            "bytes",
+            Detail::Scalar(sdm_contract::Scalar::UInt64(bytes.len() as u64)),
+        )
+        .with_field(
+            "limit",
+            Detail::Scalar(sdm_contract::Scalar::UInt64(PAYLOAD_BYTES as u64)),
+        ));
+    }
+    Ok(Built {
+        bytes,
+        answering: answered.len(),
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::iso_microseconds;
+    use super::{decimal_float, iso_microseconds};
+    use sdm_wire::json::Value;
 
     #[test]
     fn times_are_written_as_the_reference_writes_them() {
@@ -715,5 +1016,22 @@ mod tests {
             iso_microseconds(1_706_659_200_000_000_000),
             "2024-01-31T00:00:00.000000Z"
         );
+    }
+
+    #[test]
+    fn a_decimal_is_sent_as_float64_only_where_it_holds_it() {
+        let number = |t: &str| Value::Number(t.to_owned());
+        // 1.5 at scale 2, a whole 5, and the nearest double to 0.1.
+        assert_eq!(decimal_float(150, 2, "c").unwrap(), number("1.5"));
+        assert_eq!(decimal_float(500, 2, "c").unwrap(), number("5.0"));
+        assert_eq!(decimal_float(1, 1, "c").unwrap(), number("0.1"));
+        // 2**53 + 1, whole, is not a double; 2**53 is.
+        let unit = 10_i128.pow(18);
+        assert!(decimal_float(((1_i128 << 53) + 1) * unit, 18, "c").is_err());
+        assert!(decimal_float((1_i128 << 53) * unit, 18, "c").is_ok());
+        // A fraction past the JSON-safe range is refused, within it taken:
+        // 2**53 - 1 + 0.5 is past it, 2**53 - 2 + 0.5 within.
+        assert!(decimal_float(9_007_199_254_740_991 * 10 + 5, 1, "c").is_err());
+        assert!(decimal_float(9_007_199_254_740_990 * 10 + 5, 1, "c").is_ok());
     }
 }

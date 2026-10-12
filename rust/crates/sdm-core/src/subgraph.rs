@@ -49,10 +49,9 @@ use crate::describe::{ask, ask_all_vec};
 use crate::materialize::{Times, batches, key_set, named, one_batch};
 use crate::run::{Asker, internal};
 
-/// The neighbors kept of each row at each hop: a fast run's two hops of
-/// 32 (`_DEFAULT_NUM_NEIGHBORS`).
-pub(crate) const NEIGHBORS: [u64; 2] = [32, 32];
-const HOPS: usize = NEIGHBORS.len();
+/// The hops walked: the default two (`num_hops`), each keeping the run
+/// mode's neighbors of each row (`_DEFAULT_NUM_NEIGHBORS`, [`Walk::neighbors`]).
+const HOPS: usize = 2;
 
 /// One table the walk reached: its rows, in the order numbered, as the
 /// frames they came in, and the example each was reached for.
@@ -113,12 +112,40 @@ pub(crate) struct Walk<'a> {
     pub anchors: &'a [i64],
     pub nulls: NullOrder,
     pub entity: &'a Table,
+    /// The neighbors kept of each row at each hop, by the run mode.
+    pub neighbors: [u64; HOPS],
+    /// The features left out, by table: a static target's columns, which
+    /// the reference's sampler neither reads nor sends
+    /// (`get_exclude_cols_dict`, `exclude_cols_dict`).
+    pub excluded: &'a [(String, String)],
 }
 
-/// The columns the walk reads of `table`: its features, foreign keys and
-/// key, in the table's order (`sample_columns_dict`).
-pub(crate) fn sample_columns(graph: &Graph, table: &Table) -> Vec<String> {
-    let mut names: BTreeSet<String> = graph.features(table).into_iter().map(|(n, _)| n).collect();
+/// The features of `table` the walk reads and sends: those `excluded`
+/// does not name for it.
+pub(crate) fn features(
+    graph: &Graph,
+    table: &Table,
+    excluded: &[(String, String)],
+) -> Vec<(String, Stype)> {
+    graph
+        .features(table)
+        .into_iter()
+        .filter(|(n, _)| !excluded.iter().any(|(t, c)| *t == table.name && c == n))
+        .collect()
+}
+
+/// The columns the walk reads of `table`: its features (but those
+/// `excluded`), foreign keys and key, in the table's order
+/// (`sample_columns_dict`).
+pub(crate) fn sample_columns(
+    graph: &Graph,
+    table: &Table,
+    excluded: &[(String, String)],
+) -> Vec<String> {
+    let mut names: BTreeSet<String> = features(graph, table, excluded)
+        .into_iter()
+        .map(|(n, _)| n)
+        .collect();
     for (fkey, _) in graph.foreign_keys(&table.name) {
         names.insert(fkey.to_owned());
     }
@@ -204,7 +231,7 @@ impl Walk<'_> {
             entity.batches.push((0..examples).collect());
             entity.counts[0] = examples;
         }
-        for (hop, &neighbors) in NEIGHBORS.iter().enumerate() {
+        for (hop, &neighbors) in self.neighbors.iter().enumerate() {
             let visiting: Vec<String> = visits.iter().map(|v| v.name.clone()).collect();
             for name in visiting {
                 self.visit(&mut visits, &mut edges, &name, hop, neighbors)
@@ -277,7 +304,7 @@ impl Walk<'_> {
                     }
                 }
                 let seeds = take_array(named(&frame, fkey)?, &first_row)?;
-                let columns = sample_columns(self.graph, dst_table);
+                let columns = sample_columns(self.graph, dst_table, self.excluded);
                 let answer = self.times.read(
                     self.asker,
                     dst_table,
@@ -381,7 +408,7 @@ impl Walk<'_> {
             requests.push(sample::by_fkey(
                 src_table,
                 fkey,
-                sample_columns(self.graph, src_table),
+                sample_columns(self.graph, src_table, self.excluded),
                 key_set(self.asker, seeds)?,
                 neighbors,
                 self.nulls,
@@ -399,7 +426,7 @@ impl Walk<'_> {
             let positions = batches(&answer, batch.len())?;
             let cols: Vec<usize> = positions.iter().map(|&p| index[p]).collect();
             let examples: Vec<usize> = positions.iter().map(|&p| batch[p]).collect();
-            let columns = sample_columns(self.graph, src_table);
+            let columns = sample_columns(self.graph, src_table, self.excluded);
             let fetched = project(&answer, &columns)?;
             let src_at = reach(visits, src);
             let src_visit = &mut visits[src_at];
@@ -453,7 +480,7 @@ impl Walk<'_> {
                 frame = first_of_each_key(frame, key)?;
             }
             let entity = table.name == self.entity.name;
-            let features = self.graph.features(table);
+            let features = features(self.graph, table, self.excluded);
             let mut sent: BTreeSet<String> = features.iter().map(|(n, _)| n.clone()).collect();
             if entity && let Some(key) = &table.primary_key {
                 sent.insert(key.clone());

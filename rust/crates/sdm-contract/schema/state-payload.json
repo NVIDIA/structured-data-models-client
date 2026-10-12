@@ -1,6 +1,6 @@
 {
   "title": "StatePayload",
-  "description": "The payload of one prediction request.",
+  "description": "The payload of one prediction request: a regression's by default, a\nclassification's with [`ClassTarget`] and [`ClassificationConfig`].",
   "type": "object",
   "properties": {
     "model": {
@@ -12,11 +12,11 @@
       "type": "object",
       "properties": {
         "kind": {
-          "description": "The task's kind, as the engine names it (`regression`).",
+          "description": "The task's kind, as the engine names it (`regression`,\n`binary_classification`, `multiclass_classification`).",
           "type": "string"
         },
         "target": {
-          "description": "The label column of the instance table.",
+          "description": "The label column of the instance table; a classification's names its\nclasses, and a binary task's its positive class. The schema of\n[`Target`] and [`ClassTarget`] at once, for the schema only.",
           "type": "object",
           "properties": {
             "column_name": {
@@ -34,6 +34,15 @@
                 "bool",
                 "timestamp[us]"
               ]
+            },
+            "classes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "positive_class": {
+              "type": "string"
             }
           },
           "additionalProperties": false,
@@ -415,7 +424,7 @@
           }
         },
         "prediction_statistic": {
-          "description": "A regression's statistic, as the caller chose it: the reader's, not\nthe writer's (the Python host records it on the payload).",
+          "description": "A regression's statistic, where the caller chose one (T1.28a).",
           "type": "string"
         }
       },
@@ -435,7 +444,7 @@
           "type": "boolean"
         },
         "inference_config": {
-          "description": "The engine's inference options, as it writes them.",
+          "description": "The engine's inference options, as it writes them: a classification's\nwith its class shuffle, a regression's with its target transforms and\noutput type. The schema of [`InferenceConfig`] and\n[`ClassificationConfig`] at once, for the schema only.",
           "type": "object",
           "properties": {
             "kind": {
@@ -456,7 +465,6 @@
               "type": "boolean"
             },
             "class_shuffle": {
-              "description": "The reader's, not the writer's.",
               "type": "boolean"
             },
             "target_transforms": {
@@ -475,9 +483,7 @@
             "num_estimators",
             "column_shuffle",
             "category_shuffle",
-            "hop_shuffle",
-            "target_transforms",
-            "output_type"
+            "hop_shuffle"
           ]
         }
       },

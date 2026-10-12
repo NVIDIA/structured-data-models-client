@@ -90,6 +90,7 @@ impl Operation {
                 named.push((m.query, Bytes));
                 named.extend(m.indices.map(|id| (id, Arrow)));
                 named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
+                named.extend(m.inference_config.map(|id| (id, Bytes)));
                 named
             }
             Operation::Predict(p) => vec![(p.state.payload, Bytes), (p.state.query, Bytes)],
@@ -609,14 +610,36 @@ pub struct Materialize {
     /// name, `anchor_entity`, until the core takes it (decision E61).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub anchor_entity: bool,
-    /// The most context examples the caller asked for; refused by name,
-    /// `num_context_samples`, until the run mode it selects is the core's
-    /// (T1.28a; decision E61).
+    /// The most context examples the caller asked for, an integer of any
+    /// size as a [`Seed`] writes one, so the core bounds it whatever the
+    /// host's integer type (T1.28a): below 1 refused, `INVALID_REQUEST`; up
+    /// to the default mode's examples a fast run, up to the best mode's a
+    /// best one, past it refused, `UNSUPPORTED_REQUEST`; left out, a fast
+    /// run of its own examples.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub num_context_samples: Option<u64>,
+    pub num_context_samples: Option<Box<Seed>>,
+    /// The hops the sampling options ask for, bounded by the core before it
+    /// refuses the options by name (T1.28a): `num_hops` as given, and the
+    /// length of `num_neighbors`, which asks one hop per entry; each an
+    /// integer of any size as a [`Seed`] writes one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_hops: Option<Box<Seed>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_neighbors: Option<Box<Seed>>,
+    /// The regression's statistic the caller chose (`mean` or `median`),
+    /// which the core checks and records in the payload's output (T1.28a);
+    /// left out, none is recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prediction_statistic: Option<String>,
+    /// A bytes attachment of the caller's `inference_config` as a JSON
+    /// object, its keys and values as given, which the core reads by the
+    /// engine's rules and writes into the payload (T1.28a; decision E45(a));
+    /// left out, the task's defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inference_config: Option<AttachmentId>,
     /// The names of the call's other sampling options, which this message
     /// carries no value of (the reference's `context_anchor_time`,
-    /// `exclude_cols_dict`, `inference_config`, `lag_timesteps`,
+    /// `exclude_cols_dict`, `lag_timesteps`,
     /// `max_pq_iterations`, `num_hops`, `num_neighbors`,
     /// `return_embeddings`, `top_k` and `use_prediction_time`): the core
     /// takes none of them yet and refuses the first in name order by its
@@ -816,6 +839,12 @@ pub struct Predict {
     /// predicts a regression's default, `prediction`, alone, and refuses
     /// any other list by name, `outputs` (decision E61).
     pub outputs: Vec<String>,
+    /// The inference-config keys the caller set at `materialize`, rather
+    /// than left to their defaults, as the host holds them: a key the model
+    /// does not read among them is refused before the call is made, the
+    /// others' defaults left out of it silently (T1.28a).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inference_asked: Vec<String>,
 }
 
 /// The prediction. Nothing inline grows with the result's width or the
@@ -868,6 +897,8 @@ pub struct Attachments {
     pub materialize_held: HeldSchema,
     #[schemars(rename = "Materialize.query")]
     pub materialize_query: String,
+    #[schemars(rename = "Materialize.inference_config")]
+    pub materialize_inference_config: RequestedInference,
     #[schemars(rename = "SamplerState.memo")]
     pub sampler_state_memo: SamplerMemo,
     #[schemars(rename = "RequestState.payload")]
@@ -910,6 +941,21 @@ impl JsonSchema for StatePayload {
             .expect("the committed state payload schema is JSON");
         payload["x-request-state-version"] = serde_json::json!(REQUEST_STATE_VERSION);
         schemars::Schema::try_from(payload).expect("the state payload's schema is an object")
+    }
+}
+
+/// [`Materialize`]'s `inference_config`: the caller's inference options,
+/// a JSON object of the engine's keys and the values given for them, read
+/// with `sdm-wire`'s bounded reader.
+pub struct RequestedInference;
+
+impl JsonSchema for RequestedInference {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "RequestedInference".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({ "type": "object" })
     }
 }
 

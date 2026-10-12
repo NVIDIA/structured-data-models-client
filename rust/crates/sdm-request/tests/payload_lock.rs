@@ -24,7 +24,9 @@ use arrow_array::{
 };
 use sdm_contract::ops::Stype;
 use sdm_contract::schema_check::check;
-use sdm_request::payload::{Sampled, SampledColumn, SampledLink, SampledTable, regression};
+use sdm_engine::labels::Labels;
+use sdm_request::options::{Kind, Options, RunMode};
+use sdm_request::payload::{Sampled, SampledColumn, SampledLink, SampledTable, build};
 use sdm_request::predict::INFERENCE_OPTIONS;
 use serde_json::{Value, json};
 
@@ -45,7 +47,12 @@ fn shop() -> Sampled {
         anchors: (0..5)
             .map(|i| 1_709_251_200_000_000_000 - i * DAY_NS)
             .collect(),
-        targets: vec![1.5, 0.0, 42.25],
+        kind: Kind::Regression,
+        labels: Labels::Float(vec![1.5, 0.0, 42.25]),
+        windowed: true,
+        run_mode: RunMode::Fast,
+        options: Options::default(),
+        statistic: Some("mean".into()),
         tables: vec![
             SampledTable {
                 name: "users".into(),
@@ -118,7 +125,12 @@ fn family() -> Sampled {
         num_train: 2,
         num_test: 1,
         anchors: vec![NO_ANCHOR; 3],
-        targets: vec![f32::NAN, 3.0],
+        kind: Kind::Regression,
+        labels: Labels::Float(vec![f32::NAN, 3.0]),
+        windowed: false,
+        run_mode: RunMode::Best,
+        options: Options::default(),
+        statistic: None,
         tables: vec![
             SampledTable {
                 name: "Users".into(),
@@ -156,15 +168,64 @@ fn family() -> Sampled {
 }
 
 fn built(sampled: &Sampled) -> Value {
-    serde_json::from_slice(&regression(sampled).expect("the producer builds it")).unwrap()
+    serde_json::from_slice(&build(sampled).expect("the producer builds it").bytes).unwrap()
+}
+
+/// The shop sample asked as a classification: `kind` over `labels`.
+fn classified(kind: Kind, labels: Labels) -> Sampled {
+    Sampled {
+        kind,
+        labels,
+        windowed: false,
+        statistic: None,
+        ..shop()
+    }
 }
 
 #[test]
 fn the_payload_the_producer_builds_is_the_locked_definition_s() {
-    for (name, sampled) in [("shop", shop()), ("family", family())] {
+    for (name, sampled) in [
+        ("shop", shop()),
+        ("family", family()),
+        (
+            "binary",
+            classified(Kind::Binary, Labels::Bool(vec![true, false, true])),
+        ),
+        (
+            "multiclass",
+            classified(
+                Kind::Multiclass,
+                Labels::Text(vec!["b".into(), "a".into(), "b".into()]),
+            ),
+        ),
+    ] {
         let payload = built(&sampled);
         assert_eq!(check("StatePayload", &payload), Ok(()), "{name}");
     }
+    // A classification's target names its classes, a binary task's its
+    // positive class, and its options their class shuffle.
+    let binary = built(&classified(
+        Kind::Binary,
+        Labels::Bool(vec![true, false, true]),
+    ));
+    assert_eq!(
+        binary["task"]["target"]["classes"],
+        json!(["false", "true"])
+    );
+    assert_eq!(binary["task"]["target"]["positive_class"], json!("true"));
+    assert_eq!(
+        binary["inference"]["inference_config"]["class_shuffle"],
+        json!(false)
+    );
+    let multiclass = built(&classified(
+        Kind::Multiclass,
+        Labels::Bool(vec![true, false, true]),
+    ));
+    assert_eq!(
+        multiclass["task"]["target"]["classes"],
+        json!(["True", "False"])
+    );
+    assert!(multiclass["task"]["target"].get("positive_class").is_none());
     // The two samples take the producer's optional branches both ways.
     let shop = built(&shop());
     let family = built(&family());

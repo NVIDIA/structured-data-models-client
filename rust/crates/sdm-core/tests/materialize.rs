@@ -199,6 +199,10 @@ fn materialize_start(
         unseeded: false,
         anchor_entity: false,
         num_context_samples: None,
+        num_hops: None,
+        num_neighbors: None,
+        prediction_statistic: None,
+        inference_config: None,
         options: vec![],
         sampler_state: None,
     });
@@ -322,7 +326,12 @@ fn to_the_sample(run: &mut Run) -> (DataRequest, Vec<String>) {
     let mut warnings = Vec::new();
     loop {
         let step = run.next().unwrap();
-        warnings.extend(run.take_warnings().into_iter().map(|w| w.code));
+        warnings.extend(
+            run.take_warnings()
+                .into_iter()
+                .map(|w| w.code)
+                .filter(|c| !REQUEST_NOTICES.contains(&c.as_str())),
+        );
         let Step::Fetch { requests } = step else {
             panic!("not a fetch: {step:?}");
         };
@@ -694,6 +703,17 @@ fn indexes(on: &[(&str, &str)]) -> FetchResult {
     ])
 }
 
+/// The notices of what the request leaves out (T1.28a), which these
+/// sampler tests leave to the client's route tests: their sources leave
+/// tables unreached.
+const REQUEST_NOTICES: [&str; 5] = [
+    sdm_core::materialize::CONTEXT_CAPPED,
+    sdm_core::materialize::TABLES_UNLINKED,
+    sdm_core::materialize::TABLES_UNREACHED,
+    sdm_core::materialize::COLUMNS_UNREAD,
+    sdm_core::materialize::CONTEXT_ANSWERS,
+];
+
 /// Every request `run` asks up to the sample, each answered as
 /// [`catalog`] answers it, the indexes as `index_answer`, and the warnings
 /// given on the way.
@@ -705,7 +725,12 @@ fn requests_to_the_sample(
     let mut warnings = Vec::new();
     loop {
         let step = run.next().unwrap();
-        warnings.extend(run.take_warnings().into_iter().map(|w| w.code));
+        warnings.extend(
+            run.take_warnings()
+                .into_iter()
+                .map(|w| w.code)
+                .filter(|c| !REQUEST_NOTICES.contains(&c.as_str())),
+        );
         let Step::Fetch { requests } = step else {
             panic!("not a fetch: {step:?}");
         };
@@ -797,7 +822,12 @@ fn try_steps_sampling(
     let mut warnings = Vec::new();
     loop {
         let step = run.next()?;
-        warnings.extend(run.take_warnings().into_iter().map(|w| w.code));
+        warnings.extend(
+            run.take_warnings()
+                .into_iter()
+                .map(|w| w.code)
+                .filter(|c| !REQUEST_NOTICES.contains(&c.as_str())),
+        );
         let requests = match step {
             Step::Fetch { requests } => requests,
             Step::Done { .. } => return Ok((seen, warnings)),
@@ -910,17 +940,28 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     };
     let refused = |change: &dyn Fn(&mut Materialize)| rule(&with(change).unwrap_err());
     assert_eq!(
-        refused(&|m| m.options = vec!["num_neighbors".into(), "inference_config".into()]),
-        "inference_config"
+        refused(&|m| m.options = vec!["num_neighbors".into(), "lag_timesteps".into()]),
+        "lag_timesteps"
     );
     assert_eq!(refused(&|m| m.unseeded = true), "unseeded");
-    assert_eq!(
-        refused(&|m| m.num_context_samples = Some(10)),
-        "num_context_samples"
-    );
     assert_eq!(refused(&|m| m.anchor_entity = true), "anchor_entity");
-    // The options before the seed, the seed before the context size, as
-    // the bridge refused them.
+    // From T1.28a the context size is the core's: bounded first, before
+    // the options, as the client bounds it before anything else.
+    for (asked, code) in [
+        (Seed::from(0_u128), ErrorCode::InvalidRequest),
+        (Seed::from(-3_i128), ErrorCode::InvalidRequest),
+        (Seed::from(10_001_u128), ErrorCode::UnsupportedRequest),
+        (Seed::from(1_u128 << 100), ErrorCode::UnsupportedRequest),
+    ] {
+        let err = with(&|m| {
+            m.num_context_samples = Some(Box::new(asked.clone()));
+            m.options = vec!["top_k".into()];
+        })
+        .unwrap_err();
+        assert_eq!(err.code, code, "{asked:?}");
+        assert_eq!(err.fields["field"], Detail::text("num_context_samples"));
+    }
+    // The options before the seed, as the bridge refused them.
     assert_eq!(
         refused(&|m| {
             m.unseeded = true;
@@ -931,7 +972,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     assert_eq!(
         refused(&|m| {
             m.unseeded = true;
-            m.num_context_samples = Some(10);
+            m.num_context_samples = Some(Box::new(Seed::from(10_u128)));
         }),
         "unseeded"
     );
@@ -1879,4 +1920,46 @@ fn the_coverage_warning_is_given_on_every_run_that_meets_it() {
         let (_, warnings) = try_steps_sampling(&mut run, &|| indexes(&[]), &sample).unwrap();
         assert_eq!(warnings, ["MISSING_INDICES", "CONTEXT_COVERAGE"]);
     }
+}
+
+// --- the caller's inference options (T1.28a) ---------------------------------
+
+#[test]
+fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
+    // E49's probe of the one JSON reader T1.28a adds: the caller's
+    // inference options, read with the wire's bounded reader before the run
+    // exists, so ten thousand nested levels are refused by name, never read
+    // recursively, and one level under the bound is read (and refused for
+    // what it is, an option the engine does not read, when the run reaches
+    // it).
+    let start = |text: String| {
+        let (mut operation, mut attachments) = materialize_start(duckdb(), &shop(), QUERY, None);
+        let Operation::Materialize(request) = &mut operation else {
+            unreachable!()
+        };
+        request.inference_config = Some(AttachmentId(9));
+        attachments.insert(AttachmentId(9), Attachment::Bytes(text.into_bytes()));
+        materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
+    };
+    let deep = format!(
+        r#"{{"num_estimators": {}1{}}}"#,
+        "[".repeat(10_000),
+        "]".repeat(10_000)
+    );
+    let Err(err) = start(deep) else {
+        panic!("refused before the run exists");
+    };
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(err.fields["field"], Detail::text("inference_config"));
+    assert_eq!(err.fields["category"], Detail::text("depth"));
+    let within = format!(
+        r#"{{"num_estimators": {}1{}}}"#,
+        "[".repeat(100),
+        "]".repeat(100)
+    );
+    assert!(start(within).is_ok(), "read within the bound");
+    let Err(not_json) = start("{".into()) else {
+        panic!("not JSON");
+    };
+    assert_eq!(not_json.fields["field"], Detail::text("inference_config"));
 }

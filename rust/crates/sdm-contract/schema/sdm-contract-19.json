@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/18",
+  "$id": "sdm-contract/19",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -285,6 +285,9 @@
         "Materialize.query": {
           "type": "string"
         },
+        "Materialize.inference_config": {
+          "$ref": "#/$defs/RequestedInference"
+        },
         "SamplerState.memo": {
           "$ref": "#/$defs/SamplerMemo"
         },
@@ -311,6 +314,7 @@
         "Materialize.schema",
         "Materialize.held",
         "Materialize.query",
+        "Materialize.inference_config",
         "SamplerState.memo",
         "RequestState.payload",
         "RequestState.query",
@@ -1818,6 +1822,9 @@
         }
       ]
     },
+    "RequestedInference": {
+      "type": "object"
+    },
     "SamplerMemo": {
       "description": "[`SamplerState`]'s memo: what the runs read, and of what.",
       "type": "object",
@@ -1879,7 +1886,7 @@
     },
     "StatePayload": {
       "title": "StatePayload",
-      "description": "The payload of one prediction request.",
+      "description": "The payload of one prediction request: a regression's by default, a\nclassification's with [`ClassTarget`] and [`ClassificationConfig`].",
       "type": "object",
       "properties": {
         "model": {
@@ -1891,11 +1898,11 @@
           "type": "object",
           "properties": {
             "kind": {
-              "description": "The task's kind, as the engine names it (`regression`).",
+              "description": "The task's kind, as the engine names it (`regression`,\n`binary_classification`, `multiclass_classification`).",
               "type": "string"
             },
             "target": {
-              "description": "The label column of the instance table.",
+              "description": "The label column of the instance table; a classification's names its\nclasses, and a binary task's its positive class. The schema of\n[`Target`] and [`ClassTarget`] at once, for the schema only.",
               "type": "object",
               "properties": {
                 "column_name": {
@@ -1913,6 +1920,15 @@
                     "bool",
                     "timestamp[us]"
                   ]
+                },
+                "classes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "positive_class": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false,
@@ -2294,7 +2310,7 @@
               }
             },
             "prediction_statistic": {
-              "description": "A regression's statistic, as the caller chose it: the reader's, not\nthe writer's (the Python host records it on the payload).",
+              "description": "A regression's statistic, where the caller chose one (T1.28a).",
               "type": "string"
             }
           },
@@ -2314,7 +2330,7 @@
               "type": "boolean"
             },
             "inference_config": {
-              "description": "The engine's inference options, as it writes them.",
+              "description": "The engine's inference options, as it writes them: a classification's\nwith its class shuffle, a regression's with its target transforms and\noutput type. The schema of [`InferenceConfig`] and\n[`ClassificationConfig`] at once, for the schema only.",
               "type": "object",
               "properties": {
                 "kind": {
@@ -2335,7 +2351,6 @@
                   "type": "boolean"
                 },
                 "class_shuffle": {
-                  "description": "The reader's, not the writer's.",
                   "type": "boolean"
                 },
                 "target_transforms": {
@@ -2354,9 +2369,7 @@
                 "num_estimators",
                 "column_shuffle",
                 "category_shuffle",
-                "hop_shuffle",
-                "target_transforms",
-                "output_type"
+                "hop_shuffle"
               ]
             }
           },
@@ -2677,16 +2690,57 @@
               "type": "boolean"
             },
             "num_context_samples": {
-              "description": "The most context examples the caller asked for; refused by name,\n`num_context_samples`, until the run mode it selects is the core's\n(T1.28a; decision E61).",
+              "description": "The most context examples the caller asked for, an integer of any\nsize as a [`Seed`] writes one, so the core bounds it whatever the\nhost's integer type (T1.28a): below 1 refused, `INVALID_REQUEST`; up\nto the default mode's examples a fast run, up to the best mode's a\nbest one, past it refused, `UNSUPPORTED_REQUEST`; left out, a fast\nrun of its own examples.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Seed"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "num_hops": {
+              "description": "The hops the sampling options ask for, bounded by the core before it\nrefuses the options by name (T1.28a): `num_hops` as given, and the\nlength of `num_neighbors`, which asks one hop per entry; each an\ninteger of any size as a [`Seed`] writes one.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Seed"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "num_neighbors": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Seed"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "prediction_statistic": {
+              "description": "The regression's statistic the caller chose (`mean` or `median`),\nwhich the core checks and records in the payload's output (T1.28a);\nleft out, none is recorded.",
               "type": [
-                "integer",
+                "string",
                 "null"
-              ],
-              "format": "uint64",
-              "minimum": 0
+              ]
+            },
+            "inference_config": {
+              "description": "A bytes attachment of the caller's `inference_config` as a JSON\nobject, its keys and values as given, which the core reads by the\nengine's rules and writes into the payload (T1.28a; decision E45(a));\nleft out, the task's defaults.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "options": {
-              "description": "The names of the call's other sampling options, which this message\ncarries no value of (the reference's `context_anchor_time`,\n`exclude_cols_dict`, `inference_config`, `lag_timesteps`,\n`max_pq_iterations`, `num_hops`, `num_neighbors`,\n`return_embeddings`, `top_k` and `use_prediction_time`): the core\ntakes none of them yet and refuses the first in name order by its\nname, and another name as `INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
+              "description": "The names of the call's other sampling options, which this message\ncarries no value of (the reference's `context_anchor_time`,\n`exclude_cols_dict`, `lag_timesteps`,\n`max_pq_iterations`, `num_hops`, `num_neighbors`,\n`return_embeddings`, `top_k` and `use_prediction_time`): the core\ntakes none of them yet and refuses the first in name order by its\nname, and another name as `INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
               "type": "array",
               "items": {
                 "type": "string"
@@ -2733,6 +2787,13 @@
             },
             "outputs": {
               "description": "The outputs asked for, by the wire's names, in order; the core\npredicts a regression's default, `prediction`, alone, and refuses\nany other list by name, `outputs` (decision E61).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "inference_asked": {
+              "description": "The inference-config keys the caller set at `materialize`, rather\nthan left to their defaults, as the host holds them: a key the model\ndoes not read among them is refused before the call is made, the\nothers' defaults left out of it silently (T1.28a).",
               "type": "array",
               "items": {
                 "type": "string"
