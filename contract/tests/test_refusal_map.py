@@ -489,9 +489,7 @@ def test_an_entry_no_probe_hits_fails() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    'retyped', [7, None, '', ['seeded'], {'x': 1}]
-)
+@pytest.mark.parametrize('retyped', [7, None, '', ['seeded'], {'x': 1}])
 def test_retyped_evidence_fails(retyped: Any) -> None:
     observed = _observed()
     observed['notebook']['rule'] = retyped
@@ -507,10 +505,7 @@ def test_missing_or_empty_evidence_fails() -> None:
     del observed['notebook']
     failures = refusal_map.check(document, 'python-core', observed)
     assert 'notebook: not observed' in failures
-    assert (
-        'materialize/seeded: listed for python-core and not hit'
-        in failures
-    )
+    assert 'materialize/seeded: listed for python-core and not hit' in failures
     observed = _observed()
     del observed['notebook']['rule']
     assert refusal_map.check(document, 'python-core', observed) != []
@@ -533,8 +528,7 @@ def test_a_probe_that_succeeds_or_hits_another_entry_fails() -> None:
     observed = _observed()
     observed['no-inference-config'] = copy.deepcopy(observed['notebook'])
     assert (
-        'no-inference-config: hit materialize/seeded, where the map has '
-        'success'
+        'no-inference-config: hit materialize/seeded, where the map has success'
     ) in refusal_map.check(document, 'python-core', observed)
     observed = _observed()
     observed['notebook'] = refusal_map.success('predict')

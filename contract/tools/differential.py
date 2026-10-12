@@ -109,7 +109,22 @@ RULES = {
     # A static decimal target's (P1B-18); every other label type's is
     # P1B-3's (a decimal's average, a time): read by the query's shape.
     'target_type': 'P1B-3',
+    # From T1.28a: an average compared with NULL, which the reference fails
+    # internally (E66(b)'s class); the inference options' text coercions.
+    'average_null': 'P1B-21',
+    'inference_config_text': 'P1B-3',
+    'target_transform_null': 'P1B-3',
+    # A key of a type the bridge's cast takes no Arrow type for (an edit
+    # keying a decimal column): T1.32a's.
+    'key_type': 'P1B-3',
 }
+#: From T1.28a: the core's refusals at predict, of a request both routes
+#: materialize alike, by the entry naming each (predict's not-yet rules,
+#: the answer to a classification among them, T1.28b's).
+PREDICT_RULES = {'problem_type': 'P1B-4', 'outputs': 'P1B-4'}
+#: The core's refusals at ``Schema.from_source`` where the reference fails
+#: unnamed, by the entry naming each.
+FROM_SOURCE_RULES = {'empty_table': 'P1B-11'}
 #: The entry a static target's refusal by a rule is under, where it is not
 #: the rule's own.
 STATIC_RULES = {'target_type': 'P1B-18'}
@@ -145,6 +160,11 @@ WARNINGS = (
     'leak',
     'before the data',
     'after the',
+    # From T1.28a, the client's notices the core gives: tables left out,
+    # text columns, the context that answers the question.
+    'not in this request',
+    'typed text',
+    'rows being scored',
 )
 
 
@@ -169,6 +189,24 @@ def source(rng: random.Random, i: int) -> dict[str, Any]:
     ent_time = rng.random() < 0.25
     if ent_time:
         cols.append(f'{_ts("i * 86400")} AS born')
+    # From T1.28a: a boolean (a static target too), a DECIMAL(38, 0) feature
+    # whose values fit int64 or do not, a time of day, and a wide table.
+    flag = rng.random() < 0.3
+    if flag:
+        cols.append('(i % 3 = 0) AS flag')
+    if rng.random() < 0.2:
+        cols.append(
+            rng.choice(
+                [
+                    '(12345678901234567890123456789::DECIMAL(38, 0) + i) AS big',
+                    '(i * 10)::DECIMAL(38, 0) AS big',
+                ]
+            )
+        )
+    if rng.random() < 0.15:
+        cols.append('make_time((i % 24)::BIGINT, 30, 0) AS tod')
+    if rng.random() < 0.15:
+        cols += [f'(i * {k} + 0.5)::DOUBLE AS w{k}' for k in range(25)]
     s['setup'].append(
         f'CREATE TABLE e AS SELECT {", ".join(cols)} FROM range({n_e}) t(i)'
     )
@@ -246,8 +284,38 @@ def source(rng: random.Random, i: int) -> dict[str, Any]:
             for a, b, c, d in rels
         ],
     }
+    if rng.random() < 0.1:
+        # An empty table, which both routes refuse at Schema.from_source.
+        s['setup'].append(
+            'CREATE TABLE z AS SELECT i::BIGINT AS zid FROM range(0) t(i)'
+        )
     s['edits'] = _edits(rng, _columns(s['setup']), rels)
-    s['pql'] = _query(rng, decimal)
+    s['pql'] = _query(rng, decimal, flag)
+    # From T1.28a: the options whose rules the core holds.
+    options: dict[str, Any] = {}
+    samples = rng.choice([None, None, None, 5, 1_500])
+    if samples is not None:
+        options['num_context_samples'] = samples
+    # A statistic for a regression's question (an aggregation, or a
+    # numerical column), where both routes take it; a classification's
+    # refusal of one is the acceptance tests'.
+    statistic = rng.choice([None, None, 'mean', 'median'])
+    asked = s['pql'].split('PREDICT', 1)[1].split('FOR EACH', 1)[0]
+    regression = not any(op in asked for op in ('>', '<', '=')) and (
+        '(' in asked or 'e.size' in asked
+    )
+    if statistic is not None and regression:
+        options['prediction_statistic'] = statistic
+    if rng.random() < 0.25:
+        options['inference_config'] = rng.choice(
+            [
+                {'num_estimators': 2, 'column_shuffle': True},
+                {'num_estimators': 3},
+                {'hop_shuffle': 1},
+            ]
+        )
+    if options:
+        s['options'] = options
     s['indices'] = ['e0', 'e1'] if key_text else [0, 1]
     if rng.random() < 0.6:
         s['anchor_time'] = rng.choice(
@@ -357,7 +425,7 @@ def _edits(
     return out
 
 
-def _query(rng: random.Random, decimal: bool) -> str:
+def _query(rng: random.Random, decimal: bool, flag: bool = False) -> str:
     windows = [
         (0, 30, 'days'),
         (0, 7, 'days'),
@@ -377,6 +445,7 @@ def _query(rng: random.Random, decimal: bool) -> str:
                 'PREDICT e.size FOR EACH e.id',
                 'PREDICT e.size > 3 FOR EACH e.id',
             ]
+            + (['PREDICT e.flag FOR EACH e.id'] if flag else [])
         )
     aggregation = rng.choice(['SUM', 'COUNT', 'AVG', 'MIN', 'MAX'])
     columns = ['v', 'n', 'f'] + (['d'] if decimal else [])
@@ -666,7 +735,10 @@ def probe(spec_path: Path, out: Path, route: str) -> None:
             except Exception as error:  # noqa: BLE001
                 rec['edits'].append(_outcome(error))
         rec['schema'] = _projection(schema)
-        args: dict[str, Any] = {'indices': src['indices']}
+        args: dict[str, Any] = {
+            'indices': src['indices'],
+            **src.get('options', {}),
+        }
         if 'anchor_time' in src:
             args['anchor_time'] = pd.Timestamp(src['anchor_time'])
         seeds.clear()
@@ -831,6 +903,22 @@ def classify(
             and old['from_source'][1:2] == core['from_source'][1:2]
         ):
             return 'agree', 'both refuse from_source with one code'
+        # An empty table, which the reference refuses unnamed and the core
+        # by name (E66(b)'s class).
+        fo, fc = old['from_source'], core['from_source']
+        if (
+            fo[0] != 'ok'
+            and len(fo) > 1
+            and fo[1] in (None, 'INTERNAL_ERROR')
+            and len(fc) == 3
+            and fc[1] == 'UNSUPPORTED_REQUEST'
+            and fc[2] in FROM_SOURCE_RULES
+        ):
+            return under(
+                FROM_SOURCE_RULES[fc[2]],
+                fc[2],
+                f'E66(b): the reference {fo}, the core {fc}',
+            )
         return (
             'UNCLASSIFIED',
             f'from_source {old["from_source"]} | {core["from_source"]}',
@@ -854,6 +942,22 @@ def classify(
         ) != core.get('result'):
             problems.append(
                 f'predict {old.get("predict")} | {core.get("predict")}'
+            )
+        predicted = core.get('predict')
+        if (
+            problems
+            == [f'predict {old.get("predict")} | {core.get("predict")}']
+            and old.get('predict') == ['ok']
+            and isinstance(predicted, list)
+            and len(predicted) == 3
+            and predicted[1] == 'UNSUPPORTED_REQUEST'
+            and predicted[2] in PREDICT_RULES
+        ):
+            # The same request; the core refuses its answer by name.
+            return under(
+                PREDICT_RULES[predicted[2]],
+                predicted[2],
+                f'the same request, predict refused {predicted[2]}',
             )
         if problems:
             return 'UNCLASSIFIED', '; '.join(problems)
@@ -896,6 +1000,15 @@ def classify(
                 rule,
                 f'E66(b): the reference {om}, the core {cm}',
             )
+    if om[1] in (None, 'INTERNAL_ERROR') and cm[1] == 'PROVIDER_ERROR':
+        # The source's own failure, which the reference reports internally
+        # and the core as the provider's (a time column the source's CAST
+        # cannot read: DT-12's text, DT-18's time of day).
+        return under(
+            'DT-18',
+            None,
+            f'the source fails: the reference {om}, the core {cm}',
+        )
     if (cm[2], om[1]) in CODE_CHANGES:
         return under(
             CODE_CHANGES[(cm[2], om[1])],

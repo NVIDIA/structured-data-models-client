@@ -592,3 +592,50 @@ def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
     assert core.details == old.details
     assert 'ENDPOINT-ONLY-7c2' in str(core)
     assert core.__cause__ is None and core.__context__ is None
+
+
+def test_the_host_sends_the_call_re_encoded_register_host_4(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register HOST-4 (proposed): the core writes the payload, which its
+    # byte limit counts (PD-2), as UTF-8; the Python host's transport
+    # decodes the core's call and encodes it again as json.dumps does, so
+    # a character past ASCII is sent as its escape, not as the bytes the
+    # core wrote. The JSON is the same.
+    from sdm_client._rust import run as rust_run
+
+    taken: list[bytes] = []
+    take = rust_run.Finished.take
+
+    def recording(self: Any, attachment: int) -> Any:
+        got = take(self, attachment)
+        state = (
+            self.result.get('state') if isinstance(self.result, dict) else None
+        )
+        if isinstance(state, dict) and attachment == state.get('payload'):
+            taken.append(bytes(got))
+        return got
+
+    monkeypatch.setattr(rust_run.Finished, 'take', recording)
+    monkeypatch.setenv(_routing.ENVIRONMENT, MATERIALIZE)
+    connection = duckdb.connect()
+    for statement in [
+        *_shop(),
+        "UPDATE users SET country = 'Zürich' WHERE user_id = 0",
+    ]:
+        connection.execute(statement)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
+        )
+    [written] = taken
+    assert 'Zürich'.encode() in written and b'\\u00fc' not in written
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with _answering(400, b'{"code": "RECORDED"}') as (url, received):
+        with pytest.raises(StructuredDataError):
+            _predict(url, request)
+    [sent] = received
+    assert b'\\u00fc' in sent and 'Zürich'.encode() not in sent
+    assert json.loads(sent)['context'] == json.loads(written)['context']

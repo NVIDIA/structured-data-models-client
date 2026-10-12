@@ -1156,6 +1156,36 @@ entries:
     every text column of the AdventureWorks journey (codes, names, UUIDs),
     which reaches predict on both hosts with this rule.
 
+- id: DT-18
+  title: A time of day set as a time column fails the source's CAST, reported as the provider's error
+  kind: change
+  old_behavior: >-
+    A TIME column set as a table's time column (an edit after
+    Schema.from_source) fails the reference's sampling statement, DuckDB's
+    CAST from TIME to TIMESTAMP being unimplemented, which its client
+    reports as StructuredDataError with code INTERNAL_ERROR at materialize.
+  new_behavior: >-
+    The core renders the same statement, which fails the same way in the
+    source, and reports the provider's error, PROVIDER_ERROR at
+    materialize, as DT-12 reports a text column the CAST cannot read.
+  affected_inputs: >-
+    SQL sources whose time column, set by an edit, is a TIME column, on the
+    core route.
+  cases: [T1.28a]
+  refs: [DT-12, P1B-1]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found at T1.28a by contract/tools/differential.py, whose generator now
+    makes times of day (seed 29, one source, an edit setting e.tod as the
+    time column); the core's behavior predates T1.28a. Fits the class the
+    owner approved on 2026-10-11 (E66(b): where the reference gives an
+    internal error, a clearer code is approved), as DT-12 did: for the
+    reviewer to approve under the class, never self-approved. The tool
+    classifies every PROVIDER_ERROR where the reference fails internally
+    here.
+
 - id: ORD-1
   title: Tie order of the shared train set by entity time
   kind: change
@@ -1455,10 +1485,9 @@ entries:
     windowed SUM, COUNT, AVG, MIN or MAX, a comparison of one, or of a
     column of the entity's own row, with a number or NULL, and a static
     column (static_target, aggregation, month_window and a decimal sum's
-    target_type lifted), and the classification and static tasks are
-    refused after their labels, until T1.28a lays them out in the
-    payload, by classification_task (a binary or multiclass task) and
-    target_leakage (a static regression); still refused by name:
+    target_type lifted), and, from T1.28a, the classification and static
+    tasks are materialized as the reference materializes them
+    (classification_task and target_leakage lifted); still refused by name:
     logical_target (AND, OR, NOT), target_filter (a target with WHERE),
     condition (another comparison: IN, LIKE and its kin, text or a
     boolean compared, a condition of a condition), condition_value (a
@@ -1470,6 +1499,20 @@ entries:
     (a time, a decimal's average, a static decimal target, P1B-18); a
     decimal sum past 38 digits is INVALID_REQUEST, as the reference's
     grouped sum fails it (T1.27's fix round 1).
+    From T1.28a: a DECIMAL(38, s) feature and a time of day have the
+    reference's wire dtype (wire_dtype lifted for them; a decimal of another
+    precision still refused by name, since the reference's decimal sums
+    fail at the column's declared precision, which this core does not check
+    yet, and such a feature is sent beside them); num_context_samples and
+    inference_config lifted, the options' values read as the client and
+    the engine read them, but a value the engine's validation coerces from
+    text (inference_config_text) and a null target transform
+    (target_transform_null) refused by name, and an inference config that
+    is not a mapping refused INVALID_REQUEST, where the reference takes its
+    engine's own config object; an average compared with NULL refused by
+    name (average_null, P1B-21); a multiclass target of floats refused
+    target_type, its classes' text being Python's repr of a float32's
+    double.
     The entities are cast to the key's type as the
     reference casts them (pandas, to the key's Arrow dtype), so none the
     reference takes is refused. A schema not described on the core has no core route
@@ -1480,7 +1523,7 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source's schema
     under a forced core route, with any of the inputs above; base.regression
     is none of them, and its payload is the reference's.
-  cases: [base.regression, base.adventureworks, base.binary, base.multiclass, decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.29]
+  cases: [base.regression, base.adventureworks, base.binary, base.multiclass, decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.28a, T1.29]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -1530,6 +1573,12 @@ entries:
     labels equal to the reference payload's context wherever the core
     gave them (the test-only labels operation), and nothing else of this
     entry differed.
+    Measured at T1.28a by contract/tools/differential.py over 150 sources
+    (seeds 27 to 29), its generator grown with booleans, DECIMAL(38, 0)
+    features, times of day, wide tables, empty tables and the options the
+    core now reads: the classification and static tasks' payloads equal to
+    the reference's, and of this entry only keyless_neighbors, key_type
+    and target_type reached.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1568,7 +1617,14 @@ entries:
     reader takes and JSON does not hold, or a token past a double's range,
     1e400, which reads as an infinity), is INVALID_RESPONSE on the core,
     field response, reason not_finite, on every host, where the reference
-    passes the value on. A request not materialized on
+    passes the value on. From T1.28a a classification's call is written as
+    the reference's (its default outputs, prediction and probabilities, and
+    no statistic), its answer refused by name (problem_type, the result's
+    layout T1.28b's), and outputs other than the task's default refused by
+    name (outputs) once the request state's task is read; an inference
+    option the caller set and the model does not read is refused before
+    the call, UNSUPPORTED_REQUEST naming the model and the options, as the
+    reference's adapter refuses it. A request not materialized on
     the core has no core route (RouteError, the seam's own failure). The
     default route is unchanged.
   affected_inputs: >-
@@ -1576,7 +1632,7 @@ entries:
     source, under a forced core route, with any of the inputs or answers
     above; base.regression is none of them, and its request and result are
     the reference's.
-  cases: [base.regression, T1.11d, T1.26, T1.28, T1.29]
+  cases: [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28, T1.28a, T1.29]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -2181,6 +2237,76 @@ entries:
     T1.28a, which gives a decimal feature its wire dtype, settles the code
     (the reference's INVALID_REQUEST where float64 cannot hold the
     values).
+    Settled at T1.28a: a DECIMAL(38, s) feature is sent as the reference
+    sends it, and one whose values float64 does not hold exactly is
+    refused INVALID_REQUEST, as the reference refuses it (sdm-request's
+    payload.rs, decimal_float, held by its unit test); no outcome of this
+    entry remains, so it is for the reviewer to close (rejected, the change
+    withdrawn), never the implementer. A decimal of another precision
+    than 38 is still refused wire_dtype (P1B-3).
+
+- id: P1B-20
+  title: A limit refused UNSUPPORTED_REQUEST is raised as UnsupportedRequestError on the core route
+  kind: change
+  old_behavior: >-
+    The reference's client refuses a request past the endpoint's limits
+    with StructuredDataError, code UNSUPPORTED_REQUEST: more than 1,000
+    entities (_check_entity_count), a context size past 10,000
+    (_run_mode_for), more than 6 hops (_check_shape).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core refuses each (T1.28a, sdm-request's options and sdm-core's
+    materialize), code UNSUPPORTED_REQUEST, which the Python host raises as
+    UnsupportedRequestError, a subclass of StructuredDataError (the one
+    class _rust/errors.py maps the code to), naming no rule: the code and
+    every except clause the reference's class catches are the reference's;
+    the exception's class name is not. The default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route past the entity count, the context size or the hops
+    the endpoint takes.
+  cases: [T1.28a]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.28a: the independent test author's recorded cases
+    (test_t128a_payload_rules.py: num_context_samples 10,001, 1,001
+    entities) hold the code and the reference's class as a base of the
+    core's; the class's name differs. Not E66(b)'s class (the reference's
+    refusal is named): for the reviewer or the owner, never self-approved.
+    The alternative, a host mapping UNSUPPORTED_REQUEST to the base class
+    by the error's fields, would be a rule in the host.
+
+- id: P1B-21
+  title: An average compared with NULL is refused by name where the reference fails INTERNAL_ERROR
+  kind: change
+  old_behavior: >-
+    The reference's materialize of a target AVG(...) = NULL or AVG(...) !=
+    NULL fails inside its executor, which its client raises as
+    StructuredDataError with code INTERNAL_ERROR.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    materialize refuses the query's shape before anything is fetched:
+    UnsupportedRequestError, code UNSUPPORTED_REQUEST, fields operation
+    materialize and rule average_null (T1.28a; until T1.28a the core
+    labelled it and refused classification_task after the labels). The
+    default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route whose target compares a windowed AVG with NULL.
+  cases: [T1.27, T1.28a]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Carried from T1.27's review into T1.28a, which lifts classification_task:
+    the independent test author's avg-equals-null case holds the core to a
+    named refusal other than INTERNAL_ERROR and not one of the rules
+    T1.28a lifts. Fits the class the owner approved on 2026-10-11 (E66(b):
+    where the reference crashes or gives an internal error, a named
+    refusal is approved): for the reviewer to approve under the class,
+    never self-approved.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
@@ -2372,6 +2498,41 @@ entries:
     T1.17 round 1), whose own run of the CI artifacts showed the warning
     before the client's import in the floor lane alone; reviewer-owned
     (checkpoint 7), not the owner's.
+
+- id: HOST-4
+  title: python-core sends the call re-encoded by its transport, not the bytes the core counted
+  kind: change
+  old_behavior: >-
+    The reference counts a request's size as json.dumps' compact text of
+    its payload (payload_size_bytes) and sends the call as its transport
+    encodes it (json.dumps with its default separators and ASCII escapes).
+  new_behavior: >-
+    The core counts the payload limit on the bytes it writes the payload
+    as, UTF-8 (register PD-2, T1.28a: sdm_request::payload::build, held at
+    the limit with ASCII and with two- to four-byte characters by
+    sdm-request's tests/payload_bytes.rs). The Python host sends the call
+    through the client's transport, which decodes the core's call and
+    encodes it again as json.dumps does (spaced separators, each character
+    past ASCII as an escape), so the bytes it sends are not the bytes the
+    core counted, nor those the core wrote; a host sending the core's call
+    bytes as they are, which the contract's CallModel step gives it, sends
+    the bytes counted. The default route is unchanged.
+  affected_inputs: >-
+    SDMClient.predict on the core route of a request near the payload
+    limit, or holding characters past ASCII.
+  cases: [T1.28a]
+  refs: [PD-2]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    The orchestrator's reading of PD-2 at T1.28a: the count is the core's
+    serialized payload bytes, exactly as the core writes them, and hosts
+    send those bytes unchanged; python-core's transport re-encodes them,
+    so a host deviation, registered rather than changed in T1.28a (the
+    transport is shared with the old route and with the Databricks
+    serving transport, which wraps the call in its own envelope). For the
+    reviewer or the owner.
 
 # --- PQL validation (T1.12) ---------------------------------------------------
 

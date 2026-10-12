@@ -345,3 +345,128 @@ def test_incomplete_or_doubled_evidence_fails(tmp_path: Path) -> None:
     core.write_text(json.dumps([agreeing]))
     spec.write_text(json.dumps({'sources': [source, source]}))
     assert differential.compare(old, core, spec, register) == 1
+
+
+#: The entries T1.28a's classifications name, as the register holds them.
+T128A = {
+    **REGISTER,
+    'P1B-4': {
+        'id': 'P1B-4',
+        'status': 'proposed',
+        'new_behavior': 'problem_type outputs',
+    },
+    'P1B-11': {
+        'id': 'P1B-11',
+        'status': 'approved',
+        'new_behavior': 'empty_table',
+    },
+    'DT-18': {
+        'id': 'DT-18',
+        'status': 'proposed',
+        'new_behavior': 'PROVIDER_ERROR',
+    },
+}
+
+
+def _same_request(core_predict: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    old = _old()
+    core = {**_old(), 'predict': core_predict}
+    core.pop('result')
+    return old, core
+
+
+def test_a_predict_refusal_of_the_same_request_is_its_entry_s() -> None:
+    # T1.28a: both routes build the same request; the core refuses its
+    # answer by a predict rule (a classification's layout, T1.28b's).
+    old, core = _same_request(
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'problem_type']
+    )
+    assert differential.classify(old, core, [0, 1], T128A, 2)[0] == (
+        'proposed:P1B-4'
+    )
+    # Fail-closed: another rule, another code, no rule, a differing request
+    # beside it, an entry that does not name the rule, an entry missing.
+    for predicted in (
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'not_a_rule'],
+        ['StructuredDataError', 'INVALID_REQUEST', 'problem_type'],
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', None],
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST'],
+        None,
+    ):
+        old, core = _same_request(predicted)
+        assert differential.classify(old, core, [0, 1], T128A, 2)[0] == (
+            'UNCLASSIFIED'
+        ), predicted
+    old, core = _same_request(
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'problem_type']
+    )
+    core['warnings'] = ['typed text']
+    assert differential.classify(old, core, [0, 1], T128A, 2)[0] == (
+        'UNCLASSIFIED'
+    )
+    unnamed = {**T128A, 'P1B-4': {**T128A['P1B-4'], 'new_behavior': 'x'}}
+    old, core = _same_request(
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'problem_type']
+    )
+    assert differential.classify(old, core, [0, 1], unnamed, 2)[0] == (
+        'UNCLASSIFIED'
+    )
+    missing = {k: v for k, v in T128A.items() if k != 'P1B-4'}
+    assert differential.classify(old, core, [0, 1], missing, 2)[0] == (
+        'UNCLASSIFIED'
+    )
+
+
+def test_an_empty_table_refused_by_name_is_e66b_s_entry() -> None:
+    old = {'id': 'g00', 'from_source': ['RuntimeError', None, None]}
+    core = {
+        'id': 'g00',
+        'from_source': [
+            'UnsupportedRequestError',
+            'UNSUPPORTED_REQUEST',
+            'empty_table',
+        ],
+    }
+    assert differential.classify(old, core, [0, 1], T128A, 0)[0] == (
+        'approved:P1B-11'
+    )
+    for refused in (
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'other'],
+        ['StructuredDataError', 'INVALID_REQUEST', None],
+        ['ok'],
+    ):
+        assert differential.classify(
+            old, {**core, 'from_source': refused}, [0, 1], T128A, 0
+        )[0] == ('UNCLASSIFIED'), refused
+    named = {
+        **old,
+        'from_source': ['StructuredDataError', 'INVALID_REQUEST', None],
+    }
+    assert differential.classify(named, core, [0, 1], T128A, 0)[0] == (
+        'UNCLASSIFIED'
+    )
+
+
+def test_the_source_s_failure_under_the_provider_s_code_is_dt_18_s() -> None:
+    old = {
+        **_old(),
+        'materialize': ['StructuredDataError', 'INTERNAL_ERROR', None],
+    }
+    core = {
+        **_core(),
+        'materialize': ['StructuredDataError', 'PROVIDER_ERROR', None],
+    }
+    assert differential.classify(old, core, [0, 1], T128A, 2)[0] == (
+        'proposed:DT-18'
+    )
+    named = {
+        **old,
+        'materialize': ['StructuredDataError', 'INVALID_REQUEST', None],
+    }
+    assert differential.classify(named, core, [0, 1], T128A, 2)[0] == (
+        'UNCLASSIFIED'
+    )
+    missing = {k: v for k, v in T128A.items() if k != 'DT-18'}
+    assert differential.classify(old, core, [0, 1], missing, 2)[0] == (
+        'UNCLASSIFIED'
+    )

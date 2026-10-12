@@ -245,7 +245,9 @@ def test_inference_options_not_a_mapping_are_refused(
     assert refused.value.code == 'INVALID_REQUEST'
 
 
-@pytest.mark.parametrize('depth', [500, 100_000], ids=['past-the-core', 'past-json'])
+@pytest.mark.parametrize(
+    'depth', [500, 100_000], ids=['past-the-core', 'past-json']
+)
 def test_inference_options_nested_deep_are_refused_never_a_crash(
     monkeypatch: pytest.MonkeyPatch, depth: int
 ) -> None:
@@ -1679,3 +1681,85 @@ def test_the_default_mode_s_cap_is_noticed_as_on_the_old_route(
     if _old_route_needs_the_engine():
         return
     assert core == notices()
+
+
+def _refusal_of(**options: Any) -> StructuredDataError:
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(**options)
+    return refused.value
+
+
+def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register P1B-20 (proposed): a limit the reference refuses as
+    # StructuredDataError(UNSUPPORTED_REQUEST) the core refuses with the
+    # same code, raised as UnsupportedRequestError, its subclass.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    for options in (
+        {'indices': list(range(1_001))},
+        {'num_context_samples': 10_001},
+        {'num_hops': 7},
+    ):
+        core = _refusal_of(**options)
+        assert core.code == 'UNSUPPORTED_REQUEST', options
+        assert type(core).__name__ == 'UnsupportedRequestError', options
+        assert 'rule' not in core.details, options
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    for options in ({'indices': list(range(1_001))}, {'num_hops': 7}):
+        old = _refusal_of(**options)
+        assert (type(old), old.code) == (
+            StructuredDataError,
+            'UNSUPPORTED_REQUEST',
+        ), options
+
+
+def test_an_average_compared_with_null_is_refused_by_name_register_p1b_21(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register P1B-21 (proposed, E66(b)'s class): the reference fails
+    # INTERNAL_ERROR; the core refuses the shape by name.
+    query = (
+        'PREDICT AVG(orders.price, 0, 30, days) != NULL FOR EACH users.user_id'
+    )
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _refusal_of(query=query)
+    assert (core.code, core.details['rule']) == (
+        'UNSUPPORTED_REQUEST',
+        'average_null',
+    )
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    assert _refusal_of(query=query).code == 'INTERNAL_ERROR'
+
+
+def test_a_time_of_day_as_the_time_column_is_the_source_s_failure_register_dt_18(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register DT-18 (proposed, E66(b)'s class): the source's CAST of a
+    # TIME column fails on both routes; the reference reports it as
+    # INTERNAL_ERROR, the core as the provider's error.
+    def refused() -> StructuredDataError:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            connection = _connection(
+                'CREATE OR REPLACE TABLE users AS SELECT *, '
+                'make_time(user_id::BIGINT, 30, 0) AS tod FROM users'
+            )
+            schema = Schema.from_source(DuckDBSource(connection))
+            schema['users'].time_column = 'tod'
+            with pytest.raises(StructuredDataError) as error:
+                PredictiveQuery(
+                    'PREDICT users.age > 30 FOR EACH users.user_id', schema
+                ).materialize(indices=[0, 1])
+        return error.value
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    assert refused().code == 'PROVIDER_ERROR'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    assert refused().code == 'INTERNAL_ERROR'
