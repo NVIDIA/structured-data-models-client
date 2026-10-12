@@ -1380,3 +1380,62 @@ def test_the_host_drops_a_state_on_the_core_s_word_not_the_field_it_names(
         query.materialize(indices=[0, 1], anchor_time=ANCHOR)
     kept = query._relational_materializer._core_sampler_state
     assert ('held' in kept) is not said
+
+
+#: A decimal average whose sum would not fit DECIMAL(38, 18) (T1.27's fix
+#: round 2): two prices of 6e19 for user 1 in the window, one earlier order
+#: bounding the data. The reference averages them; the sum it refuses.
+DECIMAL_AVERAGE = (
+    'CREATE TABLE users (user_id BIGINT PRIMARY KEY)',
+    'INSERT INTO users SELECT i FROM range(4) t(i)',
+    'CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, '
+    'price DECIMAL(38, 18), ts TIMESTAMP)',
+    "INSERT INTO orders VALUES (1, 1, 60000000000000000000, '2024-02-15'), "
+    "(2, 1, 60000000000000000000, '2024-02-15'), (3, 2, 1, '2024-01-01')",
+)
+#: The reference's context for the average, recorded from the reference
+#: checkout's environment (b413e9a; pandas 3.0.6, pyarrow 25.0.1) through
+#: the same public calls: one example, user 1 at 2024-02-01, its label the
+#: mean read at float32.
+DECIMAL_AVERAGE_REFERENCE = [
+    [0, 1, '2024-02-01T00:00:00.000000Z', 6.000000208206194e19]
+]
+
+
+def _decimal_average(query: str) -> Any:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        connection = duckdb.connect()
+        for statement in DECIMAL_AVERAGE:
+            connection.execute(statement)
+        schema = Schema.from_source(DuckDBSource(connection))
+        return PredictiveQuery(query, schema).materialize(
+            indices=[1], anchor_time=ANCHOR
+        )
+
+
+def test_a_decimal_average_past_38_digits_is_not_the_caller_s_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    average = 'PREDICT AVG(orders.price, 0, 1, months) FOR EACH users.user_id'
+    total = 'PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id'
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        # The old route is the reference's: the average taken, as recorded,
+        # and the sum refused as the caller's error.
+        request = _decimal_average(average)
+        rows = request._payloads[0]['context']['instance_table']['rows']
+        assert json.loads(json.dumps(rows)) == DECIMAL_AVERAGE_REFERENCE
+        with pytest.raises(StructuredDataError) as refused:
+            _decimal_average(total)
+        assert refused.value.code == 'INVALID_REQUEST'
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    # On the core a decimal's average takes a rule it does not port yet,
+    # refused by name (P1B-3), never as the caller's error.
+    with pytest.raises(StructuredDataError) as refused:
+        _decimal_average(average)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['rule'] == 'target_type'
+    # The sum is the caller's error on both routes.
+    with pytest.raises(StructuredDataError) as refused:
+        _decimal_average(total)
+    assert refused.value.code == 'INVALID_REQUEST'

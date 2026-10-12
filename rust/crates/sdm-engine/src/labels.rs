@@ -154,9 +154,9 @@ const DECIMAL_38: i128 = 99_999_999_999_999_999_999_999_999_999_999_999_999;
 /// example `batch[row]` whose value is present and whose time is in its
 /// window ([`Bounds`]), in row order. A decimal's sum past `DECIMAL(38)`
 /// is the caller's error, `INVALID_REQUEST`, as the reference's grouped sum
-/// fails it and its client reports it, a decimal's average's sum included;
-/// the average itself takes a rule this does not port, refused by name
-/// (`target_type`).
+/// fails it and its client reports it; a decimal's average takes a rule
+/// this does not port, refused by name (`target_type`), whatever its sum,
+/// since the reference averages values whose sum would not fit.
 pub fn aggregate(
     aggregation: Aggregation,
     examples: usize,
@@ -220,13 +220,10 @@ pub fn aggregate(
                     (sum / (n as i64 as f64)) as f32
                 }
                 Values::Ones(_) => 1.0,
-                // The reference's mean sums first, failing a sum past
-                // `DECIMAL(38)` as the caller's error; the mean of what
-                // fits takes a rule this does not port.
-                Values::Decimal { values: v, .. } => {
-                    decimal_sum(rows.iter().map(|&r| v[r].unwrap_or(0)))?;
-                    return Err(not_yet("target_type"));
-                }
+                // A decimal's mean, which the reference computes even where
+                // the sum would not fit `DECIMAL(38)`, takes a rule this
+                // does not port.
+                Values::Decimal { .. } => return Err(not_yet("target_type")),
             },
             Aggregation::Min | Aggregation::Max => {
                 let max = aggregation == Aggregation::Max;
@@ -630,6 +627,23 @@ mod tests {
             scale: 18,
         };
         assert!(aggregate(Aggregation::Sum, 1, &[0], &one, &[Some(0)], bounds(&[0])).is_ok());
+        // An average of the same values is not the caller's error: the
+        // reference averages them (T1.27's fix round 2); its rule is one
+        // this does not port, by name.
+        let err = aggregate(
+            Aggregation::Avg,
+            1,
+            &[0, 0],
+            &values,
+            &[Some(0); 2],
+            bounds(&[0]),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, sdm_contract::ErrorCode::UnsupportedRequest);
+        assert_eq!(
+            err.fields["rule"],
+            sdm_contract::Detail::text("target_type")
+        );
     }
 
     #[test]
