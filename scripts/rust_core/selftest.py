@@ -1922,6 +1922,32 @@ def freeze_cases(results: list[Result]) -> None:
             bridge_freeze.tree_allowances(root)[1],
             fails_with='ALLOWANCES is not a literal dict',
         )
+        # A key no dict can hold is a named refusal, not a TypeError, read
+        # as the tree's copy or as the base's (part 1's review, P3).
+        unhashable = allowances_as('{[1]: {}}')
+        (root / bridge_freeze.SCRIPT).write_text(unhashable)
+        try:
+            read_problems = bridge_freeze.tree_allowances(root)[1]
+        except TypeError as error:
+            read_problems = [f'raised {error!r}']
+        expect(
+            results,
+            "bridge_freeze: the tree's allowances keyed by a list",
+            read_problems,
+            fails_with="the tree's scripts/rust_core/bridge_freeze.py: "
+            'ALLOWANCES is not a literal dict',
+        )
+        try:
+            held_problems = bridge_freeze.held_allowances(unhashable)[1]
+        except TypeError as error:
+            held_problems = [f'raised {error!r}']
+        expect(
+            results,
+            "bridge_freeze: the base's allowances keyed by a list",
+            held_problems,
+            fails_with="the base's scripts/rust_core/bridge_freeze.py: "
+            'ALLOWANCES is not a literal dict',
+        )
         (root / bridge_freeze.SCRIPT).unlink()
         expect(
             results,
@@ -2251,6 +2277,34 @@ def freeze_cases(results: list[Result]) -> None:
             'bridge_freeze: a blank --base refused',
             bridge_freeze.problems(repo, ''),
             fails_with='the base branch is blank',
+        )
+        # Through problems(), as l0_deps.py and a gate run it: the tree's
+        # own allowances are read (part 1's review, P3), so an entry under a
+        # row the base's decisions do not hold is refused by its name. With
+        # problems() reading the running copy's (no allowances= passed),
+        # this seed's E99 is never read and the check fails.
+        (repo / bridge_freeze.SCRIPT).write_text(
+            allowances_as(
+                repr(
+                    {
+                        'E99': {
+                            f'{schema}::f': {
+                                'raise': 1,
+                                'warn': 0,
+                                'branch': 0,
+                                'calls': [],
+                            }
+                        }
+                    }
+                )
+            )
+        )
+        git('commit', '-q', '-am', 'an allowance under no row of the base')
+        expect(
+            results,
+            "bridge_freeze: problems() reads the tree's allowances, a row the base lacks refused",
+            bridge_freeze.problems(repo, 'phase'),
+            fails_with="ALLOWANCES[E99]: not a row of the merge base's decisions.md",
         )
 
 

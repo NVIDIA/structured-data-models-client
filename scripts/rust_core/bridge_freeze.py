@@ -958,7 +958,8 @@ def literal_allowances(
         if isinstance(target, ast.Name) and target.id == 'ALLOWANCES':
             try:
                 value = ast.literal_eval(node.value)  # type: ignore[arg-type]
-            except ValueError:
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                # TypeError: a key no dict can hold, such as a list.
                 break
             if isinstance(value, dict) and all(
                 isinstance(v, dict) for v in value.values()
@@ -986,32 +987,12 @@ def held_allowances(
     script: str | None,
 ) -> tuple[set[tuple[str, str]], list[str]]:
     """The ``(decision, <file>::<function>)`` pairs the base's copy of this
-    file already grants, or why they cannot be read."""
-    if script is None:
-        return set(), []
-    try:
-        tree = ast.parse(script)
-    except SyntaxError as error:
-        return set(), [f"the base's {SCRIPT} does not parse: {error.msg}"]
-    for node in tree.body:
-        target = (
-            node.target
-            if isinstance(node, ast.AnnAssign)
-            else node.targets[0]
-            if isinstance(node, ast.Assign) and len(node.targets) == 1
-            else None
-        )
-        if isinstance(target, ast.Name) and target.id == 'ALLOWANCES':
-            try:
-                value = ast.literal_eval(node.value)  # type: ignore[arg-type]
-            except ValueError:
-                break
-            if isinstance(value, dict) and all(
-                isinstance(v, dict) for v in value.values()
-            ):
-                return {(d, str(k)) for d, v in value.items() for k in v}, []
-            break
-    return set(), [f"the base's {SCRIPT}: ALLOWANCES is not a literal dict"]
+    file already grants, or why they cannot be read
+    (:func:`literal_allowances`, which the tree's copy is read by too)."""
+    found, problems = literal_allowances(script, "the base's")
+    if found is None:
+        return set(), problems
+    return {(d, str(k)) for d, v in found.items() for k in v}, []
 
 
 def allowance_problems(
