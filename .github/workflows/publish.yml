@@ -2,30 +2,33 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Publishing to PyPI, without a stored credential.
+# Publishing to PyPI through Kitmaker.
 #
-# There is no API token in this workflow or in the repository's secrets. PyPI's
-# Trusted Publishing exchanges this job's OIDC identity for a PyPI token minted
-# on the spot and good for about fifteen minutes, which the upload then uses
-# for every file. That token is worth stealing while it lives; what does not
-# exist is a long-lived one sitting in a secret for anyone who ever gets read
-# access to it.
+# Kitmaker owns NVIDIA's PyPI organization, and this project's open source
+# review record commits to releasing through it. Kitmaker does not accept an
+# upload; it fetches an artifact from a URL and publishes it itself, to pypi.org
+# and pypi.nvidia.com together. So the release here is two steps: attach every
+# distribution to the GitHub Release, then ask Kitmaker's Portal to publish from
+# those asset URLs.
 #
-# The same identity signs a PEP 740 attestation that a consumer can verify back
-# to this repository. An attestation proves the upload came from a publisher
-# this repository authorized. It does not pin the workflow or the tag: the
-# verifier takes those from PyPI's own provenance and cross-checks only the
-# repository, so a second Trusted Publisher configured here would verify just
-# as cleanly.
+# Two consequences worth stating rather than discovering.
 #
-# `publish` is the only job that can reach the publishing identity, because it
-# is the only one with `id-token: write`. `build` has `contents: read` to check
-# the tree out and `actions: read` to ask whether CI passed, and nothing more,
-# so a compromised build dependency cannot upload anything itself. It can still
-# decide what the privileged job uploads, because it is what produces the
-# distributions; the split limits who holds the credential, not what gets built.
-# `verify` adds no permission. `attach-sbom` has `contents: write`, which is
-# what lets it create the GitHub Release and attach the inventory to it.
+# There is a stored credential now. Kitmaker's Portal authenticates with a
+# long-lived bearer token, so `KITMAKER_API_TOKEN` sits in this repository's
+# secrets, which the previous Trusted Publishing setup deliberately avoided.
+# It is held by one job, behind a protected environment, and it can publish
+# only to the five Portal projects it owns.
+#
+# There are no PEP 740 attestations. Those are issued to whoever uploads, and
+# the uploader is Kitmaker, not this workflow. A consumer verifies these
+# distributions by NVIDIA's ownership of the PyPI project, not by a signature
+# traceable to this repository. SECURITY.md says so plainly.
+#
+# `build` has `contents: read` to check the tree out and `actions: read` to ask
+# whether CI passed, and nothing more, so a compromised build dependency cannot
+# publish anything itself. It can still decide what gets published, because it
+# is what produces the distributions. `release` has `contents: write` to create
+# the GitHub Release and attach the artifacts. `kitmaker` holds the token.
 name: publish
 
 on:
@@ -217,142 +220,13 @@ jobs:
           name: distributions
           path: dist/
 
-  publish:
+  # Kitmaker fetches artifacts from a URL rather than accepting an upload, and
+  # it accepts an Artifactory path or a GitHub release asset. The release is
+  # created here so those asset URLs exist. They have to be publicly reachable:
+  # Kitmaker refuses private GitHub assets, so this cannot publish while the
+  # repository is internal.
+  release:
     needs: build
-    runs-on: ubuntu-latest
-    environment: pypi          # a protected environment, so a release is reviewable
-    permissions:
-      id-token: write          # the only privilege here, and the reason there is no token
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: distributions
-          path: dist/
-
-      # The SBOM is a release asset, not something to upload to the index.
-      - name: Keep only the distributions
-        run: rm -f dist/sbom.cyclonedx.json dist/notes.md
-
-      # The mutable layer inside the pinned action. This action is pinned by
-      # commit, but it generates a Docker action whose image is
-      # `ghcr.io/pypa/gh-action-pypi-publish:<the pinned sha>`, and a GHCR tag
-      # is mutable however it is named. There is no input to pull it by digest,
-      # so short of forking the action there is no supported way to pin it, and
-      # repointing that tag would change the code that runs in the job holding
-      # `id-token: write`. The trust boundary for the upload is therefore the
-      # pypa organization, not just the commit below. Writing the upload by
-      # hand to avoid it would put less-reviewed code in the same place, which
-      # is the worse trade.
-      #
-      # It is not the only mutable thing the release runs. `ubuntu-latest` is
-      # reimaged on its own schedule, and everything this workflow installs
-      # from PyPI resolves at release time: `pip` itself, the build and
-      # packaging tools, the PEP 517 build requirements behind them, the whole
-      # dependency graph the SBOM step installs to inventory it, and the
-      # verifier's own dependencies, which the pin below does not reach.
-      # Pinning every `uses:` does not make a release hermetic and is not
-      # claimed to.
-      #
-      # What this one does not leave unguarded is the bytes of the files it is
-      # given: `verify` below checks what PyPI attested against the artifacts
-      # `build` produced, so an image that altered one of them on its way to
-      # the index fails there.
-      - name: Publish with Trusted Publishing and attest the artifacts
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-        with:
-          attestations: true
-
-  # An attestation nobody checks is a claim. The release workflow signs these
-  # files, so the release workflow is where the signature is checked. It cannot
-  # run before anyone installs them, because an attestation is only on the
-  # index once the upload is done; what it catches is a release whose
-  # signatures are wrong, while the release is still minutes old and whoever
-  # cut it is still watching.
-  #
-  # It checks the files `build` produced, not copies fetched back from PyPI.
-  # The verifier takes either, and the difference matters here: the provenance
-  # always comes from PyPI, so handing it the local artifact asks whether each
-  # file this workflow built is byte-for-byte what PyPI attested. Handing it
-  # `pypi:<name>` would download the attested file and compare it against its
-  # own attestation, which passes by construction even if the upload step
-  # swapped the bytes.
-  #
-  # The question it does not ask is whether PyPI holds anything else. It walks
-  # the artifacts this build produced, not the release's file list on the
-  # index, so an upload that published all of them faithfully and added a
-  # sixth file would pass here. Catching that means diffing the index's file
-  # set against a build manifest, which is a network call that can fail a
-  # release for reasons that are not about signatures; the residual is named
-  # rather than guarded.
-  #
-  # What it establishes is still narrower than it looks, and the prose
-  # elsewhere is written to match: a PEP 740 attestation proves these exact
-  # bytes were published by a Trusted Publisher of this repository and have not
-  # been altered since. It is not build provenance, and `--repository` is the
-  # only constraint the verifier accepts. The workflow filename in the
-  # attestation comes from PyPI's own provenance rather than from anything
-  # asserted here, so this does not distinguish one workflow in this repository
-  # from another.
-  verify:
-    needs: publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: distributions
-          path: dist/
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-
-      - name: Every distribution this build produced verifies against this repository
-        run: |
-          set -euo pipefail
-          # Pinned, unlike the build-time tools above, because this one is the
-          # check rather than the thing being checked: a verifier resolved at
-          # release time could pass without verifying, or drop the subcommand
-          # and block a release that is fine. Upstream says the CLI is not a
-          # stable interface, so raise this deliberately. The pin is on this
-          # package only; what it resolves underneath is not pinned.
-          python -m pip install pypi-attestations==0.0.30
-          # The same two files the publish job drops, for the same reason:
-          # they are release assets and were never uploaded to the index.
-          rm -f dist/sbom.cyclonedx.json dist/notes.md
-
-          failed=0
-          for path in dist/*; do
-            name=$(basename "$path")
-            verified=
-            # A file is on PyPI the moment the upload returns, but its
-            # provenance is served through a cache that can take a few seconds
-            # to catch up, and the files do not all become visible at once.
-            # Every file gets its own retries, so one slow entry cannot be
-            # reported as unsigned.
-            for attempt in 1 2 3 4 5; do
-              if python -m pypi_attestations verify pypi \
-                   --repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
-                   "$path"; then
-                verified=yes
-                break
-              fi
-              sleep $((attempt * 10))
-            done
-            if [ -z "$verified" ]; then
-              echo "::error::$name does not verify as published by $GITHUB_REPOSITORY"
-              failed=1
-            fi
-          done
-          exit $failed
-
-  # The SBOM is generated during the build and stripped from the upload,
-  # because PyPI takes distributions and nothing else. Without this job it
-  # lived only in the Actions artifact, which expires, so the inventory a
-  # consumer needs to accept this into their own supply chain existed for
-  # ninety days and then did not. Attached to the release, where it lasts as
-  # long as the release does.
-  attach-sbom:
-    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -362,16 +236,16 @@ jobs:
           name: distributions
           path: dist/
 
-      # Pushing a tag creates a tag, not a Release, and `gh release upload`
-      # needs the Release to exist. Creating it here rather than asking the
-      # releaser to do it by hand keeps RELEASING.md's promise that the tag is
-      # the only manual step. `--verify-tag` refuses to invent a release for a
-      # tag that is not really there.
-      - name: Attach the SBOM to the release
+      - name: Attach every distribution and the SBOM to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           test -s dist/sbom.cyclonedx.json
+          test -s dist/notes.md
+          # Pushing a tag creates a tag, not a Release, and `gh release upload`
+          # needs the Release to exist. `--verify-tag` refuses to invent one for
+          # a tag that is not really there.
           if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
@@ -379,5 +253,121 @@ jobs:
               --verify-tag \
               --notes-file dist/notes.md
           fi
-          gh release upload "$GITHUB_REF_NAME" dist/sbom.cyclonedx.json \
+          # The SBOM is a release asset and was never meant for the index; the
+          # notes are already the release body.
+          rm -f dist/notes.md
+          gh release upload "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" --clobber
+
+  # One Portal project per distribution, because Kitmaker matches the project
+  # name against the distribution name parsed from each filename. Sending the
+  # whole of `dist/` to one project would be rejected on the first file that
+  # belongs to another.
+  kitmaker:
+    needs: release
+    runs-on: ubuntu-latest
+    environment: pypi          # a protected environment, so a release is reviewable
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish each distribution through Kitmaker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KITMAKER_API_TOKEN: ${{ secrets.KITMAKER_API_TOKEN }}
+          PIC: ${{ vars.KITMAKER_PIC }}
+        run: |
+          set -euo pipefail
+          : "${KITMAKER_API_TOKEN:?KITMAKER_API_TOKEN is not set}"
+          : "${PIC:?KITMAKER_PIC is not set}"
+          rm -f dist/sbom.cyclonedx.json dist/notes.md
+
+          api=https://kitmaker-portal.nvidia.com/api/v0
+
+          # Portal project ids, created once and owned by the PIC. A name here
+          # that does not match its id would publish one distribution's files
+          # under another's name, so the release step below checks the id's
+          # name against this table before it sends anything.
+          projects='
+          6898 structured-data-models-client
+          6899 structured-data-models-api
+          6900 structured-data-models-pql
+          6901 structured-data-models-connectors
+          6902 structured-data-models-relational-engine
+          '
+
+          # `gh release view` gives the public download URL for each asset,
+          # which is the form Kitmaker accepts.
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | "\(.name)\t\(.url)"' > assets.tsv
+          test -s assets.tsv
+
+          # A distribution name canonicalises the same way Kitmaker does it:
+          # lower case, and `.` `_` `-` all equivalent.
+          canon() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '._' '--'; }
+
+          submit() {  # $1 project_id, $2 project_name, $3 upload
+            local id="$1" name="$2" upload="$3" body
+            body=$(python3 - "$name" "$upload" "$PIC" <<'EOF'
+          import json, sys, os, re
+          name, upload, pic = sys.argv[1], sys.argv[2] == 'true', sys.argv[3]
+          canon = lambda s: re.sub(r'[._-]+', '-', s).lower()
+          urls = []
+          for line in open('assets.tsv'):
+              fname, url = line.rstrip('\n').split('\t')
+              if not fname.endswith(('.whl', '.tar.gz')):
+                  continue
+              dist = fname.split('-')[0] if fname.endswith('.whl') else fname.rsplit('-', 1)[0]
+              if canon(dist) == canon(name):
+                  urls.append(url)
+          if not urls:
+              sys.exit(f'no artifacts in the release belong to {name}')
+          print(json.dumps({
+              'project_name': name,
+              'payload': [
+                  {'pic': pic, 'job_type': 'wheel-release-job', 'url': u, 'upload': upload}
+                  for u in urls
+              ],
+          }))
+          EOF
+          )
+            curl --fail --silent --show-error -X POST "$api/projects/$id/releases" \
+              -H "Authorization: Bearer $KITMAKER_API_TOKEN" \
+              -H 'Content-Type: application/json' -d "$body"
+          }
+
+          echo "$projects" | while read -r id name; do
+            [ -z "$id" ] && continue
+            # The id is the authority for where files land, so confirm it still
+            # carries the name this table claims before trusting either.
+            actual=$(curl --fail --silent -H "Authorization: Bearer $KITMAKER_API_TOKEN" \
+              "$api/projects/$id" | python3 -c 'import sys,json; print(json.load(sys.stdin)["name"])')
+            if [ "$actual" != "$name" ]; then
+              echo "::error::Portal project $id is '$actual', not '$name'"
+              exit 1
+            fi
+            # Dry run first. Kitmaker batches are sequential and not atomic, and
+            # a published file cannot be recalled, so input errors are worth
+            # finding before anything is live.
+            echo "dry run: $name"
+            submit "$id" "$name" false >/dev/null
+            echo "publishing: $name"
+            uuid=$(submit "$id" "$name" true \
+              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("uuid") or d.get("release_uuid") or "")')
+            [ -z "$uuid" ] && { echo "::error::$name returned no release uuid"; exit 1; }
+            echo "  $name -> $uuid"
+            for attempt in $(seq 1 60); do
+              state=$(curl --fail --silent -H "Authorization: Bearer $KITMAKER_API_TOKEN" \
+                "$api/status/$uuid" \
+                | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status",""))')
+              case "$state" in
+                completed|success) echo "  $name: $state"; break ;;
+                failed|error|cancelled) echo "::error::$name finished as $state"; exit 1 ;;
+              esac
+              sleep 30
+            done
+          done

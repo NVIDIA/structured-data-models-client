@@ -29,30 +29,30 @@ disclosure policy. See the
 
 ## Verifying a release
 
-Every file this project publishes to PyPI carries a
-[PEP 740](https://peps.python.org/pep-0740/) attestation. There is no NVIDIA
-signing key to fetch: the signature is issued to the short-lived identity of
-this repository's release workflow and recorded in Sigstore's transparency
-log.
+These distributions are published to PyPI by **Kitmaker**, the team that owns
+NVIDIA's PyPI organization, from artifacts attached to the corresponding
+GitHub release in this repository. Kitmaker publishes to
+[pypi.org](https://pypi.org/) and `pypi.nvidia.com` together.
+
+What that gives you is NVIDIA's ownership of the project on PyPI: the
+distribution lives under the NVIDIA organization, which is the same assurance
+that covers NVIDIA's other published packages. What it does not give you is a
+per-file signature traceable to this repository. The uploader is Kitmaker, so
+there is no PEP 740 attestation naming this repository's release workflow, and
+there is nothing for `pypi-attestations` to check.
+
+If you want to confirm you have the bytes this repository built, compare
+against the release assets, which are the same files Kitmaker was asked to
+publish:
 
 ```bash
-pip install pypi-attestations
 pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify
-python -m pypi_attestations verify pypi \
-  --repository https://github.com/NVIDIA/structured-data-models-client \
-  /tmp/verify/*.whl
+# then compare the wheel's digest against the asset of the same name at
+# https://github.com/NVIDIA/structured-data-models-client/releases/tag/v1.0.0
 ```
 
-`--repository` is not optional: without it the command refuses to verify a
-file published from a repository at all, and with the wrong one it fails. The
-same command verifies any of the five packages; name the file you want to
-check.
-
-A passing check tells you these exact bytes were published to PyPI by an
-authorized Trusted Publisher of this repository, and have not been altered
-since. That is integrity and origin. It is not build provenance: it does not
-establish how the bytes were produced, and it does not tell you the release is
-free of defects or vulnerabilities.
+None of this tells you the release is free of defects or vulnerabilities. It
+establishes origin, and nothing more.
 
 ## Supported versions
 

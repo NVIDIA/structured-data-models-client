@@ -74,35 +74,38 @@ release missing it publishes an extra nobody can install. It then generates the
 SBOM, and takes the release's notes from the changelog's entry for that
 version, refusing a tag that has none: notes that read like a diff are fixable
 afterwards and a distribution on PyPI is not, so both happen before anything is
-uploaded. It uploads through PyPI Trusted Publishing with PEP 740 attestations,
-then creates the GitHub Release for the tag with those notes and attaches the
-SBOM to it, so the dependency inventory outlives the ninety days an Actions
-artifact gets.
+uploaded. It attaches every distribution and the SBOM to the GitHub Release for the
+tag, and then asks Kitmaker's Portal to publish from those asset URLs.
 
-**There is no stored PyPI token.** Publishing authenticates with the
-workflow's OIDC identity, which PyPI exchanges for a token minted on the spot
-and good for about fifteen minutes. That is why `publish` is the only job
-holding `id-token: write`. If you find yourself wanting to add a token to the
-repository's secrets, something is wrong with the trusted-publisher
-configuration instead.
+**Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
+NVIDIA's PyPI organization and this project's OSRB record commits to releasing
+through it. Kitmaker does not accept an upload; it fetches each artifact from a
+URL and publishes it itself, to pypi.org and pypi.nvidia.com together. It only
+accepts an Artifactory path or a GitHub release asset, and it refuses private
+GitHub assets, so **a release cannot publish while the repository is
+internal**.
+
+One Portal project exists per distribution, because Kitmaker matches the
+project name against the distribution name parsed from each filename. Their
+ids are in `publish.yml`, and the job checks each id still carries the name it
+expects before sending anything, since a mismatch would publish one
+distribution's files under another's name. Every project is dry-run with
+`upload: false` before the real submission; Kitmaker batches are sequential and
+not atomic, and a published file cannot be recalled.
+
+**There is a stored credential.** `KITMAKER_API_TOKEN` is a long-lived bearer
+token in this repository's secrets, held only by the `kitmaker` job behind the
+protected `pypi` environment. The previous Trusted Publishing setup avoided a
+stored token; this is the cost of publishing through Kitmaker.
+
+**There are no PEP 740 attestations.** They are issued to whoever uploads, and
+that is Kitmaker. SECURITY.md tells consumers what they can verify instead.
 
 ## After
 
-The `verify` job has already checked every distribution this workflow built
-against this repository's identity, so there is nothing to confirm by hand. It runs beside
-the job that creates the GitHub Release rather than before it: an upload
-cannot be undone, and a release whose SBOM never got attached because a cache
-was cold is worse than one whose verification has to be re-run. A red `verify`
-on a green `publish` means the files are on PyPI and something about their
-attestations needs looking at, not that the release did not happen.
-
-It checks the artifacts the build produced against the provenance PyPI
-serves, which is the stronger direction: for each file this workflow built, it
-answers whether PyPI attested those exact bytes. It does not compare the
-index's file list against the build, so it would not notice an upload that
-published all of them faithfully and added one more. SECURITY.md's "Verifying
-a release" section is the same command written for a consumer, who starts from
-the file they downloaded instead.
+Check the five projects on pypi.org and confirm each shows NVIDIA organization
+ownership. Portal reporting that a release completed is not the same as the
+package being installable, so install it the way a user would.
 
 ## Yanking
 
