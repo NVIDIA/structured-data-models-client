@@ -81,7 +81,14 @@ shape; else nothing), a count or a dotted first-party call may rise only
 under the entry's own ``ALLOWANCES`` entry, declared ``allowance``: one
 the base's copy of this file does not already hold (spent), under a row of
 the base's decisions.md whose status reads "approved by owner <date>" and
-which names ``<file>::<qualified name>`` in backticks. The one exception:
+which names ``<file>::<qualified name>`` in backticks; the allowances
+read are the checked tree's own copy of this file's, so a gate running its
+checkpoint's copy over a candidate reads the candidate's (a bug fix at
+T1.24b: it read its own, and granted none). So a candidate's own
+ALLOWANCES can grant an allowance; the safeguards are that each entry must
+name a row the owner approved in the base's decisions.md, that this file is
+a protected path a landing must name, that reviewers check every entry, and
+that E56(d) retires the allowances at T1.28b. The one exception:
 the entries declared ``moved`` in one change net their counts, and their
 dropped calls, against each other across the frozen files, so a rule
 moved from ``schema.py`` into ``_rust/`` glue needs no allowance, as long
@@ -903,6 +910,52 @@ class Base:
     source: Callable[[Path], str | bytes | None] = lambda rel: None
 
 
+def literal_allowances(
+    script: str | None, whose: str
+) -> tuple[dict[str, dict[str, dict[str, Any]]] | None, list[str]]:
+    """The ``ALLOWANCES`` literal a copy of this file holds (``whose``
+    copy), or why it cannot be read."""
+    if script is None:
+        return None, []
+    try:
+        tree = ast.parse(script)
+    except SyntaxError as error:
+        return None, [f'{whose} {SCRIPT} does not parse: {error.msg}']
+    for node in tree.body:
+        target = (
+            node.target
+            if isinstance(node, ast.AnnAssign)
+            else node.targets[0]
+            if isinstance(node, ast.Assign) and len(node.targets) == 1
+            else None
+        )
+        if isinstance(target, ast.Name) and target.id == 'ALLOWANCES':
+            try:
+                value = ast.literal_eval(node.value)  # type: ignore[arg-type]
+            except ValueError:
+                break
+            if isinstance(value, dict) and all(
+                isinstance(v, dict) for v in value.values()
+            ):
+                return value, []
+            break
+    return None, [f'{whose} {SCRIPT}: ALLOWANCES is not a literal dict']
+
+
+def tree_allowances(root: Path) -> tuple[Allowances, list[str]]:
+    """The allowances of the tree at ``root``: its own copy of this file's
+    ``ALLOWANCES``, which a gate, running its checkpoint's copy of this
+    file over a candidate's tree, reads in place of its own (T1.24b: the
+    checkpoint's copy holds none of the candidate's growth); a copy
+    missing, unparsed or not a literal is refused."""
+    path = root / SCRIPT
+    script = path.read_text(encoding='utf-8') if path.is_file() else None
+    if script is None:
+        return {}, [f"the tree's {SCRIPT} is missing"]
+    found, problems = literal_allowances(script, "the tree's")
+    return found or {}, problems
+
+
 def held_allowances(
     script: str | None,
 ) -> tuple[set[tuple[str, str]], list[str]]:
@@ -1322,7 +1375,10 @@ def problems(root: Path = REPO_ROOT, ref: str | None = None) -> list[str]:
     ref = base_ref(ref)
     if not ref.strip():
         return [f'the base branch is blank (--base or {BASE_ENV}): name one']
-    return check(root, base_baseline(root, ref))
+    allowances, unreadable = tree_allowances(root)
+    if unreadable:
+        return unreadable
+    return check(root, base_baseline(root, ref), allowances=allowances)
 
 
 def write(root: Path) -> list[str]:

@@ -653,6 +653,23 @@ def freeze_cases(results: list[Result]) -> None:
         path = REPO_ROOT / rel
         return path.read_bytes() if path.is_file() else None
 
+    def allowances_as(value: str) -> str:
+        r"""The script with its whole ALLOWANCES assignment, whatever it
+        holds (empty until T1.24b's E66 entries), assigning ``value``."""
+        node = next(
+            each
+            for each in ast.parse(script).body
+            if isinstance(each, ast.AnnAssign)
+            and isinstance(each.target, ast.Name)
+            and each.target.id == 'ALLOWANCES'
+        )
+        assigned = ast.get_source_segment(script, node)
+        assert assigned is not None
+        return script.replace(
+            assigned,
+            f'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {value}',
+        )
+
     def based(
         rows: str = '',
         *,
@@ -661,10 +678,7 @@ def freeze_cases(results: list[Result]) -> None:
     ) -> bridge_freeze.Base:
         text = script
         if held is not None:
-            text = text.replace(
-                'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {}',
-                f'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {held}',
-            )
+            text = allowances_as(held)
             assert text != script
         declared = changes
         if spent is not None:
@@ -1877,14 +1891,44 @@ def freeze_cases(results: list[Result]) -> None:
             'the fixture base',
             committed,
             decisions,
-            script.replace(
-                'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {}',
-                'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = dict()',
-            ),
+            allowances_as('dict()'),
             changes,
             source,
         ),
     )
+
+    # T1.24b: the allowances are the tree's own copy's, which a gate reads
+    # when it runs its checkpoint's copy of the script over a candidate.
+    with tempfile.TemporaryDirectory(prefix='sdm-allowances-') as tmp:
+        root = Path(tmp)
+        (root / bridge_freeze.SCRIPT).parent.mkdir(parents=True)
+        mine = {
+            'E99': {
+                'x.py::f': {'raise': 1, 'warn': 0, 'branch': 0, 'calls': []}
+            }
+        }
+        (root / bridge_freeze.SCRIPT).write_text(allowances_as(repr(mine)))
+        read, unreadable = bridge_freeze.tree_allowances(root)
+        expect(
+            results,
+            "bridge_freeze: the tree's allowances, not the running copy's",
+            [] if read == mine and not unreadable else [repr(read)],
+            fails_with=None,
+        )
+        (root / bridge_freeze.SCRIPT).write_text(allowances_as('dict()'))
+        expect(
+            results,
+            "bridge_freeze: the tree's allowances not a literal",
+            bridge_freeze.tree_allowances(root)[1],
+            fails_with='ALLOWANCES is not a literal dict',
+        )
+        (root / bridge_freeze.SCRIPT).unlink()
+        expect(
+            results,
+            "bridge_freeze: the tree's script missing",
+            bridge_freeze.tree_allowances(root)[1],
+            fails_with='is missing',
+        )
 
     # Missing, empty and retyped evidence.
     def write_baseline(text: str) -> Callable[[Path], None]:
