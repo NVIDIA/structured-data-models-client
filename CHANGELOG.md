@@ -29,6 +29,9 @@ these packages. All five distributions share one version and one entry.
   installs on a laptop rather than on Linux only. The engine ships no source
   distribution, so those wheels remain the full set of platforms it supports:
   `structured-data-models-client` itself is pure Python and stays broader.
+- `kumo-tabular` accepts `explanation` in `outputs`, over one scored row at a
+  time, and returns it on `result.explanation`. Asking for one over more rows
+  is refused before sending.
 
 ### Changed
 
@@ -42,6 +45,9 @@ these packages. All five distributions share one version and one entry.
   value that cannot be read as its type, such as a `run_mode` that is not
   text, is refused with `INVALID_REQUEST` before sending, where a NIM
   answered `422 VALIDATION_FAILED`.
+- A `kumo-relational` explanation is no longer refused above the 1,000-row
+  context budget. That limit belonged to an earlier deployment; the Kumo
+  Relational SDM NIM explains under either budget.
 
 ### Fixed
 
