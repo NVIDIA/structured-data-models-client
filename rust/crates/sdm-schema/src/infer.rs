@@ -560,7 +560,11 @@ fn text_holds_dates(
     match times.share(&first) {
         Ok(share) if score(share.fewest) != score(share.listed) => {
             let outside = share.most > share.listed || share.unshaped > 0;
-            Err(not_yet(if outside { "text_time" } else { "text_time_order" }))
+            Err(not_yet(if outside {
+                "text_time"
+            } else {
+                "text_time_order"
+            }))
         }
         Ok(share)
             if score(share.fewest)
