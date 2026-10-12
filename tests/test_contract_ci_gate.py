@@ -171,7 +171,9 @@ def _git(work: Path, *args: str) -> str:
         'contract-python-floor-pandas2-2',
     ],
 )
-def test_every_cell_gates_a_failing_comparator(tmp_path: Path, job: str) -> None:
+def test_every_cell_gates_a_failing_comparator(
+    tmp_path: Path, job: str
+) -> None:
     r"""The control for the floor cell's waiver gone (T1.25b; it reported
     T1.18's own run alone, E65(c)): a gate whose one failing step is the
     comparator, all of whose differences are ``warnings`` ones, the

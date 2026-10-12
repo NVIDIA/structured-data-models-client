@@ -49,7 +49,9 @@ import warnings
 import pandas as pd
 
 HERE = pathlib.Path(__file__).resolve().parent
-_spec = importlib.util.spec_from_file_location('record', HERE / 'text_times_record.py')
+_spec = importlib.util.spec_from_file_location(
+    'record', HERE / 'text_times_record.py'
+)
 assert _spec and _spec.loader
 record = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(record)
@@ -100,7 +102,7 @@ def kinds(values: list[str | None]) -> list[str]:
     client's shapes, or outside both."""
     out = []
     mf, df = record.readings(values)
-    for a, b in zip(mf, df):
+    for a, b in zip(mf, df, strict=True):
         if a == record.OUTSIDE or b == record.OUTSIDE:
             out.append('unshaped')
         elif a == record.SHAPED or b == record.SHAPED:
@@ -116,7 +118,9 @@ def alone(value: str) -> object:
     return read[0] if isinstance(read, list) else read
 
 
-def classify_reading(values: list[str | None], ref: object, core: object) -> str | None:
+def classify_reading(
+    values: list[str | None], ref: object, core: object
+) -> str | None:
     """The class of a difference in a reading of the values, or None:
     ``a``; ``b.order_open``, an order of day and month the values leave
     open, refused where the reference reads each value month first unless
@@ -140,7 +144,13 @@ def classify_reading(values: list[str | None], ref: object, core: object) -> str
     if not isinstance(ref, list) or not isinstance(core, list):
         return 'b.other'
     return '+'.join(
-        sorted({why(v, r, c) for v, r, c in zip(values, ref, core) if r != c})
+        sorted(
+            {
+                why(v, r, c)
+                for v, r, c in zip(values, ref, core, strict=True)
+                if r != c
+            }
+        )
     )
 
 
@@ -174,7 +184,9 @@ def core_decides(first: list[str], named: bool) -> object:
     return low if low == high else 'text_time'
 
 
-def classify_inference(values: list[str | None], named: bool) -> tuple[str | None, object, object]:
+def classify_inference(
+    values: list[str | None], named: bool
+) -> tuple[str | None, object, object]:
     """The class of a difference in whether text is a timestamp: ``a``;
     ``b.offsets``, offsets mixed refused or raised on one side only;
     ``b.order_decided`` or ``b.format_guess``, values in the list counted
@@ -191,15 +203,23 @@ def classify_inference(values: list[str | None], named: bool) -> tuple[str | Non
         ref_decision = 'error'
     else:
         # The clock's words read as the clock's time: counted, not dated.
-        ref_decision = decision(sum(r is not None for r in ref) / len(first), named)
+        ref_decision = decision(
+            sum(r is not None for r in ref) / len(first), named
+        )
     core_decision = core_decides(first, named)
     if ref_decision == core_decision:
         return None, ref_decision, core_decision
-    if ref_decision == 'refused (offsets mixed)' and core_decision == 'text_time_zones':
+    if (
+        ref_decision == 'refused (offsets mixed)'
+        and core_decision == 'text_time_zones'
+    ):
         return None, ref_decision, core_decision
     if core_decision == 'text_time':
         return 'a', ref_decision, core_decision
-    if 'refused (offsets mixed)' in (ref_decision,) or core_decision == 'text_time_zones':
+    if (
+        'refused (offsets mixed)' in (ref_decision,)
+        or core_decision == 'text_time_zones'
+    ):
         return 'b.offsets', ref_decision, core_decision
     # Which values the two count differently: text outside the client's
     # shapes the reference reads, or values in the list.
@@ -208,7 +228,7 @@ def classify_inference(values: list[str | None], named: bool) -> tuple[str | Non
         kind = kinds(first)
         differ = [
             (value, r, k)
-            for value, r, c, k in zip(first, ref, mf, kind)
+            for value, r, c, k in zip(first, ref, mf, kind, strict=True)
             if (r is not None) != (c[0] == 'time')
         ]
         if differ and all(k == 'unshaped' for _, _, k in differ):
@@ -217,7 +237,9 @@ def classify_inference(values: list[str | None], named: bool) -> tuple[str | Non
             reasons = {
                 why(v, r, str(c[1]) if c[0] == 'time' else None)
                 for (v, r, _), c in zip(
-                    differ, [mf[first.index(v)] for v, _, _ in differ]
+                    differ,
+                    [mf[first.index(v)] for v, _, _ in differ],
+                    strict=True,
                 )
             }
             return '+'.join(sorted(reasons)), ref_decision, core_decision
@@ -267,14 +289,20 @@ def main() -> None:
             note(
                 'inference',
                 cls,
-                {'values': values, 'named': named, 'reference': ref, 'core': core},
+                {
+                    'values': values,
+                    'named': named,
+                    'reference': ref,
+                    'core': core,
+                },
             )
         # The warning, where the core's inference decides under any name
         # (a refused description warns of nothing): every difference is in
         # how the order of day and month is decided, so in the list.
         first = [v for v in values if v is not None and v != ''][:100]
         if first and all(
-            isinstance(core_decides(first, named), bool) for named in (True, False)
+            isinstance(core_decides(first, named), bool)
+            for named in (True, False)
         ):
             ref = pandas_day_first(first)
             core = record.day_first(first)
@@ -284,11 +312,17 @@ def main() -> None:
                 # first value; text outside the shapes the core never
                 # warns of.
                 cls = 'b.order_rule' if set(kinds(first)) == {'listed'} else 'c'
-            note('day_first', cls, {'values': first, 'reference': ref, 'core': core})
+            note(
+                'day_first',
+                cls,
+                {'values': first, 'reference': ref, 'core': core},
+            )
 
     for outcome in outcomes.values():
         for entry in outcome['classes'].values():
-            unique = {json.dumps(e, sort_keys=True): e for e in entry['examples']}
+            unique = {
+                json.dumps(e, sort_keys=True): e for e in entry['examples']
+            }
             entry['examples'] = [
                 unique[k] for k in sorted(unique, key=lambda k: (len(k), k))
             ][:3]
@@ -297,7 +331,7 @@ def main() -> None:
         'format': 'sdm-text-times-differential/1',
         'reference': f'pandas {pd.__version__}',
         'inputs': (
-            "the columns of text-times.json as T1.25 recorded them (b455b94), "
+            'the columns of text-times.json as T1.25 recorded them (b455b94), '
             f'{len(columns)} columns'
         ),
         'year': record.YEAR,

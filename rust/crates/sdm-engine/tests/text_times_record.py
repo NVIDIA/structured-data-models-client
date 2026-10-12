@@ -53,7 +53,9 @@ WHITE_SPACE = (
 #: The client's two shapes, as date-rules.md's "Accepted shapes" writes
 #: them, over ASCII digits.
 ZONE = r'(Z|[+-]\d{2}(?::?\d{2})?|[A-Za-z][A-Za-z0-9_+/-]*)'
-TIME = r'(?:([ T])(\d{H}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:( ?)' + ZONE + r')?)?'
+TIME = (
+    r'(?:([ T])(\d{H}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:( ?)' + ZONE + r')?)?'
+)
 YEAR_FIRST = re.compile(
     r'(\d{4})([-/])(\d{2})([-/])(\d{2})' + TIME.replace('{H}', '{2}'), re.ASCII
 )
@@ -92,11 +94,17 @@ def epoch_days(year: int, month: int, day: int) -> int:
     # The year 0 (a leap year, proleptic): 366 days before 0001-01-01.
     assert year == 0
     before = sum(month_days(0, m) for m in range(1, month)) + day - 1
-    return date(1, 1, 1).toordinal() - date(1970, 1, 1).toordinal() - 366 + before
+    return (
+        date(1, 1, 1).toordinal() - date(1970, 1, 1).toordinal() - 366 + before
+    )
 
 
 LOW = epoch_days(1, 1, 1) * 86_400 * 10**9
-HIGH = (date(9999, 12, 31).toordinal() - date(1970, 1, 1).toordinal() + 1) * 86_400 * 10**9
+HIGH = (
+    (date(9999, 12, 31).toordinal() - date(1970, 1, 1).toordinal() + 1)
+    * 86_400
+    * 10**9
+)
 
 
 def pivot(yy: int) -> int:
@@ -136,7 +144,9 @@ def one(value: str | None, order: str) -> tuple:
             hours, minutes = int(digits[:2]), int(digits[2:] or 0)
             if hours > 23 or minutes > 59:
                 return SHAPED
-            offset = (1 if zone[0] == '+' else -1) * (hours * 3600 + minutes * 60)
+            offset = (1 if zone[0] == '+' else -1) * (
+                hours * 3600 + minutes * 60
+            )
         else:
             return SHAPED
     if lead == 'year':
@@ -146,17 +156,29 @@ def one(value: str | None, order: str) -> tuple:
         year = pivot(int(c)) if len(c) == 2 else int(c)
     hour, minute = int(hh or 0), int(mi or 0)
     # Fields naming no date or time of day: outside the list.
-    if not (1 <= month <= 12 and 1 <= day <= 31 and hour <= 23 and minute <= 59):
+    if not (
+        1 <= month <= 12 and 1 <= day <= 31 and hour <= 23 and minute <= 59
+    ):
         return SHAPED
     if day > month_days(year, month):
         return SHAPED
     second = int(ss or 0)
     nanos = int((frac or '').ljust(9, '0') or 0)
-    seconds = epoch_days(year, month, day) * 86_400 + hour * 3600 + minute * 60 + second
+    seconds = (
+        epoch_days(year, month, day) * 86_400
+        + hour * 3600
+        + minute * 60
+        + second
+    )
     at = (seconds - (offset or 0)) * 10**9 + nanos
     if not LOW <= at < HIGH:
         return SHAPED
-    if lead == 'year' and s1 == '-' and spaced in (None, '') and 1 <= year <= 9999:
+    if (
+        lead == 'year'
+        and s1 == '-'
+        and spaced in (None, '')
+        and 1 <= year <= 9999
+    ):
         # The cross-check: datetime's own ISO reader, to the microsecond.
         try:
             iso = datetime.fromisoformat(text)
@@ -205,7 +227,10 @@ def mixed(read: list[tuple]) -> bool:
 
 def column(values: list[str | None], utc: bool) -> object:
     mf, df = readings(values)
-    if any(a[0] == 'outside' and b[0] == 'outside' for a, b in zip(mf, df)):
+    if any(
+        a[0] == 'outside' and b[0] == 'outside'
+        for a, b in zip(mf, df, strict=True)
+    ):
         return 'outside'
     if mf != df:
         return 'order'
@@ -219,7 +244,9 @@ def share(values: list[str | None]) -> object:
     if mixed(mf) or mixed(df):
         return 'mixed'
     fewest = min(sum(r[0] == 'time' for r in read) for read in (mf, df))
-    most = max(sum(r[0] == 'time' or r == SHAPED for r in read) for read in (mf, df))
+    most = max(
+        sum(r[0] == 'time' or r == SHAPED for r in read) for read in (mf, df)
+    )
     return [fewest, most, sum(r == OUTSIDE for r in mf)]
 
 
@@ -232,7 +259,9 @@ def day_first(values: list[str | None]) -> str | None:
         found = shape(value.strip(WHITE_SPACE))
         if not found or found[0] != 'dm':
             continue
-        a, s1, b, s2, c, tsep, hh, mi, ss, frac, spaced, zone = found[1].groups()
+        a, s1, b, s2, c, tsep, hh, mi, ss, frac, spaced, zone = found[
+            1
+        ].groups()
         text = f'%d{s1}%m{s2}' + ('%y' if len(c) == 2 else '%Y')
         if tsep is not None:
             text += f'{tsep}%H:%M'
@@ -241,12 +270,19 @@ def day_first(values: list[str | None]) -> str | None:
             if frac is not None:
                 text += '.%f'
             if zone is not None:
-                text += spaced + ('%z' if zone == 'Z' or zone[0] in '+-' else '%Z')
+                text += spaced + (
+                    '%z' if zone == 'Z' or zone[0] in '+-' else '%Z'
+                )
         return text
     return None
 
 
-YEAR_FIRST_DATES = ['2024{s}01{s}05', '2023{s}12{s}31', '2024{s}02{s}29', '1999{s}02{s}29']
+YEAR_FIRST_DATES = [
+    '2024{s}01{s}05',
+    '2023{s}12{s}31',
+    '2024{s}02{s}29',
+    '1999{s}02{s}29',
+]
 DAY_OR_MONTH_DATES = [
     '01{s}05{s}2024',
     '1{s}5{s}2024',
@@ -383,9 +419,13 @@ def grid() -> list[str]:
 
 def random_columns(rng: random.Random, n: int) -> list[list[str | None]]:
     def one_date(lead: str, sep: str, ylen: int) -> str:
-        y = rng.choice([1999, 2020, 2024, 1850, 2100, 1, 9999, rng.randint(1900, 2100)])
+        y = rng.choice(
+            [1999, 2020, 2024, 1850, 2100, 1, 9999, rng.randint(1900, 2100)]
+        )
         m = rng.choice([1, 2, 3, 11, 12, 13, rng.randint(1, 12)])
-        d = rng.choice([1, 2, 12, 13, 15, 28, 29, 30, 31, 0, 32, rng.randint(1, 28)])
+        d = rng.choice(
+            [1, 2, 12, 13, 15, 28, 29, 30, 31, 0, 32, rng.randint(1, 28)]
+        )
         if lead == 'year':
             return f'{y:04d}{sep}{m:02d}{sep}{d:02d}'
         a, b = (d, m) if rng.random() < 0.5 else (m, d)
@@ -399,7 +439,8 @@ def random_columns(rng: random.Random, n: int) -> list[list[str | None]]:
             t += f':{rng.choice([0, 59, 60, rng.randint(0, 59)]):02d}'
             if rng.random() < 0.4:
                 t += '.' + ''.join(
-                    rng.choice('0123456789') for _ in range(rng.choice([1, 3, 6, 9, 10]))
+                    rng.choice('0123456789')
+                    for _ in range(rng.choice([1, 3, 6, 9, 10]))
                 )
         if rng.random() < 0.35:
             t += rng.choice(['', ' ']) + rng.choice(
@@ -419,7 +460,10 @@ def random_columns(rng: random.Random, n: int) -> list[list[str | None]]:
             if roll < 0.15:
                 column.append(rng.choice(OTHERS + [None, '']))
                 continue
-            column.append(one_date(lead, sep, ylen) + (tail if roll < 0.85 else one_time()))
+            column.append(
+                one_date(lead, sep, ylen)
+                + (tail if roll < 0.85 else one_time())
+            )
         columns.append(column)
     return columns
 
