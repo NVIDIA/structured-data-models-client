@@ -289,7 +289,7 @@ Enacted by the owner 2026-10-11 (E66(f)), proposed at checkpoint 4 (E56(d)): at 
 
 ### PQL parser
 
-- The parser is permanent (E18): no PQL-team crate replaces it, nothing deletes it, and T1.6b completed it as product work. The crate's rename from `sdm-pql-interim` is held back (E69(e)): the gate runs the checkpoint's L0 guards, whose data name the crate, so the rename waits for a landed guard that can judge it, and the name stays until then.
+- The parser is permanent (E18): no PQL-team crate replaces it, nothing deletes it, and T1.6b completed it as product work. The crate's rename from `sdm-pql-interim` is held back (E69(e)): the gate runs the checkpoint's L0 guards, whose data name the crate, so the rename waits for a landed guard that can judge it, and the name stays until then: T1.28w part 1 makes the guards read the crate names from the checked tree, and part 2 renames (E69(e)).
 
 - `sdm-pql-interim` holds the archive's lexer, parser, visitor, AST, profiles, codes and the seven validators; the 417-query corpus (193 valid, 224 invalid) and the journey's queries live with `sdm-core`'s adapter tests and run through the adapter (E12); the 29 quirks (`quirks.json`), the custom-profile rows (`custom-profiles.json`) and the validator-option rows (`sdm-pql-interim/tests/validator-options.json`) came with T1.6b, answered again by the reference (`record_quirks.py`).
 - Validity-affecting emulation stays, inside the crate, on the allowlist: `pyint`'s 4,300-digit limit, `float_repr` for AST constant text, and `escapes` for string literals (A4, E9); `float_repr` writes only message text in the ported path and is a candidate to remove, not a reason to add emulation.
