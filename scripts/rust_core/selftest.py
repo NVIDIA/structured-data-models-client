@@ -37,9 +37,9 @@ defined, or in a let-out file that cannot be opened, read or parsed,
 pays for no rise and no call;
 a declared refactor, a rename declared, a rule moved out declared, a
 widened coverage declared, a frozen file added or removed, and an approved
-allowance pass; a declared refactor raising a count, a stale or spent
-declaration, the allowances' faults, and missing, empty, retyped, too deep
-or too wide evidence fail; and the merge base is read through git on a
+allowance pass, and a spent one of an unchanged entry; a declared refactor
+raising a count, a stale or spent declaration, the allowances' faults, and
+missing, empty, retyped, too deep or too wide evidence fail; and the merge base is read through git on a
 temporary repository.
 
 Phase 1 design, task T1.10c (formerly T1.16); the rest of ``selftest.py``,
@@ -1826,6 +1826,37 @@ def freeze_cases(results: list[Result]) -> None:
         on=based(approved, held=repr({'E99': {key: grown}})),
         allowances={'E99': {key: grown}},
         rewrite=True,
+        declare=by_allowance,
+    )
+    # T1.27 part 1: on the phase head once an allowance has landed, the
+    # base holds the declaration and the ALLOWANCES entry both, and the
+    # entry is unchanged: spent, tolerated as a spent moved one is (T1.24b's
+    # landing runs failed it as granting nothing). It grants nothing new.
+    landed = based(
+        approved, held=repr({'E99': {key: grown}}), spent=by_allowance
+    )
+    case(
+        'control: a spent allowance of an unchanged entry, as on the phase head after its landing',
+        lambda r: None,
+        None,
+        on=landed,
+        allowances={'E99': {key: grown}},
+        declare=by_allowance,
+    )
+    case(
+        'a spent allowance declared over a changed entry',
+        added_raise,
+        'already holds, which is spent',
+        on=landed,
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
+    case(
+        "a spent allowance declaration under an entry the base's ALLOWANCES lacks",
+        lambda r: None,
+        'which grants it nothing',
+        on=based(approved, spent=by_allowance),
         declare=by_allowance,
     )
     new_key = f'{materialize}::_brand_new'

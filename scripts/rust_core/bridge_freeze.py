@@ -84,7 +84,13 @@ the base's decisions.md whose status reads "approved by owner <date>" and
 which names ``<file>::<qualified name>`` in backticks; the allowances
 read are the checked tree's own copy of this file's, so a gate running its
 checkpoint's copy over a candidate reads the candidate's (a bug fix at
-T1.24b: it read its own, and granted none). So a candidate's own
+T1.24b: it read its own, and granted none). An ``allowance`` declaration
+the base's declarations already hold, of an entry unchanged against the
+base, under an entry the base's ``ALLOWANCES`` already holds, is spent, as
+on the phase head once the growth has landed: tolerated as a spent
+``moved`` declaration is, and granting nothing (a bug fix at T1.27: it was
+refused as granting nothing, so every landing of an allowance failed on
+the phase branch). So a candidate's own
 ALLOWANCES can grant an allowance; the safeguards are that each entry must
 name a row the owner approved in the base's decisions.md, that this file is
 a protected path a landing must name, that reviewers check every entry, and
@@ -1062,10 +1068,12 @@ def ratchet(
     code: Mapping[Path, Measured | None],
     measured_at_base: Mapping[Path, Measured | None],
     opaque: frozenset[Path] = frozenset(),
+    held_grants: frozenset[tuple[str, str]] = frozenset(),
 ) -> list[str]:
     """The tripwire and the counts against the merge base. ``opaque`` are
     the files let out of the freeze that cannot be read: every entry of
-    one counts as still defined."""
+    one counts as still defined. ``held_grants`` are the ``(decision,
+    <file>::<function>)`` pairs the base's ``ALLOWANCES`` already holds."""
     problems = []
     remedy = (
         'growth needs an ALLOWANCES entry under an owner-approved decisions '
@@ -1195,7 +1203,15 @@ def ratchet(
         grant: Mapping[str, Any] | None = None
         if kind_said is not None and kind_said[0] == 'allowance':
             grant = granted.get(key, {}).get(kind_said[1])
-            if grant is None:
+            # Spent: the base holds the declaration and the allowance, and
+            # the entry is unchanged against it, so it asks for nothing; it
+            # is tolerated as a spent moved one is and grants nothing.
+            spent_here = (
+                key not in changed
+                and spent.get(key) == kind_said
+                and (kind_said[1], key) in held_grants
+            )
+            if grant is None and not spent_here:
                 problems.append(
                     f'{key}: declared under allowance {kind_said[1]}, which '
                     'grants it nothing (no valid ALLOWANCES entry for it '
@@ -1313,6 +1329,7 @@ def check(
         code=code,
         measured_at_base=measured_at_base,
         opaque=frozenset(opaque),
+        held_grants=frozenset(held),
     )
     return problems
 

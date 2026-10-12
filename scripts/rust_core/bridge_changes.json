@@ -73,15 +73,6 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
       "moved": "T1.24b (E67): materialize is handed the description the core last answered and the schema as it stands, as two attachments, the core refusing schema_edited by name"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__": {
-      "allowance": "E66"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.__setattr__": {
-      "allowance": "E66"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__": {
-      "allowance": "E66"
     }
   }
 }
