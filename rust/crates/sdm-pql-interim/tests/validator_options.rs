@@ -15,11 +15,13 @@
 
 use std::path::Path;
 
-use sdm_pql::dates::Reader;
-use sdm_pql::schema::{Column, ColumnKey, ColumnKeyGroup, SchemaDefinition, TableDefinition};
-use sdm_pql::types::{Dtype, Stype};
-use sdm_pql::validator::predictive_query::PredictiveQueryValidator;
-use sdm_pql::{Filters, Mode, parse};
+use sdm_pql_interim::dates::Reader;
+use sdm_pql_interim::schema::{
+    Column, ColumnKey, ColumnKeyGroup, SchemaDefinition, TableDefinition,
+};
+use sdm_pql_interim::types::{Dtype, Stype};
+use sdm_pql_interim::validator::predictive_query::PredictiveQueryValidator;
+use sdm_pql_interim::{Filters, Mode, parse};
 use serde_json::{Value, json};
 
 fn table() -> Value {

@@ -129,7 +129,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_CRATES = (
     'sdm-contract',
     'sdm-core',
-    'sdm-pql',
+    'sdm-pql-interim',
     'sdm-data',
     'sdm-schema',
     'sdm-engine',
@@ -137,7 +137,7 @@ CORE_CRATES = (
     'sdm-request',
     'sdm-host',
 )
-PARSER_CRATE = 'sdm-pql'
+PARSER_CRATE = 'sdm-pql-interim'
 SQL_FREE_CRATES = ('sdm-schema', 'sdm-engine', 'sdm-request', 'sdm-core')
 DEV_CRATES = ('sdm-testkit',)
 ALLOWLIST = Path('scripts/rust_core/emulation-allowlist.txt')

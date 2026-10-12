@@ -4,7 +4,8 @@
 
 //! The PQL adapter: the one module that names the PQL parser.
 //!
-//! Behind it is `sdm-pql`, this client's own parser (decision E18). It
+//! Behind it is `sdm-pql-interim`, this client's own parser (decision E18;
+//! its name awaits a rename the gate can judge, E69). It
 //! answers in the validated-query format ([`sdm_contract::pql`]), and the
 //! model capability checks ([`crate::profiles`]) read that format, so
 //! nothing past this module depends on the parser's own types.
@@ -34,10 +35,10 @@ use sdm_contract::pql::{
 };
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_engine::time::{Instant, Zones};
-use sdm_pql as parser;
-use sdm_pql::ast::{self, ConstValue, Kind, NodeRef};
-use sdm_pql::literal::Literal;
-use sdm_pql::types as t;
+use sdm_pql_interim as parser;
+use sdm_pql_interim::ast::{self, ConstValue, Kind, NodeRef};
+use sdm_pql_interim::literal::Literal;
+use sdm_pql_interim::types as t;
 
 use crate::profiles::{
     Mode, Profile, QueryFeatures, check_capabilities, check_parsed_capabilities,

@@ -17,7 +17,7 @@ This script asks the reference for each answer again and writes:
 - ``custom-profiles.json`` beside this file: queries validated with a
   ``Profile`` none of the five named ones is (each capability turned off,
   none, or only ``temporal`` and ``static``, in either mode);
-- ``rust/crates/sdm-pql/tests/validator-options.json``: queries the
+- ``rust/crates/sdm-pql-interim/tests/validator-options.json``: queries the
   reference's ``PredictiveQueryValidator`` validates with its
   ``allow_array_targets`` and ``allow_timestamp_arrays`` options, which no
   profile reaches: whether each is accepted, and its errors' codes and
@@ -47,7 +47,7 @@ REPO = HERE.parents[4]
 ARCHIVE = 'archive/rust-core-attempt-1'
 QUIRKS = HERE / 'quirks.json'
 PROFILES = HERE / 'custom-profiles.json'
-OPTIONS = REPO / 'rust/crates/sdm-pql/tests/validator-options.json'
+OPTIONS = REPO / 'rust/crates/sdm-pql-interim/tests/validator-options.json'
 
 
 def _guard(reference: Path) -> Any:

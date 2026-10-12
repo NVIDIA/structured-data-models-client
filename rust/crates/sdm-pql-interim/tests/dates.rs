@@ -20,7 +20,7 @@
 
 use std::path::Path;
 
-use sdm_pql::dates::{Reader, Reading};
+use sdm_pql_interim::dates::{Reader, Reading};
 use serde_json::Value;
 
 fn here(name: &str) -> String {

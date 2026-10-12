@@ -5,7 +5,9 @@
 //! The PQL parser: the lexer, parser, visitor, syntax tree and seven
 //! validators, first ported from the first attempt
 //! (`archive/rust-core-attempt-1`, `rust/crates/pql`) and this client's own
-//! from then on (decision E18), behind `sdm-core`'s adapter.
+//! from then on (decision E18), behind `sdm-core`'s adapter. The crate
+//! keeps the name `sdm-pql-interim` until the gate, which runs the
+//! checkpoint's L0 guards, can judge a crate renamed (T1.6b; E69).
 //!
 //! Only `sdm_core::pql` uses this crate. It parses a query ([`parse`]) and
 //! resolves it against a schema ([`resolve`]); whether the model on the
