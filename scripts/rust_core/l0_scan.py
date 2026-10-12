@@ -17,7 +17,13 @@ graph; these check the text:
   the like, a ``py``-prefixed Python type name (``pyint``, ``pystr``), a
   dunder name, or a string literal naming Python, pandas, NumPy or pyarrow,
   is emulation vocabulary. The public names the allowlisted modules define
-  may be used anywhere in their crate.
+  may be used anywhere in their crate. The parser crate's name is the
+  checked tree's: its own copy of this file's ``PARSER_CRATE``, read as a
+  string literal, never run, with ``CORE_CRATES``' parser entry under that
+  name (``parser_crates``), so a gate running its checkpoint's copy over a
+  candidate that renames the crate judges the candidate's name (a bug fix at
+  T1.28w, E56(a)); a copy missing, unparsed, not a literal, or naming
+  another crate is refused.
 - ``sql``: no SQL fragment and no provider match in ``sdm-schema``,
   ``sdm-engine``, ``sdm-request`` or ``sdm-core`` (migration plan,
   "Ownership"; ``sdm-core`` from T1.21c). It is a
@@ -122,6 +128,7 @@ from typing import Any
 import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = Path('scripts/rust_core/l0_scan.py')
 
 # The crates whose code ships and whose rules are the core's: the domain
 # crates and the host layer. The binding, sdm-py, talks to Python by design,
@@ -341,7 +348,59 @@ _PUB_ITEM = re.compile(
 )
 
 
-def read_allowlist(root: Path) -> tuple[list[Path], list[str]]:
+def tree_name(
+    root: Path, script: Path, name: str
+) -> tuple[str | None, list[str]]:
+    """The string the checked tree's own copy of ``script`` assigns to
+    ``name`` at its top level, read as a literal, never run; or why it
+    cannot be read. A gate runs its checkpoint's copy of a guard over a
+    candidate's tree, so a crate's name in a guard's data is the tree's
+    (T1.28w: the checkpoint's copy named the parser crate as it stood, so a
+    package that renamed it could not pass its own gate)."""
+    path = root / script
+    if not path.is_file():
+        return None, [f"the tree's {script} is missing"]
+    try:
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+    except SyntaxError as error:
+        return None, [f"the tree's {script} does not parse: {error.msg}"]
+    value: ast.expr | None = None
+    for node in tree.body:
+        target = (
+            node.target
+            if isinstance(node, ast.AnnAssign)
+            else node.targets[0]
+            if isinstance(node, ast.Assign) and len(node.targets) == 1
+            else None
+        )
+        if isinstance(target, ast.Name) and target.id == name:
+            value = node.value  # type: ignore[union-attr]
+    if (
+        isinstance(value, ast.Constant)
+        and isinstance(value.value, str)
+        and value.value
+    ):
+        return value.value, []
+    return None, [f"the tree's {script}: {name} is not a string literal"]
+
+
+def parser_crates(root: Path) -> tuple[str, tuple[str, ...], list[str]]:
+    """The parser crate's name in the tree at ``root`` (its copy of this
+    file's ``PARSER_CRATE``), and ``CORE_CRATES`` with the parser under it;
+    a name this copy gives another crate is refused."""
+    name, problems = tree_name(root, SCRIPT, 'PARSER_CRATE')
+    others = {*CORE_CRATES, *DIALECT_FREE_CRATES, *DEV_CRATES} - {PARSER_CRATE}
+    if name in others:
+        problems = [
+            f"the tree's {SCRIPT}: PARSER_CRATE names {name}, another crate"
+        ]
+    if name is None or problems:
+        return PARSER_CRATE, CORE_CRATES, problems
+    crates = tuple(name if c == PARSER_CRATE else c for c in CORE_CRATES)
+    return name, crates, []
+
+
+def read_allowlist(root: Path, parser: str) -> tuple[list[Path], list[str]]:
     entries: list[Path] = []
     problems: list[str] = []
     path = root / ALLOWLIST
@@ -355,7 +414,7 @@ def read_allowlist(root: Path) -> tuple[list[Path], list[str]]:
         if not (root / entry).is_file():
             problems.append(f'{ALLOWLIST}:{number}: {line} does not exist')
             continue
-        parser_src = Path('rust/crates') / PARSER_CRATE / 'src'
+        parser_src = Path('rust/crates') / parser / 'src'
         if parser_src not in entry.parents:
             problems.append(
                 f'{ALLOWLIST}:{number}: {line} is outside {parser_src}; '
@@ -376,7 +435,10 @@ def vocabulary_term(identifier: str) -> str | None:
 
 
 def check_vocabulary(root: Path) -> list[str]:
-    allowed, problems = read_allowlist(root)
+    parser, crates, unreadable = parser_crates(root)
+    if unreadable:
+        return unreadable
+    allowed, problems = read_allowlist(root, parser)
     allowed_set = {root / p for p in allowed}
     # The names the allowlisted modules define, and the modules themselves,
     # may be named anywhere in their crate.
@@ -385,7 +447,7 @@ def check_vocabulary(root: Path) -> list[str]:
         permitted.update(
             _PUB_ITEM.findall(read_rust(path.read_text()).skeleton)
         )
-    for crate in CORE_CRATES:
+    for crate in crates:
         src = crate_dir(root, crate) / 'src'
         for path in rust_files(src):
             if path in allowed_set:
@@ -394,7 +456,7 @@ def check_vocabulary(root: Path) -> list[str]:
             rel = path.relative_to(root)
             for offset, name in identifiers(source):
                 term = vocabulary_term(name)
-                if term and not (crate == PARSER_CRATE and name in permitted):
+                if term and not (crate == parser and name in permitted):
                     problems.append(
                         f'{rel}:{source.line(offset)}: `{name}` is Python-emulation '
                         f'vocabulary ({term}); emulation lives only in the modules '

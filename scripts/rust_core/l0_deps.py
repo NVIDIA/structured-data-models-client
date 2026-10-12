@@ -20,7 +20,13 @@ features, every target platform) and checks:
 - the parser rule: only ``sdm-core`` depends on the parser crate, and only
   its adapter (``src/pql.rs``, and ``src/test_ops.rs``, compiled only with
   the ``test-ops`` feature) names it, by its own name or any name a
-  ``package =`` rename gives it, read from ``cargo metadata``;
+  ``package =`` rename gives it, read from ``cargo metadata``; the parser
+  crate's name is the checked tree's: its own copy of this file's
+  ``PARSER``, read as a string literal, never run, the classes and edges
+  this copy's with the parser's under that name (``tree_crates``), so a gate
+  running its checkpoint's copy over a candidate that renames the crate
+  judges the candidate's name (a bug fix at T1.28w, E56(a)); a copy
+  missing, unparsed, not a literal, or naming another crate is refused;
 - nothing shipped (domain, host or binding) reaches ``sdm-testkit`` over
   normal or build edges;
 - no domain crate, and not ``sdm-host``, reaches ``pyo3``, ``jni``,
@@ -65,6 +71,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -72,9 +79,10 @@ import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bridge_freeze  # noqa: E402
-from l0_scan import read_rust  # noqa: E402
+from l0_scan import read_rust, tree_name  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = Path('scripts/rust_core/l0_deps.py')
 
 DOMAIN = 'domain'
 HOST = 'host'
@@ -280,25 +288,64 @@ class Graph:
         return paths
 
 
-def check_classes(graph: Graph) -> list[str]:
+@dataclass(frozen=True)
+class Crates:
+    """The crates' data a check reads: the parser's name and the classes
+    and edges, the parser's under that name."""
+
+    parser: str
+    classes: dict[str, str]
+    allowed: dict[str, frozenset[str]]
+
+
+def tree_crates(root: Path) -> tuple[Crates, list[str]]:
+    """The crates' data for the tree at ``root``: the parser's name its own
+    copy of this file gives (``PARSER``), with this copy's ``CLASSES`` and
+    ``ALLOWED`` under it; a name this copy gives another crate is
+    refused."""
+    ours = Crates(PARSER, CLASSES, ALLOWED)
+    name, problems = tree_name(root, SCRIPT, 'PARSER')
+    others = {*CLASSES, *ALLOWED, *REQUIRED, *BINDING_FORBIDDEN} - {PARSER}
+    if name in others:
+        problems = [f"the tree's {SCRIPT}: PARSER names {name}, another crate"]
+    if name is None or problems:
+        return ours, problems
+
+    def renamed(crate: str) -> str:
+        return name if crate == PARSER else crate
+
+    return (
+        Crates(
+            name,
+            {renamed(c): kind for c, kind in CLASSES.items()},
+            {
+                renamed(c): frozenset(renamed(d) for d in deps)
+                for c, deps in ALLOWED.items()
+            },
+        ),
+        [],
+    )
+
+
+def check_classes(graph: Graph, crates: Crates) -> list[str]:
     problems = [
         f'{crate}: a workspace crate with no class; add it to CLASSES and ALLOWED'
         for crate in graph.members
-        if crate not in CLASSES
+        if crate not in crates.classes
     ]
     problems += [
         f'{crate}: classified, but not a workspace crate'
-        for crate in CLASSES
+        for crate in crates.classes
         if crate not in graph.members
     ]
     return problems
 
 
-def check_edges(graph: Graph) -> list[str]:
+def check_edges(graph: Graph, crates: Crates) -> list[str]:
     problems = []
     members = set(graph.members)
     for crate in graph.members:
-        allowed = ALLOWED.get(crate, frozenset())
+        allowed = crates.allowed.get(crate, frozenset())
         first_party = {dep for dep, _ in graph.direct(crate) if dep in members}
         for dep, kinds in graph.direct(crate):
             if dep in members and dep not in allowed:
@@ -312,21 +359,22 @@ def check_edges(graph: Graph) -> list[str]:
     for crate in graph.members:
         if crate == 'sdm-core':
             continue
-        if any(dep == PARSER for dep, _ in graph.direct(crate)):
+        if any(dep == crates.parser for dep, _ in graph.direct(crate)):
             problems.append(
-                f"{crate} -> {PARSER}: only sdm-core's adapter reaches the parser"
+                f"{crate} -> {crates.parser}: only sdm-core's adapter reaches "
+                'the parser'
             )
     return problems
 
 
-def check_reach(graph: Graph) -> list[str]:
+def check_reach(graph: Graph, crates: Crates) -> list[str]:
     problems = []
     for crate in graph.members:
-        kind = CLASSES.get(crate)
+        kind = crates.classes.get(crate)
         if kind not in SHIPPED:
             continue
         reached = graph.reach(crate)
-        dev = [c for c in reached if CLASSES.get(c) == DEV]
+        dev = [c for c in reached if crates.classes.get(c) == DEV]
         for target in dev:
             problems.append(
                 f'{crate} reaches {target} ({" -> ".join(reached[target])}); '
@@ -349,13 +397,13 @@ def crate_root(graph: Graph, crate: str) -> Path:
     return graph.manifests[crate].parent
 
 
-def check_parser_users(graph: Graph) -> list[str]:
+def check_parser_users(graph: Graph, parser: str) -> list[str]:
     if 'sdm-core' not in graph.manifests:
         return ['sdm-core: missing']
     root = crate_root(graph, 'sdm-core')
     problems = []
-    names = {PARSER.replace('-', '_')} | graph.externs.get(
-        ('sdm-core', PARSER), set()
+    names = {parser.replace('-', '_')} | graph.externs.get(
+        ('sdm-core', parser), set()
     )
     pattern = re.compile(
         r'\b(' + '|'.join(re.escape(n) for n in sorted(names)) + r')\b'
@@ -380,7 +428,7 @@ def check_parser_users(graph: Graph) -> list[str]:
     return problems
 
 
-def check_unsafe(graph: Graph) -> list[str]:
+def check_unsafe(graph: Graph, crates: Crates) -> list[str]:
     problems = []
     workspace = tomllib.loads((graph.workspace_root / 'Cargo.toml').read_text())
     workspace_rust = (
@@ -391,7 +439,7 @@ def check_unsafe(graph: Graph) -> list[str]:
             'rust/Cargo.toml: the workspace lints do not forbid unsafe_code'
         )
     for crate in graph.members:
-        kind = CLASSES.get(crate)
+        kind = crates.classes.get(crate)
         manifest = tomllib.loads(graph.manifests[crate].read_text())
         lints = manifest.get('lints', {})
         if kind in (DOMAIN, HOST):
@@ -482,17 +530,21 @@ def check_bridges(root: Path, parser_root: Path) -> list[str]:
 
 def run_checks(metadata: dict[str, Any], root: Path) -> dict[str, list[str]]:
     graph = Graph(metadata)
+    crates, unreadable = tree_crates(root)
+    if unreadable:
+        return {'classes': unreadable}
+    parser = crates.parser
     parser_root = (
-        crate_root(graph, PARSER)
-        if PARSER in graph.manifests
-        else root / 'rust/crates' / PARSER
+        crate_root(graph, parser)
+        if parser in graph.manifests
+        else root / 'rust/crates' / parser
     )
     return {
-        'classes': check_classes(graph),
-        'edges': check_edges(graph),
-        'reach': check_reach(graph),
-        'parser': check_parser_users(graph),
-        'unsafe': check_unsafe(graph),
+        'classes': check_classes(graph, crates),
+        'edges': check_edges(graph, crates),
+        'reach': check_reach(graph, crates),
+        'parser': check_parser_users(graph, parser),
+        'unsafe': check_unsafe(graph, crates),
         'bridges': check_bridges(root, parser_root),
     }
 
