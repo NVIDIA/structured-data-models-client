@@ -101,7 +101,8 @@ def _core_examples(
     entity, its anchor as the payload writes it and its label."""
     given = case['input']
     connection = duckdb.connect()
-    for statement in _base(given['base']) + list(given.get('setup', [])):
+    base = _base(given['base']) if given.get('base') else []
+    for statement in base + list(given.get('setup', [])):
         connection.execute(statement)
     monkeypatch.setenv(
         'SDM_CORE_ROUTES', ','.join(FROM_SOURCE_DUCKDB + MATERIALIZE_DUCKDB)
@@ -268,3 +269,79 @@ def test_the_label_check_fails_closed(monkeypatch: Any) -> None:
     ]['rows'][0]
     assert problems(left_out, [], core)
     assert os.environ.get('SDM_CORE_ROUTES')
+
+
+#: Decimal sums whose running total passes 38 digits (or ``i128``) and
+#: comes back (T1.27's fix round 3): user 1's prices in time order and the
+#: label the reference gives user 1 at 2024-02-01, recorded from the
+#: reference checkout's environment through the public calls (every other
+#: example's label 0.0); the client's ``tests/test_the_materialize_route.py``
+#: holds the old route to the same rows where the engine is installed.
+SIX = '60000000000000000000'
+DECIMAL_SUMS = {
+    'running-past-38-digits': (
+        'DECIMAL(38, 18)',
+        [SIX, SIX, '-' + SIX],
+        6.000000208206194e19,
+    ),
+    'back-to-zero': ('DECIMAL(38, 18)', [SIX, SIX, '-' + SIX, '-' + SIX], 0.0),
+    'another-order': (
+        'DECIMAL(38, 18)',
+        [SIX, '-' + SIX, SIX],
+        6.000000208206194e19,
+    ),
+    'scale-0': (
+        'DECIMAL(38, 0)',
+        ['6' + '0' * 37] * 2 + ['-6' + '0' * 37],
+        6.000000213819608e37,
+    ),
+    'running-past-i128': (
+        'DECIMAL(38, 0)',
+        ['9' + '0' * 37] * 2 + ['-9' + '0' * 37],
+        8.999999813669171e37,
+    ),
+}
+DECIMAL_SUM_EXAMPLES = [
+    (0, '2024-02-01'),
+    (1, '2024-02-01'),
+    (2, '2024-02-01'),
+    (3, '2024-02-01'),
+    (0, '2024-01-01'),
+    (1, '2024-01-01'),
+    (3, '2024-01-01'),
+    (2, '2024-01-01'),
+]
+
+
+@pytest.mark.parametrize('name', sorted(DECIMAL_SUMS))
+def test_a_decimal_sum_s_labels_are_the_reference_s(
+    name: str, monkeypatch: Any
+) -> None:
+    dtype, prices, label = DECIMAL_SUMS[name]
+    setup = [
+        'CREATE TABLE users (user_id BIGINT PRIMARY KEY)',
+        'INSERT INTO users SELECT i FROM range(4) t(i)',
+        'CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, '
+        f'price {dtype}, ts TIMESTAMP)',
+        "INSERT INTO orders VALUES (0, 2, 1, '2024-01-01')",
+    ] + [
+        f'INSERT INTO orders VALUES ({i + 1}, 1, {price}, '
+        f"TIMESTAMP '2024-02-10' + to_days({i}))"
+        for i, price in enumerate(prices)
+    ]
+    case = {
+        'input': {
+            'setup': setup,
+            'pql': 'PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id',
+            'materialize': {'indices': [1], 'anchor_time': '2024-03-01'},
+        }
+    }
+    wanted = [
+        (
+            entity,
+            f'{day}T00:00:00.000000Z',
+            label if (entity, day) == (1, '2024-02-01') else 0.0,
+        )
+        for entity, day in DECIMAL_SUM_EXAMPLES
+    ]
+    assert _core_examples(case, monkeypatch) == wanted

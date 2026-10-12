@@ -1439,3 +1439,103 @@ def test_a_decimal_average_past_38_digits_is_not_the_caller_s_error(
     with pytest.raises(StructuredDataError) as refused:
         _decimal_average(total)
     assert refused.value.code == 'INVALID_REQUEST'
+
+
+#: Decimal sums whose running total passes 38 digits (or ``i128``) and
+#: comes back (T1.27's fix round 3), user 1's prices in time order, and the
+#: label the reference gives user 1 at 2024-02-01, recorded from the
+#: reference checkout's environment (b413e9a; pandas 3.0.6, pyarrow
+#: 25.0.1) through the same public calls; every other example's label is
+#: 0.0. ``tests_test_ops/test_the_labels.py`` holds the core's labels to
+#: the same values.
+SIX = '60000000000000000000'
+DECIMAL_SUMS = {
+    'running-past-38-digits': (
+        'DECIMAL(38, 18)',
+        [SIX, SIX, '-' + SIX],
+        6.000000208206194e19,
+    ),
+    'back-to-zero': ('DECIMAL(38, 18)', [SIX, SIX, '-' + SIX, '-' + SIX], 0.0),
+    'another-order': (
+        'DECIMAL(38, 18)',
+        [SIX, '-' + SIX, SIX],
+        6.000000208206194e19,
+    ),
+    'scale-0': (
+        'DECIMAL(38, 0)',
+        ['6' + '0' * 37] * 2 + ['-6' + '0' * 37],
+        6.000000213819608e37,
+    ),
+    'running-past-i128': (
+        'DECIMAL(38, 0)',
+        ['9' + '0' * 37] * 2 + ['-9' + '0' * 37],
+        8.999999813669171e37,
+    ),
+}
+#: The reference's context over those sources: the examples' instance id,
+#: entity and anchor; user 1 at 2024-02-01 is the one example with a sum.
+DECIMAL_SUM_EXAMPLES = [
+    (0, 0, '2024-02-01'),
+    (1, 1, '2024-02-01'),
+    (2, 2, '2024-02-01'),
+    (3, 3, '2024-02-01'),
+    (4, 0, '2024-01-01'),
+    (5, 1, '2024-01-01'),
+    (6, 3, '2024-01-01'),
+    (7, 2, '2024-01-01'),
+]
+
+
+def _decimal_sum_rows(label: float) -> list[list[Any]]:
+    return [
+        [
+            i,
+            entity,
+            f'{day}T00:00:00.000000Z',
+            label if (entity, day) == (1, '2024-02-01') else 0.0,
+        ]
+        for i, entity, day in DECIMAL_SUM_EXAMPLES
+    ]
+
+
+def _decimal_sum(dtype: str, prices: list[str]) -> Any:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        connection = duckdb.connect()
+        connection.execute('CREATE TABLE users (user_id BIGINT PRIMARY KEY)')
+        connection.execute('INSERT INTO users SELECT i FROM range(4) t(i)')
+        connection.execute(
+            'CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, '
+            f'price {dtype}, ts TIMESTAMP)'
+        )
+        connection.execute("INSERT INTO orders VALUES (0, 2, 1, '2024-01-01')")
+        for i, price in enumerate(prices):
+            connection.execute(
+                f'INSERT INTO orders VALUES ({i + 1}, 1, {price}, '
+                f"TIMESTAMP '2024-02-10' + to_days({i}))"
+            )
+        schema = Schema.from_source(DuckDBSource(connection))
+        return PredictiveQuery(
+            'PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[1], anchor_time=ANCHOR)
+
+
+@pytest.mark.parametrize('name', sorted(DECIMAL_SUMS))
+def test_a_decimal_sum_s_total_alone_is_checked(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dtype, prices, label = DECIMAL_SUMS[name]
+    if importlib.util.find_spec('sdm_relational_engine') is not None:
+        # The old route is the reference's: the labels as recorded.
+        request = _decimal_sum(dtype, prices)
+        rows = request._payloads[0]['context']['instance_table']['rows']
+        assert json.loads(json.dumps(rows)) == _decimal_sum_rows(label)
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    # On the core the sum is labelled, never the caller's error (its labels
+    # are held in tests_test_ops); the request then needs the decimal
+    # feature's wire dtype, T1.28a's, refused by name (P1B-3).
+    with pytest.raises(StructuredDataError) as refused:
+        _decimal_sum(dtype, prices)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['rule'] == 'wire_dtype'

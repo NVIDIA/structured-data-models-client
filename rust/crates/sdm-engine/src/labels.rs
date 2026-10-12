@@ -135,14 +135,15 @@ fn decimal_overflow() -> CoreError {
     .with_field("field", sdm_contract::Detail::text("query"))
 }
 
-/// The exact sum of `values`, in order, refused past `DECIMAL(38)`.
+/// The exact sum of `values`, refused when the sum itself is past
+/// `DECIMAL(38)`, as the reference's grouped sum checks only its total
+/// (T1.27's fix round 3): its terms are added as Arrow's `Decimal128` adds
+/// them, wrapping, so a running sum past 38 digits, or past `i128`, that
+/// comes back within them is the reference's answer.
 fn decimal_sum(values: impl Iterator<Item = i128>) -> Result<i128, CoreError> {
-    let mut sum: i128 = 0;
-    for value in values {
-        sum = sum
-            .checked_add(value)
-            .filter(|s| s.abs() <= DECIMAL_38)
-            .ok_or_else(decimal_overflow)?;
+    let sum = values.fold(0_i128, i128::wrapping_add);
+    if sum.unsigned_abs() > DECIMAL_38.unsigned_abs() {
+        return Err(decimal_overflow());
     }
     Ok(sum)
 }
@@ -152,8 +153,8 @@ const DECIMAL_38: i128 = 99_999_999_999_999_999_999_999_999_999_999_999_999;
 
 /// `aggregation` of `values` for each of `examples` examples: the rows of
 /// example `batch[row]` whose value is present and whose time is in its
-/// window ([`Bounds`]), in row order. A decimal's sum past `DECIMAL(38)`
-/// is the caller's error, `INVALID_REQUEST`, as the reference's grouped sum
+/// window ([`Bounds`]), in row order. A decimal's sum whose total is past
+/// `DECIMAL(38)` is the caller's error, `INVALID_REQUEST`, as the reference's grouped sum
 /// fails it and its client reports it; a decimal's average takes a rule
 /// this does not port, refused by name (`target_type`), whatever its sum,
 /// since the reference averages values whose sum would not fit.
@@ -627,6 +628,33 @@ mod tests {
             scale: 18,
         };
         assert!(aggregate(Aggregation::Sum, 1, &[0], &one, &[Some(0)], bounds(&[0])).is_ok());
+        // Only the total is checked, as the reference checks it: a running
+        // sum past 38 digits, or past i128, that comes back is summed (fix
+        // round 3; the reference's labels 6.000000208206194e19 and
+        // 8.999999813669171e37), in any order.
+        let nine = 90_000_000_000_000_000_000_000_000_000_000_000_000_i128;
+        for (terms, scale, wanted) in [
+            (vec![big, big, -big], 18, 6.000_000_208_206_194e19_f64),
+            (vec![big, -big, big], 18, 6.000_000_208_206_194e19),
+            (vec![big, big, -big, -big], 18, 0.0),
+            (vec![nine, nine, -nine], 0, 8.999_999_813_669_171e37),
+        ] {
+            let n = terms.len();
+            let values = Values::Decimal {
+                values: terms.into_iter().map(Some).collect(),
+                scale,
+            };
+            let out = aggregate(
+                Aggregation::Sum,
+                1,
+                &vec![0; n],
+                &values,
+                &vec![Some(0); n],
+                bounds(&[0]),
+            )
+            .unwrap();
+            assert_eq!(f64::from(out.values[0]), wanted);
+        }
         // An average of the same values is not the caller's error: the
         // reference averages them (T1.27's fix round 2); its rule is one
         // this does not port, by name.
