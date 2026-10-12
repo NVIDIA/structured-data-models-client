@@ -88,3 +88,12 @@ pub fn take_json<T: DeserializeOwned>(
             .with_field("column", count(e.column()))
     })
 }
+
+/// Takes the bytes attachment `id`, when a message names one, as
+/// [`take_json`] takes it; `None` when it names none.
+pub fn take_json_if<T: DeserializeOwned>(
+    attachments: &mut Attachments,
+    id: Option<AttachmentId>,
+) -> Result<Option<T>, CoreError> {
+    id.map(|id| take_json(attachments, id)).transpose()
+}

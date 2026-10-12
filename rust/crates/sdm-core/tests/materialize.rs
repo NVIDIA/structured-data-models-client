@@ -186,6 +186,7 @@ fn materialize_start(
     let operation = Operation::Materialize(Materialize {
         provider,
         schema: AttachmentId(1),
+        held: None,
         query: AttachmentId(2),
         indices: Some(AttachmentId(3)),
         anchor_time: Some(Scalar::Timestamp {

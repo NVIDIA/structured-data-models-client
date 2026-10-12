@@ -326,7 +326,13 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
         # the probe of the case itself, whose core operations the case
         # names (describe_source alone), the notebook's materialize carrying
         # what the case format cannot (the gap, inference_config).
-        started = {each['op']: each for each in capture.inputs}
+        # From T1.24b each edit python-core makes starts an edit_schema,
+        # which a rust-host probe makes from its edits, not its core.
+        started = {
+            each['op']: each
+            for each in capture.inputs
+            if each['op'] != 'edit_schema'
+        }
         assert set(started) <= set(rust['core']) or (
             rust['derive'] == {'from': 'case', 'steps': []}
             and set(rust['core']) == {'describe_source'}

@@ -490,7 +490,8 @@ def _core_consistent(
     is a refusal with its own code. ``describe_source`` answers with a
     description or an error, never both, and its error ends the call there,
     as a refusal with its code; a description lets the call go on, so the
-    outcome is the later calls'."""
+    outcome is the later calls', the user's edits first (``edit_schema``,
+    from T1.24b), whose refusal ends it beside the description."""
     core = observation['core']
     if core is None:
         return
@@ -532,7 +533,15 @@ def _core_consistent(
         return
     if 'describe_source' in case.get('core', {}):
         where = f'{case["id"]}: {who}'
-        if (core['described'] is None) == (core['error'] is None):
+        # From T1.24b the user's edits follow the description, each an
+        # edit_schema, and a refused one ends the call with its error
+        # beside the description (decision E67).
+        edited = bool(core['inputs']) and (
+            core['inputs'][-1].get('op') == 'edit_schema'
+        )
+        if (core['described'] is None) == (core['error'] is None) and not (
+            edited and core['described'] is not None
+        ):
             report.fail(
                 f'{where}: core: not one description or one error', 'outcome'
             )

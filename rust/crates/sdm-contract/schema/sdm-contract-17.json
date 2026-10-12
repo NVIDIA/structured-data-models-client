@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/16",
+  "$id": "sdm-contract/17",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -264,8 +264,23 @@
         "DescribedSource.description": {
           "$ref": "#/$defs/SourceDescription"
         },
+        "EditSchema.schema": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "EditSchema.held": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "EditSchema.edit": {
+          "$ref": "#/$defs/SchemaEdit"
+        },
+        "SchemaEdited.schema": {
+          "$ref": "#/$defs/SourceDescription"
+        },
         "Materialize.schema": {
           "$ref": "#/$defs/SourceDescription"
+        },
+        "Materialize.held": {
+          "$ref": "#/$defs/HeldSchema"
         },
         "Materialize.query": {
           "type": "string"
@@ -289,7 +304,12 @@
         "ValidateQuery.schema",
         "DescribeSource.source",
         "DescribedSource.description",
+        "EditSchema.schema",
+        "EditSchema.held",
+        "EditSchema.edit",
+        "SchemaEdited.schema",
         "Materialize.schema",
+        "Materialize.held",
         "Materialize.query",
         "SamplerState.memo",
         "RequestState.payload",
@@ -1477,6 +1497,327 @@
       "type": "string",
       "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
     },
+    "HeldSchema": {
+      "description": "A schema as a host holds it, beside the description the core last\nanswered of it (decision E67): the host's schema may have been changed\nsince in ways no edit the core takes says (a table or column added, a\ncolumn retyped, a table mapped to another source table, a table or\ncolumn dropped from its dictionary). `edit_schema` and `materialize`\nread the description as the host holds it: its tables, columns,\nmeanings, keys, time columns and links the host's, what the source said\nof each column the description's; a table or column the description\nlacks, a column of another data type, or a table of another source is\nrefused by name (`schema_edited`).",
+      "type": "object",
+      "properties": {
+        "tables": {
+          "description": "The host's tables as they stand, in its order, each by the name the\nschema gives it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldTable"
+          }
+        },
+        "links": {
+          "description": "The host's relationships as they stand, each\n`[foreign key, referenced key]`.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ColumnRef"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tables",
+        "links"
+      ]
+    },
+    "HeldTable": {
+      "description": "One table as the host holds it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "description": "The source's name of the table it reads, as the host holds it.",
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldColumn"
+          }
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "time_column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "columns",
+        "primary_key"
+      ]
+    },
+    "HeldColumn": {
+      "description": "One column as the host holds it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "description": "The column's data type as the host names it, on the client's wire\n([`Dtype::wire_name`]).",
+          "type": "string"
+        },
+        "stype": {
+          "$ref": "#/$defs/Stype"
+        },
+        "stype_before_key": {
+          "description": "What the column meant before the schema joined on it, as the host\nholds it ([`DescribedColumn::stype_before_key`]).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stype"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "stype"
+      ]
+    },
+    "SchemaEdit": {
+      "description": "One edit to a schema, as the caller made it to the host's schema, each\nvalue as the contract writes it or [`Given::Unreadable`]: the host\npasses every edit it is given, and the core takes or refuses it.",
+      "oneOf": [
+        {
+          "description": "A table's primary key set (`schema[table].primary_key = key`), its\ncolumns in order, or cleared (`null`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Given"
+            },
+            "edit": {
+              "type": "string",
+              "const": "primary_key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "key"
+          ]
+        },
+        {
+          "description": "A table's time column set (`schema[table].time_column = column`),\nor cleared (`null`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "$ref": "#/$defs/Given2"
+            },
+            "edit": {
+              "type": "string",
+              "const": "time_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "column"
+          ]
+        },
+        {
+          "description": "A column's meaning set (`schema[table][column].stype = stype`), as\nthe text the caller gave.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "stype": {
+              "$ref": "#/$defs/Given3"
+            },
+            "edit": {
+              "type": "string",
+              "const": "stype"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "column",
+            "stype"
+          ]
+        },
+        {
+          "description": "A column left out (`del schema[table][column]`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "$ref": "#/$defs/Given3"
+            },
+            "edit": {
+              "type": "string",
+              "const": "leave_out"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "column"
+          ]
+        },
+        {
+          "description": "The relationships replaced (`schema.relationships = links`), or\nedited as a list, as the list stands after the edit; each\n`[foreign key, referenced key]`.",
+          "type": "object",
+          "properties": {
+            "links": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Given4"
+              }
+            },
+            "edit": {
+              "type": "string",
+              "const": "relationships"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "links"
+          ]
+        }
+      ]
+    },
+    "Given": {
+      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Given2": {
+      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Given3": {
+      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Given4": {
+      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ColumnRef"
+              }
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "SamplerMemo": {
       "description": "[`SamplerState`]'s memo: what the runs read, and of what.",
       "type": "object",
@@ -2147,6 +2488,41 @@
           ]
         },
         {
+          "description": "Check one edit to a schema the core described and make it, as the\nreference client's setters check and make it (decision E67): the\nschema the host holds, and the edit; the result is the schema with the\nedit made, or the refusal the reference gives at the assignment.",
+          "type": "object",
+          "properties": {
+            "schema": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the\ndescription the core last answered of the schema,\n`describe_source`'s or the last `edit_schema`'s.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "held": {
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands; left out, the host holds `schema` as it is.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "edit": {
+              "description": "A bytes attachment of a [`SchemaEdit`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "edit_schema"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "schema",
+            "edit"
+          ]
+        },
+        {
           "description": "Build a request for a query over a described source.",
           "type": "object",
           "properties": {
@@ -2154,8 +2530,19 @@
               "$ref": "#/$defs/ProviderChoice"
             },
             "schema": {
-              "description": "A bytes attachment of a [`SourceDescription`] as JSON.",
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the\ndescription the core last answered of the schema, or the schema to\nsample.",
               "$ref": "#/$defs/AttachmentId"
+            },
+            "held": {
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands, which the core reads beside `schema` (decision E67); left\nout, the host holds `schema` as it is.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "query": {
               "description": "The query text: a bytes attachment of a JSON string.",
@@ -3570,6 +3957,36 @@
           "required": [
             "op",
             "description"
+          ]
+        },
+        {
+          "description": "`edit_schema`'s result.",
+          "type": "object",
+          "properties": {
+            "schema": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the schema\nwith the edit made, which the host holds from now on as the\ndescription the core last answered.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "declared": {
+              "description": "The column the edit gave a meaning the caller chose (the reference's\n`Column.stype_declared`): the column whose meaning was assigned, or\nthe time column named, which is assigned `timestamp`; none for any\nother edit.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColumnRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "const": "edit_schema"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "schema"
           ]
         },
         {

@@ -17,11 +17,15 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 6] = [
+const READ: [&str; 10] = [
     "ValidateQuery.query",
     "ValidateQuery.schema",
     "DescribeSource.source",
+    "EditSchema.schema",
+    "EditSchema.held",
+    "EditSchema.edit",
     "Materialize.schema",
+    "Materialize.held",
     "Materialize.query",
     "RequestState.query",
 ];
@@ -40,13 +44,30 @@ fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
         {
             arm = Some(name);
         }
-        let Some((left, right)) = line.split_once(" = take_json(&mut attachments, request.") else {
+        // An attachment a message may leave out is read by `take_json_if`
+        // into an `Option` of the type the lock names.
+        let (left, right, optional) = if let Some((l, r)) =
+            line.split_once(" = take_json(&mut attachments, request.")
+        {
+            (l, r, false)
+        } else if let Some((l, r)) = line.split_once(" = take_json_if(&mut attachments, request.") {
+            (l, r, true)
+        } else {
             continue;
         };
         let decoded = left
             .rsplit_once(": ")
             .map(|(_, ty)| ty.to_owned())
             .ok_or_else(|| format!("a take_json with no type: {line}"))?;
+        let decoded = if optional {
+            decoded
+                .strip_prefix("Option<")
+                .and_then(|ty| ty.strip_suffix('>'))
+                .map(str::to_owned)
+                .ok_or_else(|| format!("a take_json_if not into an Option: {line}"))?
+        } else {
+            decoded
+        };
         let field = right
             .split_once(')')
             .map(|(field, _)| field)

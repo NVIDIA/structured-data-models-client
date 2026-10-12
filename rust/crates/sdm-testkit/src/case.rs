@@ -129,8 +129,9 @@ pub struct Relationship {
     pub target_column: Name,
 }
 
-/// One edit to the schema `Schema.from_source` returned (T1.21b). Read only
-/// from an object ([`object_only`]), never from a list of its fields.
+/// One edit to the schema `Schema.from_source` returned (T1.21b; from
+/// T1.24b a key, a time column, a meaning and the relationships set). Read
+/// only from an object ([`object_only`]), never from a list of its fields.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "Object")]
 pub enum Edit {
@@ -138,6 +139,18 @@ pub enum Edit {
     ClearTimeColumn { table: Name },
     /// `del schema[table][column]`.
     DeleteColumn { table: Name, column: Name },
+    /// `schema[table].primary_key = column`.
+    SetPrimaryKey { table: Name, column: Name },
+    /// `schema[table].time_column = column`.
+    SetTimeColumn { table: Name, column: Name },
+    /// `schema[table][column].stype = stype`.
+    SetStype {
+        table: Name,
+        column: Name,
+        stype: Name,
+    },
+    /// `schema.relationships = [Relationship(**link) for link in ...]`.
+    SetRelationships { relationships: Vec<Relationship> },
 }
 
 /// A JSON object, which serde would otherwise let a struct or a tagged enum
@@ -169,6 +182,20 @@ impl TryFrom<Object> for Edit {
         object_only::<EditFields>(object).map(|edit| match edit {
             EditFields::ClearTimeColumn { table } => Edit::ClearTimeColumn { table },
             EditFields::DeleteColumn { table, column } => Edit::DeleteColumn { table, column },
+            EditFields::SetPrimaryKey { table, column } => Edit::SetPrimaryKey { table, column },
+            EditFields::SetTimeColumn { table, column } => Edit::SetTimeColumn { table, column },
+            EditFields::SetStype {
+                table,
+                column,
+                stype,
+            } => Edit::SetStype {
+                table,
+                column,
+                stype,
+            },
+            EditFields::SetRelationships { relationships } => {
+                Edit::SetRelationships { relationships }
+            }
         })
     }
 }
@@ -187,8 +214,29 @@ struct RelationshipFields {
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 enum EditFields {
-    ClearTimeColumn { table: Name },
-    DeleteColumn { table: Name, column: Name },
+    ClearTimeColumn {
+        table: Name,
+    },
+    DeleteColumn {
+        table: Name,
+        column: Name,
+    },
+    SetPrimaryKey {
+        table: Name,
+        column: Name,
+    },
+    SetTimeColumn {
+        table: Name,
+        column: Name,
+    },
+    SetStype {
+        table: Name,
+        column: Name,
+        stype: Name,
+    },
+    SetRelationships {
+        relationships: Vec<Relationship>,
+    },
 }
 
 /// An optional field the case schema does not let be null: absent is

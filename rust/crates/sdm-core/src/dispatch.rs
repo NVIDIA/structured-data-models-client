@@ -7,14 +7,14 @@
 use std::sync::Arc;
 
 use sdm_contract::ops::{
-    Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION, SAMPLER_STATE_VERSION,
-    SamplerMemo, SourceDescription, SourceSpec,
+    HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
+    SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceDescription, SourceSpec,
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_engine::time::Zones;
 
-use crate::attached::{check_attachments, take_json};
+use crate::attached::{check_attachments, take_json, take_json_if};
 use crate::compose::CompositionRoot;
 use crate::profiles::Profile;
 use crate::run::{Attachment, Attachments, Run, internal};
@@ -83,8 +83,20 @@ pub fn start(
                 crate::describe::run(asker, source, check_keys, facts)
             })
         }
+        Operation::EditSchema(request) => {
+            let described: SourceDescription = take_json(&mut attachments, request.schema)?;
+            let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
+            let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
+            Run::new(move |asker| crate::edit::run(asker, described, held, edit))
+        }
         Operation::Materialize(request) => {
-            let description: SourceDescription = take_json(&mut attachments, request.schema)?;
+            let described: SourceDescription = take_json(&mut attachments, request.schema)?;
+            let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
+            // The schema as the host holds it, before anything else of the
+            // call is read; one changed in a way no edit the core takes says
+            // is refused by name (`schema_edited`, decision E67), as the
+            // host's bridge refused it before the core ran until T1.24b.
+            let description = sdm_schema::edit::read_held(described, held, "materialize")?;
             let query: String = take_json(&mut attachments, request.query)?;
             let indices = match request.indices {
                 Some(id) => match attachments.remove(&id) {

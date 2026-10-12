@@ -30,8 +30,8 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Materialize, Operation, OperationResult, Predict, ProfileSpec, QuerySchema,
-    RequestState, SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
+    DescribeSource, EditSchema, Materialize, Operation, OperationResult, Predict, ProfileSpec,
+    QuerySchema, RequestState, SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -466,14 +466,25 @@ fn describe_on(
     };
     observed.described = Some(described.clone());
     observed.answer = Answer::Described(described.clone());
+    // The user's edits, each checked and made by the core's edit_schema
+    // (decision E67), finish describing the schema: a refusal of one is the
+    // case's outcome, as the Python runner records it at from_source.
+    let mut schema: SourceDescription = serde_json::from_value(described)
+        .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
+    for edit in edits {
+        match edit_schema(case, &schema, edit, connection, &mut observed, log)? {
+            Ok(edited) => schema = edited,
+            Err(answer) => {
+                observed.answer = answer;
+                return Ok(observed);
+            }
+        }
+    }
     let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
         return Ok(observed);
     };
     // The schema materialize samples is this host's own description, with
     // the user's edits made: never one the case carries (decision E50).
-    let described: SourceDescription = serde_json::from_value(described)
-        .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
-    let schema = edits::edited(&described, edits).with_context(|| case.id.clone())?;
     let Some(state) = materialize(case, spec, &schema, connection, &mut observed, log, None)?
     else {
         return Ok(observed);
@@ -483,6 +494,62 @@ fn describe_on(
         predict(case, spec, state, &mut observed)?;
     }
     Ok(observed)
+}
+
+/// One edit made to `schema`, the description the core last answered, by
+/// the core's `edit_schema` over the schema as this host holds it
+/// ([`edits::held`]): the schema it answered, or the core's refusal, the
+/// case's answer.
+fn edit_schema(
+    case: &Case,
+    schema: &SourceDescription,
+    edit: &SchemaEdit,
+    connection: &duckdb::Connection,
+    observed: &mut Observed,
+    log: &mut DriverLog,
+) -> Result<std::result::Result<SourceDescription, Answer>> {
+    // What this host sends, as it encodes it, is what it records.
+    let schema_bytes = serde_json::to_vec(schema)?;
+    let held_bytes = serde_json::to_vec(&edits::held(schema))?;
+    let edit_bytes = serde_json::to_vec(&edit.to_contract())?;
+    observed.operations.push("edit_schema".into());
+    observed.inputs.push(json!({
+        "op": "edit_schema",
+        "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
+        "held": serde_json::from_slice::<Value>(&held_bytes)?,
+        "edit": serde_json::from_slice::<Value>(&edit_bytes)?,
+    }));
+    let start = ControlMessage::Start(Box::new(StartRun {
+        contract: CONTRACT_VERSION,
+        facts: facts()?,
+        operation: Operation::EditSchema(EditSchema {
+            schema: AttachmentId(1),
+            held: Some(AttachmentId(2)),
+            edit: AttachmentId(3),
+        }),
+    }));
+    let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
+    let attachments = BTreeMap::from([
+        (AttachmentId(1), Attachment::Bytes(schema_bytes)),
+        (AttachmentId(2), Attachment::Bytes(held_bytes)),
+        (AttachmentId(3), Attachment::Bytes(edit_bytes)),
+    ]);
+    let handle = match HostRun::start(&default_root(), &message, attachments) {
+        Ok(handle) => handle,
+        Err(refused) => return Ok(Err(error_of(&refused)?)),
+    };
+    match drive(case, &handle, connection, observed, log)? {
+        Err(answer) => Ok(Err(answer)),
+        Ok(OperationResult::EditSchema(edited)) => {
+            let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(edited.schema) else {
+                bail!("{}: the schema edited is not attached", case.id);
+            };
+            Ok(Ok(serde_json::from_slice(&bytes).map_err(|_| {
+                anyhow!("{}: the schema edited is not a SourceDescription", case.id)
+            })?))
+        }
+        Ok(_) => bail!("{}: edit_schema answered another operation", case.id),
+    }
 }
 
 /// One Arrow column of contract scalars, all of one integer or text type.
@@ -600,14 +667,18 @@ fn materialize(
     let column = column_of(&indices)?;
     let field = Field::new("indices", column.data_type().clone(), false);
     let batch = RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![column])?;
-    // What this host sends, as it encodes it, is what it records.
+    // What this host sends, as it encodes it, is what it records: the
+    // description the core last answered, and the schema as this host
+    // holds it (decision E67).
     let schema_bytes = serde_json::to_vec(schema)?;
+    let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let query_bytes = serde_json::to_vec(&case.input.pql)?;
     observed.operations.push("materialize".into());
     observed.inputs.push(json!({
         "op": "materialize",
         "provider": serde_json::to_value(&provider)?,
         "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
+        "held": serde_json::from_slice::<Value>(&held_bytes)?,
         "query": serde_json::from_slice::<Value>(&query_bytes)?,
         "indices": serde_json::to_value(&indices)?,
         "anchor_time": serde_json::to_value(&anchor_time)?,
@@ -619,6 +690,7 @@ fn materialize(
         operation: Operation::Materialize(Materialize {
             provider,
             schema: AttachmentId(1),
+            held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time,
@@ -639,6 +711,7 @@ fn materialize(
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let mut attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(schema_bytes)),
+        (AttachmentId(5), Attachment::Bytes(held_bytes)),
         (AttachmentId(2), Attachment::Bytes(query_bytes)),
         (
             AttachmentId(3),

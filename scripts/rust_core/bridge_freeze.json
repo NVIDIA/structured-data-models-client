@@ -43,7 +43,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "bb80218c4b619e061a382cad6b5e4f7be7aad14fe24928944869767fd02d3837",
+        "fingerprint": "6af7fa385beb949b19c61ebf73a49a8a2bd06084caaf19ae30551bae87558a3e",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -80,21 +80,19 @@
         ]
       },
       "description": {
-        "fingerprint": "19bda8a3f2622aba9c0c7e5b36161d5deecbb1253f37fa59bb3dd30314de2c34",
-        "raise": 3,
+        "fingerprint": "46970a104391a3525c759f021bd8dc29df124cca4f834dca9c191ac386f06281",
+        "raise": 1,
         "warn": 0,
-        "branch": 8,
+        "branch": 4,
         "calls": [
           ".append",
-          ".get",
           ".items",
           "sdm_client._routing.RouteError",
-          "sdm_client.materializers.sources.wire_dtype",
           "sdm_client.schema._as_key_tuple"
         ]
       },
       "gather": {
-        "fingerprint": "d6d8c5014c4607b163e1a93ae1a4157f29f5b832b26d9054d3aa7e67856e0c2c",
+        "fingerprint": "7739aea8acad12bdadc544a8e5d4c973533c8926e1d88a541fcd17681e644da5",
         "raise": 0,
         "warn": 0,
         "branch": 3,
@@ -706,12 +704,13 @@
         "calls": []
       },
       "Column.__setattr__": {
-        "fingerprint": "64cc55e156fab030439211d631711d43d7cc18687957338221762323267f2176",
+        "fingerprint": "b3b807b8a585be4796f3f696e7dc74286f11bef636274c56da7ce8b2037ea239",
         "raise": 1,
         "warn": 0,
-        "branch": 8,
+        "branch": 11,
         "calls": [
           ".__setattr__",
+          "sdm_client._rust.edits.column",
           "sdm_client.errors.StructuredDataError",
           "sdm_client.schema.Column._adopt_as_time_column",
           "sdm_client.schema.Column._check_stype",
@@ -720,12 +719,13 @@
         ]
       },
       "Schema.__setattr__": {
-        "fingerprint": "0eb8da79fb815daa89d671082b5579aa4df7bf8ead38509e6e19e86f2d53ac74",
+        "fingerprint": "2e3fd3001b9fdd83fcb1b34cbc24c00e063fa25371417129613be2faea6cbab5",
         "raise": 0,
         "warn": 0,
-        "branch": 2,
+        "branch": 5,
         "calls": [
           ".__setattr__",
+          "sdm_client._rust.edits.relationships",
           "sdm_client.schema._Links"
         ]
       },
@@ -808,12 +808,13 @@
         ]
       },
       "_TableShape.__setattr__": {
-        "fingerprint": "110348d51d428a4358d69e2084c674a3953fea4254ffceea749a46687f139cdd",
+        "fingerprint": "02f519b42555f7ddd7cc732860689258c6adc03438ded31e3c031eff19d3d949",
         "raise": 0,
         "warn": 0,
-        "branch": 8,
+        "branch": 11,
         "calls": [
           ".__setattr__",
+          "sdm_client._rust.edits.table",
           "sdm_client.schema._TableShape._own_columns",
           "sdm_client.schema._as_key_tuple"
         ]

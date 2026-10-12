@@ -616,6 +616,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
             },
         },
         schema: AttachmentId(1),
+        held: None,
         query: AttachmentId(2),
         indices: None,
         anchor_time: None,

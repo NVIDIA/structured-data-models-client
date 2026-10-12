@@ -185,6 +185,21 @@ class Column:
                 'assign the dtype you want instead',
                 code='INVALID_REQUEST',
             )
+        if (
+            key == 'stype'
+            and getattr(
+                getattr(getattr(self, '_table', None), '_schema', None),
+                '_core_description',
+                None,
+            )
+            is not None
+        ):
+            # A core-built schema's column: the core checks and makes the
+            # edit, and its answer is stored (T1.24b, decision E66(g)).
+            from sdm_client._rust import edits
+
+            if edits.column(self, value):
+                return
         if key == 'stype':
             self._check_stype(value)
             self._check_supports_dtype(value, getattr(self, 'dtype', None))
@@ -394,6 +409,19 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
+        if (
+            key in ('primary_key', 'time_column')
+            and getattr(
+                getattr(self, '_schema', None), '_core_description', None
+            )
+            is not None
+        ):
+            # A core-built schema's table: the core checks and makes the
+            # edit, and its answer is stored (T1.24b, decision E66(g)).
+            from sdm_client._rust import edits
+
+            if edits.table(self, key, value):
+                return
         if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
@@ -762,6 +790,16 @@ class SourceTable(_TableShape):
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
+        if (
+            getattr(getattr(self, '_schema', None), '_core_description', None)
+            is not None
+        ):
+            # A core-built schema's table: the core checks and makes the
+            # edit, and its answer is stored (T1.24b).
+            from sdm_client._rust import edits
+
+            if edits.leave_out(self, column):
+                return
         self._check_column(column)
         role = (
             'primary key'
@@ -891,6 +929,16 @@ class Schema:
         the other accepted. `check_consistent()`, which a caller runs to
         ask exactly this, passed it.
         """
+        if (
+            key == 'relationships'
+            and getattr(self, '_core_description', None) is not None
+        ):
+            # A core-built schema: the core checks and makes the edit, and
+            # its answer is stored (T1.24b, decision E66(g)).
+            from sdm_client._rust import edits
+
+            if edits.relationships(self, value):
+                return
         if key == 'relationships' and hasattr(self, '_tables'):
             value = _Links(self._settle(value), self)
             object.__setattr__(self, key, value)
@@ -2595,6 +2643,13 @@ class _Links(list):
         object.__setattr__(self, '_schema', schema)
 
     def _resettle(self, links: list[Relationship]) -> None:
+        if getattr(self._schema, '_core_description', None) is not None:
+            # A core-built schema: the core checks and makes the edit, and
+            # its answer is stored in this list (T1.24b).
+            from sdm_client._rust import edits
+
+            if edits.relationships(self._schema, links, into=self):
+                return
         settled = self._schema._settle(links)
         super().clear()
         super().extend(settled)

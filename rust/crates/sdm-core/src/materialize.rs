@@ -899,8 +899,8 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
     sdm_schema::assemble::mark_keys(description);
     for table in &description.tables {
         for column in &table.columns {
-            let supported = crate::pql::interim_stype(column.stype)
-                .supports_dtype(crate::pql::interim_dtype(column.dtype));
+            // As the language answers it, as an edit's meaning is held.
+            let supported = crate::edit::supports(column.stype, column.dtype);
             if !supported {
                 return Err(invalid(
                     "a column's meaning is not one its values can carry",

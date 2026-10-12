@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the live object's edit semantics that building today's Schema re-runs
-# (T1.24b), are deleted in Phase 1 by that task; building the Schema from
-# the description stays the host's. Frozen meanwhile (E50).
+# Bridge code: from T1.24b no host-held rule with a Phase 1 owner is left
+# here (design, "Host-held semantics"; decision E67): the live object's
+# edits are the core's edit_schema, and building today's Schema from the
+# description and converting the call's own values stay the host's. Its
+# routing branch in Schema.from_source is deleted in Phase 5, with the
+# routing seam (decision B-D7). Frozen meanwhile (E50).
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 

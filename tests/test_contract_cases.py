@@ -535,6 +535,9 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                         'op': 'materialize',
                         'query': case['input']['pql'],
                         'schema': described,
+                        # From T1.24b, beside it, the schema as the host
+                        # holds it.
+                        'held': {'tables': [], 'links': []},
                         **case['core']['materialize'],
                     }
                 )

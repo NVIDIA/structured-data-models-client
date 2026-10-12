@@ -14,9 +14,9 @@ use sdm_contract::data::{
 };
 use sdm_contract::facts::{LocalZone, PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::{
-    Capability, DescribeSource, DescribedSource, Materialize, Materialized, Operation,
-    OperationResult, PqlDiagnostic, Predict, Predicted, ProfileName, ProfileSpec, QueryValidation,
-    RequestState, SamplerState, Seed, Severity, Span, ValidateQuery,
+    Capability, ColumnRef, DescribeSource, DescribedSource, EditSchema, Materialize, Materialized,
+    Operation, OperationResult, PqlDiagnostic, Predict, Predicted, ProfileName, ProfileSpec,
+    QueryValidation, RequestState, SamplerState, SchemaEdited, Seed, Severity, Span, ValidateQuery,
 };
 use sdm_contract::run::{
     Endpoint, FetchOutcome, FetchReply, FetchStep, ModelCall, ModelOutcome, ModelReply, ReplyId,
@@ -121,11 +121,17 @@ pub fn messages() -> Vec<ControlMessage> {
             source: AttachmentId(1),
             check_keys: true,
         })),
+        start(Operation::EditSchema(EditSchema {
+            schema: AttachmentId(1),
+            held: Some(AttachmentId(2)),
+            edit: AttachmentId(3),
+        })),
         start(Operation::Materialize(Materialize {
             provider: sdm_contract::data::ProviderChoice::Sql {
                 dialect: Dialect::new("duckdb"),
             },
             schema: AttachmentId(1),
+            held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
             anchor_time: None,
@@ -347,6 +353,15 @@ pub fn messages() -> Vec<ControlMessage> {
         ControlMessage::Step(Step::Done {
             result: OperationResult::DescribeSource(DescribedSource {
                 description: AttachmentId(9),
+            }),
+        }),
+        ControlMessage::Step(Step::Done {
+            result: OperationResult::EditSchema(SchemaEdited {
+                schema: AttachmentId(9),
+                declared: Some(ColumnRef {
+                    table: "users".into(),
+                    column: "signup".into(),
+                }),
             }),
         }),
         ControlMessage::Step(Step::Done {

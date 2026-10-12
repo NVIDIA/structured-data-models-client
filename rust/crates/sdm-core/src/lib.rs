@@ -11,6 +11,7 @@ pub mod attached;
 pub mod compose;
 mod describe;
 pub mod dispatch;
+mod edit;
 pub mod materialize;
 pub mod pql;
 mod predict;

@@ -79,7 +79,7 @@ pub struct Assembled {
     pub warnings: Vec<CoreWarning>,
 }
 
-fn invalid(message: &str, field: &str) -> CoreError {
+pub(crate) fn invalid(message: &str, field: &str) -> CoreError {
     CoreError::new(
         ErrorKind::InvalidRequest,
         ErrorCode::InvalidRequest,
@@ -92,7 +92,7 @@ fn invalid(message: &str, field: &str) -> CoreError {
 /// text types, as the language's `Stype.ID.supports_dtype` takes them;
 /// the language also takes binary, which no description holds
 /// (`infer::table` refuses it as `column_type`).
-fn can_identify(dtype: Dtype) -> bool {
+pub(crate) fn can_identify(dtype: Dtype) -> bool {
     matches!(
         dtype,
         Dtype::Int
@@ -316,7 +316,7 @@ pub fn assemble(
 /// table and column the schema holds at each end, and it can join
 /// (`_require_joinable`), each refused as `INVALID_REQUEST` naming the
 /// link.
-fn checked(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), CoreError> {
+pub(crate) fn checked(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), CoreError> {
     let message = match joins(tables, link) {
         Ok(()) => return Ok(()),
         Err(Unjoinable::Missing) => {
@@ -464,7 +464,7 @@ pub fn apply_keys_and_times(
     Ok(())
 }
 
-fn no_column(table: &str, column: &str, field: &str) -> CoreError {
+pub(crate) fn no_column(table: &str, column: &str, field: &str) -> CoreError {
     invalid("a column named is not its table's", field)
         .with_field("table", Detail::text(table))
         .with_field("column", Detail::text(column))
@@ -578,7 +578,7 @@ pub fn joins(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), Unjoin
 }
 
 /// The links, each once, in their order (`_each_link_once`).
-fn once(links: Vec<Link>) -> Vec<Link> {
+pub(crate) fn once(links: Vec<Link>) -> Vec<Link> {
     let mut seen = BTreeSet::new();
     links
         .into_iter()
@@ -674,25 +674,6 @@ pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
         return Err(refused);
     }
     Ok(())
-}
-
-/// The data type a message names, as the client's wire names it.
-fn wire_name(dtype: Dtype) -> &'static str {
-    match dtype {
-        Dtype::Bool => "bool",
-        Dtype::Int | Dtype::Int64 => "int64",
-        Dtype::Byte | Dtype::Int16 | Dtype::Int32 => "int32",
-        Dtype::Float | Dtype::Float64 => "float64",
-        Dtype::Float32 => "float32",
-        Dtype::String => "string",
-        Dtype::Date | Dtype::Time => "timestamp[us]",
-        Dtype::Binary => "binary",
-        Dtype::Timedelta => "timedelta",
-        Dtype::Floatlist => "floatlist",
-        Dtype::Intlist => "intlist",
-        Dtype::Stringlist => "stringlist",
-        Dtype::Unsupported => "unsupported",
-    }
 }
 
 fn texts<S: AsRef<str>>(names: &[S]) -> Detail {
@@ -846,7 +827,11 @@ fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -
         ));
         fields.push(("key", texts(key)));
     } else {
-        let dtype = |at: &ColumnRef| column(tables, at).map(|c| wire_name(c.dtype)).unwrap_or("");
+        let dtype = |at: &ColumnRef| {
+            column(tables, at)
+                .map(|c| Dtype::wire_name(c.dtype))
+                .unwrap_or("")
+        };
         fields.push(("reason", Detail::text("types")));
         fields.push(("variant", Detail::text("types")));
         fields.push(("source_dtype", Detail::text(dtype(foreign))));
@@ -961,7 +946,7 @@ fn guessed_time_columns(
 /// The warnings of two tables naming each other, once a pair
 /// (`_warn_of_a_pair_joined_both_ways`); a table pointing at itself is one
 /// link, not two.
-fn name_each_other(links: &[Link]) -> Vec<CoreWarning> {
+pub(crate) fn name_each_other(links: &[Link]) -> Vec<CoreWarning> {
     let pairs: BTreeSet<(&str, &str)> = links
         .iter()
         .map(|l| (l[0].table.as_str(), l[1].table.as_str()))
@@ -992,7 +977,7 @@ fn name_each_other(links: &[Link]) -> Vec<CoreWarning> {
 /// (`_warn_two_ways_to_reach_one_table`), each pair once, in order: the
 /// columns in name order, the one a remedy keeps (`kept`, the first) and
 /// the others (`others`).
-fn two_ways(links: &[Link]) -> Vec<CoreWarning> {
+pub(crate) fn two_ways(links: &[Link]) -> Vec<CoreWarning> {
     let mut ways: BTreeMap<(&str, &str), Vec<&str>> = BTreeMap::new();
     for link in links {
         let columns = ways

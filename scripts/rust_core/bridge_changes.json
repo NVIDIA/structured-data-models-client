@@ -5,12 +5,6 @@
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
       "moved": "T1.23 (E59): the schema's assembly in sdm-schema decides each table's source name and the time column inference took before the links or the caller settled another (time_column_inferred, in place of edit_stamp_refused); build presents them as the description gives them"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
-      "moved": "T1.24 (E61): a table named otherwise than its source is the core's to sample (the core's table_source refusal lifted); the table's source name is held to the one the description gave, the schema_edited refusal staying for T1.24b"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T1.26b (E52): the index once-flag moved into the core's sampler state value; the run is handed the materializer's state and leaves its own there, done or failed, through _rust/run.py's pass-through, and the core skips the index read and the time bounds it has made"
-    },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_infer_relationships": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: links inferred by name, no longer reached on the core route"
     },
@@ -26,19 +20,10 @@
     "packages/structured-data-models-client/src/sdm_client/schema.py::_warn_how_time_columns_were_inferred": {
       "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the time-column warning, given by the core, no longer reached on the core route"
     },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.__setattr__": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema._check_relationships": {
       "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema._settle": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__": {
       "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._adopt_key": {
@@ -79,6 +64,24 @@
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.__init__": {
       "moved": "T1.26b (E52): the index once-flag gone; the materializer holds the core's sampler state value, opaque, which the core reads"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
+      "moved": "T1.24b (E67): the schema_edited refusal moved into the core (sdm_schema::edit::read_held, refused by name); description's answer is the description the core last answered and the schema as it stands, which the core reads together"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
+      "moved": "T1.24b (E67): the schema_edited refusal and the reading of the schema beside the description (each column's meaning over what the source said of it) moved into the core's read_held; description sends the description the core last answered and the schema as it stands (HeldSchema), which the edit bridge sends edit_schema too"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
+      "moved": "T1.24b (E67): materialize is handed the description the core last answered and the schema as it stands, as two attachments, the core refusing schema_edited by name"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__": {
+      "allowance": "E66"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.__setattr__": {
+      "allowance": "E66"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__": {
+      "allowance": "E66"
     }
   }
 }

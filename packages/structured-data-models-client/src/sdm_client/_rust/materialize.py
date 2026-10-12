@@ -2,10 +2,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the schema_edited refusal (T1.24b), the zoned anchor's conversion (T1.25), the
-# run mode, entity count, shape, limits and capped-context notice (T1.28a)
-# and the entities' cast to the key's type (T1.32a, checkpoint 4), are
-# deleted in Phase 1 by those tasks.
+# the run mode, entity count, shape, limits and capped-context notice
+# (T1.28a) and the entities' cast to the key's type (T1.32a, checkpoint
+# 4), are deleted in Phase 1 by those tasks.
 # Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request's gathering (T1.11c).
@@ -20,11 +19,12 @@ the ``Request`` built from the payload.
 
 The core's ``materialize`` samples the source through the DuckDB provider
 (:mod:`.providers.duckdb`) and lays out the payload the engine lays out;
-this module hands it what the schema says now, with what the core's
-description of the source said of each column that the schema does not
-hold (the type the source handed over, whether it may be null, whether the
-source keys it), and the entities to predict for as one Arrow column of the
-key's own type. From T1.21d the core holds that schema to the reference's
+this module hands it the description the core last answered of the
+schema and the schema as it stands (from T1.24b, decision E67), which the
+core reads together: what the schema says now, with what the description
+said of each column that the schema does not hold (the type the source
+handed over, whether it may be null, whether the source keys it); and the
+entities to predict for as one Arrow column of the key's own type. From T1.21d the core holds that schema to the reference's
 consistency check itself, marking the columns it joins on again from what
 each column means and meant before it was joined on (decision E55); this
 module checks none of it. Nothing here imports the relational engine.
@@ -37,9 +37,9 @@ the core (decision E61): the anchor time and seed in their fields, an
 unseeded sample, an anchor at each entity's own time and a context size as
 the contract says them, and the names of the rest; the core refuses with
 ``UNSUPPORTED_REQUEST``, naming the rule, each it does not take yet, and
-any schema it does not sample yet (register entry P1B-3). Here a schema
-edited past its description is still refused (``schema_edited``, with the
-edit semantics at T1.24b).
+any schema it does not sample yet (register entry P1B-3), and, from
+T1.24b, a schema changed in a way no edit it takes says
+(``schema_edited``), which this module no longer refuses itself.
 """
 
 from __future__ import annotations
@@ -90,20 +90,23 @@ def _not_taken(rule: str) -> StructuredDataError:
     )
 
 
-def description(schema: Schema) -> dict[str, Any]:
-    r"""The schema as the contract's ``SourceDescription``: its tables, their
-    columns' data and semantic types (what each means, and meant before the
-    schema joined on it), keys and time columns, and its relationships, as
-    they stand; of each column, what the core's description of the source
-    said that the schema does not hold.
+def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
+    r"""The schema as the contract's ``Materialize`` and ``EditSchema`` take
+    it: the ``SourceDescription`` the core last answered of it
+    (``describe_source``'s, or the last edit's), and the schema as it
+    stands (``HeldSchema``): each table by the name the schema holds it
+    under, its source's name of the table, its columns' data types and
+    meanings and what each meant before the schema joined on it, its key
+    and time column, and the links. The core reads the two together
+    (decision E67): what the schema says now, with what the description
+    said of each column that the schema does not hold, and refuses by name
+    a schema changed in a way it does not follow yet (``schema_edited``);
+    this module checks none of it.
 
     Raises:
         RouteError: The schema was not described on the core, so what the
             source said of its columns is not known here.
-        StructuredDataError: ``UNSUPPORTED_REQUEST`` naming the rule, for a
-            schema edited in a way the description cannot follow yet.
     """
-    from sdm_client.materializers.sources import wire_dtype
     from sdm_client.schema import _as_key_tuple
 
     described = getattr(schema, '_core_description', None)
@@ -112,39 +115,28 @@ def description(schema: Schema) -> dict[str, Any]:
             'materialize on the core needs a schema Schema.from_source '
             'described on the core'
         )
-    by_name = {table['name']: table for table in described['tables']}
     tables = []
     for name, table in schema.tables.items():
-        source = by_name.get(name)
-        # The description names the source table each table read; a table
-        # mapped to another source table since is not followed yet.
-        if source is None or (
-            getattr(table, 'source_name', name) != source['source']
-        ):
-            raise _not_taken('schema_edited')
-        columns = {column['name']: column for column in source['columns']}
-        shaped = []
-        for column_name, column in table.columns.items():
-            read = columns.get(column_name)
-            if read is None or wire_dtype(read['dtype']) != column.dtype:
-                raise _not_taken('schema_edited')
-            shaped.append(
-                {
-                    **read,
-                    'stype': str(column.stype),
-                    'stype_before_key': column._stype_before_key,
-                }
-            )
         key = table.primary_key
         tables.append(
             {
                 'name': name,
-                'source': source['source'],
-                'columns': shaped,
+                'source': getattr(table, 'source_name', name),
+                'columns': [
+                    {
+                        'name': column_name,
+                        'dtype': column.dtype,
+                        'stype': str(column.stype),
+                        'stype_before_key': (
+                            None
+                            if column._stype_before_key is None
+                            else str(column._stype_before_key)
+                        ),
+                    }
+                    for column_name, column in table.columns.items()
+                ],
                 'primary_key': [] if key is None else list(_as_key_tuple(key)),
                 'time_column': table.time_column,
-                'time_column_inferred': source['time_column_inferred'],
-                'duplicate_keys': source['duplicate_keys'],
             }
         )
     links = [
@@ -154,7 +146,7 @@ def description(schema: Schema) -> dict[str, Any]:
         ]
         for link in schema.relationships
     ]
-    return {'tables': tables, 'links': links}
+    return described, {'tables': tables, 'links': links}
 
 
 def _anchor(value: Any) -> dict[str, Any] | None:
@@ -257,10 +249,12 @@ def gather(
     entity = table_name(query.entity_column)
     seed = options.get('random_seed')
     anchor = options.get('anchor_time')
+    described, held = description(schema)
     operation = {
         'op': 'materialize',
         'provider': {'provider': 'sql', 'dialect': 'duckdb'},
         'schema': 1,
+        'held': 4,
         'query': 2,
         'indices': 3,
         'anchor_time': _anchor(options.get('anchor_time')),
@@ -275,9 +269,10 @@ def gather(
         'options': sorted(set(options) - TAKEN),
     }
     attachments = {
-        1: codec.attachment(description(schema)),
+        1: codec.attachment(described),
         2: codec.attachment(query.to_string()),
         3: _indices(indices, schema, entity),
+        4: codec.attachment(held),
     }
     source: Any = schema.source
     # The sampler state the core's last run on this materializer left,

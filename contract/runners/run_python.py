@@ -485,6 +485,18 @@ class _Capture:
                     'check_keys': operation['check_keys'],
                 }
             )
+        elif operation['op'] == 'edit_schema':
+            # The schema and the edit a setter passed (T1.24b): the
+            # description the core last answered, the schema as the host
+            # holds it, and the edit.
+            self.inputs.append(
+                {
+                    'op': 'edit_schema',
+                    'schema': json.loads(attachments[operation['schema']]),
+                    'held': json.loads(attachments[operation['held']]),
+                    'edit': json.loads(attachments[operation['edit']]),
+                }
+            )
         elif operation['op'] == 'materialize':
             indices = operation['indices']
             self.inputs.append(
@@ -492,6 +504,7 @@ class _Capture:
                     'op': 'materialize',
                     'provider': operation['provider'],
                     'schema': json.loads(attachments[operation['schema']]),
+                    'held': json.loads(attachments[operation['held']]),
                     'query': json.loads(attachments[operation['query']]),
                     'indices': (
                         None
@@ -1558,13 +1571,27 @@ def _from_source_arguments(spec: dict[str, Any]) -> dict[str, Any]:
     return arguments
 
 
-def _edit(schema: Any, edits: list[dict[str, str]]) -> None:
-    r"""The case's edits to the schema, in order (T1.21b)."""
+def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
+    r"""The case's edits to the schema, in order (T1.21b; from T1.24b a
+    key, a time column, a meaning and the relationships set)."""
+    from sdm_client import Relationship
+
     for edit in edits:
-        if edit['op'] == 'clear_time_column':
+        op = edit['op']
+        if op == 'clear_time_column':
             schema[edit['table']].time_column = None
-        else:
+        elif op == 'delete_column':
             del schema[edit['table']][edit['column']]
+        elif op == 'set_primary_key':
+            schema[edit['table']].primary_key = edit['column']
+        elif op == 'set_time_column':
+            schema[edit['table']].time_column = edit['column']
+        elif op == 'set_stype':
+            schema[edit['table']][edit['column']].stype = edit['stype']
+        else:
+            schema.relationships = [
+                Relationship(**link) for link in edit['relationships']
+            ]
 
 
 def presented(schema: Any) -> list[str]:

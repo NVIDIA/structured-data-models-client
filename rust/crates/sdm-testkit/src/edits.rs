@@ -2,34 +2,27 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The user's edits to the schema, as this host makes them to the
-//! description its own `describe_source` answered (decision E50, T1.21d):
-//! the case names only the edits, never the schema `materialize` samples.
+//! The user's edits to the schema, as this host makes them (decision E67,
+//! T1.24b): each passed to the core's `edit_schema` with the description
+//! the core last answered and the schema as this host holds it, the core
+//! function the Python client's setters pass theirs to, so the core checks
+//! and makes every edit and this host decides none (`crate::host` runs
+//! them). The case names only the edits, never the schema `materialize`
+//! samples (decision E50). An edit the core refuses is the case's outcome,
+//! at the from_source stage, as the Python runner records it.
 //!
-//! An edit is what the Python client's schema does with the same call,
-//! as its host then hands the schema to `materialize`, where that is plain
-//! data: a time column cleared, a column left out, a key named, the
-//! relationships replaced, each once. A key named keeps the count the
-//! description gave its table, as the Python host sends it (its
-//! `_rust/materialize.py` takes each table's `duplicate_keys` from the
-//! core's description, the schema holding none for a key named after it
-//! was built); following an edit past the description is T1.24's (the
-//! `schema_edited` refusal). Which columns the schema joins on is not
-//! re-derived here: the core marks them again from what the host holds
-//! (`materialize`'s consistency check, decision E55). An edit the Python
-//! client refuses (a table or column the schema lacks, a key or time
-//! column left out, a time column named as the key) is this host's
-//! failure, not a case outcome.
+//! This host holds a schema as the description the core last answered
+//! ([`held`]): it changes nothing of it the core did not answer, so it
+//! never holds a schema changed past its description.
 
-use anyhow::{Result, bail};
-use sdm_contract::ops::{ColumnRef, SourceDescription};
+use sdm_contract::ops::{
+    self, ColumnRef, Given, HeldColumn, HeldSchema, HeldTable, SourceDescription,
+};
 use serde::Deserialize;
 
 use crate::case;
 
-/// One edit, in the case format's spelling: the case's own two
-/// (`clear_time_column`, `delete_column`) and the refusal map's probes'
-/// two more (`set_primary_key`, `set_relationships`).
+/// One edit, in the case format's spelling, and the refusal map's probes'.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SchemaEdit {
@@ -39,6 +32,14 @@ pub enum SchemaEdit {
     DeleteColumn { table: String, column: String },
     /// `schema[table].primary_key = column`.
     SetPrimaryKey { table: String, column: String },
+    /// `schema[table].time_column = column`.
+    SetTimeColumn { table: String, column: String },
+    /// `schema[table][column].stype = stype`.
+    SetStype {
+        table: String,
+        column: String,
+        stype: String,
+    },
     /// `schema.relationships = [...]`.
     SetRelationships { relationships: Vec<Link> },
 }
@@ -63,66 +64,113 @@ impl From<&case::Edit> for SchemaEdit {
                 table: table.0.clone(),
                 column: column.0.clone(),
             },
+            case::Edit::SetPrimaryKey { table, column } => SchemaEdit::SetPrimaryKey {
+                table: table.0.clone(),
+                column: column.0.clone(),
+            },
+            case::Edit::SetTimeColumn { table, column } => SchemaEdit::SetTimeColumn {
+                table: table.0.clone(),
+                column: column.0.clone(),
+            },
+            case::Edit::SetStype {
+                table,
+                column,
+                stype,
+            } => SchemaEdit::SetStype {
+                table: table.0.clone(),
+                column: column.0.clone(),
+                stype: stype.0.clone(),
+            },
+            case::Edit::SetRelationships { relationships } => SchemaEdit::SetRelationships {
+                relationships: relationships
+                    .iter()
+                    .map(|link| Link {
+                        source_table: link.source_table.0.clone(),
+                        source_column: link.source_column.0.clone(),
+                        target_table: link.target_table.0.clone(),
+                        target_column: link.target_column.0.clone(),
+                    })
+                    .collect(),
+            },
         }
     }
 }
 
-/// `described` with `edits` made, in order.
-pub fn edited(described: &SourceDescription, edits: &[SchemaEdit]) -> Result<SourceDescription> {
-    let mut schema = described.clone();
-    for edit in edits {
-        match edit {
-            SchemaEdit::ClearTimeColumn { table } => {
-                let Some(at) = schema.tables.iter_mut().find(|t| &t.name == table) else {
-                    bail!("an edit names a table the schema lacks");
-                };
-                at.time_column = None;
-            }
-            SchemaEdit::DeleteColumn { table, column } => {
-                let Some(at) = schema.tables.iter_mut().find(|t| &t.name == table) else {
-                    bail!("an edit names a table the schema lacks");
-                };
-                if at.primary_key.contains(column) || at.time_column.as_ref() == Some(column) {
-                    bail!("an edit leaves out a table's key or time column");
-                }
-                let before = at.columns.len();
-                at.columns.retain(|c| &c.name != column);
-                if at.columns.len() == before {
-                    bail!("an edit names a column the schema lacks");
-                }
-            }
-            SchemaEdit::SetPrimaryKey { table, column } => {
-                let Some(at) = schema.tables.iter_mut().find(|t| &t.name == table) else {
-                    bail!("an edit names a table the schema lacks");
-                };
-                if !at.columns.iter().any(|c| &c.name == column) {
-                    bail!("an edit names a column the schema lacks");
-                }
-                if at.time_column.as_ref() == Some(column) {
-                    bail!("an edit names a table's time column as its key");
-                }
-                at.primary_key = vec![column.clone()];
-            }
-            SchemaEdit::SetRelationships { relationships } => {
-                let mut links: Vec<Vec<ColumnRef>> = Vec::new();
-                for link in relationships {
-                    let pair = vec![
-                        ColumnRef {
-                            table: link.source_table.clone(),
-                            column: link.source_column.clone(),
-                        },
-                        ColumnRef {
-                            table: link.target_table.clone(),
-                            column: link.target_column.clone(),
-                        },
-                    ];
-                    if !links.contains(&pair) {
-                        links.push(pair);
-                    }
-                }
-                schema.links = links;
-            }
+impl SchemaEdit {
+    /// The edit as the contract's `edit_schema` takes it: the same edit
+    /// the Python client's setter passes for the same call.
+    pub fn to_contract(&self) -> ops::SchemaEdit {
+        match self {
+            SchemaEdit::ClearTimeColumn { table } => ops::SchemaEdit::TimeColumn {
+                table: table.clone(),
+                column: Given::Value(None),
+            },
+            SchemaEdit::DeleteColumn { table, column } => ops::SchemaEdit::LeaveOut {
+                table: table.clone(),
+                column: Given::Value(column.clone()),
+            },
+            SchemaEdit::SetPrimaryKey { table, column } => ops::SchemaEdit::PrimaryKey {
+                table: table.clone(),
+                key: Given::Value(Some(vec![column.clone()])),
+            },
+            SchemaEdit::SetTimeColumn { table, column } => ops::SchemaEdit::TimeColumn {
+                table: table.clone(),
+                column: Given::Value(Some(column.clone())),
+            },
+            SchemaEdit::SetStype {
+                table,
+                column,
+                stype,
+            } => ops::SchemaEdit::Stype {
+                table: table.clone(),
+                column: column.clone(),
+                stype: Given::Value(stype.clone()),
+            },
+            SchemaEdit::SetRelationships { relationships } => ops::SchemaEdit::Relationships {
+                links: relationships
+                    .iter()
+                    .map(|link| {
+                        Given::Value(vec![
+                            ColumnRef {
+                                table: link.source_table.clone(),
+                                column: link.source_column.clone(),
+                            },
+                            ColumnRef {
+                                table: link.target_table.clone(),
+                                column: link.target_column.clone(),
+                            },
+                        ])
+                    })
+                    .collect(),
+            },
         }
     }
-    Ok(schema)
+}
+
+/// The schema as this host holds it: the description the core last
+/// answered, as it is, each column's data type by its wire name.
+pub fn held(described: &SourceDescription) -> HeldSchema {
+    HeldSchema {
+        tables: described
+            .tables
+            .iter()
+            .map(|table| HeldTable {
+                name: table.name.clone(),
+                source: table.source.clone(),
+                columns: table
+                    .columns
+                    .iter()
+                    .map(|column| HeldColumn {
+                        name: column.name.clone(),
+                        dtype: column.dtype.wire_name().to_owned(),
+                        stype: column.stype,
+                        stype_before_key: column.stype_before_key,
+                    })
+                    .collect(),
+                primary_key: table.primary_key.clone(),
+                time_column: table.time_column.clone(),
+            })
+            .collect(),
+        links: described.links.clone(),
+    }
 }

@@ -306,7 +306,33 @@ FIRST_PARTY = frozenset(
 #: base's copy of this file already holds grants nothing, so a consumed one
 #: cannot grow the function again after a shrink. The change is declared
 #: ``{"allowance": "<row>"}`` in bridge_changes.json.
-ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {}
+ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {
+    # T1.24b: the owner's allowance of 2026-10-11 for the glue in the frozen
+    # setters that passes a core-built schema's edit to the core's
+    # edit_schema and stores its answer (the branch that finds a core-built
+    # schema, and the call of the bridge that passes the edit on), nothing
+    # that decides an edit itself.
+    'E66': {
+        'packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__': {
+            'raise': 1,
+            'warn': 0,
+            'branch': 11,
+            'calls': ['sdm_client._rust.edits.column'],
+        },
+        'packages/structured-data-models-client/src/sdm_client/schema.py::Schema.__setattr__': {
+            'raise': 0,
+            'warn': 0,
+            'branch': 5,
+            'calls': ['sdm_client._rust.edits.relationships'],
+        },
+        'packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__': {
+            'raise': 0,
+            'warn': 0,
+            'branch': 11,
+            'calls': ['sdm_client._rust.edits.table'],
+        },
+    },
+}
 
 KINDS = ('raise', 'warn', 'branch')
 MODULE = '<module>'

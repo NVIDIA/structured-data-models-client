@@ -37,6 +37,7 @@ use crate::types::ColumnType;
 pub enum Operation {
     ValidateQuery(ValidateQuery),
     DescribeSource(DescribeSource),
+    EditSchema(EditSchema),
     Materialize(Materialize),
     Predict(Predict),
     /// Operations only tests reach, built only with the `test-ops` feature,
@@ -62,6 +63,7 @@ impl Operation {
         match self {
             Operation::ValidateQuery(_) => "validate_query",
             Operation::DescribeSource(_) => "describe_source",
+            Operation::EditSchema(_) => "edit_schema",
             Operation::Materialize(_) => "materialize",
             Operation::Predict(_) => "predict",
             #[cfg(feature = "test-ops")]
@@ -76,8 +78,16 @@ impl Operation {
         match self {
             Operation::ValidateQuery(v) => vec![(v.query, Bytes), (v.schema, Bytes)],
             Operation::DescribeSource(d) => vec![(d.source, Bytes)],
+            Operation::EditSchema(e) => {
+                let mut named = vec![(e.schema, Bytes)];
+                named.extend(e.held.map(|id| (id, Bytes)));
+                named.push((e.edit, Bytes));
+                named
+            }
             Operation::Materialize(m) => {
-                let mut named = vec![(m.schema, Bytes), (m.query, Bytes)];
+                let mut named = vec![(m.schema, Bytes)];
+                named.extend(m.held.map(|id| (id, Bytes)));
+                named.push((m.query, Bytes));
                 named.extend(m.indices.map(|id| (id, Arrow)));
                 named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
                 named
@@ -95,6 +105,7 @@ impl Operation {
 pub enum OperationResult {
     ValidateQuery(QueryValidation),
     DescribeSource(DescribedSource),
+    EditSchema(SchemaEdited),
     Materialize(Materialized),
     Predict(Predicted),
     #[cfg(feature = "test-ops")]
@@ -174,6 +185,29 @@ pub enum Dtype {
     Intlist,
     Stringlist,
     Unsupported,
+}
+
+impl Dtype {
+    /// The data type's name on the client's wire, as a host's schema
+    /// names a column's data type (`int64`, `string`, `timestamp[us]`):
+    /// a date and a time are both `timestamp[us]`.
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Dtype::Bool => "bool",
+            Dtype::Int | Dtype::Int64 => "int64",
+            Dtype::Byte | Dtype::Int16 | Dtype::Int32 => "int32",
+            Dtype::Float | Dtype::Float64 => "float64",
+            Dtype::Float32 => "float32",
+            Dtype::String => "string",
+            Dtype::Date | Dtype::Time => "timestamp[us]",
+            Dtype::Binary => "binary",
+            Dtype::Timedelta => "timedelta",
+            Dtype::Floatlist => "floatlist",
+            Dtype::Intlist => "intlist",
+            Dtype::Stringlist => "stringlist",
+            Dtype::Unsupported => "unsupported",
+        }
+    }
 }
 
 /// PQL's semantic types.
@@ -411,6 +445,136 @@ pub struct DescribedColumn {
     pub unique: bool,
 }
 
+// --- edit_schema ------------------------------------------------------------------
+
+/// Check one edit to a schema the core described and make it, as the
+/// reference client's setters check and make it (decision E67): the
+/// schema the host holds, and the edit; the result is the schema with the
+/// edit made, or the refusal the reference gives at the assignment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EditSchema {
+    /// A bytes attachment of a [`SourceDescription`] as JSON: the
+    /// description the core last answered of the schema,
+    /// `describe_source`'s or the last `edit_schema`'s.
+    pub schema: AttachmentId,
+    /// A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as
+    /// it stands; left out, the host holds `schema` as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<AttachmentId>,
+    /// A bytes attachment of a [`SchemaEdit`] as JSON.
+    pub edit: AttachmentId,
+}
+
+/// `edit_schema`'s result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaEdited {
+    /// A bytes attachment of a [`SourceDescription`] as JSON: the schema
+    /// with the edit made, which the host holds from now on as the
+    /// description the core last answered.
+    pub schema: AttachmentId,
+    /// The column the edit gave a meaning the caller chose (the reference's
+    /// `Column.stype_declared`): the column whose meaning was assigned, or
+    /// the time column named, which is assigned `timestamp`; none for any
+    /// other edit.
+    pub declared: Option<ColumnRef>,
+}
+
+/// A schema as a host holds it, beside the description the core last
+/// answered of it (decision E67): the host's schema may have been changed
+/// since in ways no edit the core takes says (a table or column added, a
+/// column retyped, a table mapped to another source table, a table or
+/// column dropped from its dictionary). `edit_schema` and `materialize`
+/// read the description as the host holds it: its tables, columns,
+/// meanings, keys, time columns and links the host's, what the source said
+/// of each column the description's; a table or column the description
+/// lacks, a column of another data type, or a table of another source is
+/// refused by name (`schema_edited`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldSchema {
+    /// The host's tables as they stand, in its order, each by the name the
+    /// schema gives it.
+    pub tables: Vec<HeldTable>,
+    /// The host's relationships as they stand, each
+    /// `[foreign key, referenced key]`.
+    pub links: Vec<Vec<ColumnRef>>,
+}
+
+/// One table as the host holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldTable {
+    pub name: String,
+    /// The source's name of the table it reads, as the host holds it.
+    pub source: String,
+    pub columns: Vec<HeldColumn>,
+    pub primary_key: Vec<String>,
+    pub time_column: Option<String>,
+}
+
+/// One column as the host holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HeldColumn {
+    pub name: String,
+    /// The column's data type as the host names it, on the client's wire
+    /// ([`Dtype::wire_name`]).
+    pub dtype: String,
+    pub stype: Stype,
+    /// What the column meant before the schema joined on it, as the host
+    /// holds it ([`DescribedColumn::stype_before_key`]).
+    pub stype_before_key: Option<Stype>,
+}
+
+/// One edit to a schema, as the caller made it to the host's schema, each
+/// value as the contract writes it or [`Given::Unreadable`]: the host
+/// passes every edit it is given, and the core takes or refuses it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "edit", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SchemaEdit {
+    /// A table's primary key set (`schema[table].primary_key = key`), its
+    /// columns in order, or cleared (`null`).
+    PrimaryKey {
+        table: String,
+        key: Given<Option<Vec<String>>>,
+    },
+    /// A table's time column set (`schema[table].time_column = column`),
+    /// or cleared (`null`).
+    TimeColumn {
+        table: String,
+        column: Given<Option<String>>,
+    },
+    /// A column's meaning set (`schema[table][column].stype = stype`), as
+    /// the text the caller gave.
+    Stype {
+        table: String,
+        column: String,
+        stype: Given<String>,
+    },
+    /// A column left out (`del schema[table][column]`).
+    LeaveOut {
+        table: String,
+        column: Given<String>,
+    },
+    /// The relationships replaced (`schema.relationships = links`), or
+    /// edited as a list, as the list stands after the edit; each
+    /// `[foreign key, referenced key]`.
+    Relationships { links: Vec<Given<Vec<ColumnRef>>> },
+}
+
+/// A value a caller gave an edit: the value, as the contract writes it, or
+/// a value of the host's own no contract type holds (a key named by a
+/// number, a set of names, a relationship that is not one), which the
+/// core refuses as the reference refuses it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum Given<T> {
+    Value(T),
+    Unreadable,
+}
+
 // --- materialize and predict --------------------------------------------------
 
 /// Build a request for a query over a described source.
@@ -418,8 +582,15 @@ pub struct DescribedColumn {
 #[serde(deny_unknown_fields)]
 pub struct Materialize {
     pub provider: ProviderChoice,
-    /// A bytes attachment of a [`SourceDescription`] as JSON.
+    /// A bytes attachment of a [`SourceDescription`] as JSON: the
+    /// description the core last answered of the schema, or the schema to
+    /// sample.
     pub schema: AttachmentId,
+    /// A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as
+    /// it stands, which the core reads beside `schema` (decision E67); left
+    /// out, the host holds `schema` as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<AttachmentId>,
     /// The query text: a bytes attachment of a JSON string.
     pub query: AttachmentId,
     /// The entities to predict for: an Arrow attachment of one column.
@@ -683,8 +854,18 @@ pub struct Attachments {
     pub describe_source_source: SourceSpec,
     #[schemars(rename = "DescribedSource.description")]
     pub described_source_description: SourceDescription,
+    #[schemars(rename = "EditSchema.schema")]
+    pub edit_schema_schema: SourceDescription,
+    #[schemars(rename = "EditSchema.held")]
+    pub edit_schema_held: HeldSchema,
+    #[schemars(rename = "EditSchema.edit")]
+    pub edit_schema_edit: SchemaEdit,
+    #[schemars(rename = "SchemaEdited.schema")]
+    pub schema_edited_schema: SourceDescription,
     #[schemars(rename = "Materialize.schema")]
     pub materialize_schema: SourceDescription,
+    #[schemars(rename = "Materialize.held")]
+    pub materialize_held: HeldSchema,
     #[schemars(rename = "Materialize.query")]
     pub materialize_query: String,
     #[schemars(rename = "SamplerState.memo")]

@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -573,6 +573,263 @@
         "stage": "predict",
         "code": "INVALID_REQUEST"
       }
+    },
+    {
+      "why": "a set_primary_key edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers"
+      }
+    },
+    {
+      "why": "a set_primary_key edit naming an empty column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": ""
+      }
+    },
+    {
+      "why": "a set_primary_key edit naming its key as a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": [
+          "CustomerID"
+        ]
+      }
+    },
+    {
+      "why": "a set_primary_key edit with a key it does not take",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": "CustomerID",
+        "stype": "ID"
+      }
+    },
+    {
+      "why": "a set_time_column edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "a set_time_column edit naming a null column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products",
+        "column": null
+      }
+    },
+    {
+      "why": "a set_stype edit without its stype",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color"
+      }
+    },
+    {
+      "why": "a set_stype edit with an empty stype",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": ""
+      }
+    },
+    {
+      "why": "a set_stype edit with a stype that is not text",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": 7
+      }
+    },
+    {
+      "why": "a set_stype edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "stype": "categorical"
+      }
+    },
+    {
+      "why": "a set_relationships edit without its relationships",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships"
+      }
+    },
+    {
+      "why": "a set_relationships edit whose relationships are not a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        }
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship missing a key",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship with a key beside its four",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID",
+            "kind": "many_to_one"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship that is a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          [
+            "sales_order_headers",
+            "CustomerID",
+            "customers",
+            "CustomerID"
+          ]
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship naming an empty column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a table key",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "table": "customers",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
     }
   ],
   "accepted": [
@@ -644,6 +901,91 @@
         "outcome": "success",
         "stage": "predict",
         "today": "t"
+      }
+    },
+    {
+      "why": "a set_primary_key edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": "CustomerID"
+      }
+    },
+    {
+      "why": "a set_time_column edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products",
+        "column": "SellStartDate"
+      }
+    },
+    {
+      "why": "a set_stype edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": "categorical"
+      }
+    },
+    {
+      "why": "a set_stype edit with a stype the reference refuses, which the call refuses",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": "banana"
+      }
+    },
+    {
+      "why": "a set_relationships edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with no relationships",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": []
       }
     }
   ],

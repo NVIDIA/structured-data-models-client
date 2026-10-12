@@ -185,13 +185,26 @@
                 }
               },
               {
+                "description": "edit_schema's start (T1.24b): the description the core last answered, the schema as the host holds it, and the edit.",
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["op", "provider", "schema", "query", "indices", "anchor_time", "seed"],
+                "required": ["op", "schema", "held", "edit"],
+                "properties": {
+                  "op": {"const": "edit_schema"},
+                  "schema": {"description": "The contract's SourceDescription.", "type": "object"},
+                  "held": {"description": "The contract's HeldSchema.", "type": "object"},
+                  "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "provider", "schema", "held", "query", "indices", "anchor_time", "seed"],
                 "properties": {
                   "op": {"const": "materialize"},
                   "provider": {"type": "object"},
-                  "schema": {"description": "The contract's SourceDescription.", "type": "object"},
+                  "schema": {"description": "The contract's SourceDescription: the description the core last answered.", "type": "object"},
+                  "held": {"description": "The contract's HeldSchema: the schema as the host holds it (T1.24b).", "type": "object"},
                   "query": {"type": "string"},
                   "indices": {"description": "One Arrow column, each value a contract scalar.", "type": ["array", "null"], "items": {"type": "object"}},
                   "anchor_time": {"type": ["object", "null"]},
