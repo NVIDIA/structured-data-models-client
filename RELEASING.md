@@ -87,19 +87,22 @@ internal**.
 
 One Portal project exists per distribution, because Kitmaker matches the
 project name against the distribution name parsed from each filename. Their
-ids are in `publish.yml`, and the job checks each id still carries the name it
-expects before sending anything, since a mismatch would publish one
-distribution's files under another's name. Every project is dry-run with
-`upload: false` before the real submission; Kitmaker batches are sequential and
-not atomic, and a published file cannot be recalled.
+ids are in `.github/workflows/kitmaker_release.py`, and each is checked against
+the name it should carry before anything is sent, so a renamed or reassigned id
+fails early rather than being trusted. Every project is validated and dry-run
+to a terminal state before *any* of them publishes, because the five
+distributions pin each other by exact version and a client live without its
+engine is worse than a release that never started. Kitmaker batches are
+sequential and not atomic, and a published file cannot be recalled.
 
 **There is a stored credential.** `KITMAKER_API_TOKEN` is a long-lived bearer
 token in this repository's secrets, held only by the `kitmaker` job behind the
 protected `pypi` environment. The previous Trusted Publishing setup avoided a
 stored token; this is the cost of publishing through Kitmaker.
 
-**There are no PEP 740 attestations.** They are issued to whoever uploads, and
-that is Kitmaker. SECURITY.md tells consumers what they can verify instead.
+**This workflow no longer signs what it ships.** PEP 740 attestations go to
+whoever uploads, and that is Kitmaker, so nothing here produces one naming this
+repository. SECURITY.md tells consumers what they can check instead.
 
 ## After
 

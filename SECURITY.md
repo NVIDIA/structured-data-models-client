@@ -37,17 +37,21 @@ GitHub release in this repository. Kitmaker publishes to
 What that gives you is NVIDIA's ownership of the project on PyPI: the
 distribution lives under the NVIDIA organization, which is the same assurance
 that covers NVIDIA's other published packages. What it does not give you is a
-per-file signature traceable to this repository. The uploader is Kitmaker, so
-there is no PEP 740 attestation naming this repository's release workflow, and
-there is nothing for `pypi-attestations` to check.
+per-file signature traceable to this repository. The uploader is Kitmaker, so no PEP 740
+attestation names this repository's release workflow. Whether PyPI holds a
+Kitmaker attestation instead is Kitmaker's to say; what this repository can
+tell you is that it does not sign these files itself.
 
-If you want to confirm you have the bytes this repository built, compare
-against the release assets, which are the same files Kitmaker was asked to
-publish:
+You can compare a downloaded file against the asset of the same name on the
+corresponding GitHub release. That shows the two locations hold the same bytes
+at the time you look, which is worth something, but it is not proof of how
+either was built: release assets can be replaced after publication, so a
+mismatch is not by itself evidence of tampering on PyPI, and a match is not
+evidence that this repository produced them.
 
 ```bash
 pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify
-# then compare the wheel's digest against the asset of the same name at
+# then compare that file's digest against the asset of the same name at
 # https://github.com/NVIDIA/structured-data-models-client/releases/tag/v1.0.0
 ```
 

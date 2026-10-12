@@ -19,16 +19,18 @@
 # It is held by one job, behind a protected environment, and it can publish
 # only to the five Portal projects it owns.
 #
-# There are no PEP 740 attestations. Those are issued to whoever uploads, and
-# the uploader is Kitmaker, not this workflow. A consumer verifies these
-# distributions by NVIDIA's ownership of the PyPI project, not by a signature
-# traceable to this repository. SECURITY.md says so plainly.
+# This workflow no longer signs what it ships. PEP 740 attestations are issued
+# to whoever uploads, and that is Kitmaker now, so nothing here produces one
+# naming this repository. Whether Kitmaker supplies its own is Kitmaker's to
+# say. A consumer is left with NVIDIA's ownership of the PyPI project, which
+# SECURITY.md states rather than dressing up.
 #
 # `build` has `contents: read` to check the tree out and `actions: read` to ask
 # whether CI passed, and nothing more, so a compromised build dependency cannot
 # publish anything itself. It can still decide what gets published, because it
 # is what produces the distributions. `release` has `contents: write` to create
-# the GitHub Release and attach the artifacts. `kitmaker` holds the token.
+# the GitHub Release, verify the tag and attach the artifacts. `kitmaker`
+# holds the token and needs nothing else.
 name: publish
 
 on:
@@ -260,9 +262,14 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --clobber
 
   # One Portal project per distribution, because Kitmaker matches the project
-  # name against the distribution name parsed from each filename. Sending the
-  # whole of `dist/` to one project would be rejected on the first file that
-  # belongs to another.
+  # name against the distribution name parsed from each filename.
+  #
+  # Two passes on purpose. Every project is validated and dry-run to a terminal
+  # state before any of them publishes, because the five distributions pin each
+  # other by exact version: a client live without the engine it requires is
+  # worse than a release that did not start. Portal batches are sequential and
+  # not atomic, and a published file cannot be recalled, so the only moment
+  # this can be stopped cheaply is before the first upload.
   kitmaker:
     needs: release
     runs-on: ubuntu-latest
@@ -284,90 +291,15 @@ jobs:
           set -euo pipefail
           : "${KITMAKER_API_TOKEN:?KITMAKER_API_TOKEN is not set}"
           : "${PIC:?KITMAKER_PIC is not set}"
-          rm -f dist/sbom.cyclonedx.json dist/notes.md
-
-          api=https://kitmaker-portal.nvidia.com/api/v0
-
-          # Portal project ids, created once and owned by the PIC. A name here
-          # that does not match its id would publish one distribution's files
-          # under another's name, so the release step below checks the id's
-          # name against this table before it sends anything.
-          projects='
-          6898 structured-data-models-client
-          6899 structured-data-models-api
-          6900 structured-data-models-pql
-          6901 structured-data-models-connectors
-          6902 structured-data-models-relational-engine
-          '
-
-          # `gh release view` gives the public download URL for each asset,
-          # which is the form Kitmaker accepts.
+          # `gh release view` lists whatever is attached, which on a rerun can
+          # include assets this run did not build. The artifact `build` handed
+          # over is the authority for what may be published, so the asset list
+          # is filtered down to exactly its filenames.
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
             --json assets --jq '.assets[] | "\(.name)\t\(.url)"' > assets.tsv
           test -s assets.tsv
+          python3 .github/workflows/kitmaker_release.py
 
-          # A distribution name canonicalises the same way Kitmaker does it:
-          # lower case, and `.` `_` `-` all equivalent.
-          canon() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '._' '--'; }
-
-          submit() {  # $1 project_id, $2 project_name, $3 upload
-            local id="$1" name="$2" upload="$3" body
-            body=$(python3 - "$name" "$upload" "$PIC" <<'EOF'
-          import json, sys, os, re
-          name, upload, pic = sys.argv[1], sys.argv[2] == 'true', sys.argv[3]
-          canon = lambda s: re.sub(r'[._-]+', '-', s).lower()
-          urls = []
-          for line in open('assets.tsv'):
-              fname, url = line.rstrip('\n').split('\t')
-              if not fname.endswith(('.whl', '.tar.gz')):
-                  continue
-              dist = fname.split('-')[0] if fname.endswith('.whl') else fname.rsplit('-', 1)[0]
-              if canon(dist) == canon(name):
-                  urls.append(url)
-          if not urls:
-              sys.exit(f'no artifacts in the release belong to {name}')
-          print(json.dumps({
-              'project_name': name,
-              'payload': [
-                  {'pic': pic, 'job_type': 'wheel-release-job', 'url': u, 'upload': upload}
-                  for u in urls
-              ],
-          }))
-          EOF
-          )
-            curl --fail --silent --show-error -X POST "$api/projects/$id/releases" \
-              -H "Authorization: Bearer $KITMAKER_API_TOKEN" \
-              -H 'Content-Type: application/json' -d "$body"
-          }
-
-          echo "$projects" | while read -r id name; do
-            [ -z "$id" ] && continue
-            # The id is the authority for where files land, so confirm it still
-            # carries the name this table claims before trusting either.
-            actual=$(curl --fail --silent -H "Authorization: Bearer $KITMAKER_API_TOKEN" \
-              "$api/projects/$id" | python3 -c 'import sys,json; print(json.load(sys.stdin)["name"])')
-            if [ "$actual" != "$name" ]; then
-              echo "::error::Portal project $id is '$actual', not '$name'"
-              exit 1
-            fi
-            # Dry run first. Kitmaker batches are sequential and not atomic, and
-            # a published file cannot be recalled, so input errors are worth
-            # finding before anything is live.
-            echo "dry run: $name"
-            submit "$id" "$name" false >/dev/null
-            echo "publishing: $name"
-            uuid=$(submit "$id" "$name" true \
-              | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("uuid") or d.get("release_uuid") or "")')
-            [ -z "$uuid" ] && { echo "::error::$name returned no release uuid"; exit 1; }
-            echo "  $name -> $uuid"
-            for attempt in $(seq 1 60); do
-              state=$(curl --fail --silent -H "Authorization: Bearer $KITMAKER_API_TOKEN" \
-                "$api/status/$uuid" \
-                | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status",""))')
-              case "$state" in
-                completed|success) echo "  $name: $state"; break ;;
-                failed|error|cancelled) echo "::error::$name finished as $state"; exit 1 ;;
-              esac
-              sleep 30
-            done
-          done
+      - name: The release notes name what was published
+        if: always()
+        run: cat kitmaker-summary.txt 2>/dev/null || true
