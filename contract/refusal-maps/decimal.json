@@ -15,7 +15,7 @@
       "rule": "wire_dtype",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-request/src/payload.rs:144",
+      "where": "rust/crates/sdm-request/src/payload.rs:150",
       "why": "A DECIMAL(38, 0) feature past float64's and int64's precision has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
       "observed": {
         "python-core": {
