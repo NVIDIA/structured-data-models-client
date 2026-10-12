@@ -525,9 +525,13 @@ for item in sys.argv[8 + int(count):]:
     checks[number] = {'result': verdict, 'steps': names.split()}
 found = {'sha': head, 'halves': {}}
 if os.path.exists(path):
-    with open(path, encoding='utf-8') as file:
-        found = json.load(file)
-    if found.get('sha') != head or not isinstance(found.get('halves'), dict):
+    try:
+        with open(path, encoding='utf-8') as file:
+            found = json.load(file)
+    except (OSError, ValueError, RecursionError):
+        sys.exit(f'{path}: not evidence it reads')
+    if not isinstance(found, dict) or found.get('sha') != head or not isinstance(
+            found.get('halves'), dict):
         sys.exit(f'{path}: not this candidate\'s evidence')
 found['halves'][half] = {'checkpoint': checkpoint, 'base': base,
                          'passed': failed == '0', 'checks': checks, 'steps': steps}
