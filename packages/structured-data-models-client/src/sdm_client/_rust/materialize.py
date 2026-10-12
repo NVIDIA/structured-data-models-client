@@ -272,6 +272,9 @@ def gather(
         'query': 2,
         'indices': 3,
         'anchor_time': _anchor(options.get('anchor_time')),
+        # The seed given, as its field, beside the call's values, which name
+        # a seed of another type or none (an unseeded sample) for the core.
+        'seed': codec.seed(options.get('random_seed')),
         'anchor_entity': isinstance(anchor, str) and anchor == 'entity',
         # The call's values the core reads (T1.28a), the seed among them: a
         # seed given as None asks for an unseeded sample, a new one each

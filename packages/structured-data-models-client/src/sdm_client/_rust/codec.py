@@ -246,12 +246,15 @@ def timestamp(value: int, unit: str, zone: str | None) -> dict[str, Any]:
     return {**integer('i64', value), 't': 'ts', 'unit': unit, 'zone': zone}
 
 
-def seed(value: int) -> str:
-    r"""A seed as the contract writes one: an integer of any size as signed
-    hexadecimal text with no leading zeros, so no integer reader's digit
-    limit is met (decision H7)."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise CodecError('seed: not an integer')
+def seed(value: Any) -> str | None:
+    r"""A seed as the contract writes one: an integer of any size (a NumPy
+    integer too) as signed hexadecimal text with no leading zeros, so no
+    integer reader's digit limit is met (decision H7). None for none, or for
+    a value of another type, which the call's values carry to the core as
+    given, and the core refuses (T1.28a)."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Integral):
+        return None
+    value = int(value)
     sign = '-' if value < 0 else ''
     return f'{sign}0x{abs(value):x}'
 

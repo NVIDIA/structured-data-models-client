@@ -92,7 +92,7 @@
         ]
       },
       "gather": {
-        "fingerprint": "b64222abf5be810a195a4d01a61af8cc72f9a673ca2d138a4940c93e544c8550",
+        "fingerprint": "10a8342d3dd327b8ea62e66a842f66338ae2c57a01a2598073a787943fcd9595",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -102,6 +102,7 @@
           ".to_string",
           "predictive_query.validator.utils.table_name",
           "sdm_client._rust.codec.attachment",
+          "sdm_client._rust.codec.seed",
           "sdm_client._rust.providers.duckdb.DuckDBProvider",
           "sdm_client._rust.run.run"
         ]
