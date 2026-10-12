@@ -214,17 +214,21 @@ if [ "$harness" = 0 ]; then
 fi
 
 # The evidence stays outside the tested tree (design, "CI"): the clone's git
-# directory, or a directory outside the worktree.
+# directory, or a directory outside the worktree, judged where each really
+# resolves (every symbolic link in the existing part of a path followed),
+# not by its spelling.
 if [ -n "$locked" ]; then
-  if [ -z "$evidence" ]; then
-    evidence=$(git -C "$candidate" rev-parse --path-format=absolute --git-common-dir)/sdm-gate-evidence || exit 2
-  fi
-  case "$evidence/" in
-    "$candidate"/.git/*) ;;
-    "$candidate"/*)
-      echo "gate.sh: the evidence directory $evidence is inside the worktree it judges" >&2
-      exit 2 ;;
-  esac
+  common=$(git -C "$candidate" rev-parse --path-format=absolute --git-common-dir) || exit 2
+  [ -n "$evidence" ] || evidence=$common/sdm-gate-evidence
+  "$PYTHON" - "$evidence" "$candidate" "$common" <<'EOF' || exit 2
+import os, sys
+evidence, candidate, common = (os.path.realpath(path) for path in sys.argv[1:])
+def under(path, root):
+    return os.path.commonpath([path, root]) == root
+if under(evidence, candidate) and not under(evidence, common):
+    sys.exit(f'gate.sh: the evidence directory {sys.argv[1]} resolves to {evidence}, '
+             'inside the worktree it judges')
+EOF
 fi
 
 # --- the harness: $here judges $candidate ---------------------------------------
@@ -390,7 +394,8 @@ fi
 # --- the locked checks' own steps (--locked) --------------------------------
 
 # The seeded-fault suite of locked check 2: each check's seeded faults
-# (as-built, T1.15's table); no file here runs gate.sh --locked itself.
+# (as-built, T1.15's table); no file here runs gate.sh --locked itself
+# (test_gate_modes.py and test_gate_evidence_paths.py do, so stay out).
 SEEDED=(
   contract/tests/test_gate_controls.py
   contract/tests/test_payload_and_result_rules.py
@@ -401,6 +406,8 @@ SEEDED=(
   tests/test_contract_ratchet.py
   tests/test_contract_register.py
   tests/test_contract_coverage.py
+  tests/test_contract_coverage_approval.py
+  tests/test_contract_compare_depth.py
 )
 runners_cover() {
   "$PYTHON" - "${given[@]+"${given[@]}"}" <<'EOF'
