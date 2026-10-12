@@ -913,6 +913,9 @@ entries:
     map lists it (materialize/text_time_cast, owner T1.32e, which settles
     the code when it admits the cases). A refusal for a refusal under
     another code, so for the owner, beside P1B-1. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+    Reached at T1.24b too through an edit naming a text column the time
+    column (the E49 differential, one source): the same codes on each
+    route.
 
 - id: DT-13
   title: A zoned time column read in the fetching cursor's zone, as the reference reads it
@@ -1226,7 +1229,9 @@ entries:
     time column come back in no fixed order, on the core and on the
     reference with its null handling corrected (measured at T1.26b's
     review round 2).
-  affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
+  affected_inputs: >-
+    Relational requests whose neighbor tables have NULL or tied times, or
+    null keys.
   cases: [T1.26, T1.26b]
   status: proposed
   approved_by: null
@@ -1428,9 +1433,13 @@ entries:
     raised StructuredDataError with the same code until T1.24; T1.23's
     table_source is lifted at T1.24, a table the schema names otherwise
     than its source sampled by its source name, as the reference samples
-    it; in the bridge, before the core runs: key_type and schema_edited (a
-    table, column or type changed since the description, or a table
-    mapped to another source table than the description's; T1.24b's).
+    it; in the bridge, before the core runs: key_type; in the core from
+    T1.24b, before materialize's run exists, schema_edited (a table or
+    column the description lacks, a column retyped, or a table mapped to
+    another source table than the description's: the core reads the
+    schema as the host holds it beside the description it last answered,
+    sdm_schema::edit::read_held, and refuses such a schema there and at an
+    edit, P1B-17), until T1.24b the bridge's.
     The entities are cast to the key's type as the
     reference casts them (pandas, to the key's Arrow dtype), so none the
     reference takes is refused. A schema not described on the core has no core route
@@ -1479,6 +1488,11 @@ entries:
     linking nothing to a one-column sequence key; (b) it carries a flag and
     the core refuses a one-column sequence key by name; (c) approve reading
     it as a plain name. The owner chose (c), for now, on 2026-10-11: P1B-15.
+    Measured at T1.24b by the E49 differential over 102 generated DuckDB
+    sources, each with a sequence of edits (574 steps): keyless_neighbors is
+    reached where an edit clears the key of a table others refer to (5
+    sources), the reference sampling them; nothing else of this entry
+    differed.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1936,7 +1950,14 @@ entries:
     semantics, schema_edited), so the owner decides this with it. Pinned
     by the client's tests/test_the_materialize_route.py,
     test_a_schema_edited_between_two_calls_is_sampled_as_edited, on both
-    routes. Never self-approved.
+    routes. Never self-approved. T1.24b leaves it as registered: an edit is
+    the core's edit_schema, made on the schema the host holds and stored
+    there, and materialize reads that schema as it stands at each call
+    (the held schema beside the description, decision E67), so the
+    sampler state's fingerprint follows a key, link or time column edited
+    between calls as before; the pinning test is unchanged and passes on
+    both routes. The implementer's recommendation to the owner is in the
+    tracker's Journey row.
 
 
 - id: P1B-15
@@ -1966,6 +1987,76 @@ entries:
     option (c), approved for now, of the three recorded at T1.25 in P1B-3's
     notes (the key's form carried and the reference matched; a flag and a
     named refusal; the plain name).
+
+- id: P1B-16
+  title: An edit naming a column by a value no name is is refused by name on the core route
+  kind: change
+  old_behavior: >-
+    The reference looks a column up by the value an edit gives
+    (schema[t].time_column = value, schema[t][c].stype = value,
+    del schema[t][value], a Relationship naming a column by the value), and
+    a value that cannot be looked up, a list, raises Python's TypeError
+    (unhashable type) from the lookup, naming nothing; a value that can be
+    and is no name (a number) is refused INVALID_REQUEST.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    core-built schema's setter passes the value to the core's edit_schema
+    as unreadable where no contract type holds it, and the core refuses it
+    INVALID_REQUEST naming the field (time_column, stype, column,
+    relationships), the schema left as it was (T1.24b, decision E67). The
+    values the reference refuses by name are refused alike.
+  affected_inputs: >-
+    Edits to a schema Schema.from_source described on the core route that
+    name a column by an unhashable value.
+  cases: [T1.24b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.24b and pinned on both routes by the client's
+    tests/test_the_schema_edits.py,
+    test_a_value_no_name_is_is_refused_by_name_where_the_reference_crashes
+    (TypeError on the old route, INVALID_REQUEST on the core). The
+    implementer reads it as fitting E66(b)'s class (the reference gives an
+    unnamed error, the core a named refusal); whether it does is the
+    owner's or the reviewer's to say. Never self-approved.
+
+- id: P1B-17
+  title: An edit to a schema changed past its description is refused by name at the edit on the core route
+  kind: change
+  old_behavior: >-
+    The reference makes an edit to a schema of tables in their source
+    whatever was changed of it before: a column's data type assigned, a
+    table mapped to another source table, a table or column added through
+    the schema's dictionaries.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core's edit_schema reads the schema as the host holds it beside the
+    description the core last answered, and refuses such a schema by name,
+    UNSUPPORTED_REQUEST with operation edit_schema and rule schema_edited,
+    at the next key, time column, meaning, column left out or relationships
+    edit, the schema left as it was (T1.24b, decision E67). Until T1.24b
+    the Python setters made that edit, and only materialize refused the
+    schema (P1B-3's schema_edited, which it still is at materialize). An
+    edit of the data type, the source name or a dictionary is not passed
+    to the core, as before.
+  affected_inputs: >-
+    A schema Schema.from_source described on the core route, a column
+    retyped, a table mapped to another source table or a table or column
+    added since, then edited by a setter the core takes.
+  cases: [T1.24b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    The core checks an edit against what the source said of each column
+    (its data type), which it does not know of a column it did not
+    describe or one retyped since; following such a schema is later work,
+    with materialize's (P1B-3). Pinned by the client's
+    tests/test_the_schema_edits.py,
+    test_a_schema_changed_past_its_description_is_refused_by_name, and
+    sdm-schema's and sdm-core's tests. A refusal of an input the reference
+    accepts, so for the owner. Never self-approved.
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
