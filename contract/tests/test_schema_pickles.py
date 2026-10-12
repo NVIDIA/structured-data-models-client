@@ -179,3 +179,47 @@ def test_a_core_built_schema_pickles_as_the_old_route_s(
         loaded.relationships.append(
             Relationship('orders', 'nothing', 'buyers', 'user_id')
         )
+
+
+def test_an_edited_core_built_schema_round_trips_its_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.24b: the edits a core-built schema took (decision E67) are its
+    # state, the core's last answer among it; reloaded, the schema is the
+    # edited one, and its next edit is the core's again.
+    from sdm_client import Relationship, Schema, StructuredDataError, _routing
+
+    core = _shop(','.join(_routing.FROM_SOURCE_DUCKDB_TABLES), monkeypatch)
+    core['buyers']['age'].stype = 'categorical'
+    core['orders'].time_column = None
+    core['orders'].primary_key = ('order_id',)
+    del core['orders']['price']
+    core.relationships = [
+        Relationship('orders', 'user_id', 'buyers', 'user_id')
+    ]
+    state = {
+        key: value for key, value in vars(core).items() if key != '_source'
+    }
+
+    class _WithoutTheSource(pickle.Pickler):
+        def reducer_override(self, obj: Any) -> Any:
+            if obj is core:
+                return object.__new__, (Schema,), state
+            return NotImplemented
+
+    written = io.BytesIO()
+    _WithoutTheSource(written).dump(core)
+    loaded = pickle.loads(written.getvalue())
+    assert loaded._core_description == core._core_description
+    assert _writer().projection(loaded) == {
+        **_writer().projection(core),
+        'source': False,
+    }
+    assert loaded['buyers']['age'].stype_declared is True
+    assert loaded['orders'].primary_key == ('order_id',)
+    assert 'price' not in loaded['orders'].columns
+    with pytest.raises(StructuredDataError) as refused:
+        loaded['orders'].time_column = 'user_id'
+    assert refused.value.details['field'] == 'time_column'
+    loaded['orders'].time_column = 'ts'
+    assert loaded._core_description['tables'][1]['time_column'] == 'ts'

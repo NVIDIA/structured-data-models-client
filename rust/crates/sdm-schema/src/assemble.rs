@@ -648,7 +648,10 @@ pub fn mark_keys(description: &mut SourceDescription) {
 }
 
 /// Refuses a schema whose links cannot join (`Schema.check_consistent`'s
-/// relationships), as `INVALID_REQUEST`.
+/// relationships), as `INVALID_REQUEST`; then, as the reference's engine
+/// refuses the graph it is handed (`Graph._edge_error`), a link whose
+/// foreign key is its own table's primary key (T1.24b: found by the E49
+/// differential, a key named on a link's foreign key).
 pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
     for link in &description.links {
         let message = match joins(&description.tables, link) {
@@ -672,6 +675,25 @@ pub fn check_links(description: &SourceDescription) -> Result<(), CoreError> {
                 .with_field("target_column", Detail::text(&referenced.column));
         }
         return Err(refused);
+    }
+    for link in &description.links {
+        let [foreign, referenced] = link.as_slice() else {
+            continue;
+        };
+        let keyed = description
+            .tables
+            .iter()
+            .find(|t| t.name == foreign.table)
+            .is_some_and(|t| t.primary_key == [foreign.column.clone()]);
+        if keyed {
+            return Err(named_link(
+                invalid(
+                    "a relationship's foreign key is its table's primary key",
+                    "relationships",
+                ),
+                &[foreign.clone(), referenced.clone()],
+            ));
+        }
     }
     Ok(())
 }

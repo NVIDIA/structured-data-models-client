@@ -170,12 +170,26 @@ def _store(
             del table.columns[gone]
         for column_name, column in table.columns.items():
             said = columns[column_name]
-            if column.stype != said['stype']:
-                object.__setattr__(column, 'stype', said['stype'])
-            if column._stype_before_key != said['stype_before_key']:
-                object.__setattr__(
-                    column, '_stype_before_key', said['stype_before_key']
+            # A meaning the column holds already, as its meaning or as what
+            # it meant before the schema joined on it, is kept as the
+            # object it is, as the reference's marks move it between the
+            # two.
+            held = (column.stype, column._stype_before_key)
+            for field, value in (
+                ('stype', said['stype']),
+                ('_stype_before_key', said['stype_before_key']),
+            ):
+                kept = next(
+                    (
+                        each
+                        for each in held
+                        if each is not None
+                        and value is not None
+                        and each == value
+                    ),
+                    value,
                 )
+                object.__setattr__(column, field, kept)
     if declared is not None:
         chosen = schema.tables[declared['table']].columns[declared['column']]
         object.__setattr__(chosen, 'stype_declared', True)

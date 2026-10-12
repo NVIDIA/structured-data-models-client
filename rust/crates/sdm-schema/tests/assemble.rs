@@ -479,6 +479,21 @@ fn a_link_that_cannot_join_is_refused_by_the_consistency_check() {
     let mut widened = description();
     widened.tables[0].columns[1].dtype = Dtype::Float;
     assert!(assemble::check_links(&widened).is_ok());
+    // A link whose foreign key is its own table's primary key, which the
+    // reference's engine refuses (`Graph._edge_error`), is refused naming
+    // the link (T1.24b); the same key on another column of it is not.
+    let mut keyed = description();
+    let foreign = keyed.links[0][0].clone();
+    let table = keyed
+        .tables
+        .iter_mut()
+        .find(|t| t.name == foreign.table)
+        .unwrap();
+    table.primary_key = vec![foreign.column.clone()];
+    let err = assemble::check_links(&keyed).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(err.fields["field"], Detail::text("relationships"));
+    assert_eq!(err.fields["source_column"], Detail::text(&foreign.column));
 }
 
 #[test]
