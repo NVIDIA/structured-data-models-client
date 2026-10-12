@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The schema's edits on the pure-Rust host (T1.24b, decision E67): each
-//! `edit.*` case's edits are the core's `edit_schema`, as on python-core,
+//! `edit.*` case's (`contract/fixtures/edit-cases`) edits are the core's `edit_schema`, as on python-core,
 //! and what this host starts the core with, the core's error code and the
 //! request state are the ones `contract/pinned/edits.core.json` pins from
 //! python-core's run (`contract/tests/test_edit_cases.py`), so CI gates the
@@ -49,13 +49,13 @@ fn digest(value: &Value) -> String {
 /// Each edit case, run on this host: what the pin holds of it, by case.
 fn observed() -> BTreeMap<String, Value> {
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(contract().join("cases/s1"))
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(contract().join("fixtures/edit-cases"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("edit."))
+                .is_some_and(|name| name.starts_with("edit.") && name.ends_with(".json"))
         })
         .collect();
     paths.sort();

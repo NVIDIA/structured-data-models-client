@@ -8,7 +8,9 @@ Run where the contract tests run:
 
     python -m pytest contract/tests -q
 
-The ``edit.*`` cases (``contract/cases/s1``) make edits to the schema
+The ``edit.*`` cases (``contract/fixtures/edit-cases``, in the case
+format, outside ``contract/cases`` until the format's new edits are the
+gate's checkpoint's, as its README says) make edits to the schema
 ``Schema.from_source`` returned, each through the case format's edits:
 seven the reference refuses at the assignment (a key on a column the table
 lacks or on its time column, a time column that cannot hold a time, a
@@ -18,7 +20,9 @@ takes, then materializes. Each edit is the core's ``edit_schema`` on both
 core hosts (decision E67). What holds them:
 
 - the reference's outcome: python-core's outcome is each case's
-  ``expect``, which the committed reference observation records;
+  ``expect``, which the reference observation recorded beside the cases
+  (``reference.jsonl``, recorded on python-ref under T1.13's rules)
+  records;
 - the two core hosts agree: what python-core's host started the core with
   (``core.inputs``: the description, the schema held and the edit of each
   ``edit_schema``, and ``materialize``'s inputs), the core's error code and
@@ -44,8 +48,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-CASES = sorted((ROOT / 'contract/cases/s1').glob('edit.*.json'))
-REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
+FIXTURES = ROOT / 'contract/fixtures/edit-cases'
+CASES = sorted(FIXTURES.glob('edit.*.json'))
+REFERENCE = FIXTURES / 'reference.jsonl'
 PINNED = ROOT / 'contract/pinned/edits.core.json'
 FORMAT = 'sdm-edits-pin/1'
 FIELDS = ('inputs', 'error', 'materialized')

@@ -150,21 +150,8 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     committed = {
         case['id']: case for case, _ in run_python.load_cases([CASES / 's1'])
     }
-    # T1.24b's edit cases, the schema's edits on the core (E67), are the
-    # contract's own, not the inventory's.
-    edits = {
-        'edit.accepted-meaning-key-links',
-        'edit.key-missing-column',
-        'edit.key-time-column',
-        'edit.leave-out-the-key',
-        'edit.link-not-the-key',
-        'edit.meaning-not-carried',
-        'edit.meaning-unknown',
-        'edit.time-column-not-a-time',
-    }
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
-        'base.adventureworks',
-        *edits,
+        'base.adventureworks'
     }
     for entry in inventory['cases']:
         case = committed[entry['id']]
