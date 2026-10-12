@@ -305,8 +305,9 @@ jobs:
   # The binding with its test-only operations, built beside native-wheel by
   # the same step and tested at the E16 floor: every file of the binding's
   # tests, and the Python host's tests that need those operations, which
-  # the test job does not collect (E23). Nothing waits for it, and its wheel
-  # is its own artifact, which no job that builds or ships takes (E23).
+  # the test job does not collect (E23). Its wheel is its own artifact,
+  # which wheel-smoke installs in its clean containers and no job that
+  # builds or ships takes (E23).
   native-test-ops:
     runs-on: ubuntu-latest
     env:
@@ -363,6 +364,47 @@ jobs:
             "$(ls native/*.whl)"
           /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
             -p no:cacheprovider --native-build production
+
+  # The wheels as a user installs them (T1.17, decision E16), each lane in
+  # a clean container, both gating: the floor (Python 3.10, pyarrow 14.0.1,
+  # pandas 2.2.0, NumPy 1.26.4) and the newest (Python 3.14 with the newest
+  # pandas 3, NumPy 2 and pyarrow, resolved on every run). wheel_smoke.py
+  # runs itself in the lane's Python image, pinned by digest, the checkout
+  # mounted read-only; it installs the shipped wheel and the test-ops one,
+  # as these jobs built them, each in an environment of its own holding
+  # only wheels, and runs the binding's tests on them from outside the
+  # checkout (shared and released buffers, admitted types, outputs after
+  # collection, error and destruction, busy and cancel). Each lane's
+  # resolved environments, reports and environment.json are its artifact,
+  # uploaded whether it passed or not.
+  wheel-smoke:
+    name: wheel-smoke (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    needs: [native-wheel, native-test-ops]
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [floor, newest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - name: The lane's clean container
+        run: |
+          python3 scripts/rust_core/wheel_smoke.py --lane ${{ matrix.lane }} --container \
+            --wheel "$(ls native/*.whl)" --test-ops-wheel "$(ls native-test-ops/*.whl)" \
+            --out wheel-smoke
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-smoke-${{ matrix.lane }}
+          path: wheel-smoke/
 
   typecheck:
     runs-on: ubuntu-latest
