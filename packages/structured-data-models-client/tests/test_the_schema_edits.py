@@ -269,7 +269,8 @@ def test_a_meaning_given_as_a_stype_is_kept_as_given(
     assert schema['orders']['user_id'].stype is Stype.categorical
 
 
-@pytest.mark.parametrize('route', ['core', 'old'])
+# The old route only where the relational engine is installed.
+@pytest.mark.parametrize('route', ('core', 'old') if ENGINE else ('core',))
 def test_a_key_and_a_time_column_given_as_numpy_text_are_kept_as_given(
     route: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
