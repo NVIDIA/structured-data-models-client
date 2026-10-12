@@ -1090,9 +1090,24 @@ def test_an_identity_only_change_passes(repo: Path, tmp_path: Path) -> None:
 # --- ratchet integrity -------------------------------------------------------------
 
 
+def _pinned(repo: Path) -> str:
+    r"""A landing whose ``KNOWN_DIFFERING`` pins one case, the checkpoint
+    the known-differing tests start from (the file is empty from T1.6b)."""
+    path = 'rust/crates/sdm-core/tests/pql/known-differing.json'
+
+    def pin(r: Path) -> None:
+        document = json.loads((r / path).read_text())
+        document['cases'] = [
+            {'id': 'literal/pinned', 'parts': ['warnings'], 'why': 'seeded'}
+        ]
+        (r / path).write_text(json.dumps(document, indent=1))
+
+    return land(repo, 'T1.14', edit=pin, protected=path)
+
+
 def test_an_id_added_to_known_differing_fails(repo: Path) -> None:
     path = 'rust/crates/sdm-core/tests/pql/known-differing.json'
-    landed = checkpoint_of(repo)
+    landed = _pinned(repo)
 
     def add(part: bool) -> Callable[[Path], None]:
         def edit(r: Path) -> None:
@@ -1141,7 +1156,7 @@ def test_a_known_differing_file_missing_or_reshaped_fails(
     repo: Path, seed: str, wanted: str
 ) -> None:
     path = 'rust/crates/sdm-core/tests/pql/known-differing.json'
-    landed = checkpoint_of(repo)
+    landed = _pinned(repo)
 
     def reshape(r: Path) -> None:
         if seed == 'missing':
