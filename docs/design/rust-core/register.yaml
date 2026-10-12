@@ -2361,7 +2361,15 @@ entries:
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E65}
   notes: >-
     Runtime-only, so a register entry naming the cell, never an exclusion
-    (H1). For the independent reviewer; no case outcome changes.
+    (H1). For the independent reviewer; no case outcome changes. The floor
+    lane of T1.17's wheel-smoke (Python 3.10 in a clean container, pyarrow
+    14.0.1, pandas 2.2.0, NumPy 1.26.4) records pyarrow's own to_pandas()
+    raising the BlockManager DeprecationWarning before any client module is
+    imported, and the newest lane (pandas 3, NumPy 2, the newest pyarrow)
+    none (wheel_smoke.py's to_pandas_warnings, in each lane's
+    environment.json): the warning is the runtime's, which the client
+    neither causes nor changes. Disposition recommended at T1.17: approve
+    as kept; the decision is the independent reviewer's (checkpoint 7).
 
 # --- PQL validation (T1.12) ---------------------------------------------------
 

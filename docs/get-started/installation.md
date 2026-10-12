@@ -24,7 +24,8 @@ Install into the notebook with `%pip`, then restart Python, each step in its own
 
 ```text
 import numpy
-keep_numpy = f'numpy=={numpy.__version__}'
+major, minor = (int(part) for part in numpy.__version__.split('.')[:2])
+keep_numpy = f'numpy=={numpy.__version__}' if (major, minor) >= (1, 26) else 'numpy~=1.26.0'
 ```
 
 ```text
@@ -37,10 +38,11 @@ dbutils.library.restartPython()
 
 Four things differ from a laptop, each found by running on every LTS runtime and serverless environment:
 
-- **Keep the runtime's own NumPy.**
+- **Keep the runtime's own NumPy where it is 1.26 or later, and NumPy 1.26 where it is older.**
   Databricks builds its preinstalled packages against the NumPy it ships.
   Installing can upgrade pandas and, through it, NumPy beneath them, after which the Python process cannot start.
   Pinning NumPy to the version already there leaves pip to choose a pandas that fits it.
+  The client needs NumPy 1.26 or later, so where the runtime ships an older one (DBR 14.3 LTS and 15.4 LTS, serverless environments 1 and 2, each NumPy 1.23.5) pinning it cannot resolve: the install upgrades NumPy there, and `numpy~=1.26.0` holds that upgrade to the 1.26 line.
 - **Write version bounds with `~=`, not `<` or `>`.**
   A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
 - **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**
