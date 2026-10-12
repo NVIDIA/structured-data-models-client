@@ -10,8 +10,8 @@ real observations (``python-core`` and ``python-old``, run here as CI's
 
 - the unseeded candidate passes, and the output names the landing whose
   harness judged; before T1.14's landing the bootstrap says so;
-- a corrupted expectation, a missing case, a skipped call and a missing
-  native library each fail;
+- a corrupted expectation, a missing case, a skipped call, a missing
+  native library and an old route that loaded the core each fail;
 - a protected change fails unless named, and the checkpoint's harness
   refuses to judge from any other commit.
 
@@ -213,6 +213,27 @@ def test_a_missing_native_library_fails(
     done = gate(repo, '--base', landed, *files(observed, tmp_path, unload))
     assert failed(done) == {'compare'}, done.stdout
     assert 'sdm_client._native was not loaded' in done.stdout
+
+
+def test_an_old_route_that_loaded_the_core_fails(
+    repo: Path, tmp_path: Path, observed: dict[str, list[dict[str, Any]]]
+) -> None:
+    r"""The route proof's other half (T1.15, T1.19 merged into it): a
+    ``python-old`` observation with ``sdm_client._native`` loaded fails;
+    ``contract/tests/test_route_proof_seeds.py`` makes one with a real run."""
+    landed = git(repo, 'rev-parse', 'HEAD')
+    commit(repo)
+
+    def load(runner: str, lines: list[dict[str, Any]]) -> None:
+        for line in lines:
+            if runner == 'python-old' and line['case'] == CASE:
+                line['identity']['native_loaded'] = True
+
+    done = gate(repo, '--base', landed, *files(observed, tmp_path, load))
+    assert failed(done) == {'compare'}, done.stdout
+    assert f'{CASE}: python-old: route: the old route loaded the core' in (
+        done.stdout
+    )
 
 
 def test_a_protected_change_fails_unless_named(
