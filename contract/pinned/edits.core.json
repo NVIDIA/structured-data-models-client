@@ -1,5 +1,5 @@
 {
-  "about": "python-core's run of the edit.* cases, as contract/tests/test_edit_cases.py writes it: per case, the digests of the core's inputs and of the edits' starts, the core's error code, and the digest of the request state; sdm-testkit's tests/edit_cases.rs holds rust-host to it (T1.24b).",
+  "about": "python-core's run of the edit.* cases, as contract/tests/test_edit_cases.py writes it: per case, the digests of the core's inputs and of the edits' starts, the core's error code, and the digest of the request state; sdm-testkit's tests/edit_cases.rs holds rust-host to it (T1.24b; the cases in contract/cases/s1 from T1.27).",
   "cases": {
     "edit.accepted-meaning-key-links": {
       "edits": "12b47d8c1e839a99bca6bd1739ee7ff407853400cf527514e3a72a0a24b69040",
@@ -48,6 +48,12 @@
       "error": "INVALID_REQUEST",
       "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
       "materialized": null
+    },
+    "edit.time-column-text": {
+      "edits": "00028f1dcf7eb74bf5eb14899886e06f3545e3ccba2ee150a1ed00701843b4e0",
+      "error": null,
+      "inputs": "99412173d6718514afaf13673d2c1590bdaf5898f004e268bb2732cfed32ac88",
+      "materialized": "5f8593a39d20576f68c96c70545ff2e588ef402d572571c2739a3bb3547fda28"
     }
   },
   "format": "sdm-edits-pin/1"
