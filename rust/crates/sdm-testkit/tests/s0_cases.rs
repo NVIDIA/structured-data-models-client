@@ -37,13 +37,12 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
         if case.status == Status::Diagnostic {
             // Gating nothing against the reference, but held to the core's
             // answer its register entry records, so a drift fails here: the
-            // D8 and DT-9 cases, which the interim date reader answers with
-            // UNSUPPORTED_REQUEST until T1.6b (DT-9); escaped surrogates
+            // D8 and DT-9 cases, which the core reads from T1.6b (DT-9
+            // rejected; each has an acceptance twin), escaped surrogates
             // (PQL-1) and the core's deepest query (PQL-2), which the core
             // accepts where the reference refuses or raises.
             let today = match case.register.as_deref() {
-                Some("DT-9") => ("refusal", Some("UNSUPPORTED_REQUEST".to_owned())),
-                Some("PQL-1" | "PQL-2") => ("success", None),
+                Some("DT-9" | "PQL-1" | "PQL-2") => ("success", None),
                 other => panic!("{}: a diagnostic S0 case under {other:?}", case.id),
             };
             assert_eq!(observed.answer.outcome(), today, "{}", case.id);

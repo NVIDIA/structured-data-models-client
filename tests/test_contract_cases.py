@@ -227,10 +227,19 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     # 461 in the runner on Python 3.12) and the core's MAX_DEPTH (999).
     deepest = pql('deepest')
     assert deepest.count('(' * 400) == 1 and '(' * 401 not in deepest
-    # The two date cases DT-9 holds back stay diagnostic until T1.6b.
+    # The two date cases DT-9 held back stay diagnostic (a changed case
+    # file needs an approved entry), and from T1.6b each has an acceptance
+    # twin of the same input: D8's packed date and DT-9's long field.
     dated = [case for case in cases.values() if case.get('register') == 'DT-9']
     assert len(dated) == 2
     assert {case['status'] for case in dated} == {'diagnostic'}
+    for case in dated:
+        name = case['id'].removeprefix('s0.boundary.')
+        twin = cases[f's0.accept.{name}']
+        assert twin['status'] == 'acceptance' and 'register' not in twin
+        assert twin['input'] == case['input'], name
+        assert twin['core'] == case['core'], name
+        assert twin['expect'] == {'outcome': 'success', 'stage': 'materialize'}
     # Escapes as written in the query text, a backslash and its letters: a
     # \\u escape and no surrogate in the accepted case; an escaped pair and
     # a lone escaped surrogate in the two cases register PQL-1 holds.
