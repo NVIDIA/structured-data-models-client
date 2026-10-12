@@ -226,15 +226,33 @@ COVERED: dict[Path, tuple[str, ...]] = {
         'PredictiveQuery.materialize',
         '_is_hashable',
     ),
-    # From T1.28a the core route leaves RelationalMaterializer.materialize
-    # for the core's bridge once the option names are checked, so the
-    # rules it ran around the gathering (the ledger's T1.28a rows), which
-    # the old route alone still runs, are no longer covered; _gather, which
-    # held the core route's branch until then, still is.
     _CLIENT / 'materializers/relational.py': (
         'RelationalMaterializer.__init__',
+        'RelationalMaterializer._check_entity_count',
+        'RelationalMaterializer._check_limits',
+        'RelationalMaterializer._check_shape',
         'RelationalMaterializer._gather',
+        'RelationalMaterializer._refuse_a_name_the_wire_reserves',
+        'RelationalMaterializer._run_mode_for',
+        'RelationalMaterializer._unreserved',
+        'RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities',
         'RelationalMaterializer.materialize',
+        '_columns_to_leave_out',
+        '_drop_context_that_answers_the_question',
+        '_entities_at_anchors',
+        '_instances_matching',
+        '_joins_nothing',
+        '_positions',
+        '_record_the_statistic',
+        '_remove_instances',
+        '_statistic_asked_for',
+        '_tables_linked_to',
+        '_tables_sent',
+        '_warn_of_a_context_the_default_mode_capped',
+        '_warn_of_columns_the_model_does_not_read',
+        '_warn_of_relationships_that_join_nothing',
+        '_warn_of_tables_left_out',
+        '_warn_the_filter_chose_only_the_examples',
     ),
     # The ledgered rules' own bodies (T1.28's _preflight, model check and
     # merge, the decomposition), and Schema.from_source, the describe
