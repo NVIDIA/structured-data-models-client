@@ -8,65 +8,188 @@
       "type": "string"
     },
     "task": {
-      "description": "What is predicted, of which entity.",
-      "type": "object",
-      "properties": {
-        "kind": {
-          "description": "The task's kind, as the engine names it (`regression`,\n`binary_classification`, `multiclass_classification`).",
-          "type": "string"
-        },
-        "target": {
-          "description": "The label column of the instance table; a classification's names its\nclasses, and a binary task's its positive class. The schema of\n[`Target`] and [`ClassTarget`] at once, for the schema only.",
+      "description": "What is predicted, of which entity: a task of each kind, its kind's\nname and its target. The schema of [`Task`] of each target, for the\nschema only.",
+      "anyOf": [
+        {
+          "description": "A regression's task, for the schema only.",
           "type": "object",
           "properties": {
-            "column_name": {
-              "type": "string"
-            },
-            "dtype": {
-              "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+            "kind": {
               "type": "string",
               "enum": [
-                "int64",
-                "float32",
-                "float64",
-                "string",
-                "stringlist",
-                "bool",
-                "timestamp[us]"
+                "regression"
               ]
             },
-            "classes": {
+            "target": {
+              "description": "The label column of the instance table: a regression's.",
+              "type": "object",
+              "properties": {
+                "column_name": {
+                  "type": "string"
+                },
+                "dtype": {
+                  "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                  "type": "string",
+                  "enum": [
+                    "int64",
+                    "float32",
+                    "float64",
+                    "string",
+                    "stringlist",
+                    "bool",
+                    "timestamp[us]"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "column_name",
+                "dtype"
+              ]
+            },
+            "entity_table_names": {
               "type": "array",
               "items": {
                 "type": "string"
               }
             },
-            "positive_class": {
+            "anchor_time_column": {
               "type": "string"
             }
           },
           "additionalProperties": false,
           "required": [
-            "column_name",
-            "dtype"
+            "kind",
+            "target",
+            "entity_table_names"
           ]
         },
-        "entity_table_names": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        {
+          "description": "A binary task, for the schema only.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "binary_classification"
+              ]
+            },
+            "target": {
+              "description": "A binary task's label column: its classes and positive class.",
+              "type": "object",
+              "properties": {
+                "column_name": {
+                  "type": "string"
+                },
+                "dtype": {
+                  "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                  "type": "string",
+                  "enum": [
+                    "int64",
+                    "float32",
+                    "float64",
+                    "string",
+                    "stringlist",
+                    "bool",
+                    "timestamp[us]"
+                  ]
+                },
+                "classes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "positive_class": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "column_name",
+                "dtype",
+                "classes",
+                "positive_class"
+              ]
+            },
+            "entity_table_names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "anchor_time_column": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "entity_table_names"
+          ]
         },
-        "anchor_time_column": {
-          "description": "The instance table's column holding each example's anchor time,\nwhere the examples have one.",
-          "type": "string"
+        {
+          "description": "A multiclass task, for the schema only.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "multiclass_classification"
+              ]
+            },
+            "target": {
+              "description": "A multiclass task's label column: its classes, no positive class.",
+              "type": "object",
+              "properties": {
+                "column_name": {
+                  "type": "string"
+                },
+                "dtype": {
+                  "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                  "type": "string",
+                  "enum": [
+                    "int64",
+                    "float32",
+                    "float64",
+                    "string",
+                    "stringlist",
+                    "bool",
+                    "timestamp[us]"
+                  ]
+                },
+                "classes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "column_name",
+                "dtype",
+                "classes"
+              ]
+            },
+            "entity_table_names": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "anchor_time_column": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "target",
+            "entity_table_names"
+          ]
         }
-      },
-      "additionalProperties": false,
-      "required": [
-        "kind",
-        "target",
-        "entity_table_names"
       ]
     },
     "schema": {
@@ -444,46 +567,88 @@
           "type": "boolean"
         },
         "inference_config": {
-          "description": "The engine's inference options, as it writes them: a classification's\nwith its class shuffle, a regression's with its target transforms and\noutput type. The schema of [`InferenceConfig`] and\n[`ClassificationConfig`] at once, for the schema only.",
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string"
+          "description": "The engine's inference options, a regression's or a classification's:\nthe schema of [`InferenceConfig`] and [`ClassificationConfig`], for the\nschema only.",
+          "anyOf": [
+            {
+              "description": "A regression's inference options, as the engine writes them\n(`_inference_config_to_json`).",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "num_estimators": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "column_shuffle": {
+                  "type": "boolean"
+                },
+                "category_shuffle": {
+                  "type": "boolean"
+                },
+                "hop_shuffle": {
+                  "type": "boolean"
+                },
+                "class_shuffle": {
+                  "description": "The reader's, not the writer's: a regression's options hold none.",
+                  "type": "boolean"
+                },
+                "target_transforms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "output_type": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "num_estimators",
+                "column_shuffle",
+                "category_shuffle",
+                "hop_shuffle",
+                "target_transforms",
+                "output_type"
+              ]
             },
-            "num_estimators": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0
-            },
-            "column_shuffle": {
-              "type": "boolean"
-            },
-            "category_shuffle": {
-              "type": "boolean"
-            },
-            "hop_shuffle": {
-              "type": "boolean"
-            },
-            "class_shuffle": {
-              "type": "boolean"
-            },
-            "target_transforms": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "output_type": {
-              "type": "string"
+            {
+              "description": "A classification's inference options, its class shuffle the reader's\nto leave out: the schema of [`ClassificationConfig`], for the schema\nonly.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "num_estimators": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "column_shuffle": {
+                  "type": "boolean"
+                },
+                "category_shuffle": {
+                  "type": "boolean"
+                },
+                "hop_shuffle": {
+                  "type": "boolean"
+                },
+                "class_shuffle": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "num_estimators",
+                "column_shuffle",
+                "category_shuffle",
+                "hop_shuffle"
+              ]
             }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "num_estimators",
-            "column_shuffle",
-            "category_shuffle",
-            "hop_shuffle"
           ]
         }
       },

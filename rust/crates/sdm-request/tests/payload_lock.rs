@@ -246,7 +246,9 @@ fn the_payload_the_producer_builds_is_the_locked_definition_s() {
 }
 
 /// `edit` made to the payload the producer builds for the shop sample: the
-/// locked definition refuses it, naming `expected`.
+/// locked definition refuses it, naming `expected` (inside the task or the
+/// inference options, which take one shape per kind of task, the place
+/// none of the kinds' shapes holds).
 fn refused(edit: impl FnOnce(&mut Value), expected: &str) {
     let mut payload = built(&shop());
     let before = payload.clone();
@@ -264,11 +266,11 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         |p| p["review_extra_field"] = json!(true),
         "review_extra_field",
     );
-    refused(|p| p["task"]["horizon"] = json!(3), "horizon");
+    refused(|p| p["task"]["horizon"] = json!(3), "$.task: none of");
     refused(|p| p["metadata"]["num_batches"] = json!(1), "num_batches");
     refused(
         |p| p["inference"]["inference_config"]["seed"] = json!(42),
-        "seed",
+        "$.inference.inference_config: none of",
     );
     refused(
         |p| p["schema"]["instance_table"]["columns"]["TARGET"]["unit"] = json!("s"),
@@ -287,7 +289,12 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         |p| p["metadata"]["num_context_examples"] = json!("3"),
         "num_context_examples",
     );
-    refused(|p| p["task"]["kind"] = json!(1), "kind");
+    refused(|p| p["task"]["kind"] = json!(1), "$.task: none of");
+    // A kind the task's shape is not: a regression named a classification.
+    refused(
+        |p| p["task"]["kind"] = json!("binary_classification"),
+        "$.task: none of",
+    );
     refused(
         |p| p["inference"]["use_prediction_time"] = json!("false"),
         "use_prediction_time",
@@ -313,13 +320,16 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         |p| p["schema"]["related_tables"]["orders"]["columns"]["price"]["dtype"] = json!("int32"),
         "dtype",
     );
-    refused(|p| p["task"]["target"]["dtype"] = json!("decimal"), "dtype");
+    refused(
+        |p| p["task"]["target"]["dtype"] = json!("decimal"),
+        "$.task: none of",
+    );
     // Removed.
     refused(
         |p| {
             p["task"].as_object_mut().unwrap().remove("target");
         },
-        "target is missing",
+        "$.task: none of",
     );
     refused(
         |p| {
@@ -329,20 +339,43 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
     );
 }
 
-/// The definition the locked schema gives at `path` (`.`-separated; `*`
-/// is any key of an open map, `[]` an array's items).
-fn defined(path: &str) -> Value {
+/// The definitions the locked schema gives at `path` (`.`-separated; `*`
+/// is any key of an open map, `[]` an array's items): one, or one per
+/// option where a definition is one of several (`anyOf`, the task's and
+/// the inference options' shapes per kind), each option naming the step.
+fn defined(path: &str) -> Vec<Value> {
     let root: Value = serde_json::from_str(&sdm_contract::schema_json()).unwrap();
-    let mut node = root["$defs"]["StatePayload"].clone();
+    let mut nodes = vec![root["$defs"]["StatePayload"].clone()];
     for step in path.split('.') {
-        node = match step {
-            "[]" => node["items"].clone(),
-            "*" => node["additionalProperties"].clone(),
-            key => node["properties"][key].clone(),
-        };
-        assert!(node.is_object(), "{path}: the definition names no {step}");
+        nodes = nodes
+            .iter()
+            .flat_map(|node| match node["anyOf"].as_array() {
+                Some(options) => options.clone(),
+                None => vec![node.clone()],
+            })
+            .map(|node| match step {
+                "[]" => node["items"].clone(),
+                "*" => node["additionalProperties"].clone(),
+                key => node["properties"][key].clone(),
+            })
+            .collect();
+        for node in &nodes {
+            assert!(node.is_object(), "{path}: a definition names no {step}");
+        }
     }
-    node
+    nodes
+}
+
+/// The type each definition at `path` gives, its options' for one of
+/// several.
+fn types(path: &str) -> Vec<Value> {
+    defined(path)
+        .into_iter()
+        .flat_map(|node| match node["anyOf"].as_array() {
+            Some(options) => options.iter().map(|o| o["type"].clone()).collect(),
+            None => vec![node["type"].clone()],
+        })
+        .collect()
 }
 
 #[test]
@@ -367,9 +400,21 @@ fn what_the_readers_read_is_defined_with_the_type_they_read() {
         // The Python host's bridge reads the context's size.
         ("metadata.num_context_examples", "integer"),
     ] {
-        assert_eq!(defined(path)["type"], json!(kind), "{path}");
+        let given = types(path);
+        assert!(!given.is_empty(), "{path}");
+        assert!(given.iter().all(|t| *t == json!(kind)), "{path}: {given:?}");
     }
+    // Each option the client forwards is named by the options' shape of
+    // a classification, and all but the class shuffle by a regression's.
     for option in INFERENCE_OPTIONS {
-        defined(&format!("inference.inference_config.{option}"));
+        let root: Value = serde_json::from_str(&sdm_contract::schema_json()).unwrap();
+        let config = &root["$defs"]["StatePayload"]["properties"]["inference"]["properties"]["inference_config"];
+        let named: Vec<bool> = config["anyOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["properties"].get(option).is_some())
+            .collect();
+        assert!(named.iter().any(|n| *n), "{option}");
     }
 }

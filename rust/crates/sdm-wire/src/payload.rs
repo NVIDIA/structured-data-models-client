@@ -21,13 +21,14 @@
 //! order written, and the cells of each row, any JSON value, each number
 //! the token written ([`Value`]).
 //!
-//! The task's target and the inference options take one shape per kind of
-//! task (T1.28a): a regression's ([`Target`], [`InferenceConfig`], the
-//! defaults of [`StatePayload`]'s parameters) and a classification's
-//! ([`ClassTarget`], with its classes and positive class, and
-//! [`ClassificationConfig`]). The schema is derived once, over both
-//! ([`AnyTarget`], [`AnyConfig`]: what either writes, the members one kind
-//! alone writes optional), so it names every member either writes.
+//! The task and the inference options take one shape per kind of task
+//! (T1.28a): a regression's ([`Task`] of a [`Target`], [`InferenceConfig`],
+//! the defaults of [`StatePayload`]'s parameters) and a classification's
+//! ([`Task`] of a [`ClassTarget`], with its classes and a binary task's
+//! positive class, and [`ClassificationConfig`]). The schema is derived
+//! once, over each kind ([`AnyTask`], each kind's task with its kind's name
+//! and target; [`AnyConfig`]), so it names every member each writes and
+//! refuses a member one kind writes missing from it.
 
 use schemars::JsonSchema;
 use sdm_contract::ops::Stype;
@@ -73,10 +74,10 @@ impl<T: JsonSchema> JsonSchema for Named<T> {
 /// classification's with [`ClassTarget`] and [`ClassificationConfig`].
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields, rename = "StatePayload")]
-pub struct StatePayload<T = Target, C = InferenceConfig> {
+pub struct StatePayload<K = Task, C = InferenceConfig> {
     /// The model the request was laid out for.
     pub model: String,
-    pub task: Task<T>,
+    pub task: K,
     pub schema: PayloadSchema,
     /// The examples with a label, and the rows sampled for them.
     pub context: Half,
@@ -122,22 +123,6 @@ pub struct ClassTarget {
     pub dtype: Dtype,
     pub classes: Vec<String>,
     /// A binary task's positive class; a multiclass task names none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "String")]
-    pub positive_class: Option<String>,
-}
-
-/// The label column of the instance table; a classification's names its
-/// classes, and a binary task's its positive class. The schema of
-/// [`Target`] and [`ClassTarget`] at once, for the schema only.
-#[derive(JsonSchema)]
-#[schemars(deny_unknown_fields, rename = "Target")]
-pub struct AnyTarget {
-    pub column_name: String,
-    pub dtype: Dtype,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "Vec<String>")]
-    pub classes: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub positive_class: Option<String>,
@@ -310,29 +295,6 @@ pub struct ClassificationConfig {
     pub class_shuffle: bool,
 }
 
-/// The engine's inference options, as it writes them: a classification's
-/// with its class shuffle, a regression's with its target transforms and
-/// output type. The schema of [`InferenceConfig`] and
-/// [`ClassificationConfig`] at once, for the schema only.
-#[derive(JsonSchema)]
-#[schemars(deny_unknown_fields, rename = "InferenceConfig")]
-pub struct AnyConfig {
-    pub kind: String,
-    pub num_estimators: u64,
-    pub column_shuffle: bool,
-    pub category_shuffle: bool,
-    pub hop_shuffle: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "bool")]
-    pub class_shuffle: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "Vec<String>")]
-    pub target_transforms: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "String")]
-    pub output_type: Option<String>,
-}
-
 /// What the request was made from.
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -345,7 +307,134 @@ pub struct Metadata {
     pub num_prediction_examples: u64,
 }
 
-impl<T: Serialize, C: Serialize> StatePayload<T, C> {
+/// A task's kind on the wire, one name, for the schema only.
+macro_rules! kind_name {
+    ($name:ident, $schema:literal, [$($kind:literal),+]) => {
+        #[doc = concat!("The kind `", $schema, "` names, for the schema only.")]
+        pub struct $name;
+
+        impl JsonSchema for $name {
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                $schema.into()
+            }
+
+            fn inline_schema() -> bool {
+                true
+            }
+
+            fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                schemars::json_schema!({ "type": "string", "enum": [$($kind),+] })
+            }
+        }
+    };
+}
+
+kind_name!(RegressionKind, "RegressionKind", ["regression"]);
+kind_name!(BinaryKind, "BinaryKind", ["binary_classification"]);
+kind_name!(
+    MulticlassKind,
+    "MulticlassKind",
+    ["multiclass_classification"]
+);
+
+/// A regression's task, for the schema only.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct RegressionTask {
+    #[schemars(with = "RegressionKind")]
+    pub kind: String,
+    pub target: Target,
+    pub entity_table_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub anchor_time_column: Option<String>,
+}
+
+/// A binary task's label column: its classes and positive class.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct BinaryTarget {
+    pub column_name: String,
+    pub dtype: Dtype,
+    pub classes: Vec<String>,
+    pub positive_class: String,
+}
+
+/// A multiclass task's label column: its classes, no positive class.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct MulticlassTarget {
+    pub column_name: String,
+    pub dtype: Dtype,
+    pub classes: Vec<String>,
+}
+
+/// A binary task, for the schema only.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct BinaryTask {
+    #[schemars(with = "BinaryKind")]
+    pub kind: String,
+    pub target: BinaryTarget,
+    pub entity_table_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub anchor_time_column: Option<String>,
+}
+
+/// A multiclass task, for the schema only.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct MulticlassTask {
+    #[schemars(with = "MulticlassKind")]
+    pub kind: String,
+    pub target: MulticlassTarget,
+    pub entity_table_names: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "String")]
+    pub anchor_time_column: Option<String>,
+}
+
+/// What is predicted, of which entity: a task of each kind, its kind's
+/// name and its target. The schema of [`Task`] of each target, for the
+/// schema only.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[schemars(rename = "Task")]
+pub enum AnyTask {
+    Regression(RegressionTask),
+    Binary(BinaryTask),
+    Multiclass(MulticlassTask),
+}
+
+/// A classification's inference options, its class shuffle the reader's
+/// to leave out: the schema of [`ClassificationConfig`], for the schema
+/// only.
+#[derive(JsonSchema)]
+#[schemars(deny_unknown_fields, rename = "ClassificationConfig")]
+pub struct ClassificationConfigSchema {
+    pub kind: String,
+    pub num_estimators: u64,
+    pub column_shuffle: bool,
+    pub category_shuffle: bool,
+    pub hop_shuffle: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "bool")]
+    pub class_shuffle: Option<bool>,
+}
+
+/// The engine's inference options, a regression's or a classification's:
+/// the schema of [`InferenceConfig`] and [`ClassificationConfig`], for the
+/// schema only.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[schemars(rename = "InferenceOptions")]
+pub enum AnyConfig {
+    Regression(InferenceConfig),
+    Classification(ClassificationConfigSchema),
+}
+
+impl<K: Serialize, C: Serialize> StatePayload<K, C> {
     /// The payload's UTF-8 JSON text: compact, members in the order the
     /// types declare them, open maps in the order written, each cell's
     /// number its token.
@@ -359,8 +448,8 @@ impl<T: Serialize, C: Serialize> StatePayload<T, C> {
     }
 }
 
-/// The JSON Schema of [`StatePayload`] of either kind of task (over
-/// [`AnyTarget`] and [`AnyConfig`]), every definition inlined, as
+/// The JSON Schema of [`StatePayload`] of every kind of task (over
+/// [`AnyTask`] and [`AnyConfig`]), every definition inlined, as
 /// committed in `sdm-contract`'s `schema/state-payload.json`:
 /// pretty-printed, with a trailing newline, with no `$schema`, since the
 /// contract holds it as one of its own definitions.
@@ -368,7 +457,7 @@ pub fn schema_json() -> String {
     let generator = schemars::generate::SchemaSettings::draft2020_12()
         .with(|settings| settings.inline_subschemas = true)
         .into_generator();
-    let mut schema = generator.into_root_schema_for::<StatePayload<AnyTarget, AnyConfig>>();
+    let mut schema = generator.into_root_schema_for::<StatePayload<AnyTask, AnyConfig>>();
     schema.remove("$schema");
     let mut text = serde_json::to_string_pretty(&schema).unwrap_or_default();
     text.push('\n');
