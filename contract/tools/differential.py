@@ -47,17 +47,24 @@ naming a register entry, checked against ``docs/design/rust-core/
 register.yaml`` (the entry must exist, and for a refusal by rule name its
 text must name the rule; its status decides the class):
 
+- the edits (from T1.27's fix round: each through the public setter,
+  every one the spec makes recorded) with the same outcomes and codes,
+  and the same public schema after them, before anything else; any other
+  edit evidence is UNCLASSIFIED;
 - the same outcome, payload, seeds and result: agree;
 - the core refuses by a rule (``UNSUPPORTED_REQUEST`` naming it) what the
   reference materializes: the entry ``RULES`` names for the rule (P1B-3's
   rules not yet ported, unless another entry is named), and the core's
   labels, where it gave them, compared with the reference payload's
-  context exactly (a static target's context leaves out the entities
+  context exactly, and for a refusal after the labels its ``_by_time``
+  seeds the reference's (a static target's context leaves out the entities
   predicted for, T1.28a's rule);
 - both refuse with the same code: agree; the reference with an internal
   error (``INTERNAL_ERROR``, or an exception with no code) and the core by
   name: the owner's class E66(b), under the entry ``RULES`` names;
-- anything else: UNCLASSIFIED, and the command exits 1.
+- anything else: UNCLASSIFIED, and the command exits 1; so do probes
+  naming a source twice, and, given the spec, probes not of exactly the
+  sources it names.
 
 An entry approved (by the owner or as E66(b)'s class) is an approved
 class; a proposed one, a proposed entry the review sees. The tool approves
@@ -99,8 +106,38 @@ RULES = {
     'parent_table': 'P1B-3',
     'keyless_neighbors': 'P1B-3',
     'text_column': 'P1B-3',
-    'target_type': 'P1B-18',
+    # A static decimal target's (P1B-18); every other label type's is
+    # P1B-3's (a decimal's average, a time): read by the query's shape.
+    'target_type': 'P1B-3',
 }
+#: The entry a static target's refusal by a rule is under, where it is not
+#: the rule's own.
+STATIC_RULES = {'target_type': 'P1B-18'}
+#: A refusal under another code than the reference's, by the core's rule
+#: and the reference's code.
+CODE_CHANGES = {('wire_dtype', 'INVALID_REQUEST'): 'P1B-19'}
+
+
+def _static(query: str | None) -> bool | None:
+    r"""Whether ``query``'s target is static (no aggregation), or None
+    without a query to read."""
+    if query is None:
+        return None
+    target = query.split('PREDICT', 1)[-1].split('FOR EACH', 1)[0]
+    return '(' not in target
+
+
+def _entry(rule: str, query: str | None) -> str | None:
+    r"""The register entry a refusal by ``rule`` is under, for a query of
+    this shape; None where the shape decides and is not known."""
+    if rule in STATIC_RULES:
+        static = _static(query)
+        if static is None:
+            return None
+        return STATIC_RULES[rule] if static else RULES[rule]
+    return RULES.get(rule)
+
+
 #: What the sampler's warnings are told apart by, in either route's words.
 WARNINGS = (
     'Missing',
@@ -209,6 +246,7 @@ def source(rng: random.Random, i: int) -> dict[str, Any]:
             for a, b, c, d in rels
         ],
     }
+    s['edits'] = _edits(rng, _columns(s['setup']), rels)
     s['pql'] = _query(rng, decimal)
     s['indices'] = ['e0', 'e1'] if key_text else [0, 1]
     if rng.random() < 0.6:
@@ -222,6 +260,101 @@ def source(rng: random.Random, i: int) -> dict[str, Any]:
             ]
         )
     return s
+
+
+def _columns(setup: list[str]) -> dict[str, list[str]]:
+    r"""Each table's columns, read off the setup it was made by."""
+    tables: dict[str, list[str]] = {}
+    for statement in setup:
+        if statement.startswith('CREATE TABLE'):
+            name = statement.split()[2]
+            body = statement.split('SELECT', 1)[1].rsplit(' FROM ', 1)[0]
+            tables[name] = [
+                part.rsplit(' AS ', 1)[1].strip()
+                for part in body.split(', ')
+                if ' AS ' in part
+            ]
+        elif statement.startswith('ALTER TABLE'):
+            words = statement.split()
+            tables[words[2]].append(words[5])
+    return tables
+
+
+#: The meanings an edit gives a column: valid ones, ones its values may not
+#: carry, and one no semantic type names.
+STYPES = ['ID', 'categorical', 'numerical', 'text', 'timestamp', 'banana']
+
+
+def _edits(
+    rng: random.Random,
+    tables: dict[str, list[str]],
+    rels: list[tuple[str, str, str, str]],
+) -> list[dict[str, Any]]:
+    r"""Up to three schema edits after ``Schema.from_source``, as T1.24b's
+    differential made them through the public setters (none for about half
+    the sources, so their questions are asked of the schema as described):
+    a key or time column set, to a column the table has or one it lacks, or
+    cleared; a meaning; a column left out; the relationships replaced,
+    appended to or popped."""
+    if rng.random() < 0.5:
+        return []
+    out: list[dict[str, Any]] = []
+    for _ in range(rng.randint(1, 3)):
+        table = rng.choice(sorted(tables))
+        column = rng.choice([*tables[table], 'nope'])
+        kind = rng.choice(
+            [
+                'key',
+                'key_clear',
+                'time',
+                'time_clear',
+                'stype',
+                'stype',
+                'drop',
+                'rels',
+                'append',
+                'remove',
+            ]
+        )
+        if kind == 'key':
+            out.append({'op': 'key', 'table': table, 'value': column})
+        elif kind == 'key_clear':
+            out.append({'op': 'key', 'table': table, 'value': None})
+        elif kind == 'time':
+            out.append({'op': 'time', 'table': table, 'value': column})
+        elif kind == 'time_clear':
+            out.append({'op': 'time', 'table': table, 'value': None})
+        elif kind == 'stype':
+            if column == 'nope':
+                column = tables[table][0]
+            out.append(
+                {
+                    'op': 'stype',
+                    'table': table,
+                    'column': column,
+                    'value': rng.choice(STYPES),
+                }
+            )
+        elif kind == 'drop':
+            out.append({'op': 'drop', 'table': table, 'column': column})
+        elif kind == 'rels':
+            out.append(
+                {
+                    'op': 'rels',
+                    'value': [list(r) for r in rels if rng.random() < 0.6],
+                }
+            )
+        elif kind == 'append':
+            other = rng.choice(sorted(tables))
+            out.append(
+                {
+                    'op': 'append',
+                    'value': [table, column, other, rng.choice(tables[other])],
+                }
+            )
+        else:
+            out.append({'op': 'remove'})
+    return out
 
 
 def _query(rng: random.Random, decimal: bool) -> str:
@@ -290,6 +423,79 @@ def _text(value: Any) -> Any:
 def _plain(value: Any) -> Any:
     r"""A key as JSON holds it: a numpy scalar as the Python value it is."""
     return value.item() if hasattr(value, 'item') else value
+
+
+#: The edits a spec may make: the generator's, and the case format's own
+#: names for those it has (``contract/case.schema.json``).
+EDITS = (
+    'key',
+    'time',
+    'stype',
+    'drop',
+    'rels',
+    'append',
+    'remove',
+    'set_primary_key',
+    'set_time_column',
+    'clear_time_column',
+    'set_stype',
+    'delete_column',
+    'set_relationships',
+)
+
+
+def _apply(schema: Any, edit: dict[str, Any], relationship: Any) -> None:
+    r"""One edit, made through the public setter that makes it."""
+    op = edit['op']
+    if op == 'stype':
+        schema[edit['table']][edit['column']].stype = edit['value']
+    elif op == 'set_stype':
+        schema[edit['table']][edit['column']].stype = edit['stype']
+    elif op == 'key':
+        schema[edit['table']].primary_key = edit['value']
+    elif op == 'set_primary_key':
+        schema[edit['table']].primary_key = edit['column']
+    elif op == 'time':
+        schema[edit['table']].time_column = edit['value']
+    elif op == 'set_time_column':
+        schema[edit['table']].time_column = edit['column']
+    elif op == 'clear_time_column':
+        schema[edit['table']].time_column = None
+    elif op in ('drop', 'delete_column'):
+        del schema[edit['table']][edit['column']]
+    elif op == 'rels':
+        schema.relationships = [relationship(*r) for r in edit['value']]
+    elif op == 'set_relationships':
+        schema.relationships = [
+            relationship(**r) for r in edit['relationships']
+        ]
+    elif op == 'append':
+        schema.relationships.append(relationship(*edit['value']))
+    elif op == 'remove':
+        if schema.relationships:
+            schema.relationships.pop(0)
+    else:
+        raise SystemExit(f'an edit no setter makes: {op}')
+
+
+def _projection(schema: Any) -> dict[str, Any]:
+    r"""What the public schema says after the edits: each table's key, time
+    column and columns (name, data type, meaning), and the links."""
+    return {
+        'tables': [
+            [
+                name,
+                _text(table.primary_key),
+                table.time_column,
+                [
+                    [column_name, str(column.dtype), str(column.stype)]
+                    for column_name, column in table.columns.items()
+                ],
+            ]
+            for name, table in schema.tables.items()
+        ],
+        'links': [repr(link) for link in schema.relationships],
+    }
 
 
 def probe(spec_path: Path, out: Path, route: str) -> None:
@@ -423,6 +629,12 @@ def probe(spec_path: Path, out: Path, route: str) -> None:
         sampler.DuckDBSampler._by_time = by_time
 
     spec = json.loads(spec_path.read_text())
+    unknown = sorted(
+        {e.get('op') for src in spec['sources'] for e in src.get('edits', [])}
+        - set(EDITS)
+    )
+    if unknown:
+        raise SystemExit(f'edits no setter makes: {unknown}')
     records = []
     for src in spec['sources']:
         rec: dict[str, Any] = {'id': src['id']}
@@ -442,6 +654,18 @@ def probe(spec_path: Path, out: Path, route: str) -> None:
             rec['from_source'] = _outcome(error)
             records.append(rec)
             continue
+        # Each edit through the public setters, its outcome recorded; a
+        # refused one leaves the schema as it was, as the setter does.
+        rec['edits'] = []
+        for edit in src.get('edits', []):
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    _apply(schema, edit, Relationship)
+                rec['edits'].append(['ok'])
+            except Exception as error:  # noqa: BLE001
+                rec['edits'].append(_outcome(error))
+        rec['schema'] = _projection(schema)
         args: dict[str, Any] = {'indices': src['indices']}
         if 'anchor_time' in src:
             args['anchor_time'] = pd.Timestamp(src['anchor_time'])
@@ -546,16 +770,53 @@ def label_problems(payload: Any, indices: list[Any], core: Any) -> list[str]:
     return found
 
 
+#: The core's refusals made after the labels' windowed reads, whose
+#: ``_by_time`` seeds must be the reference's: never an empty list in
+#: place of them.
+AFTER_THE_LABELS = ('classification_task', 'target_leakage', 'wire_dtype')
+
+
+def _edit_problems(
+    old: dict[str, Any], core: dict[str, Any], edits: int | None
+) -> list[str]:
+    r"""How the two routes' edits depart: an edit not made or not
+    recorded (fewer outcomes than ``edits``, the spec's count, or than the
+    other route's), an outcome or code that differs, or the public schema
+    after them."""
+    mine, theirs = old.get('edits'), core.get('edits')
+    if not isinstance(mine, list) or not isinstance(theirs, list):
+        return ['no edit evidence']
+    wanted = len(mine) if edits is None else edits
+    if len(mine) != wanted or len(theirs) != wanted:
+        return [f'{len(mine)} and {len(theirs)} edits recorded of {wanted}']
+    found = []
+    for step, (a, b) in enumerate(zip(mine, theirs, strict=True)):
+        same = (a[0] == 'ok') == (b[0] == 'ok') and a[1:2] == b[1:2]
+        if not same:
+            found.append(f'edit {step}: {a} | {b}')
+    if old.get('schema') is None or old.get('schema') != core.get('schema'):
+        found.append('the schema after the edits')
+    return found
+
+
 def classify(
     old: dict[str, Any],
     core: dict[str, Any],
     indices: list[Any],
     register: dict[str, dict[str, Any]],
+    edits: int | None = None,
+    query: str | None = None,
 ) -> tuple[str, str]:
     r"""``(class, why)``: ``agree``, ``approved:<entry>``,
-    ``proposed:<entry>`` or ``UNCLASSIFIED``."""
+    ``proposed:<entry>`` or ``UNCLASSIFIED``; ``edits`` is how many edits
+    the source's spec makes."""
 
-    def under(entry: str, rule: str | None, why: str) -> tuple[str, str]:
+    def under(entry: str | None, rule: str | None, why: str) -> tuple[str, str]:
+        if entry is None:
+            return (
+                'UNCLASSIFIED',
+                f'{why}; the query, which names the entry, unknown',
+            )
         found = register.get(entry)
         if found is None:
             return 'UNCLASSIFIED', f'{why}; {entry} is not in the register'
@@ -576,6 +837,9 @@ def classify(
         )
     if old['from_source'][0] != 'ok':
         return 'agree', 'both refuse from_source'
+    edited = _edit_problems(old, core, edits)
+    if edited:
+        return 'UNCLASSIFIED', '; '.join(edited[:3])
     om, cm = old['materialize'], core['materialize']
     if om[0] == 'ok' and cm[0] == 'ok':
         problems = []
@@ -602,7 +866,10 @@ def classify(
                 f'the core refuses {cm} what the reference takes',
             )
         problems = []
-        if old['seeds'] != core['seeds'] and core['seeds']:
+        # After the labels the core has read every window the reference
+        # read, so its seeds are evidence that must be there; before them
+        # (a shape refused before any fetch) it has none.
+        if rule in AFTER_THE_LABELS and old['seeds'] != core['seeds']:
             problems.append('_by_time seeds')
         labels = core.get('labels')
         if isinstance(labels, list) and labels and isinstance(labels[0], list):
@@ -613,7 +880,7 @@ def classify(
             )
         if problems:
             return 'UNCLASSIFIED', '; '.join(problems[:3])
-        return under(RULES[rule], rule, f'{rule}, labels compared')
+        return under(_entry(rule, query), rule, f'{rule}, labels compared')
     if cm[0] == 'ok':
         return 'UNCLASSIFIED', f'the core takes what the reference refuses {om}'
     if om[1] == cm[1]:
@@ -625,30 +892,60 @@ def classify(
         rule = cm[2]
         if rule in RULES:
             return under(
-                RULES[rule], rule, f'E66(b): the reference {om}, the core {cm}'
+                _entry(rule, query),
+                rule,
+                f'E66(b): the reference {om}, the core {cm}',
             )
+    if (cm[2], om[1]) in CODE_CHANGES:
+        return under(
+            CODE_CHANGES[(cm[2], om[1])],
+            cm[2],
+            f'another code: the reference {om}, the core {cm}',
+        )
     return 'UNCLASSIFIED', f'the reference refuses {om}, the core {cm}'
 
 
 def compare(
     old_path: Path, core_path: Path, spec_path: Path | None, register_path: Path
 ) -> int:
-    old = {r['id']: r for r in json.loads(old_path.read_text())}
-    core = {r['id']: r for r in json.loads(core_path.read_text())}
+    def by_id(
+        records: list[dict[str, Any]], what: str
+    ) -> dict[str, Any] | None:
+        found: dict[str, Any] = {}
+        for record in records:
+            if record['id'] in found:
+                print(f'{what} names {record["id"]} twice')
+                return None
+            found[record['id']] = record
+        return found
+
+    old = by_id(json.loads(old_path.read_text()), 'the old probe')
+    core = by_id(json.loads(core_path.read_text()), 'the core probe')
     spec = (
-        {s['id']: s for s in json.loads(spec_path.read_text())['sources']}
+        by_id(json.loads(spec_path.read_text())['sources'], 'the spec')
         if spec_path is not None
         else {}
     )
+    if old is None or core is None or spec is None:
+        return 1
     register = _register(register_path)
     if set(old) != set(core) or not old:
         print('the two probes are not of the same sources')
+        return 1
+    if spec_path is not None and set(spec) != set(old):
+        print(
+            'the probes are not of every source the spec names, and only those'
+        )
         return 1
     counts: dict[str, int] = {}
     unclassified = 0
     for name in sorted(old):
         indices = spec.get(name, {}).get('indices', [0, 1, 'e0', 'e1'])
-        kind, why = classify(old[name], core[name], indices, register)
+        edits = len(spec[name].get('edits', [])) if name in spec else None
+        query = spec[name].get('pql') if name in spec else None
+        kind, why = classify(
+            old[name], core[name], indices, register, edits, query
+        )
         counts[kind] = counts.get(kind, 0) + 1
         if kind != 'agree':
             print(f'{name}: {kind}: {why}')

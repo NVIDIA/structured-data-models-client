@@ -71,6 +71,8 @@ rust/crates/sdm-engine/tests/time_ranges_record.py
 rust/crates/sdm-engine/tests/words.rs
 rust/crates/sdm-engine/tests/words_record.py
 rust/crates/sdm-engine/tests/neighbor_requests.rs
+rust/crates/sdm-engine/tests/labels.rs
+rust/crates/sdm-engine/tests/labels_record.py
 rust/crates/sdm-schema/tests/*.json
 tests/golden/**
 

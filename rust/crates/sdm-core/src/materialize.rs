@@ -1159,7 +1159,10 @@ fn warn(asker: &Asker, code: &str, message: &str) {
 /// decision E55): the columns it joins on marked again, from what the
 /// host holds, so a host's edit is followed as the reference's schema
 /// follows it; each column's meaning one its values can carry, as the
-/// language answers it (`Stype.supports_dtype`); and each link able to
+/// language answers it (`Stype.supports_dtype`); each time column of the
+/// timestamp meaning, as the engine's table takes one (from T1.27's fix
+/// round 1, found by the differential: a time column set on a column the
+/// schema joins on keeps its identifier's meaning); and each link able to
 /// join. Before anything else of the call is read, as the reference asks
 /// it before the gathering starts.
 fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
@@ -1176,6 +1179,21 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
                 .with_field("table", Detail::text(&table.name))
                 .with_field("column", Detail::text(&column.name)));
             }
+        }
+        // The engine's table takes a time column only of the timestamp
+        // meaning (`Column.__setattr__`): one the schema joins on keeps
+        // its identifier's, and the reference refuses the request.
+        if let Some(time) = &table.time_column
+            && table
+                .columns
+                .iter()
+                .any(|c| c.name == *time && c.stype != Stype::Timestamp)
+        {
+            return Err(
+                invalid("a table's time column does not mean a time", "time_column")
+                    .with_field("table", Detail::text(&table.name))
+                    .with_field("column", Detail::text(time)),
+            );
         }
     }
     sdm_schema::assemble::check_links(description)

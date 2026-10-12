@@ -123,14 +123,40 @@ pub fn decimal_to_f64(value: i128, scale: i8) -> f64 {
     if value < 0 { -positive } else { positive }
 }
 
+/// A decimal sum past what `DECIMAL(38)` holds: the reference's grouped sum
+/// fails on it (pyarrow's `hash_sum`), which its client reports as
+/// `INVALID_REQUEST`; the core names the field the query is.
+fn decimal_overflow() -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "a decimal sum is past the 38 digits its type holds",
+    )
+    .with_field("field", sdm_contract::Detail::text("query"))
+}
+
+/// The exact sum of `values`, in order, refused past `DECIMAL(38)`.
+fn decimal_sum(values: impl Iterator<Item = i128>) -> Result<i128, CoreError> {
+    let mut sum: i128 = 0;
+    for value in values {
+        sum = sum
+            .checked_add(value)
+            .filter(|s| s.abs() <= DECIMAL_38)
+            .ok_or_else(decimal_overflow)?;
+    }
+    Ok(sum)
+}
+
 /// The largest unscaled magnitude a `DECIMAL(38, _)` holds.
 const DECIMAL_38: i128 = 99_999_999_999_999_999_999_999_999_999_999_999_999;
 
 /// `aggregation` of `values` for each of `examples` examples: the rows of
 /// example `batch[row]` whose value is present and whose time is in its
-/// window ([`Bounds`]), in row order. A decimal's sum past `DECIMAL(38)`,
-/// and a decimal's average, take rules this does not port, and are refused
-/// by name (`target_type`).
+/// window ([`Bounds`]), in row order. A decimal's sum past `DECIMAL(38)`
+/// is the caller's error, `INVALID_REQUEST`, as the reference's grouped sum
+/// fails it and its client reports it, a decimal's average's sum included;
+/// the average itself takes a rule this does not port, refused by name
+/// (`target_type`).
 pub fn aggregate(
     aggregation: Aggregation,
     examples: usize,
@@ -180,13 +206,7 @@ pub fn aggregate(
                     as f32,
                 Values::Ones(_) => rows.len() as i64 as f32,
                 Values::Decimal { values: v, scale } => {
-                    let mut sum: i128 = 0;
-                    for &r in rows {
-                        sum = sum
-                            .checked_add(v[r].unwrap_or(0))
-                            .filter(|s| s.abs() <= DECIMAL_38)
-                            .ok_or_else(|| not_yet("target_type"))?;
-                    }
+                    let sum = decimal_sum(rows.iter().map(|&r| v[r].unwrap_or(0)))?;
                     decimal_to_f64(sum, *scale) as f32
                 }
             },
@@ -200,7 +220,13 @@ pub fn aggregate(
                     (sum / (n as i64 as f64)) as f32
                 }
                 Values::Ones(_) => 1.0,
-                Values::Decimal { .. } => return Err(not_yet("target_type")),
+                // The reference's mean sums first, failing a sum past
+                // `DECIMAL(38)` as the caller's error; the mean of what
+                // fits takes a rule this does not port.
+                Values::Decimal { values: v, .. } => {
+                    decimal_sum(rows.iter().map(|&r| v[r].unwrap_or(0)))?;
+                    return Err(not_yet("target_type"));
+                }
             },
             Aggregation::Min | Aggregation::Max => {
                 let max = aggregation == Aggregation::Max;
@@ -579,6 +605,31 @@ mod tests {
             decimal_to_f64(-49_476_625_724_350, 18) as f32,
             -4.947_662_5e-5
         );
+    }
+
+    #[test]
+    fn a_decimal_sum_past_38_digits_is_the_caller_s_error() {
+        let big = 60_000_000_000_000_000_000_000_000_000_000_000_000_i128;
+        let values = Values::Decimal {
+            values: vec![Some(big), Some(big)],
+            scale: 18,
+        };
+        let err = aggregate(
+            Aggregation::Sum,
+            1,
+            &[0, 0],
+            &values,
+            &[Some(0); 2],
+            bounds(&[0]),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, sdm_contract::ErrorCode::InvalidRequest);
+        // One of them alone fits.
+        let one = Values::Decimal {
+            values: vec![Some(big)],
+            scale: 18,
+        };
+        assert!(aggregate(Aggregation::Sum, 1, &[0], &one, &[Some(0)], bounds(&[0])).is_ok());
     }
 
     #[test]

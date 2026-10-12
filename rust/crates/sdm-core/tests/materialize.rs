@@ -652,6 +652,17 @@ fn the_schema_is_held_to_the_reference_s_consistency_check() {
     let mut run = materialize(host(), &kept, QUERY, None).unwrap();
     let err = run.next().unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    // A time column the schema joins on, which keeps its identifier's
+    // meaning: the engine's table refuses it, and so does the core, before
+    // anything is read (it read the source's CAST of the key before).
+    let mut joined = shop();
+    joined.tables[0].time_column = Some("user_id".into());
+    let mut run = materialize(host(), &joined, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("time_column"));
+    assert_eq!(err.fields["table"], Detail::text("orders"));
+    assert_eq!(err.fields["column"], Detail::text("user_id"));
 }
 
 /// The tables of `description` named otherwise than the source names them:

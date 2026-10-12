@@ -16,7 +16,7 @@
       "rule": "inference_config",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:1192",
+      "where": "rust/crates/sdm-core/src/materialize.rs:1210",
       "holds": null,
       "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28a); from T1.24 the host passes the option's name through to the core (contract version 13), which refuses it by name, the value having no place in the contract yet",
       "observed": {

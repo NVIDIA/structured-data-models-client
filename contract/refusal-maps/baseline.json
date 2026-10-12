@@ -16,7 +16,7 @@
       "rule": "classification_task",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:1587",
+      "where": "rust/crates/sdm-core/src/materialize.rs:1605",
       "why": "From T1.27 the core computes both labels over fetched Arrow (base.binary's condition over a COUNT(*) of a 30-day window, base.multiclass's static text target), held to the reference's exactly on both core hosts by the test-only labels operation (sdm-testkit's tests/labels.rs, the client's tests_test_ops/test_the_labels.py); the classification task's layout in the payload is T1.28a's (the classes, their order, ['IN', 'DE', 'US'], and the positive class; for base.multiclass also the static target's context leakage, its column kept out of what the request sends and the entities predicted for taken out of its context), and masked behind it for T1.28b the boolean and text predictions in the result",
       "observed": {
         "python-core": {
