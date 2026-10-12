@@ -13,8 +13,8 @@
 //! current year in the host's local zone, and D4's day-first warning by the
 //! platform's year padding (`date-rules.md`, "The PQL literal rules"). A
 //! day-first literal whose format can be named gives a
-//! [`DATE_LITERAL_DAY_FIRST`] warning, which the run gives on its warnings
-//! channel, once per such literal each time a run reads the query.
+//! [`DATE_LITERAL_DAY_FIRST`] warning, which a `validate_query` run gives on
+//! its warnings channel, once per such literal.
 //!
 //! A query is validated as the reference's `predictive_query.validate`
 //! validates it: parsed; refused if the model cannot answer a target with a
