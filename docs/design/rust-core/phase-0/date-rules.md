@@ -64,7 +64,7 @@ All refusals are `StructuredDataError` with code `INVALID_REQUEST`.
 
 Per-row reading exists for warehouse output that writes a zone on some rows and not others.
 It also reads a value outside the accepted shapes, by `dateutil`, if the rest of the column is one decided shape: for example `['15/03/2024', 'March 3 2020']` reads both.
-The core implements `dateutil`'s reading for such values (DT-6, owner decision 30).
+The core implemented `dateutil`'s reading for such values (DT-6, owner decision 30) until the owner's answer of 2026-10-11 (E66(h)): from T1.25b such a value is outside the core's list and refused by name ("The core's text formats" below, DT-15).
 
 ### Two-digit years
 
@@ -80,6 +80,57 @@ This depends on the host's clock.
 - A zone given by name is never resolved from text: pandas 3 refuses every name but `UTC` and `GMT`.
 - A frame column that is already zone-aware (`datetime64[ns, America/New_York]`) holds UTC instants, so converting it needs no zone rules.
   Zone rules are needed only to show local wall times, and when a caller localizes a wall time; pandas 3 does both with `zoneinfo` and the host's time zone database.
+
+## The core's text formats (T1.25b)
+
+The core reads text as times by this list and nothing else (decision E68, on the owner's answer of 2026-10-11, E66(h)).
+`sdm_engine::time::text` follows it; `rust/crates/sdm-engine/tests/text_times_record.py` reads it apart from the Rust reader, with Python's `re` and `datetime`, to record the vectors `text_times.rs` holds the reader to.
+No reading here follows pandas or `dateutil`: no format is guessed from a column's first value, no word is read as a date, no second rolls over.
+Where the reference reads text otherwise, the difference is in register DT-15 (text outside the list, refused by name), DT-16 (text in the list, read otherwise) and DT-17 (inference's text outside the client's shapes), measured over the inputs T1.25 recorded by `text-times-differential.json`.
+
+### The formats
+
+A value, with its surrounding white space (Unicode's) taken off, is in the list when it is, whole, one of these:
+
+| Format | As `strftime` writes it |
+|---|---|
+| A date, year first: a four-digit year, a two-digit month and day, `-` or `/` twice | `%Y-%m-%d`, `%Y/%m/%d` |
+| A date, day or month first: a day and a month of one or two digits, a year of two to four, `/` or `-` twice | `%d/%m/%Y` or `%m/%d/%Y`, and with `-` |
+| Either date, a space or `T`, and a time of day: the hour (two digits after a year-first date, one or two after the other), the minutes, optionally the seconds, optionally a point and one to nine digits | `%H:%M`, `%H:%M:%S`, `%H:%M:%S.%f` |
+| A time of day and, with or without one space between, a zone: `Z`, `UTC`, `GMT`, or an offset `+HH`, `+HHMM` or `+HH:MM` (or `-`) | `Z`, `UTC`, `GMT`, `%:::z`, `%z`, `%:z` |
+
+Digits are ASCII digits.
+ISO 8601 and RFC 3339 dates and timestamps are the first format with the third and the fourth: `T` or a space, `Z` or an offset.
+The list is the client's two shapes ("Accepted shapes" above, `sdm_engine::time::text_shapes`) with one separator twice, no zone named but `UTC` and `GMT`, and every field in range.
+
+### What a value reads as
+
+Its fields are parsed by `jiff`'s `strtime` with the format it is written in, which the value alone gives:
+
+- the date and the time of day must name one: a month of 1 to 12, a day the month has, an hour of 0 to 23, a minute and a second of 0 to 59 (no leap second), and an offset's hours 0 to 23 and minutes 0 to 59;
+- a two-digit year is placed in the hundred years around the clock's year, from 50 years before it to 49 after, the client's rule ("Two-digit years" above; the run's `HostFacts.now` in UTC); a year of three or four digits is the year written;
+- a value with a zone reads as the instant its wall clock names at that offset (`Z`, `UTC` and `GMT` at zero), one without as its wall clock in UTC;
+- the instant must lie in the years 1 to 9999, in UTC;
+- a value empty once its white space is gone holds no time, as a missing one.
+
+Every other value is outside the list: dates in words (`March 3 2020`), packed digits (`20240101`), dots (`15.01.2024`), fields written short (`2024-1-5`), two separators (`2024/01-05`), a value naming no date (`2024-02-30`, `32-12-24`), a second of 60, a fraction past nine digits, an offset of a day or more or with minutes past 59, another zone name (`EST`, `utc`), the year 0, and words such as `now`, `today` or `NaT`.
+
+### Day or month first
+
+The values read together decide the order, by the client's rule (`day_comes_first`, "Deciding the order" above): among the values written day or month first, in the client's shape, if some first field is past 12 and no second field is, the day comes first; if some second field is past 12 and no first field is, the month comes first; otherwise nothing decides it.
+The values read together are a fetch's for `materialize`, the preview's for the time column's choice, and the first 100 non-empty ones for inference's score.
+Where nothing decides, a value the two orders read differently is refused (`text_time_order`), and one they read alike (`05/05/2024`, or a year-first value) is read.
+Where the rule decides that the day comes first, inference warns (`DATES_READ_DAY_FIRST`), naming the first such value's format as `strftime` writes it, `%y` for a two-digit year.
+
+### The readings
+
+Each refusal is `UNSUPPORTED_REQUEST` naming its rule.
+
+- `materialize` reads a fetched text time column by the reading its provider declares (`text_times`, register DT-7: `value_by_value` is this list): a value outside the list is refused (`text_time`), as are an order left open (`text_time_order`) and offsets mixed (`text_time_zones`, DT-11); a blank value is dropped and warned of (`TIME_VALUES_UNREAD`), as the reference drops it.
+- The time column's choice reads a text time column's preview to UTC, offsets mixed taken; a value outside the list, or an order left open, is refused (`text_time`) only where the choice asks where the column starts.
+- Inference's score (`contains_timestamp`, "Where text becomes a date" above): 0.3 for a name that says time and the share of the first 100 non-empty values read as times, a timestamp at 1.0 or more.
+  The share is counted at fewest, the fewer of the two orders' counts where the values decide none, and at most, the more of them counting the values in the client's shapes the list does not read and, under a name that says time, every value the list does not read; where the two decide otherwise the text is refused (`text_time`), and offsets mixed among the values read are refused (`text_time_zones`).
+  So under a name that does not say time, text outside the client's shapes is no time, as the client's own inference holds (`client/core/dates.py`: inference does not read loose text as dates, which would read part codes as dates): `AW00011205` is no timestamp.
 
 ## The PQL literal rules
 
@@ -113,6 +164,7 @@ An ambiguous slash date is read month first (`01/02/2024` is the 2nd of January)
 Mixed offsets raise `ValueError` under pandas 3 instead of coercing.
 So one text column can read differently as a frame (client rules) and as a SQL source (engine rules); this is today's behavior, and the core should keep it or register the change.
 This was checked at the function level, not through a source end to end.
+From T1.25b the core reads a source's text by its own list, "The core's text formats" below, with the client's order and two-digit year rules, and not by this reading (DT-7, DT-16).
 
 ## pandas 2 and pandas 3
 

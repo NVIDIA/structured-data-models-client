@@ -768,10 +768,10 @@ pub fn unread_times(table: &InferredTable) -> Vec<CoreWarning> {
         .collect()
 }
 
-/// The warnings of the text columns whose dates the reference's engine
-/// read by a format that puts the day first, which pandas warns of as it
-/// guesses the format: one a column, naming the table, the column and the
-/// format, as pandas writes it.
+/// The warnings of the text columns whose dates the client's rule reads
+/// day first (`date-rules.md`, "The core's text formats"), as the
+/// reference warns of a format that puts the day first: one a column,
+/// naming the table, the column and the format, as `strftime` writes it.
 pub fn day_first(table: &InferredTable) -> Vec<CoreWarning> {
     table
         .day_first

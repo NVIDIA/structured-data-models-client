@@ -713,12 +713,19 @@ entries:
     The core implements the dateutil readings such columns reach.
   affected_inputs: Frame time columns mixing a decided shape with free-form date text.
   cases: [T0.6]
-  status: approved
+  refs: [DT-15]
+  status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 30}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
-    date-rules.md, "Per-row reading". Owner decision 30 keeps it, scoped by
-    Phase 1 cases; refusing would refuse input Python accepts.
+    date-rules.md, "Per-row reading". Owner decision 30 kept it, scoped by
+    Phase 1 cases; refusing would refuse input Python accepts. Withdrawn by
+    the owner's answer of 2026-10-11 (E66(h): no pandas emulation; the
+    text-time reader parses a fixed list of formats and refuses everything
+    else by name), recorded at T1.25b (E68): the core reads no value by
+    dateutil, and such a value is outside its list and refused by name
+    (DT-15). No reader of a frame's time column existed in the core, so no
+    case changes.
 
 - id: DT-7
   title: The engine's text-date reading on SQL sources
@@ -741,13 +748,18 @@ entries:
     unifying the two rule sets would be a separate change entry. Implemented
     at T1.25 as kept (E62): whether a source's text times are read value by
     value is the provider's capability (ProviderCapabilities.text_times),
-    which sdm-data declares for its SQL dialects, and sdm_engine::time::text
-    reads value by value within date-rules.md's shapes, refusing by name
-    what takes another rule; held to pandas by sdm-engine's
-    tests/text-times.json. time.text-us-date and time.text-one-bad-value
-    now meet the source's own CAST failure, under another code (DT-12).
-    Still for the owner: implementing the reference's behaviour, it waits
-    only if the owner wants to depart from it.
+    which sdm-data declares for its SQL dialects. From T1.25b (E68, on the
+    owner's E66(h)) the capability is kept and its reading is the core's
+    fixed list of formats (date-rules.md, "The core's text formats"), not
+    the engine's pandas reading: a value outside the list is refused by name
+    (DT-15), the order of day and month is the client's rule over the
+    fetch's values and a two-digit year the client's, where the engine reads
+    each value month first unless it cannot be (DT-16); a value the engine
+    reads as no time and the list reads as none (a blank one) is still
+    dropped and warned of. time.text-us-date and time.text-one-bad-value
+    meet the source's own CAST failure, under another code (DT-12), as at
+    T1.25. Still for the owner: whether to keep the capability's name for a
+    reading that is now the core's own.
 
 - id: DT-8
   title: Zone names in any case, known by their IANA spelling
@@ -970,6 +982,144 @@ entries:
 
 # --- Orderings ----------------------------------------------------------------
 
+- id: DT-15
+  title: Text outside the core's list of formats refused by name
+  kind: change
+  old_behavior: >-
+    The reference reads text times with pandas' to_datetime: dateutil reads
+    dates in words (March 3 2020, Jan 5), packed digits (20240101), dots
+    (15.01.2024), short fields (2024-1-5), the clock's words (now, today); a
+    second of 60 rolls over under a format guessed from the first value;
+    another value (a code, a value naming no date such as 2024-02-30, an
+    offset of a day or more, a zone named other than UTC or GMT) reads as
+    NaT, which materialize drops and warns of, and which inference counts as
+    no time; minutes past 59 in an offset count on.
+  new_behavior: >-
+    The core reads text by its fixed list of formats only (date-rules.md,
+    "The core's text formats"; sdm_engine::time::text): a value outside it
+    is refused, UNSUPPORTED_REQUEST with rule text_time, by materialize when
+    a fetched text time column or text timestamp feature holds one, by the
+    time column's choice where it asks where such a column starts, and by
+    inference where such values could make the score (under a name that
+    says time, every value outside the list; under another, the ones in the
+    client's shapes; the rest is DT-17).
+  affected_inputs: >-
+    Sources holding text times outside the list: the classes above. Over the
+    13,456 columns T1.25 recorded pandas' readings of
+    (rust/crates/sdm-engine/tests/text-times-differential.json, class a):
+    10,623 materialize readings, 10,623 time-column readings and 18,856 of
+    26,908 inference decisions; over T1.25b's 60 generated DuckDB sources,
+    a zone named EST, dates in words, dots, packed digits and codes under a
+    name that says time, and a text feature holding a junk value, a value
+    naming no date or a leap second.
+  cases: [T1.25b]
+  refs: [DT-6, DT-7, P1B-2]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Approved by the owner's T1.25b answer of 2026-10-11, relayed by the
+    orchestrator (E66(h)): "A named refusal of text outside the documented
+    formats is approved by the owner's T1.25b answer (2026-10-11)." Each
+    refusal here is of a value outside the documented list; checked so by
+    the differential's classifier (class a: the core's answer is the named
+    refusal) and held by text_times.rs over the report's examples. No
+    baselined case changes (the gate passes with no transition).
+
+- id: DT-16
+  title: Text in the core's list read, refused or warned of otherwise than the reference
+  kind: change
+  old_behavior: >-
+    pandas reads a column's text by a format guessed from its first value,
+    reading a value written another way as NaT (inference's and the time
+    column's readings), or value by value with each slash date month first
+    unless its first field cannot be a month (a SQL source's text time
+    column); it warns of a guessed format that puts the day first, which it
+    guesses from a first value whose first field is past 12 and a four-digit
+    year; values with mixed offsets that its guess leaves partly NaT do not
+    raise; an instant past what nanoseconds hold, in a column of nanosecond
+    values, is NaT.
+  new_behavior: >-
+    The core reads every value of its list by the value's own format, and
+    the order of day and month by the client's rule over the values read
+    together (date-rules.md, "The core's text formats"). The kinds, as the
+    differential names them (text-times-differential.json): b.order_open, an
+    order the values leave open is refused (text_time_order) where the
+    reference reads month first (01/05/2024 alone); b.order_decided, a value
+    read in the order the column decides (02/01/2024 beside 15/03/2024 is
+    the 2nd of January, the 1st of February to the engine); b.format_guess,
+    a value the reference's guessed format reads as no time is read (a
+    column of 2024-01-05 and 2024-01-05 10:30:00, or of ISO and slash
+    dates), so inference may type a text column a timestamp that the
+    reference types as text and materialize go on to read it; b.offsets,
+    offsets mixed among the values read refused (text_time_zones) where the
+    reference's guess left one side NaT and raised nothing, or decided where
+    it raised; b.range, a year past 2262 read where a nanosecond column
+    reads NaT (materialize then refuses it, DT-14); b.order_rule, the day-
+    first warning given where the client's rule decides the day comes first
+    (a two-digit year, an ambiguous first value) and not where pandas guesses
+    it from a value the list does not read.
+  affected_inputs: >-
+    Over the 13,456 columns T1.25 recorded: materialize 1,166 (1,150
+    b.order_open, 15 b.order_decided, 1 b.range); the time column's choice
+    1,203; inference 357 of 26,908 decisions (272 b.offsets, 67
+    b.format_guess, the rest range or mixed); the warning 361 of 2,810. Over
+    T1.25b's 60 generated sources: European dates (dd/mm/yyyy, dd-mm-yyyy
+    HH:MM) typed a timestamp and warned of, two-digit European years read
+    and warned of, US-and-ISO and mixed ISO layouts typed a timestamp, an
+    ambiguous text feature refused (text_time_order), mixed offsets refused
+    at describe.
+  cases: [T1.25b]
+  refs: [DT-7, DT-11, DT-14]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    For the owner, never self-approved: the owner's T1.25b answer requires
+    separate approval for a value inside the documented formats read
+    differently from the reference, before affected cases are admitted. No
+    contract case is affected (the gate passes with no transition; the
+    family maps and the AdventureWorks journey are unchanged), so none waits
+    for admission. Recommendation: approve as a class. Each kind is the
+    client's documented rule (the order over the column, two-digit years,
+    per-row reading) or a pandas artefact the core drops (the format guessed
+    from the first value, month first by default, nanosecond overflow);
+    b.order_open could instead read month first by default, which is the
+    engine's reading, if the owner prefers it to the refusal.
+
+- id: DT-17
+  title: Inference counts text outside the client's shapes as no time under a name that does not say time
+  kind: change
+  old_behavior: >-
+    contains_timestamp counts every value pandas reads as a date: under a
+    name that does not say time, a column whose first 100 non-empty values
+    pandas all reads (dates in words, packed digits, the clock's words) is a
+    timestamp.
+  new_behavior: >-
+    Under a name that does not say time, the core counts a value outside the
+    client's shapes as no time, so such a column is text (no refusal); under
+    a name that says time, such values could make the score and the column
+    is refused (text_time, DT-15). A code (AW00011205) is no timestamp under
+    any name the reference would not make one of either.
+  affected_inputs: >-
+    Over the 13,456 columns T1.25 recorded: 459 of 26,908 inference
+    decisions and 11 day-first warnings (class c), every one a column of the
+    clock's words (now, today) or of dates in words or packed digits under a
+    name that does not say time. None of T1.25b's 60 generated sources.
+  cases: [T1.25b]
+  refs: [DT-15, P1B-2]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    For the owner: not a named refusal, so outside the T1.25b answer's
+    approval. Recommendation: approve. It is the client's own inference rule
+    (client/core/dates.py: inference does not read loose text as dates,
+    which would read part codes as dates); refusing instead would need a
+    reader of dateutil's words to tell a date from a code, or would refuse
+    every text column of the AdventureWorks journey (codes, names, UUIDs),
+    which reaches predict on both hosts with this rule.
+
 - id: ORD-1
   title: Tie order of the shared train set by entity time
   kind: change
@@ -1144,32 +1294,25 @@ entries:
     schema bridge refuses neither relationships nor a time column cleared
     (None), which the core takes (contract version 13): the rules
     relationships and time_column_cleared are gone. From T1.25 the core
-    reads text as dates as the reference's engine does (DT-7), over
-    date-rules.md's shapes, so text_time refuses only text whose reading
-    takes a rule outside them and that the values that never read do not
-    already decide, for example: a zone written by name, white space around a value, a
-    free-form date (March 3 2020), a packed one (20240101), the year 0, more
-    than six fractional digits, a three-digit year, mixed separators, and
-    the clock's own now and today, dot dates (15.01.2024) and unpadded
-    year-first values (2024-1-5); and, from T1.25's fix round 1, an offset
-    with seconds (+01:00:30), Z followed by an offset (Z+01:00), and an
-    offset writing minutes past 59 under an ISO format, where pandas reads
-    that value as no time (2024-01-02T01:02:03+01:99 after
-    2024-01-01T01:02:03+01:00, refused for inference and the time column's
-    choice; pinned at T1.26a by text-times.json, beside the non-ISO
-    format's reading, which agrees with pandas); offsets mixed are refused
-    by name (text_time_zones, DT-11). Measured at T1.25 over the T0.6 corpus's 121
-    column cases as source columns under a name that says time and one that
-    does not: the core describes 112 of the 242 as the reference does,
-    warnings included; on 66 it decides, as the reference does, that the
-    text is no timestamp and then refuses multicategorical; it refuses 58
-    by text_time (zone names, white space around a value) and 6 by
-    text_time_zones (DT-11), which the reference refuses unnamed. Through that route a
-    DuckDB system view named as a table (pg_class; duckdb_columns over a
-    source of one table, which the core describes over the shop base),
-    which the reference describes, is refused by text_time, its text
-    holding values the core's reading does not decide (measured at T1.24
-    and again at T1.25, pinned by the client's
+    read text as dates as the reference's engine does (DT-7), over
+    date-rules.md's shapes, refusing text_time where that reading took a
+    rule outside them; from T1.25b (E68) it reads text by its own list of
+    formats (date-rules.md, "The core's text formats"), and text_time
+    refuses, in inference, text the list does not read that could make the
+    score (under a name that says time, any such value; under another, one
+    in the client's shapes), and in materialize a value outside the list
+    (DT-15); offsets mixed are refused by name (text_time_zones, DT-11), and
+    an order of day and month the values leave open by text_time_order
+    (DT-16). Measured at T1.25b over the T0.6 corpus's 121 column cases as
+    source columns under a name that says time and one that does not: the
+    core describes 60 of the 242 as the reference does, warnings included;
+    on 36 it decides, as the reference does, that the text is no timestamp
+    and then refuses multicategorical; it refuses 98 by text_time (DT-15)
+    and 14 by text_time_zones (6 of them the reference refuses unnamed,
+    DT-11); 34 it reads otherwise in the list (DT-16). DuckDB system views
+    named as a table (pg_class; duckdb_columns over a source of one table),
+    which the core refused by text_time at T1.24 and T1.25, are described
+    from T1.25b as the reference describes them (pinned by the client's
     tests/test_the_schema_route.py). A key of one column given as
     a sequence (['user_id'] or ('user_id',)), which the reference keeps as
     a tuple and infers no link to by name, is the column's name on the core
@@ -1183,7 +1326,7 @@ entries:
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
     reference's.
-  cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d, T1.21e, T1.23, T1.24, T1.25, T1.26a, T1.32c, T1.32d]
+  cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d, T1.21e, T1.23, T1.24, T1.25, T1.25b, T1.26a, T1.32c, T1.32d]
   status: proposed
   approved_by: null
   decision_ref: null
