@@ -276,9 +276,9 @@ impl Reader {
     }
 
     /// The values' instants, a missing value `None`, as a source's text
-    /// time column is read (register DT-7): refused for
-    /// a value outside the list, an order the values leave open, and,
-    /// unless read to UTC, offsets mixed.
+    /// time column is read (register DT-7): refused for a value outside the
+    /// list, an order the values leave open, and, unless read to UTC,
+    /// offsets mixed.
     pub fn column(
         &self,
         values: &[Option<&str>],
