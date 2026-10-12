@@ -89,7 +89,10 @@ FAULTS: dict[str, tuple[Callable[[dict[str, Any]], None], str]] = {
         lambda d: d['entries'].append(copy.deepcopy(d['entries'][0])),
         'PK-1: the ID repeats',
     ),
-    'an ID removed': (lambda d: d['entries'].pop(), 'PQL-2: removed'),
+    'an ID removed': (
+        lambda d: d['entries'].remove(_entry(d, 'PQL-2')),
+        'PQL-2: removed',
+    ),
     'a case that resolves to nothing': (
         lambda d: _entry(d, 'PQL-2')['cases'].append('no.such-case'),
         'case no.such-case: not a corpus case',
