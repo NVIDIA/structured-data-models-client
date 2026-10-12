@@ -87,6 +87,7 @@ impl TextTimes for Days {
         let open = read.iter().filter(|r| r.is_err()).count() - codes;
         Ok(TextShare {
             fewest,
+            listed: fewest,
             most: fewest + open,
             unshaped: codes,
         })

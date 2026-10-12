@@ -21,9 +21,10 @@ missing value, or ``"outside"`` (a value outside the
 list, ``text_time``), ``"order"`` (an order of day and month the values
 leave open, ``text_time_order``) or ``"mixed"`` (offsets mixed,
 ``text_time_zones``); ``utc``, the same read to UTC, where no offsets are
-mixed; ``share``, the fewest and the most values read as times (the most
-counting the values in the client's shapes the list does not read) and how
-many are outside the shapes, or ``"mixed"``; ``day_first``, the format inference warns of, or null.
+mixed; ``share``, the values read as times at fewest (the fewer of the two
+orders' counts where the values decide none), those read in either order,
+those and the values in the client's shapes read in neither, and the values
+outside the shapes, or ``"mixed"``; ``day_first``, the format inference warns of, or null.
 ``year`` is the clock's year, which places a two-digit year.
 
 The columns: a grid over the formats (each date, separator, year length,
@@ -88,15 +89,8 @@ def month_days(year: int, month: int) -> int:
 
 
 def epoch_days(year: int, month: int, day: int) -> int:
-    """Days from 1970-01-01, by ordinals where datetime holds the year."""
-    if 1 <= year <= 9999:
-        return date(year, month, day).toordinal() - date(1970, 1, 1).toordinal()
-    # The year 0 (a leap year, proleptic): 366 days before 0001-01-01.
-    assert year == 0
-    before = sum(month_days(0, m) for m in range(1, month)) + day - 1
-    return (
-        date(1, 1, 1).toordinal() - date(1970, 1, 1).toordinal() - 366 + before
-    )
+    """Days from 1970-01-01, by datetime's ordinals (the years 1 to 9999)."""
+    return date(year, month, day).toordinal() - date(1970, 1, 1).toordinal()
 
 
 LOW = epoch_days(1, 1, 1) * 86_400 * 10**9
@@ -161,6 +155,9 @@ def one(value: str | None, order: str) -> tuple:
     ):
         return SHAPED
     if day > month_days(year, month):
+        return SHAPED
+    # The year written is 1 to 9999, before any offset moves the instant.
+    if not 1 <= year <= 9999:
         return SHAPED
     second = int(ss or 0)
     nanos = int((frac or '').ljust(9, '0') or 0)
@@ -244,10 +241,13 @@ def share(values: list[str | None]) -> object:
     if mixed(mf) or mixed(df):
         return 'mixed'
     fewest = min(sum(r[0] == 'time' for r in read) for read in (mf, df))
-    most = max(
-        sum(r[0] == 'time' or r == SHAPED for r in read) for read in (mf, df)
+    listed = sum(
+        a[0] == 'time' or b[0] == 'time' for a, b in zip(mf, df, strict=True)
     )
-    return [fewest, most, sum(r == OUTSIDE for r in mf)]
+    shaped = sum(
+        a == SHAPED and b == SHAPED for a, b in zip(mf, df, strict=True)
+    )
+    return [fewest, listed, listed + shaped, sum(r == OUTSIDE for r in mf)]
 
 
 def day_first(values: list[str | None]) -> str | None:
@@ -360,6 +360,11 @@ OTHERS = [
     '2024-01-05T10:30z',
     '0000-01-05',
     '0000-12-31 23:00-02:00',
+    '0000-12-31T23:00-02:00',
+    '9999-12-31T23:00-02:00',
+    '0001-01-01T00:30+01:00',
+    '0001-01-01T00:30-01:00',
+    '9999-12-31T22:00-01:00',
     '9999-12-31 23:00-02:00',
     '0001-01-01 00:00+01:00',
     '2024/01-05',

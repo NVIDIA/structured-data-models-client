@@ -60,13 +60,15 @@ enum Read {
     Outside { shaped: bool },
 }
 
-/// The fewest and the most of a column's values that read as times: the
-/// two orders' counts where the values do not decide one, and the most
-/// counting every value in the client's shapes but outside the list; and
-/// how many are outside the shapes too, which the core never reads.
+/// How many of a column's values read as times: `fewest`, the fewer of the
+/// two orders' counts where the values decide none; `listed`, the values
+/// read in either order; `most`, those and the values in the client's
+/// shapes the list reads in neither; `unshaped`, the values outside the
+/// shapes, which the core never reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Share {
     pub fewest: usize,
+    pub listed: usize,
     pub most: usize,
     pub unshaped: usize,
 }
@@ -164,7 +166,7 @@ fn names_no_date(shape: &Shape<'_>, order: Order) -> bool {
 }
 
 /// The first and last instants the list reads: the years 1 to 9999, in
-/// UTC.
+/// UTC (the year written is held to the same years first).
 fn in_years(at: Instant) -> bool {
     let low = Instant::from_civil(&Civil::new(1, 1, 1, 0, 0, 0, 0).expect("a date"), 0);
     let high = Instant::from_civil(&Civil::new(10_000, 1, 1, 0, 0, 0, 0).expect("a date"), 0);
@@ -231,6 +233,11 @@ impl Reader {
         let Ok(at) = parsed.to_datetime() else {
             return outside;
         };
+        // The year written must be 1 to 9999 whatever the offset makes of
+        // it (`0000-12-31T23:00-02:00` is the year 0, outside the list).
+        if !(1..=9999).contains(&at.year()) {
+            return outside;
+        }
         let offset = match shape.time.and_then(|t| t.zone) {
             None => None,
             Some((_, Zone::Z | Zone::Name(_))) => Some(0),
@@ -314,29 +321,33 @@ impl Reader {
         self.column(values, false)
     }
 
-    /// How many of `values` read as times, at fewest and at most, for
-    /// inference's score: the fewer of the two orders' counts where the
-    /// values decide none, and the more counting every value in the
-    /// client's shapes the list does not read as one it might; and how many
-    /// are outside the shapes. Refused only for offsets mixed among the
-    /// values read.
+    /// How many of `values` read as times ([`Share`]), for inference's
+    /// score. Refused only for offsets mixed among the values read.
     pub fn share(&self, values: &[Option<&str>]) -> Result<Share, Unread> {
         let (month_first, day_first) = self.readings(values);
         if mixed(&month_first) || mixed(&day_first) {
             return Err(Unread::MixedZones);
         }
-        let count = |read: &[Read], shaped: bool| {
-            read.iter()
-                .filter(|r| match r {
-                    Read::Time(..) => true,
-                    Read::Outside { shaped: true } => shaped,
-                    _ => false,
-                })
-                .count()
-        };
+        let times = |read: &[Read]| read.iter().filter(|r| matches!(r, Read::Time(..))).count();
+        let pairs = || month_first.iter().zip(&day_first);
+        let listed = pairs()
+            .filter(|pair| matches!(pair, (Read::Time(..), _) | (_, Read::Time(..))))
+            .count();
+        let shaped = pairs()
+            .filter(|pair| {
+                matches!(
+                    pair,
+                    (
+                        Read::Outside { shaped: true },
+                        Read::Outside { shaped: true }
+                    )
+                )
+            })
+            .count();
         Ok(Share {
-            fewest: count(&month_first, false).min(count(&day_first, false)),
-            most: count(&month_first, true).max(count(&day_first, true)),
+            fewest: times(&month_first).min(times(&day_first)),
+            listed,
+            most: listed + shaped,
             unshaped: month_first
                 .iter()
                 .filter(|r| matches!(r, Read::Outside { shaped: false }))
@@ -418,6 +429,7 @@ impl sdm_schema::infer::TextTimes for Reader {
         Reader::share(self, values)
             .map(|s| sdm_schema::infer::TextShare {
                 fewest: s.fewest,
+                listed: s.listed,
                 most: s.most,
                 unshaped: s.unshaped,
             })
@@ -431,7 +443,8 @@ impl sdm_schema::infer::TextTimes for Reader {
 
 fn unread(unread: Unread) -> sdm_schema::infer::TextUnread {
     match unread {
-        Unread::Outside | Unread::Order => sdm_schema::infer::TextUnread::Undecided,
+        Unread::Outside => sdm_schema::infer::TextUnread::Undecided,
+        Unread::Order => sdm_schema::infer::TextUnread::Order,
         Unread::MixedZones => sdm_schema::infer::TextUnread::MixedZones,
     }
 }
@@ -504,7 +517,10 @@ mod tests {
             "2024-01-05 10:30 EST",
             "2024-01-05 10:30 utc",
             "0000-01-05",
+            "0000-12-31T23:00-02:00",
+            "9999-12-31T23:00-02:00",
             "9999-12-31 23:00-02:00",
+            "0001-01-01T00:30+01:00",
             "now",
             "NaT",
             "AW00000001",
@@ -604,6 +620,7 @@ mod tests {
             ]),
             Ok(Share {
                 fewest: 1,
+                listed: 1,
                 most: 3,
                 unshaped: 1
             })
@@ -612,6 +629,7 @@ mod tests {
             share(&["13/02/2024", "02/13/2024", "13/13/2024"]),
             Ok(Share {
                 fewest: 1,
+                listed: 2,
                 most: 3,
                 unshaped: 0
             })

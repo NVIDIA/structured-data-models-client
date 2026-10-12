@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 const VECTORS: &str = include_str!("text-times.json");
 
 /// The columns recorded, each read four ways.
-const COLUMNS: usize = 2_345;
+const COLUMNS: usize = 2_360;
 
 fn values(column: &Value, at: &str) -> Result<Vec<Option<String>>, String> {
     let items = column
@@ -72,6 +72,7 @@ fn expected_share(share: &Value, at: &str) -> Result<Result<Share, Unread>, Stri
         Value::Array(counts) => match counts[..] {
             [
                 Value::Number(ref a),
+                Value::Number(ref l),
                 Value::Number(ref b),
                 Value::Number(ref c),
             ] => {
@@ -82,6 +83,7 @@ fn expected_share(share: &Value, at: &str) -> Result<Result<Share, Unread>, Stri
                 };
                 Ok(Ok(Share {
                     fewest: count(a)?,
+                    listed: count(l)?,
                     most: count(b)?,
                     unshaped: count(c)?,
                 }))
@@ -221,7 +223,7 @@ fn the_check_fails_closed() {
         (
             json!(["2024-01-05", "AW00011205"]),
             "share",
-            json!([1, 1, 0]),
+            json!([1, 1, 2, 0]),
         ),
         (json!(["15/03/2024"]), "day_first", Value::Null),
     ] {
@@ -239,11 +241,11 @@ fn the_check_fails_closed() {
         json!({"format": "sdm-text-times/2", "year": 2026, "columns": []}),
         json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": []}]}),
         json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"]}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": "read", "utc": ["1"], "share": [1, 1, 0], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": [1], "utc": ["1"], "share": [1, 1, 0], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": [5], "column": ["1"], "utc": ["1"], "share": [1, 1, 0], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1], "day_first": 5}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": "read", "utc": ["1"], "share": [1, 1, 1, 0], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": [1], "utc": ["1"], "share": [1, 1, 1, 0], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": [5], "column": ["1"], "utc": ["1"], "share": [1, 1, 1, 0], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1, 1], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1, 1, 0], "day_first": 5}]}),
         json!({"format": "sdm-text-times/1", "year": 2026, "columns": []}),
         json!({"format": "sdm-text-times/2", "columns": []}),
     ] {
@@ -287,6 +289,9 @@ fn core_answer(reader: &Reader, outcome: &str, example: &Value) -> Result<Value,
             let score =
                 |n: usize| f64::from(u8::from(named)) * 0.3 + n as f64 / first.len() as f64 >= 1.0;
             match reader.share(&first) {
+                Ok(share) if score(share.fewest) != score(share.listed) => {
+                    json!("text_time_order")
+                }
                 Ok(share)
                     if score(share.fewest)
                         == score(share.most + if named { share.unshaped } else { 0 }) =>
@@ -300,6 +305,58 @@ fn core_answer(reader: &Reader, outcome: &str, example: &Value) -> Result<Value,
         "day_first" => json!(reader.day_first_format(&given)),
         _ => return Err(format!("{outcome}: not an outcome")),
     })
+}
+
+/// Whether a class `a` answer is made by a value outside the list in both
+/// orders of day and month (DT-15): the reading refuses it so, or, for
+/// inference, the refusal is `text_time` (an order the values in the list
+/// leave open is `text_time_order`, DT-16) and its values hold such a value.
+fn made_outside(reader: &Reader, outcome: &str, example: &Value, core: &Value) -> bool {
+    if core == "outside" {
+        return true;
+    }
+    if outcome != "inference" || core != "text_time" {
+        return false;
+    }
+    let Ok(owned) = values(&example["values"], outcome) else {
+        return false;
+    };
+    let first: Vec<Option<&str>> = owned
+        .iter()
+        .flatten()
+        .filter(|v| !v.is_empty())
+        .take(100)
+        .map(|v| Some(v.as_str()))
+        .collect();
+    reader.column(&first, false) == Err(Unread::Outside)
+}
+
+/// An order of day and month two values in the list leave open is never
+/// counted as made outside the list (T1.25b fix 1, the review's
+/// reproduction): its refusal is DT-16's, not DT-15's.
+#[test]
+fn an_open_order_in_the_list_is_not_a_refusal_outside_it() {
+    let reader = Reader::new(2026);
+    for named in [true, false] {
+        let example = json!({"values": ["03/15/99", "15/11/00"], "named": named});
+        let core = core_answer(&reader, "inference", &example).unwrap();
+        assert_eq!(core, "text_time_order");
+        assert!(
+            !made_outside(&reader, "inference", &example, &core),
+            "{named}"
+        );
+        // Even said text_time, values in the list are no evidence for a.
+        let said = json!("text_time");
+        assert!(
+            !made_outside(&reader, "inference", &example, &said),
+            "{named}"
+        );
+    }
+    // A value outside the list beside values that decide alike: made by it.
+    let example = json!({"values": ["2024-01-05", "2024-01-06", "2021-13-45"], "named": false});
+    let core = core_answer(&reader, "inference", &example).unwrap();
+    assert_eq!(core, "text_time");
+    assert!(made_outside(&reader, "inference", &example, &core));
 }
 
 /// The differential report (`text-times-differential.json`, recorded by
@@ -338,7 +395,7 @@ fn the_differential_reports_the_core_as_it_reads() {
                 assert_ne!(core, example["reference"], "{outcome} {class}: {example}");
                 if class == "a" {
                     assert!(
-                        core == "outside" || core == "text_time",
+                        made_outside(&reader, outcome, example, &core),
                         "{outcome}: {example}"
                     );
                 }

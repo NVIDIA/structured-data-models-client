@@ -31,8 +31,8 @@ difference is one of three classes:
   owner's approval; its kinds are named (``b.order_open`` and the rest,
   below);
 - ``c``: text outside the client's shapes, which the core counts as no
-  time under a name that does not say time and never warns of, where the
-  reference reads it as a time, and so decides or warns otherwise.
+  time under a name that does not say time, where the reference reads it
+  as a time, and so decides otherwise.
 
 The report keeps each class's count and its three shortest examples.
 """
@@ -172,14 +172,19 @@ def decision(score_of: float, named: bool) -> bool:
 
 
 def core_decides(first: list[str], named: bool) -> object:
-    """The core's answer to whether text is a timestamp: the share at
-    fewest and at most, the most counting text outside the client's shapes
-    under a name that says time."""
+    """The core's answer to whether text is a timestamp: an order of day
+    and month that changes the score is refused text_time_order; else the
+    share at fewest and at most, the most counting the values in the
+    client's shapes the list does not read and, under a name that says
+    time, every value it does not read, refused text_time where the two
+    decide otherwise."""
     share = record.share(first)
     if share == 'mixed':
         return 'text_time_zones'
-    fewest, most, unshaped = share
+    fewest, listed, most, unshaped = share
     low = decision(fewest / len(first), named)
+    if low != decision(listed / len(first), named):
+        return 'text_time_order'
     high = decision((most + (unshaped if named else 0)) / len(first), named)
     return low if low == high else 'text_time'
 
@@ -215,7 +220,12 @@ def classify_inference(
     ):
         return None, ref_decision, core_decision
     if core_decision == 'text_time':
+        # Refused by values outside the list in both orders (the order of
+        # the rest decides the score alike, or it would be text_time_order).
+        assert record.column(first, utc=False) == 'outside', first
         return 'a', ref_decision, core_decision
+    if core_decision == 'text_time_order':
+        return 'b.order_open', ref_decision, core_decision
     if (
         'refused (offsets mixed)' in (ref_decision,)
         or core_decision == 'text_time_zones'
@@ -247,6 +257,11 @@ def classify_inference(
 
 
 def main() -> None:
+    # A negative control (T1.25b fix 1): two values in the list whose day
+    # and month evidence conflicts is an order left open, never class a.
+    for named in (True, False):
+        control = classify_inference(['03/15/99', '15/11/00'], named)
+        assert control[0] == 'b.order_open', control
     with open(sys.argv[1], encoding='utf-8') as old:
         inputs = json.load(old)
     assert inputs['year'] == record.YEAR, inputs['year']
@@ -306,12 +321,10 @@ def main() -> None:
         ):
             ref = pandas_day_first(first)
             core = record.day_first(first)
-            cls = None
-            if ref != core:
-                # The client's rule against the format guessed from the
-                # first value; text outside the shapes the core never
-                # warns of.
-                cls = 'b.order_rule' if set(kinds(first)) == {'listed'} else 'c'
+            # The client's rule against the format guessed from the first
+            # value: the core warns of day and month first values in the
+            # list alone, whatever else the column holds.
+            cls = None if ref == core else 'b.order_rule'
             note(
                 'day_first',
                 cls,

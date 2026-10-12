@@ -1487,3 +1487,51 @@ def test_text_with_an_offset_is_read_by_the_list_or_refused_by_name(
             with pytest.raises(StructuredDataError) as refused:
                 Schema.from_source(DuckDBSource(_offset_events(zone)))
             assert refused.value.details['rule'] == 'text_time'
+
+
+def _text_events(values: list[str]) -> Any:
+    connection = duckdb.connect()
+    connection.execute(
+        'CREATE TABLE events (id BIGINT PRIMARY KEY, event_time VARCHAR)'
+    )
+    connection.executemany(
+        'INSERT INTO events VALUES (?, ?)', list(enumerate(values))
+    )
+    return connection
+
+
+@pytest.mark.parametrize(
+    ('values', 'rule'),
+    [
+        # A year the list does not hold, which an offset would carry into
+        # one it does (T1.25b fix 1): outside the list, refused by name
+        # (register DT-15), the year 0 and its mirror past 9999.
+        (['0000-12-31T23:00-02:00'] * 3, 'text_time'),
+        (['9999-12-31T23:00-02:00'] * 3, 'text_time'),
+        # Values in the list whose day and month the column leaves open
+        # (register DT-16): refused under the order's own rule.
+        (['03/15/99', '15/11/00'], 'text_time_order'),
+    ],
+)
+def test_text_the_list_does_not_decide_is_refused_under_its_rule(
+    monkeypatch: pytest.MonkeyPatch, values: list[str], rule: str
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with pytest.raises(StructuredDataError) as refused:
+            Schema.from_source(DuckDBSource(_text_events(values)))
+    assert refused.value.details['rule'] == rule
+
+
+def test_a_year_the_list_holds_after_an_offset_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The neighbours of the year 0's case, inside the list: the year written
+    # is 1 or 9999 and the instant stays in the years 1 to 9999.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    values = ['0001-01-01T00:30-01:00', '9999-12-31T22:00-01:00'] * 2
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        core = Schema.from_source(DuckDBSource(_text_events(values)))
+    assert str(core['events'].columns['event_time'].stype) == 'timestamp'

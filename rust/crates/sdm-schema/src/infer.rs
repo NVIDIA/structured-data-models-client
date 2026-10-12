@@ -33,12 +33,10 @@ pub const PREVIEW_ROWS: u64 = 1_000;
 /// nanoseconds since the epoch, in UTC, or `None`. `sdm-engine::time::text`
 /// holds it (T1.25, T1.25b), above this crate; `sdm-core` hands it in.
 pub trait TextTimes {
-    /// The values read, to UTC where `utc`; `Undecided` for a value outside
-    /// the list or an order left open, `MixedZones` for offsets mixed.
+    /// The values read, to UTC where `utc`, or why not ([`TextUnread`]).
     fn read(&self, values: &[Option<&str>], utc: bool) -> Result<Vec<Option<i128>>, TextUnread>;
 
-    /// How many of `values` read as times, at fewest and at most
-    /// ([`TextShare`]): what decides the score.
+    /// How many of `values` read as times ([`TextShare`]): the score's.
     fn share(&self, values: &[Option<&str>]) -> Result<TextShare, TextUnread>;
 
     /// The format of `values`' day-first dates when the values decide that
@@ -49,8 +47,10 @@ pub trait TextTimes {
 /// Why text does not read as times.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextUnread {
-    /// A value outside the reader's formats, or an order left open.
+    /// A value outside the reader's formats.
     Undecided,
+    /// An order of day and month the values leave open (`text_time_order`).
+    Order,
     /// Offsets mixed where the reading is not to UTC: the reference's
     /// reading raises, and its inference refuses the source.
     MixedZones,
@@ -506,13 +506,14 @@ fn stype_of(
     })
 }
 
-/// How many values read as times, at fewest and at most: the two orders'
-/// counts where the values decide none, the most counting every value in
-/// the client's shapes that the list does not read; and how many are
-/// outside the shapes too.
+/// How many values read as times: `fewest`, the fewer of the two orders'
+/// counts where the values decide none; `listed`, those that read in
+/// either order; `most`, those and the values in the client's shapes the
+/// list does not read in either; `unshaped`, the values outside the shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextShare {
     pub fewest: usize,
+    pub listed: usize,
     pub most: usize,
     pub unshaped: usize,
 }
@@ -522,12 +523,14 @@ pub struct TextShare {
 /// hold one, and a name that says time is worth 0.3 and the share of those
 /// values read as times the rest, scoring 1.0 or more, summed as the
 /// reference sums them in floating point. The share is counted at fewest
-/// and at most: the most counts the values the list does not read but the
-/// client's shapes hold, and, under a name that says time, every value the
-/// list does not read; where the two decide otherwise, the text is refused
-/// (`text_time`, register DT-15 to DT-17). So text outside the shapes is no
-/// time under any other name. Offsets mixed, which the reference refuses
-/// unnamed, are refused by name (`text_time_zones`, register DT-11).
+/// and at most: where the values the list reads decide otherwise in the
+/// two orders of day and month, the text is refused `text_time_order`
+/// (register DT-16); where the most, counting the values the list does not
+/// read but the client's shapes hold and, under a name that says time,
+/// every value it does not read, decides otherwise, `text_time` (DT-15).
+/// So text outside the shapes is no time under any other name (DT-17).
+/// Offsets mixed, which the reference refuses unnamed, are refused by name
+/// (`text_time_zones`, register DT-11).
 fn text_holds_dates(
     name: &str,
     sample: &[Option<Value>],
@@ -552,6 +555,7 @@ fn text_holds_dates(
     let score = |held: usize| named + held as f64 / first.len() as f64 >= 1.0;
     let named_time = named > 0.0;
     match times.share(&first) {
+        Ok(share) if score(share.fewest) != score(share.listed) => Err(not_yet("text_time_order")),
         Ok(share)
             if score(share.fewest)
                 == score(share.most + if named_time { share.unshaped } else { 0 }) =>
@@ -559,6 +563,7 @@ fn text_holds_dates(
             Ok(score(share.fewest))
         }
         Ok(_) | Err(TextUnread::Undecided) => Err(not_yet("text_time")),
+        Err(TextUnread::Order) => Err(not_yet("text_time_order")),
         Err(TextUnread::MixedZones) => Err(not_yet("text_time_zones")),
     }
 }
@@ -905,13 +910,15 @@ fn refused_for_values(
 /// The column of `among` whose values start earliest (`_earliest`), the
 /// first in table order on a tie or when none holds a real value: a value
 /// before 1901 or the epoch's midnight is a placeholder, no start. Text
-/// whose reading does not decide is refused (`text_time`).
+/// whose reading does not decide is refused (`text_time`, or
+/// `text_time_order` for an order of day and month left open).
 fn earliest(among: &[usize], read: &Read<'_>) -> Result<usize, CoreError> {
     let mut best: Option<(i128, usize)> = None;
     for &i in among {
-        let instants = read.instants[i]
-            .as_ref()
-            .map_err(|_| not_yet("text_time"))?;
+        let instants = read.instants[i].as_ref().map_err(|unread| match unread {
+            TextUnread::Order => not_yet("text_time_order"),
+            _ => not_yet("text_time"),
+        })?;
         let start = instants
             .iter()
             .flatten()
