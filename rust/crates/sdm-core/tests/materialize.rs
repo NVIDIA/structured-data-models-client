@@ -198,11 +198,7 @@ fn materialize_start(
         seed,
         unseeded: false,
         anchor_entity: false,
-        num_context_samples: None,
-        num_hops: None,
-        num_neighbors: None,
-        prediction_statistic: None,
-        inference_config: None,
+        values: None,
         options: vec![],
         sampler_state: None,
     });
@@ -939,6 +935,23 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         run.next()
     };
     let refused = |change: &dyn Fn(&mut Materialize)| rule(&with(change).unwrap_err());
+    // With the call's option values (T1.28a): `values`, and the options
+    // named.
+    let valued = |values: &str, names: &[&str]| {
+        let (mut operation, mut attachments) = materialize_start(host(), &shop(), QUERY, None);
+        let Operation::Materialize(request) = &mut operation else {
+            unreachable!()
+        };
+        request.values = Some(AttachmentId(9));
+        request.options = names.iter().map(|n| (*n).to_owned()).collect();
+        attachments.insert(
+            AttachmentId(9),
+            Attachment::Bytes(values.as_bytes().to_vec()),
+        );
+        let mut run =
+            materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+        run.next()
+    };
     assert_eq!(
         refused(&|m| m.options = vec!["num_neighbors".into(), "lag_timesteps".into()]),
         "lag_timesteps"
@@ -948,19 +961,51 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     // From T1.28a the context size is the core's: bounded first, before
     // the options, as the client bounds it before anything else.
     for (asked, code) in [
-        (Seed::from(0_u128), ErrorCode::InvalidRequest),
-        (Seed::from(-3_i128), ErrorCode::InvalidRequest),
-        (Seed::from(10_001_u128), ErrorCode::UnsupportedRequest),
-        (Seed::from(1_u128 << 100), ErrorCode::UnsupportedRequest),
+        ("0", ErrorCode::InvalidRequest),
+        ("-3", ErrorCode::InvalidRequest),
+        ("10001", ErrorCode::UnsupportedRequest),
+        (
+            "1267650600228229401496703205376",
+            ErrorCode::UnsupportedRequest,
+        ),
+        ("2.5", ErrorCode::InvalidRequest),
     ] {
-        let err = with(&|m| {
-            m.num_context_samples = Some(Box::new(asked.clone()));
-            m.options = vec!["top_k".into()];
-        })
+        let err = valued(
+            &format!(r#"{{"num_context_samples": {asked}}}"#),
+            &["top_k"],
+        )
         .unwrap_err();
-        assert_eq!(err.code, code, "{asked:?}");
+        assert_eq!(err.code, code, "{asked}");
         assert_eq!(err.fields["field"], Detail::text("num_context_samples"));
     }
+    // The hops the options ask, bounded before they are refused by name;
+    // an unseeded sample named by the values; a negative seed refused.
+    for (values, field) in [
+        (r#"{"num_hops": 0}"#, "num_hops"),
+        (r#"{"num_neighbors": []}"#, "num_neighbors"),
+        (r#"{"random_seed": -1}"#, "seed"),
+    ] {
+        let names: &[&str] = if field == "seed" { &[] } else { &["num_hops"] };
+        let err = valued(values, names).unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidRequest, "{values}");
+        assert_eq!(err.fields["field"], Detail::text(field), "{values}");
+    }
+    let past = valued(r#"{"num_hops": 7}"#, &["num_hops"]).unwrap_err();
+    assert_eq!(past.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(past.fields["field"], Detail::text("num_hops"));
+    assert!(!past.fields.contains_key("rule"), "the bound, not the rule");
+    assert_eq!(
+        rule(&valued(r#"{"num_hops": 2}"#, &["num_hops"]).unwrap_err()),
+        "num_hops"
+    );
+    assert_eq!(
+        rule(&valued(r#"{"random_seed": null}"#, &[]).unwrap_err()),
+        "unseeded"
+    );
+    assert!(matches!(
+        valued(r#"{"random_seed": 7, "num_context_samples": 5}"#, &[]),
+        Ok(Step::Fetch { .. })
+    ));
     // The options before the seed, as the bridge refused them.
     assert_eq!(
         refused(&|m| {
@@ -972,7 +1017,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     assert_eq!(
         refused(&|m| {
             m.unseeded = true;
-            m.num_context_samples = Some(Box::new(Seed::from(10_u128)));
+            m.anchor_entity = true;
         }),
         "unseeded"
     );
@@ -1937,12 +1982,12 @@ fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
         let Operation::Materialize(request) = &mut operation else {
             unreachable!()
         };
-        request.inference_config = Some(AttachmentId(9));
+        request.values = Some(AttachmentId(9));
         attachments.insert(AttachmentId(9), Attachment::Bytes(text.into_bytes()));
         materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
     };
     let deep = format!(
-        r#"{{"num_estimators": {}1{}}}"#,
+        r#"{{"inference_config": {{"num_estimators": {}1{}}}}}"#,
         "[".repeat(10_000),
         "]".repeat(10_000)
     );
@@ -1950,10 +1995,10 @@ fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
         panic!("refused before the run exists");
     };
     assert_eq!(err.code, ErrorCode::InvalidRequest);
-    assert_eq!(err.fields["field"], Detail::text("inference_config"));
+    assert_eq!(err.fields["field"], Detail::text("values"));
     assert_eq!(err.fields["category"], Detail::text("depth"));
     let within = format!(
-        r#"{{"num_estimators": {}1{}}}"#,
+        r#"{{"inference_config": {{"num_estimators": {}1{}}}}}"#,
         "[".repeat(100),
         "]".repeat(100)
     );
@@ -1961,5 +2006,5 @@ fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
     let Err(not_json) = start("{".into()) else {
         panic!("not JSON");
     };
-    assert_eq!(not_json.fields["field"], Detail::text("inference_config"));
+    assert_eq!(not_json.fields["field"], Detail::text("values"));
 }

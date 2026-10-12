@@ -87,7 +87,7 @@ use sdm_engine::sample::{self, SEED_END, SEED_START};
 use sdm_engine::time::Instant;
 use sdm_engine::time::offset::{Offset, timeframe};
 use sdm_engine::time::text::{Reader, Unread};
-use sdm_request::options::{self, Kind as Task};
+use sdm_request::options::{self, AskedSeed, Kind as Task};
 use sdm_request::payload::{self, RESERVED, Sampled};
 
 use crate::describe::{ask, describe};
@@ -176,12 +176,8 @@ pub(crate) struct Inputs {
     pub seed: Option<Seed>,
     pub unseeded: bool,
     pub anchor_entity: bool,
-    pub num_context_samples: Option<Box<Seed>>,
-    pub num_hops: Option<Box<Seed>>,
-    pub num_neighbors: Option<Box<Seed>>,
-    pub prediction_statistic: Option<String>,
-    /// The caller's inference options, as read.
-    pub inference_config: Option<sdm_wire::json::Value>,
+    /// The call's option values (`Materialize.values`), as read.
+    pub values: Option<sdm_wire::json::Value>,
     pub options: Vec<String>,
     pub facts: HostFacts,
     /// The zones the run resolves names with: the host's local zone, which
@@ -1263,11 +1259,11 @@ fn option_not_taken(name: &str) -> CoreError {
 /// sampling options, the first in name order; an unseeded sample; and an
 /// anchor at each entity's own time; the hops they ask bounded first
 /// ([`options::hops`]).
-fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
+fn options_taken(inputs: &Inputs, unseeded: bool) -> Result<(), CoreError> {
     if let Some(first) = inputs.options.iter().min() {
         return Err(option_not_taken(first));
     }
-    if inputs.unseeded {
+    if unseeded {
         return Err(not_yet("unseeded"));
     }
     if inputs.anchor_entity {
@@ -1450,22 +1446,36 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         }),
     };
     memo.keep();
-    // The context size's bound and the run mode it selects, first, as the
+    // The call's option values, each of the type the client takes; then
+    // the context size's bound and the run mode it selects, first, as the
     // client bounds it before anything else of the call (T1.28a).
-    let integer = |n: &Seed| {
-        (
-            n.is_negative(),
-            u128::from_str_radix(n.magnitude_hex(), 16).ok(),
-        )
-    };
-    let mode = options::run_mode(inputs.num_context_samples.as_deref().map(integer))?;
+    let asked_values = options::values(inputs.values.as_ref())?;
+    let mode = options::run_mode(asked_values.num_context_samples)?;
     // The hops the sampling options ask, bounded as the client bounds them,
     // before the options this core does not take are refused by name.
-    options::hops(
-        inputs.num_hops.as_deref().map(integer),
-        inputs.num_neighbors.as_deref().map(integer),
-    )?;
-    options_taken(&inputs)?;
+    options::hops(asked_values.num_hops, asked_values.num_neighbors)?;
+    // The seed the call names, in place of the host's `seed` and
+    // `unseeded` where it names one.
+    let (seed, unseeded) = match &asked_values.seed {
+        AskedSeed::Absent => (inputs.seed.clone(), inputs.unseeded),
+        AskedSeed::Unseeded => (None, true),
+        AskedSeed::Given(text) => (
+            Some(
+                Seed::try_from(text.clone())
+                    .map_err(|_| internal("a seed the call named does not read"))?,
+            ),
+            false,
+        ),
+    };
+    options_taken(&inputs, unseeded)?;
+    if seed.as_ref().is_some_and(Seed::is_negative) {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "a sampling seed cannot be negative",
+        )
+        .with_field("field", Detail::text("seed")));
+    }
     #[cfg(feature = "test-ops")]
     let labels_only = inputs.labels_only;
     let Inputs {
@@ -1473,20 +1483,21 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         query,
         indices,
         anchor_time,
-        seed,
         facts,
         zones,
+        ..
+    } = inputs;
+    let options::Asked {
         num_context_samples,
         prediction_statistic,
         inference_config,
         ..
-    } = inputs;
+    } = asked_values;
     // The most context examples asked for, which narrows the context the
     // mode gathers (`_narrow_context`); the bound above holds it to the
     // best mode's.
     let asked_examples = num_context_samples
-        .as_deref()
-        .and_then(Seed::to_u128)
+        .and_then(|n| n.magnitude)
         .and_then(|n| usize::try_from(n).ok());
     // A table the schema names otherwise than the source does is read by
     // its source name (`Table::source`), as the reference's engine reads

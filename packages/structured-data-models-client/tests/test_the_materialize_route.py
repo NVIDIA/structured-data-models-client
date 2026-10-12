@@ -226,17 +226,23 @@ def test_what_the_core_does_not_take_yet_is_refused_by_name(
     assert refused.value.details['rule'] == rule
 
 
-def test_inference_options_not_a_mapping_are_refused_by_name(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    'given',
+    [['num_estimators'], object()],
+    ids=['a-list', 'not-json'],
+)
+def test_inference_options_not_a_mapping_are_refused(
+    monkeypatch: pytest.MonkeyPatch, given: Any
 ) -> None:
-    # The contract carries a mapping's keys and values (T1.28a); the host
-    # refuses an inference config of another type, which the engine takes
-    # as its own config object, by name (P1B-3), before the core runs.
+    # The core reads the call's values as the caller gave them (T1.28a):
+    # inference options that are not a mapping are refused, INVALID_REQUEST,
+    # by the core where JSON holds them and by the host's encoder where it
+    # does not, as the client's transport refuses such a value. The
+    # reference takes its engine's own config object here (register P1B-3).
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(StructuredDataError) as refused:
-        _materialize(inference_config=['num_estimators'])
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['rule'] == 'inference_config'
+        _materialize(inference_config=given)
+    assert refused.value.code == 'INVALID_REQUEST'
 
 
 @pytest.mark.parametrize('depth', [500, 100_000], ids=['past-the-core', 'past-json'])
@@ -255,7 +261,7 @@ def test_inference_options_nested_deep_are_refused_never_a_crash(
         _materialize(inference_config={'num_estimators': nested})
     assert refused.value.code == 'INVALID_REQUEST'
     if depth == 500:
-        assert refused.value.details['field'] == 'inference_config'
+        assert refused.value.details['field'] == 'values'
         assert refused.value.details['category'] == 'depth'
 
 

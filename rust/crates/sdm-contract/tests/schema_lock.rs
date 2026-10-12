@@ -450,10 +450,7 @@ const JSON: [(&str, &str); 16] = [
     ("Operation/materialize.schema", "Materialize.schema"),
     ("Operation/materialize.held", "Materialize.held"),
     ("Operation/materialize.query", "Materialize.query"),
-    (
-        "Operation/materialize.inference_config",
-        "Materialize.inference_config",
-    ),
+    ("Operation/materialize.values", "Materialize.values"),
     ("RequestState.payload", "RequestState.payload"),
     ("RequestState.query", "RequestState.query"),
     (

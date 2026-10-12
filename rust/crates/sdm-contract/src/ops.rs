@@ -90,7 +90,7 @@ impl Operation {
                 named.push((m.query, Bytes));
                 named.extend(m.indices.map(|id| (id, Arrow)));
                 named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
-                named.extend(m.inference_config.map(|id| (id, Bytes)));
+                named.extend(m.values.map(|id| (id, Bytes)));
                 named
             }
             Operation::Predict(p) => vec![(p.state.payload, Bytes), (p.state.query, Bytes)],
@@ -610,33 +610,20 @@ pub struct Materialize {
     /// name, `anchor_entity`, until the core takes it (decision E61).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub anchor_entity: bool,
-    /// The most context examples the caller asked for, an integer of any
-    /// size as a [`Seed`] writes one, so the core bounds it whatever the
-    /// host's integer type (T1.28a): below 1 refused, `INVALID_REQUEST`; up
-    /// to the default mode's examples a fast run, up to the best mode's a
-    /// best one, past it refused, `UNSUPPORTED_REQUEST`; left out, a fast
-    /// run of its own examples.
+    /// A bytes attachment of a JSON object of the call's option values the
+    /// core reads (T1.28a), each as the caller gave it and the host's JSON
+    /// writes it, a member only where the call names the option:
+    /// `num_context_samples`, the context size, whose run mode the core
+    /// chooses and bounds; `num_hops` and `num_neighbors`, whose hops it
+    /// bounds before it refuses them by name; `prediction_statistic`, which
+    /// it checks and records; `inference_config`, which it reads by the
+    /// engine's rules and writes into the payload (decision E45(a)); and
+    /// `random_seed`, in place of `seed` and `unseeded` where it is given
+    /// (`null`, an unseeded sample). The core reads it with `sdm-wire`'s
+    /// bounded reader and holds each value's type to what the reference's
+    /// client takes, so the host checks none of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub num_context_samples: Option<Box<Seed>>,
-    /// The hops the sampling options ask for, bounded by the core before it
-    /// refuses the options by name (T1.28a): `num_hops` as given, and the
-    /// length of `num_neighbors`, which asks one hop per entry; each an
-    /// integer of any size as a [`Seed`] writes one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub num_hops: Option<Box<Seed>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub num_neighbors: Option<Box<Seed>>,
-    /// The regression's statistic the caller chose (`mean` or `median`),
-    /// which the core checks and records in the payload's output (T1.28a);
-    /// left out, none is recorded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prediction_statistic: Option<String>,
-    /// A bytes attachment of the caller's `inference_config` as a JSON
-    /// object, its keys and values as given, which the core reads by the
-    /// engine's rules and writes into the payload (T1.28a; decision E45(a));
-    /// left out, the task's defaults.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub inference_config: Option<AttachmentId>,
+    pub values: Option<AttachmentId>,
     /// The names of the call's other sampling options, which this message
     /// carries no value of (the reference's `context_anchor_time`,
     /// `exclude_cols_dict`, `lag_timesteps`,
@@ -897,8 +884,8 @@ pub struct Attachments {
     pub materialize_held: HeldSchema,
     #[schemars(rename = "Materialize.query")]
     pub materialize_query: String,
-    #[schemars(rename = "Materialize.inference_config")]
-    pub materialize_inference_config: RequestedInference,
+    #[schemars(rename = "Materialize.values")]
+    pub materialize_values: CallValues,
     #[schemars(rename = "SamplerState.memo")]
     pub sampler_state_memo: SamplerMemo,
     #[schemars(rename = "RequestState.payload")]
@@ -944,14 +931,14 @@ impl JsonSchema for StatePayload {
     }
 }
 
-/// [`Materialize`]'s `inference_config`: the caller's inference options,
-/// a JSON object of the engine's keys and the values given for them, read
-/// with `sdm-wire`'s bounded reader.
-pub struct RequestedInference;
+/// [`Materialize`]'s `values`: the call's option values, a JSON object of
+/// the options' names and the values given, read with `sdm-wire`'s bounded
+/// reader.
+pub struct CallValues;
 
-impl JsonSchema for RequestedInference {
+impl JsonSchema for CallValues {
     fn schema_name() -> std::borrow::Cow<'static, str> {
-        "RequestedInference".into()
+        "CallValues".into()
     }
 
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {

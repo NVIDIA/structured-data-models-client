@@ -138,11 +138,7 @@ pub fn messages() -> Vec<ControlMessage> {
             seed: Some(Seed::from(1_u128 << 70)),
             unseeded: false,
             anchor_entity: false,
-            num_context_samples: Some(Box::new(Seed::from(500_u128))),
-            num_hops: None,
-            num_neighbors: None,
-            prediction_statistic: None,
-            inference_config: None,
+            values: None,
             options: vec!["num_neighbors".into()],
             sampler_state: Some(SamplerState {
                 version: 1,

@@ -285,8 +285,8 @@
         "Materialize.query": {
           "type": "string"
         },
-        "Materialize.inference_config": {
-          "$ref": "#/$defs/RequestedInference"
+        "Materialize.values": {
+          "$ref": "#/$defs/CallValues"
         },
         "SamplerState.memo": {
           "$ref": "#/$defs/SamplerMemo"
@@ -314,7 +314,7 @@
         "Materialize.schema",
         "Materialize.held",
         "Materialize.query",
-        "Materialize.inference_config",
+        "Materialize.values",
         "SamplerState.memo",
         "RequestState.payload",
         "RequestState.query",
@@ -1822,7 +1822,7 @@
         }
       ]
     },
-    "RequestedInference": {
+    "CallValues": {
       "type": "object"
     },
     "SamplerMemo": {
@@ -2689,47 +2689,8 @@
               "description": "Whether the caller anchored each entity at its own time\n(`anchor_time='entity'`), with `anchor_time` left out; refused by\nname, `anchor_entity`, until the core takes it (decision E61).",
               "type": "boolean"
             },
-            "num_context_samples": {
-              "description": "The most context examples the caller asked for, an integer of any\nsize as a [`Seed`] writes one, so the core bounds it whatever the\nhost's integer type (T1.28a): below 1 refused, `INVALID_REQUEST`; up\nto the default mode's examples a fast run, up to the best mode's a\nbest one, past it refused, `UNSUPPORTED_REQUEST`; left out, a fast\nrun of its own examples.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Seed"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "num_hops": {
-              "description": "The hops the sampling options ask for, bounded by the core before it\nrefuses the options by name (T1.28a): `num_hops` as given, and the\nlength of `num_neighbors`, which asks one hop per entry; each an\ninteger of any size as a [`Seed`] writes one.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Seed"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "num_neighbors": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/Seed"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "prediction_statistic": {
-              "description": "The regression's statistic the caller chose (`mean` or `median`),\nwhich the core checks and records in the payload's output (T1.28a);\nleft out, none is recorded.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "inference_config": {
-              "description": "A bytes attachment of the caller's `inference_config` as a JSON\nobject, its keys and values as given, which the core reads by the\nengine's rules and writes into the payload (T1.28a; decision E45(a));\nleft out, the task's defaults.",
+            "values": {
+              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample). The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/AttachmentId"

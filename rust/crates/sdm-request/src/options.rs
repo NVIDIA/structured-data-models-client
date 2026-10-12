@@ -16,6 +16,154 @@ use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_wire::json::{Value, whole};
 use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
 
+/// An integer the caller gave: its sign, and its magnitude, `None` past
+/// `u128`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Integer {
+    pub negative: bool,
+    pub magnitude: Option<u128>,
+}
+
+/// The seed the call names (`random_seed`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AskedSeed {
+    /// Not named: the host's `seed` and `unseeded`, or the default.
+    Absent,
+    /// Named as none: an unseeded sample.
+    Unseeded,
+    /// An integer of any size, as signed hexadecimal text (the contract's
+    /// `Seed`).
+    Given(String),
+}
+
+/// The call's option values the core reads ([`values`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Asked {
+    pub num_context_samples: Option<Integer>,
+    pub num_hops: Option<Integer>,
+    /// How many hops `num_neighbors` asks for: its length.
+    pub num_neighbors: Option<Integer>,
+    pub prediction_statistic: Option<String>,
+    pub inference_config: Option<Value>,
+    pub seed: AskedSeed,
+}
+
+/// A value of the wrong type for its option, refused as the client
+/// refuses it (`INVALID_REQUEST`), naming the option and the type it takes.
+fn mistyped(field: &str, reason: &'static str) -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "an option of the call is of a type it does not take",
+    )
+    .with_field("field", Detail::text(field))
+    .with_field("reason", Detail::text(reason))
+}
+
+/// An integer token's digits as decimal text, its sign apart.
+fn integer(field: &str, value: &Value) -> Result<(bool, String), CoreError> {
+    match value {
+        Value::Number(token) if sdm_wire::json::is_integer_token(token) => {
+            let (negative, digits) = match token.strip_prefix('-') {
+                Some(digits) => (true, digits),
+                None => (false, token.as_str()),
+            };
+            let digits = digits.trim_start_matches('0');
+            Ok((negative && !digits.is_empty(), digits.to_owned()))
+        }
+        // A boolean, a float or anything else: not a whole number, as the
+        // client's check (`numbers.Integral`, a bool excluded) refuses it.
+        _ => Err(mistyped(field, "not_a_whole_number")),
+    }
+}
+
+fn magnitude(field: &str, value: &Value) -> Result<Integer, CoreError> {
+    let (negative, digits) = integer(field, value)?;
+    Ok(Integer {
+        negative,
+        magnitude: if digits.is_empty() {
+            Some(0)
+        } else {
+            digits.parse().ok()
+        },
+    })
+}
+
+/// Decimal digits as lowercase hexadecimal, of any size.
+fn hexadecimal(decimal: &str) -> String {
+    let mut digits: Vec<u32> = decimal.bytes().map(|b| u32::from(b - b'0')).collect();
+    let mut hex = Vec::new();
+    while !digits.is_empty() {
+        let mut remainder = 0;
+        let mut quotient = Vec::with_capacity(digits.len());
+        for d in digits {
+            let value = remainder * 10 + d;
+            let q = value / 16;
+            remainder = value % 16;
+            if !(quotient.is_empty() && q == 0) {
+                quotient.push(q);
+            }
+        }
+        hex.push(char::from_digit(remainder, 16).unwrap_or('0'));
+        digits = quotient;
+    }
+    if hex.is_empty() {
+        return "0".to_owned();
+    }
+    hex.iter().rev().collect()
+}
+
+/// Reads the call's option values (`Materialize.values`), each of the type
+/// the reference's client takes, a member present only where the call
+/// names the option; a value of another type is `INVALID_REQUEST` naming
+/// the option, as the client's checks refuse it.
+pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
+    let mut asked = Asked {
+        num_context_samples: None,
+        num_hops: None,
+        num_neighbors: None,
+        prediction_statistic: None,
+        inference_config: None,
+        seed: AskedSeed::Absent,
+    };
+    let Some(given) = given else {
+        return Ok(asked);
+    };
+    let Value::Object(members) = given else {
+        return Err(mistyped("values", "not_an_object"));
+    };
+    for (name, value) in members {
+        match (name.as_str(), value) {
+            // A size or a count of hops left as none is no size asked.
+            ("num_context_samples" | "num_hops" | "num_neighbors", Value::Null) => {}
+            ("num_context_samples", v) => asked.num_context_samples = Some(magnitude(name, v)?),
+            ("num_hops", v) => asked.num_hops = Some(magnitude(name, v)?),
+            ("num_neighbors", Value::Array(hops)) => {
+                asked.num_neighbors = Some(Integer {
+                    negative: false,
+                    magnitude: Some(hops.len() as u128),
+                });
+            }
+            ("num_neighbors", _) => return Err(mistyped(name, "not_a_sequence")),
+            ("prediction_statistic", Value::Text(text)) => {
+                asked.prediction_statistic = Some(text.clone());
+            }
+            ("prediction_statistic", _) => return Err(mistyped(name, "not_text")),
+            ("inference_config", Value::Null) => {}
+            ("inference_config", v @ Value::Object(_)) => asked.inference_config = Some(v.clone()),
+            ("inference_config", _) => return Err(mistyped(name, "not_a_mapping")),
+            ("random_seed", Value::Null) => asked.seed = AskedSeed::Unseeded,
+            ("random_seed", v) => {
+                let (negative, digits) = integer(name, v)?;
+                let sign = if negative { "-" } else { "" };
+                asked.seed = AskedSeed::Given(format!("{sign}0x{}", hexadecimal(&digits)));
+            }
+            _ => return Err(mistyped(name, "not_an_option")),
+        }
+    }
+    Ok(asked)
+}
+
 /// A task's kind, as the engine names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -78,10 +226,13 @@ impl RunMode {
 /// `_validate_materialize_args`): none or up to a fast run's examples, a
 /// fast run; up to a best run's, a best one. Below 1 is `INVALID_REQUEST`;
 /// past a best run's examples, `UNSUPPORTED_REQUEST`, as the endpoint takes
-/// no more. `asked` is the size as the contract carries it, any integer:
-/// its sign and its value, `None` past `u128`.
-pub fn run_mode(asked: Option<(bool, Option<u128>)>) -> Result<RunMode, CoreError> {
-    let Some((negative, value)) = asked else {
+/// no more.
+pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
+    let Some(Integer {
+        negative,
+        magnitude: value,
+    }) = asked
+    else {
         return Ok(RunMode::Fast);
     };
     if negative || value == Some(0) {
@@ -115,13 +266,15 @@ pub const HOPS_MAX: u128 = 6;
 /// (`_check_shape`): `num_neighbors`' length where it is given, else
 /// `num_hops`; none, or fewer than one, is `INVALID_REQUEST` (a request
 /// that crosses no relationship), more than [`HOPS_MAX`]
-/// `UNSUPPORTED_REQUEST`. Each is `(negative, value)` as [`run_mode`] takes
-/// it.
-pub fn hops(
-    num_hops: Option<(bool, Option<u128>)>,
-    num_neighbors: Option<(bool, Option<u128>)>,
-) -> Result<(), CoreError> {
-    let (field, (negative, value)) = match (num_neighbors, num_hops) {
+/// `UNSUPPORTED_REQUEST`.
+pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result<(), CoreError> {
+    let (
+        field,
+        Integer {
+            negative,
+            magnitude: value,
+        },
+    ) = match (num_neighbors, num_hops) {
         (Some(n), _) => ("num_neighbors", n),
         (None, Some(n)) => ("num_hops", n),
         (None, None) => return Ok(()),
@@ -348,21 +501,25 @@ mod tests {
         e.fields.get("rule").map(|d| format!("{d:?}"))
     }
 
+    fn int(negative: bool, magnitude: Option<u128>) -> Option<Integer> {
+        Some(Integer {
+            negative,
+            magnitude,
+        })
+    }
+
     #[test]
     fn the_run_mode_is_the_client_s() {
         assert_eq!(run_mode(None).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(Some((false, Some(1)))).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(Some((false, Some(1_000)))).unwrap(), RunMode::Fast);
-        assert_eq!(run_mode(Some((false, Some(1_001)))).unwrap(), RunMode::Best);
-        assert_eq!(
-            run_mode(Some((false, Some(10_000)))).unwrap(),
-            RunMode::Best
-        );
+        assert_eq!(run_mode(int(false, Some(1))).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1_000))).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1_001))).unwrap(), RunMode::Best);
+        assert_eq!(run_mode(int(false, Some(10_000))).unwrap(), RunMode::Best);
         for (asked, code) in [
-            (Some((false, Some(0))), ErrorCode::InvalidRequest),
-            (Some((true, Some(5))), ErrorCode::InvalidRequest),
-            (Some((false, Some(10_001))), ErrorCode::UnsupportedRequest),
-            (Some((false, None)), ErrorCode::UnsupportedRequest),
+            (int(false, Some(0)), ErrorCode::InvalidRequest),
+            (int(true, Some(5)), ErrorCode::InvalidRequest),
+            (int(false, Some(10_001)), ErrorCode::UnsupportedRequest),
+            (int(false, None), ErrorCode::UnsupportedRequest),
         ] {
             assert_eq!(run_mode(asked).unwrap_err().code, code, "{asked:?}");
         }
@@ -370,7 +527,7 @@ mod tests {
 
     #[test]
     fn the_hops_are_bounded_as_the_client_bounds_them() {
-        let some = |n: u128| Some((false, Some(n)));
+        let some = |n: u128| int(false, Some(n));
         assert!(hops(None, None).is_ok());
         assert!(hops(some(6), None).is_ok());
         assert!(
@@ -386,7 +543,7 @@ mod tests {
             ErrorCode::InvalidRequest
         );
         assert_eq!(
-            hops(Some((true, Some(1))), None).unwrap_err().code,
+            hops(int(true, Some(1)), None).unwrap_err().code,
             ErrorCode::InvalidRequest
         );
         assert_eq!(
@@ -394,7 +551,7 @@ mod tests {
             ErrorCode::UnsupportedRequest
         );
         assert_eq!(
-            hops(Some((false, None)), None).unwrap_err().code,
+            hops(int(false, None), None).unwrap_err().code,
             ErrorCode::UnsupportedRequest
         );
     }
@@ -445,6 +602,56 @@ mod tests {
             let e = options(Kind::Regression, Some(&read(text))).unwrap_err();
             assert_eq!(e.code, ErrorCode::UnsupportedRequest, "{text}");
             assert!(rule(&e).is_some(), "{text}");
+        }
+    }
+
+    #[test]
+    fn the_call_s_values_are_read_by_the_types_the_client_takes() {
+        let asked = values(Some(&read(
+            r#"{"num_context_samples": 10, "num_hops": null, "num_neighbors": [8, 8, 4], "prediction_statistic": "mean", "inference_config": {"num_estimators": 2}, "random_seed": 1180591620717411303424}"#,
+        )))
+        .unwrap();
+        assert_eq!(asked.num_context_samples, int(false, Some(10)));
+        assert_eq!(asked.num_hops, None);
+        assert_eq!(asked.num_neighbors, int(false, Some(3)));
+        assert_eq!(asked.prediction_statistic.as_deref(), Some("mean"));
+        assert!(asked.inference_config.is_some());
+        // 2**70, as the contract's seed writes it.
+        assert_eq!(asked.seed, AskedSeed::Given("0x400000000000000000".into()));
+        let seed = |text: &str| values(Some(&read(text))).unwrap().seed;
+        assert_eq!(seed(r#"{"random_seed": null}"#), AskedSeed::Unseeded);
+        assert_eq!(
+            seed(r#"{"random_seed": -42}"#),
+            AskedSeed::Given("-0x2a".into())
+        );
+        assert_eq!(
+            seed(r#"{"random_seed": 0}"#),
+            AskedSeed::Given("0x0".into())
+        );
+        assert_eq!(seed("{}"), AskedSeed::Absent);
+        assert_eq!(
+            values(Some(&read(r#"{"num_context_samples": -3}"#)))
+                .unwrap()
+                .num_context_samples,
+            int(true, Some(3))
+        );
+        for text in [
+            r#"{"num_context_samples": 2.5}"#,
+            r#"{"num_context_samples": true}"#,
+            r#"{"num_hops": "2"}"#,
+            r#"{"num_hops": 2.0}"#,
+            r#"{"num_neighbors": "ab"}"#,
+            r#"{"num_neighbors": {"a": 1}}"#,
+            r#"{"prediction_statistic": 3}"#,
+            r#"{"prediction_statistic": null}"#,
+            r#"{"inference_config": [1]}"#,
+            r#"{"random_seed": 1.5}"#,
+            r#"{"random_seed": false}"#,
+            r#"{"no_such": 1}"#,
+            r#"[1]"#,
+        ] {
+            let e = values(Some(&read(text))).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
         }
     }
 

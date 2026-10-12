@@ -623,11 +623,7 @@ fn materialize(seed: Option<Seed>) -> Operation {
         seed,
         unseeded: false,
         anchor_entity: false,
-        num_context_samples: None,
-        num_hops: None,
-        num_neighbors: None,
-        prediction_statistic: None,
-        inference_config: None,
+        values: None,
         options: vec![],
         sampler_state: None,
     })

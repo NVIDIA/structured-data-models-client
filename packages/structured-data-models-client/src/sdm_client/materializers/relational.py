@@ -131,48 +131,53 @@ class RelationalMaterializer:
                 'the client derives what the endpoint needs',
                 code='INVALID_REQUEST',
             )
-        # Over a DuckDB source on the core route (T1.11c), the core gathers
-        # and lays out the request, its rules the core's (T1.28a).
-        from sdm_client import _routing
-
-        if _routing.materializes_on_the_core(self.schema):
-            from sdm_client._rust import materialize as on_the_core
-
-            return on_the_core.materialize(
-                self, query, indices, num_context_samples, options
-            )
-
-        if len(indices) == 0:
-            raise StructuredDataError(
-                'indices names no entity, and gathering a relational request '
-                'means sampling a neighbourhood around each one, so there is '
-                'nothing here to gather. An empty batch is still answered: '
-                'build it as Request(predict=<no rows>) and predict() returns '
-                'the empty result without sending',
-                code='INVALID_REQUEST',
-            )
-
-        statistic = _statistic_asked_for(options)
-        self._refuse_a_name_the_wire_reserves()
-        self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
-        _warn_the_filter_chose_only_the_examples(query, indices)
-        _warn_of_relationships_that_join_nothing(self.schema)
-        payloads, core_state = self._gather(
-            query, indices, num_context_samples, options
-        )
-        if statistic is not None:
-            _record_the_statistic(payloads, statistic)
-        sent = _tables_sent(payloads, self.schema)
-        _warn_of_tables_left_out(
-            self.schema, sent, table_name(query.entity_column)
-        )
-        _warn_of_columns_the_model_does_not_read(
-            self.schema, _columns_to_leave_out(query, options), sent
-        )
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
-        _drop_context_that_answers_the_question(payloads, windowed=windowed)
+        # Over a DuckDB source on the core route (T1.11c), the core gathers
+        # and lays out the request, the rules around the gathering the
+        # core's (T1.28a); the old route holds its own.
+        from sdm_client import _routing
+
+        core = (
+            getattr(self.schema.source, 'backend', None) == 'duckdb'
+            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+        )
+        if core:
+            from sdm_client._rust import materialize as on_the_core
+
+            payloads, core_state = on_the_core.gather(
+                self, query, indices, num_context_samples, options
+            )
+        else:
+            if len(indices) == 0:
+                raise StructuredDataError(
+                    'indices names no entity, and gathering a relational '
+                    'request means sampling a neighbourhood around each one, '
+                    'so there is nothing here to gather. An empty batch is '
+                    'still answered: build it as Request(predict=<no rows>) '
+                    'and predict() returns the empty result without sending',
+                    code='INVALID_REQUEST',
+                )
+
+            statistic = _statistic_asked_for(options)
+            self._refuse_a_name_the_wire_reserves()
+            self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
+            _warn_the_filter_chose_only_the_examples(query, indices)
+            _warn_of_relationships_that_join_nothing(self.schema)
+            payloads, core_state = self._gather(
+                query, indices, num_context_samples, options
+            )
+            if statistic is not None:
+                _record_the_statistic(payloads, statistic)
+            sent = _tables_sent(payloads, self.schema)
+            _warn_of_tables_left_out(
+                self.schema, sent, table_name(query.entity_column)
+            )
+            _warn_of_columns_the_model_does_not_read(
+                self.schema, _columns_to_leave_out(query, options), sent
+            )
+            _drop_context_that_answers_the_question(payloads, windowed=windowed)
         request = Request.materialized(
             payloads=payloads,
             windowed=windowed,

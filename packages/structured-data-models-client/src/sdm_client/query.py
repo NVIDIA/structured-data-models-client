@@ -180,9 +180,12 @@ class PredictiveQuery:
             predict=predict,
             num_context_samples=num_context_samples,
             options=options,
-            # The core bounds the context size on its route (T1.28a).
-            bounded_by_the_core=relational
-            and _routing.materializes_on_the_core(self.schema),
+            # The core bounds the context size on its route (T1.28a): a
+            # schema over a DuckDB source is relational (refused above if
+            # not), and goes to the core where the seam forces it there.
+            bounded_by_the_core=getattr(self.schema.source, 'backend', None)
+            == 'duckdb'
+            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core',
         )
 
         # Resolved once, and against the profile this request is for, because

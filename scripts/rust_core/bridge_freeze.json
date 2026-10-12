@@ -43,7 +43,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "6af7fa385beb949b19c61ebf73a49a8a2bd06084caaf19ae30551bae87558a3e",
+        "fingerprint": "122ec77e97934d423c91bb2321aec2fdd00049b622bbd48f175a186a03c6efd6",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -92,21 +92,16 @@
         ]
       },
       "gather": {
-        "fingerprint": "7739aea8acad12bdadc544a8e5d4c973533c8926e1d88a541fcd17681e644da5",
+        "fingerprint": "b64222abf5be810a195a4d01a61af8cc72f9a673ca2d138a4940c93e544c8550",
         "raise": 0,
         "warn": 0,
-        "branch": 3,
+        "branch": 1,
         "calls": [
-          "._check_entity_count",
-          "._check_limits",
-          "._check_shape",
-          "._run_mode_for",
           ".get",
           ".take",
           ".to_string",
           "predictive_query.validator.utils.table_name",
           "sdm_client._rust.codec.attachment",
-          "sdm_client._rust.codec.seed",
           "sdm_client._rust.providers.duckdb.DuckDBProvider",
           "sdm_client._rust.run.run"
         ]
@@ -173,7 +168,7 @@
         ]
       },
       "predict": {
-        "fingerprint": "c945c70255355cf3cac5c253fc3d5eec4ec10369ed474d38d0754eec1ea56978",
+        "fingerprint": "d3fddb6d51163a30f017f0347e62e21f4599b08052122a879c8d24e4c5e63fb2",
         "raise": 4,
         "warn": 0,
         "branch": 8,
@@ -182,6 +177,7 @@
           "._preflight",
           "._send",
           ".append",
+          ".get",
           ".take",
           "sdm_api.generated.tfm_api.PredictionItem",
           "sdm_client._routing.RouteError",
@@ -329,7 +325,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
-        "fingerprint": "ec0df386cf7c0b508dc03546d539a74c664e07417d9eccb8eeee1dbf8f8e2a60",
+        "fingerprint": "607a9a0a246904eebc3e91be022ad62edbcf0ba03ea6a403d670d7b98661aaf6",
         "raise": 0,
         "warn": 0,
         "branch": 1,
@@ -377,24 +373,25 @@
         ]
       },
       "PredictiveQuery._validate_materialize_args": {
-        "fingerprint": "1eb94f742c4b94d4495609e7b4a49cde8f395a307323a33047e125a97d19ccd0",
+        "fingerprint": "53b6ffb85f7d3f3f909709f14e3c82765e9043f6c179c43f2573ae8f828c0718",
         "raise": 12,
         "warn": 0,
-        "branch": 25,
+        "branch": 26,
         "calls": [
           "sdm_client.errors.StructuredDataError"
         ]
       },
       "PredictiveQuery.materialize": {
-        "fingerprint": "c3e4e4e8cabb5a51d04fb5530b976ce0f7eb204ec90b572349eac3695aaf7a7b",
+        "fingerprint": "d8722e739f997b79ce1faf56042ed164e54a11e52dba705ab1525a9505f44031",
         "raise": 4,
         "warn": 0,
-        "branch": 19,
+        "branch": 20,
         "calls": [
           ".capitalize",
           ".indices",
           ".materialize",
           ".table",
+          "sdm_client._routing.route",
           "sdm_client.errors.StructuredDataError",
           "sdm_client.models.spec_for"
         ]
@@ -422,276 +419,53 @@
         "branch": 0,
         "calls": []
       },
-      "RelationalMaterializer._check_entity_count": {
-        "fingerprint": "08f520c5b1c9b43542f195ecabb4ef668c7917883379052a7065a5f565a42a49",
-        "raise": 1,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
-      "RelationalMaterializer._check_limits": {
-        "fingerprint": "0fb065947f3d0870dfbec78271a01ad1f3e3bd10b26750cc7c51165b35951e5c",
-        "raise": 2,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".get",
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
-      "RelationalMaterializer._check_shape": {
-        "fingerprint": "a5f2d5c45e4bf85b07837e00037b54bedc82dc256ebd629cf1df4564c5c322b0",
-        "raise": 6,
-        "warn": 0,
-        "branch": 17,
-        "calls": [
-          ".get",
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
       "RelationalMaterializer._gather": {
-        "fingerprint": "0e20fb7d918698fcfa864d9c099134e081cc3b93712fd299f6ddb50b57b341e8",
+        "fingerprint": "04b5366f7735117bd260a32a17f45086558dbe8ac6db1e09ac5f050aa025e451",
         "raise": 2,
         "warn": 0,
-        "branch": 7,
+        "branch": 5,
         "calls": [
           "._get_task_table",
           ".materialize_task",
           ".to_string",
-          "sdm_client._routing.route",
           "sdm_client.errors.StructuredDataError",
+          "sdm_client.materializers.relational.RelationalMaterializer._check_entity_count",
+          "sdm_client.materializers.relational.RelationalMaterializer._check_limits",
+          "sdm_client.materializers.relational.RelationalMaterializer._check_shape",
           "sdm_client.materializers.relational.RelationalMaterializer._engine_errors",
           "sdm_client.materializers.relational.RelationalMaterializer._get_model",
           "sdm_client.materializers.relational.RelationalMaterializer._narrow_context",
+          "sdm_client.materializers.relational.RelationalMaterializer._run_mode_for",
           "sdm_client.materializers.relational._candidates_to_rank",
+          "sdm_client.materializers.relational._columns_to_leave_out",
+          "sdm_client.materializers.relational._warn_of_a_context_the_default_mode_capped",
           "sdm_client.materializers.relational._warn_rows_the_graph_dropped"
         ]
       },
-      "RelationalMaterializer._refuse_a_name_the_wire_reserves": {
-        "fingerprint": "1773fc00d7291ca543635ca669ff685a29a86810b9aeae0e5cf27d94cd5f413a",
-        "raise": 1,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".items",
-          ".join",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema._and_list"
-        ]
-      },
-      "RelationalMaterializer._run_mode_for": {
-        "fingerprint": "4ec3bf9246f7f8dfe19277873fdf01fd1f99513bbf7b21947f1150af06031995",
-        "raise": 1,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
-      "RelationalMaterializer._unreserved": {
-        "fingerprint": "2bbe9f520da12579222c69933e685cfcf585dc2c715d00162ad0455438b39e6b",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          ".lstrip"
-        ]
-      },
-      "RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities": {
-        "fingerprint": "7a3b675295cec2a304c9ad6877d2c3e27bebd5830012bb67c9c8855054fddf4b",
-        "raise": 0,
-        "warn": 1,
-        "branch": 6,
-        "calls": [
-          ".partition",
-          "sdm_client.core.warnings.caller_stacklevel",
-          "sdm_client.materializers.tabular._holds_two_whole_numbers"
-        ]
-      },
       "RelationalMaterializer.materialize": {
-        "fingerprint": "da4d7b9c89f7f204227a26246e72ab6a46e0c3e9fecfc143bab89b4d4eedb331",
+        "fingerprint": "514041653492541fbfe9647aff53942c08a5f84efea9c4996f12334f952303e4",
         "raise": 3,
         "warn": 0,
-        "branch": 6,
+        "branch": 8,
         "calls": [
           ".get",
           ".snapshot",
           ".to_string",
           "predictive_query.validator.utils.table_name",
+          "sdm_client._routing.route",
           "sdm_client.errors.StructuredDataError",
+          "sdm_client.materializers.relational.RelationalMaterializer._refuse_a_name_the_wire_reserves",
+          "sdm_client.materializers.relational.RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities",
+          "sdm_client.materializers.relational._columns_to_leave_out",
+          "sdm_client.materializers.relational._drop_context_that_answers_the_question",
+          "sdm_client.materializers.relational._record_the_statistic",
+          "sdm_client.materializers.relational._statistic_asked_for",
+          "sdm_client.materializers.relational._tables_sent",
+          "sdm_client.materializers.relational._warn_of_columns_the_model_does_not_read",
+          "sdm_client.materializers.relational._warn_of_relationships_that_join_nothing",
+          "sdm_client.materializers.relational._warn_of_tables_left_out",
+          "sdm_client.materializers.relational._warn_the_filter_chose_only_the_examples",
           "sdm_client.request.Request.materialized"
-        ]
-      },
-      "_columns_to_leave_out": {
-        "fingerprint": "240620380b764dc9dc6e03d98aa7e2e1097f9579a0a5fb90918818ece008cd94",
-        "raise": 2,
-        "warn": 0,
-        "branch": 7,
-        "calls": [
-          ".extend",
-          ".get",
-          ".get_exclude_cols_dict",
-          ".items",
-          ".setdefault",
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
-      "_drop_context_that_answers_the_question": {
-        "fingerprint": "a17be6f01a2b2726fb809a2d9671ee57d9919da28af1618891800d62df00a648",
-        "raise": 0,
-        "warn": 1,
-        "branch": 12,
-        "calls": [
-          ".get",
-          ".setdefault",
-          ".update",
-          ".values",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
-      },
-      "_entities_at_anchors": {
-        "fingerprint": "d767a401ab44dd253b79124387ed1bd6dad20fdcc4651e1046ad85b97fcc4ebb",
-        "raise": 0,
-        "warn": 0,
-        "branch": 7,
-        "calls": []
-      },
-      "_instances_matching": {
-        "fingerprint": "e85de6299e6797a3b9bbc516c0544706a8bfac16d2c083041936d3f4efad96e4",
-        "raise": 0,
-        "warn": 0,
-        "branch": 9,
-        "calls": [
-          ".index"
-        ]
-      },
-      "_joins_nothing": {
-        "fingerprint": "ae7a06545da2a379ece892f31fe11aa29fb399b604d81f33a949e3a6c249662f",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".any",
-          ".dropna",
-          ".isin",
-          ".unique"
-        ]
-      },
-      "_positions": {
-        "fingerprint": "50f3431cc872372b1ed9bdf5cc1078f21af1374b9bb6487ffda2e39b939d9adf",
-        "raise": 0,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".get",
-          ".index",
-          ".startswith"
-        ]
-      },
-      "_record_the_statistic": {
-        "fingerprint": "942d28674ef5019f7d60089935146f313a9944bd60ea719dab954dc7170328f4",
-        "raise": 1,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          ".get",
-          ".setdefault",
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
-      "_remove_instances": {
-        "fingerprint": "02bc1fbe6a18fdc72b303cacabae6211fa616c862604acf5336b46fa6c3f1012",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".get",
-          ".index"
-        ]
-      },
-      "_statistic_asked_for": {
-        "fingerprint": "a5d7b761e07df4a9b8c5983d583a9bffed1112da846b086ea2496ba217aae8f3",
-        "raise": 1,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          ".join",
-          "sdm_client.errors.StructuredDataError"
-        ]
-      },
-      "_tables_linked_to": {
-        "fingerprint": "4fdf1b6b3eaefb88ca07bcd632b617d828cae0118384cff30dccc53429f2b83b",
-        "raise": 0,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".add",
-          ".append",
-          ".get",
-          ".pop",
-          ".setdefault"
-        ]
-      },
-      "_tables_sent": {
-        "fingerprint": "cb46b3d89715289e8eb1245495e2929e0873cb9e74c4deb1e299157be09a994e",
-        "raise": 0,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".get",
-          ".update"
-        ]
-      },
-      "_warn_of_a_context_the_default_mode_capped": {
-        "fingerprint": "568fad028a4875f5bcc21160c4f0125ea8eb56e14ef0c21b02405bd6f4ed2069",
-        "raise": 0,
-        "warn": 1,
-        "branch": 2,
-        "calls": [
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
-      },
-      "_warn_of_columns_the_model_does_not_read": {
-        "fingerprint": "44d6920aaffb41293e6ac57436f83ad856efb51c526645b97cd9521d142901b3",
-        "raise": 0,
-        "warn": 1,
-        "branch": 8,
-        "calls": [
-          ".get",
-          ".items",
-          ".join",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
-      },
-      "_warn_of_relationships_that_join_nothing": {
-        "fingerprint": "6c7464105f6992b09ee65fcd6cd39a47a2de79ecac3b936a85ea4931a1eb5f07",
-        "raise": 0,
-        "warn": 1,
-        "branch": 4,
-        "calls": [
-          ".join",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
-      },
-      "_warn_of_tables_left_out": {
-        "fingerprint": "d3c71e8c365f99e29f71e2787ffb4a7d3a136ad0aae10c0f87b5165bcb30eca2",
-        "raise": 0,
-        "warn": 2,
-        "branch": 16,
-        "calls": [
-          ".join",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
-      },
-      "_warn_the_filter_chose_only_the_examples": {
-        "fingerprint": "4ffa637a0a74da15e5dea45b96d10fced8b493e91384f446994c4bcaddc3c9ed",
-        "raise": 0,
-        "warn": 1,
-        "branch": 2,
-        "calls": [
-          "sdm_client.core.warnings.caller_stacklevel"
         ]
       }
     },

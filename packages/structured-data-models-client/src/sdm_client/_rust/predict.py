@@ -202,10 +202,7 @@ def predict(
     """
     from sdm_api.generated.tfm_api import PredictionItem
 
-    from sdm_client.adapters.relational import (
-        _keys_the_caller_set,
-        _request_id,
-    )
+    from sdm_client.adapters.relational import _request_id
     from sdm_client.result import PredictionResult
 
     state = getattr(request, '_core_state', None)
@@ -255,13 +252,11 @@ def predict(
             'model': adapter.spec.model_id,
             'request_id': _request_id(),
             'outputs': list(fields),
-            # The inference options the caller set, which the core refuses
-            # where the model does not read them (T1.28a); the host reads
-            # its own value, the core decides.
+            # The inference options the caller set (a mapping, on this
+            # route), which the core refuses where the model does not read
+            # them (T1.28a).
             'inference_asked': sorted(
-                _keys_the_caller_set(
-                    request.requested_inference.get('inference_config')
-                )
+                request.requested_inference.get('inference_config', {})
             ),
         }
         attachments = {1: _payload(payload), 2: codec.attachment(request.query)}

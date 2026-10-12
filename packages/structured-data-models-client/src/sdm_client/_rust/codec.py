@@ -286,10 +286,22 @@ def encode(message: dict[str, Any]) -> bytes:
 
 
 def attachment(value: Any) -> bytes:
-    r"""An input-sized field as a bytes attachment of its JSON."""
-    return json.dumps(
-        value, ensure_ascii=False, allow_nan=False, default=_integral
-    ).encode()
+    r"""An input-sized field as a bytes attachment of its JSON. A value JSON
+    cannot hold (one of a type the encoder does not know, a number that is
+    not finite, one nested past what the encoder writes) is refused as the
+    client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
+    call's option values travel here as the caller gave them."""
+    try:
+        return json.dumps(
+            value, ensure_ascii=False, allow_nan=False, default=_integral
+        ).encode()
+    except (TypeError, ValueError, RecursionError):
+        from sdm_client.errors import StructuredDataError
+
+        raise StructuredDataError(
+            'this request carries a value that cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        ) from None
 
 
 def _json(data: bytes) -> dict[str, Any]:
