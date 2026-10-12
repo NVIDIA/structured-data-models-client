@@ -74,12 +74,6 @@ fn check(reader: Reader, rows: &[Value], failures: &mut Vec<String>) -> Held {
             row[2].as_i64(),
             row[3].as_str().map(str::to_owned),
         );
-        // A refused literal gives no warning here: the reference warns as it
-        // guesses a format, before it refuses.
-        let want = match want {
-            (None, ..) => (None, None, None),
-            read => read,
-        };
         let got = answer(reader, literal);
         if got != want {
             failures.push(format!("{literal}: {got:?}, the reference {want:?}"));
