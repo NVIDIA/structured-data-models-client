@@ -32,6 +32,8 @@
 #   P1B-n  Phase 1b inventory cases flagged `register` (T0.7)
 #   HOST-n the host layer's own limits (Phase 1, T1.7)
 #   PQL-n  PQL validation differences found by the S0 corpus (Phase 1, T1.12)
+#   SMP-n  the sampler's behaviors the core keeps, registered at T1.27
+#          (checkpoint 7), each found in a package's differential
 #
 # Status: proposed entries wait for the independent reviewer, or for the owner
 # when they refuse an input Python accepted or the owner has to choose; the
@@ -1294,7 +1296,9 @@ entries:
     needs the owner. T1.21e's family maps (contract/refusal-maps/<seam>.json)
     show today's core route on each; the three outcomes it already changes
     are P1B-6 to P1B-8, and from T1.25 DT-12 (time.text-us-date and
-    time.text-one-bad-value, the source's CAST failure as PROVIDER_ERROR).
+    time.text-one-bad-value, the source's CAST failure as PROVIDER_ERROR);
+    from T1.27 P1B-18 (decimal.class-target-38-18, refused by name when
+    its labels are read).
 
 - id: P1B-2
   title: Schema.from_source on the core route refuses what T1.11b's thin describe_source does not infer yet
@@ -1446,7 +1450,25 @@ entries:
     another source table than the description's: the core reads the
     schema as the host holds it beside the description it last answered,
     sdm_schema::edit::read_held, and refuses such a schema there and at an
-    edit, P1B-17), until T1.24b the bridge's.
+    edit, P1B-17), until T1.24b the bridge's;
+    from T1.27 the labels are the core's (sdm_engine::labels, E19): a
+    windowed SUM, COUNT, AVG, MIN or MAX, a comparison of one, or of a
+    column of the entity's own row, with a number or NULL, and a static
+    column (static_target, aggregation, month_window and a decimal sum's
+    target_type lifted), and the classification and static tasks are
+    refused after their labels, until T1.28a lays them out in the
+    payload, by classification_task (a binary or multiclass task) and
+    target_leakage (a static regression); still refused by name:
+    logical_target (AND, OR, NOT), target_filter (a target with WHERE),
+    condition (another comparison: IN, LIKE and its kin, text or a
+    boolean compared, a condition of a condition), condition_value (a
+    constant the target's type cannot read, an integer past int64 against
+    an integer column, where the reference raises), target_stype (a
+    static target of another meaning than ID, categorical or numerical,
+    where the reference raises NotImplementedError), every other
+    aggregation (aggregation) and target_type for a label of another type
+    (a time, a decimal's average, a decimal sum past 38 digits, a static
+    decimal target, P1B-18).
     The entities are cast to the key's type as the
     reference casts them (pandas, to the key's Arrow dtype), so none the
     reference takes is refused. A schema not described on the core has no core route
@@ -1457,7 +1479,7 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source's schema
     under a forced core route, with any of the inputs above; base.regression
     is none of them, and its payload is the reference's.
-  cases: [base.regression, base.adventureworks, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.29]
+  cases: [base.regression, base.adventureworks, base.binary, base.multiclass, decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.29]
   status: proposed
   approved_by: null
   decision_ref: null
@@ -1500,6 +1522,13 @@ entries:
     reached where an edit clears the key of a table others refer to (5
     sources), the reference sampling them; nothing else of this entry
     differed.
+    Measured at T1.27 by contract/tools/differential.py (the E49
+    differential as one committed tool): see decisions E72 and the
+    tracker's T1.27 row for the counts; every refusal of materialize's on
+    the core named its rule where the reference succeeded, the core's
+    labels equal to the reference payload's context wherever the core
+    gave them (the test-only labels operation), and nothing else of this
+    entry differed.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1910,7 +1939,15 @@ entries:
     decision (b) of 2026-10-11, relayed by the orchestrator (E66(a)): a
     null is no link, in place of the refusals, conditional on all cases
     passing and model accuracy holding; benchmark before Phase 1
-    acceptance (T1.29).
+    acceptance (T1.29). The benchmark's protocol, fixed by the owner on
+    2026-10-12 before any result is seen (decisions E73(a)): against the
+    serving endpoint the owner authorised; generated DuckDB datasets with
+    null keys and null foreign keys, the same datasets without nulls as a
+    control, and AdventureWorks; the old route against the core with
+    paired seeds, the same endpoint and configuration; MAE for a
+    regression, AUROC for a binary task, macro-F1 for a multiclass one;
+    it passes when the core is no more than 2% worse, relative, on any
+    dataset and the no-null controls agree within noise.
 
 - id: P1B-14
   title: A schema's keys, links or time column edited between two materialize calls is followed on the core route
@@ -2070,6 +2107,128 @@ entries:
     the next edit or materialize fails as INVALID_MESSAGE, the held
     schema not reading as the contract's HeldSchema, rather than as
     schema_edited.
+- id: P1B-18
+  title: A static decimal target is refused by name on the core route where the reference fails INTERNAL_ERROR
+  kind: change
+  old_behavior: >-
+    The reference's materialize of a static target held in a DECIMAL
+    column (decimal.class-target-38-18: users.tier, DECIMAL(38, 18)) samples
+    the entities and computes the labels, the decimals as they are, then
+    fails building its task table ("unsupported data type
+    'decimal128(38, 18)[pyarrow]' for column 'TARGET'"), which the client
+    raises as StructuredDataError with code INTERNAL_ERROR.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    materialize samples the entities and refuses when it reads the static
+    target's values: UnsupportedRequestError, code UNSUPPORTED_REQUEST,
+    fields operation materialize and rule target_type, naming no value
+    (T1.27, sdm-core's materialize.rs static_column). Until T1.27 the
+    same call was refused earlier, by static_target (P1B-3). The default
+    route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route, predicting a column of the entity table held in a
+    DECIMAL column (any precision and scale); a static target of a time or
+    any type the reference's task table refuses alike.
+  cases: [decimal.class-target-38-18, T1.27, T1.32b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Measured at T1.27: the decimal family's map
+    (contract/refusal-maps/decimal.json) holds both runners to
+    materialize/target_type, owned by T1.32b, which admits the case; the
+    reference observation is INTERNAL_ERROR at materialize (P1B-1). Fits
+    the class the owner approved on 2026-10-11 (E66(b): where the
+    reference crashes or gives an unnamed or internal error, a named
+    refusal or a clearer code is approved): the reference's answer is an
+    internal error and the core's a named refusal. Proposed, for the
+    reviewer or the owner to approve under the class; never
+    self-approved. Whether a decimal class target should be taken (its
+    classes the decimals' text, or the values read at float64) is
+    T1.32b's question.
+
+# --- The sampler's kept behaviors (T1.27) ------------------------------------
+
+- id: SMP-1
+  title: A table repeating a key past 1.05 times its distinct keys is read through its distinct rows
+  kind: keep
+  old_behavior: >-
+    The reference's SQL sampler stores a sampled table whose rows repeat a
+    key more than 1.05 times its distinct keys as its distinct rows once,
+    and reads each row through them (_sample_subgraph's inverse_dict), so
+    every row of a key carries the values of that key's first row; at or
+    under the ratio it keeps each row as read.
+  new_behavior: >-
+    The same on the core route: sdm-core's subgraph keeps each key's
+    first row's values for every row of that key past the ratio
+    (first_of_each_key), a null key counting as its own (P1B-13).
+  affected_inputs: >-
+    PredictiveQuery.materialize over a source whose sampled table holds
+    one key in several rows (a key the source does not enforce), on the
+    core route.
+  cases: [T1.26b, T1.27]
+  refs: [P1B-13]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Ported at T1.26b and held there by the old-against-core differential
+    (E49; its sources with a repeated key); registered at T1.27 as a
+    behavior the core keeps deliberately (checkpoint 7), with no entry
+    before. Proposed for the reviewer: a keep of the reference, no
+    outcome changes.
+
+- id: SMP-2
+  title: An integer key column holding a null is sent as float64
+  kind: keep
+  old_behavior: >-
+    The reference's payload writes a foreign key column of integers that
+    holds a null (a row the walk gave no key) under the dtype pandas gives
+    such a column, float64, each key its value rounded to the nearest
+    double.
+  new_behavior: >-
+    The same on the core route: sdm-request's payload writes such a column
+    as float64 (payload.rs, float_key), so the request is the reference's.
+  affected_inputs: >-
+    A request whose sampled table's integer foreign key is null for a row,
+    on the core route; a key past 2**53 loses its low digits, as the
+    reference's does.
+  cases: [T1.26b, T1.27]
+  refs: [P1B-13]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Ported at T1.26b (P1B-13's null handling) and held by its tests and
+    differential; registered at T1.27 as a behavior the core keeps
+    deliberately (checkpoint 7). Proposed for the reviewer; no outcome
+    changes.
+
+- id: SMP-3
+  title: A text feature is sent as the reference's lowered words
+  kind: keep
+  old_behavior: >-
+    The reference's sampler sends a text feature as each value's
+    lower-case words (_normalize_text): the value cut to 300 characters,
+    lowered by Arrow's utf8_lower (no final sigma, U+0130 to i alone),
+    punctuation and <br> forms made spaces, split on str.isspace's
+    whitespace, 50 words kept.
+  new_behavior: >-
+    The same on the core route: sdm-engine's words.rs, held to every code
+    point's lowering and the words of 772 values recorded in the
+    reference's environment (tests/words.json).
+  affected_inputs: >-
+    A text feature on the core route.
+  cases: [T1.26b, T1.27]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Ported at T1.26b; registered at T1.27 as a behavior the core keeps
+    deliberately (checkpoint 7), with no entry before. Proposed for the
+    reviewer; no outcome changes.
+
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
