@@ -139,8 +139,8 @@ fn resolve_here(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
-    // The current year is read only for a literal that needs it (D5): a
-    // zone or clock the run cannot read refuses only such a query.
+    // Resolve the current year up front; propagate a zone or clock error
+    // only if a literal needs a two-digit year placed.
     let year = local_year(facts, zones);
     let reader = parser::dates::Reader {
         year: year.as_ref().ok().copied(),

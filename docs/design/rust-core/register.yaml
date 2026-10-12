@@ -2267,8 +2267,9 @@ entries:
     validator gives the reference's own (s0.SHADOWED, bridge code until
     Phase 5), so the caller sees what the old route shows; for a query the
     core refuses, which meets no shadow check, the core's is shown, once
-    per day-first literal read, where the reference gives one per read
-    (once for a query refused after its literal is read).
+    per day-first literal read, where the reference gives one per read:
+    once for a query refused before the later type checks read the literal
+    again, twice for one refused in them.
   affected_inputs: >-
     Queries with a date literal read day first whose format pandas names
     (a four-digit year, one or two digits elsewhere), on the core route.
@@ -2285,8 +2286,12 @@ entries:
     the python-core caller to the old route's warnings for an accepted
     query, and to the old route's one warning, worded the same behind the
     code, for two refused after the literal is read (T1.6b fix round 1,
-    Codex P2: the warning was held back on refusal too). Recommendation:
-    approve; the count is the reference's reading count, not a rule.
+    Codex P2: the warning was held back on refusal too). Where the run cannot
+    read the host's zone and a later literal needs a two-digit year placed,
+    the zone refusal ends the validation, and the day-first warnings of the
+    literals read before it are not given (T1.6b review, carried at
+    T1.28w). Recommendation: approve; the count is the reference's reading
+    count, not a rule.
 
 - id: PQL-4
   title: A day-first literal whose middle field is written as its year

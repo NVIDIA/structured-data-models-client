@@ -153,7 +153,7 @@ In short:
 
 ### As the core reads them (T1.6b)
 
-The core reads a literal by these rules over its fields, written down from the reference's answers and held to them (`sdm-pql-interim`'s `tests/dates.json`, `dates.rs`; decision E69); no pandas or `dateutil` code is ported.
+The core reads a literal by these rules over its fields, written down from the reference's answers and held to them (`sdm-pql`'s `tests/dates.json`, `dates.rs`; decision E69); no pandas or `dateutil` code is ported.
 
 - A literal whose every run of digits has four digits or fewer: D2's order; a year below 100 placed around the current year where no date field has three digits or more (D5); the year 0 only as a first field of exactly `0000`, a month and a day of one or two digits, and a time of day, if any, of fields of one or two digits (D7); a time of day by value, an hour to 23, a minute and a second to 59 (D6).
 - A literal with a run of five digits or more (D8):

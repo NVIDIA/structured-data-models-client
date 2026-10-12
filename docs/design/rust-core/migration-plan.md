@@ -152,7 +152,7 @@ Several separate PQL implementations exist today, and only two share tests.
 The drift risk is less in the grammar than in the code around it (tree building, error handling, validators), so "defined once" means one implementation.
 
 - **One implementation, this client's own (Phase 1 decision E18, approved by owner 2026-10-08):** the first attempt's hand-written Rust parser, ported in Phase 1 and completed there (the date-literal rules, the grammar quirks, fuzzing and a deep-query test), behind one adapter in `sdm-core`, so this client's Python and Java get PQL through the core.
-  The crate is `sdm-pql-interim` until Phase 1 task T1.6b gives it a permanent name.
+  The crate is `sdm-pql`, its permanent name since Phase 1 task T1.28w (`sdm-pql-interim` before it).
 - **One conformance suite** of valid and invalid queries with the reference's codes, spans and date readings, seeded with this client's 417 cases; today's ANTLR grammar stays in CI as a cross-check, through the reference observations and the corpus recorded on it.
 - **The validated query** is a versioned format of this client's own, locked like the contract (Phase 1 decision E8).
 - **Validity-affecting emulation** stays inside the parser crate, on a permanent allowlist; each addition needs the owner (Phase 1 decision H21).
@@ -217,7 +217,7 @@ The names and boundaries below are the target ownership, not a reason to rename 
 | `sdm-schema` | Canonical schema, inference over Arrow, source-neutral metric and semantic view interpretation | Keep the engine; move catalog SQL to `sdm-data`; drop the pandas column models and dtype parsing; YAML through a library |
 | `sdm-engine` | Modules for time (one calendar, the date parsing rules recorded in Phase 0, `DateOffset`, time zones), random streams, sampling (plan, neighbor sampler, graph store) and labels (kernels and windows) | Merges today's time, random, sampling and label code with one value model; time on a library, not a pandas date-inference clone; Arrow compute where answers allow |
 | `sdm-request` | Modules for materialization, session state, decomposition, limits, payload encoding, response decoding and result layout | Keep the logic; drop the CPython sort and `json.dumps` size emulation |
-| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the PQL parser (crate `sdm-pql-interim` until Phase 1 task T1.6b renames it; Phase 1 decision A3, pending owner confirmation, and Phase 1 decision E18, approved by owner 2026-10-08) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
+| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the PQL parser (crate `sdm-pql`, `sdm-pql-interim` until Phase 1 task T1.28w renamed it; Phase 1 decision A3, pending owner confirmation, and Phase 1 decision E18, approved by owner 2026-10-08) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
 | `sdm-testkit` | Contract runner, provider conformance kit, fixtures | Dev-only; nothing in the shipped crates |
 | `sdm-host` | Control-message codecs, Arrow handoff, native resource lifetime, panic containment, threading; no domain scheduling | New, written once |
 | `sdm-py`, `sdm-jni` | Thin PyO3 and `jni-rs` bindings over `sdm-host`: convert types, map errors, release the GIL | Rewrite `sdm-py` much slimmer; new `sdm-jni` |
