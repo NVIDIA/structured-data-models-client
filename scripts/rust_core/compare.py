@@ -253,7 +253,8 @@ def _observations(
     ):
         try:
             observation = json.loads(line)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, RecursionError):
+            # Nested past the parser is refused by name, never a traceback.
             report.fail(f'{path.name}:{number}: runner failure: not JSON')
             continue
         problem = runner._invalid(validate, observation)
