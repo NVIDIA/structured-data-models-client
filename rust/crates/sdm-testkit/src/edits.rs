@@ -54,49 +54,33 @@ pub struct Link {
     pub target_column: String,
 }
 
-impl From<&case::Edit> for SchemaEdit {
-    fn from(edit: &case::Edit) -> SchemaEdit {
+impl SchemaEdit {
+    /// The case format's edit as this host makes it: the format's first
+    /// two, which every case loader a gate's checkpoint overlays holds
+    /// (`gate.sh` builds this crate with its checkpoint's `case.rs`, which
+    /// may predate T1.24b's edits); `None` for an edit this conversion
+    /// does not name, which [`crate::host::run`] refuses as this host's
+    /// failure. The edits T1.24b added (`set_primary_key`,
+    /// `set_time_column`, `set_stype`, `set_relationships`) are converted
+    /// where they are run, in `tests/edit_cases.rs`, and here once the
+    /// gate's checkpoint loads them.
+    pub fn from_case(edit: &case::Edit) -> Option<SchemaEdit> {
+        #[allow(
+            unreachable_patterns,
+            reason = "under a checkpoint's case loader every variant is named"
+        )]
         match edit {
-            case::Edit::ClearTimeColumn { table } => SchemaEdit::ClearTimeColumn {
+            case::Edit::ClearTimeColumn { table } => Some(SchemaEdit::ClearTimeColumn {
                 table: table.0.clone(),
-            },
-            case::Edit::DeleteColumn { table, column } => SchemaEdit::DeleteColumn {
-                table: table.0.clone(),
-                column: column.0.clone(),
-            },
-            case::Edit::SetPrimaryKey { table, column } => SchemaEdit::SetPrimaryKey {
+            }),
+            case::Edit::DeleteColumn { table, column } => Some(SchemaEdit::DeleteColumn {
                 table: table.0.clone(),
                 column: column.0.clone(),
-            },
-            case::Edit::SetTimeColumn { table, column } => SchemaEdit::SetTimeColumn {
-                table: table.0.clone(),
-                column: column.0.clone(),
-            },
-            case::Edit::SetStype {
-                table,
-                column,
-                stype,
-            } => SchemaEdit::SetStype {
-                table: table.0.clone(),
-                column: column.0.clone(),
-                stype: stype.0.clone(),
-            },
-            case::Edit::SetRelationships { relationships } => SchemaEdit::SetRelationships {
-                relationships: relationships
-                    .iter()
-                    .map(|link| Link {
-                        source_table: link.source_table.0.clone(),
-                        source_column: link.source_column.0.clone(),
-                        target_table: link.target_table.0.clone(),
-                        target_column: link.target_column.0.clone(),
-                    })
-                    .collect(),
-            },
+            }),
+            _ => None,
         }
     }
-}
 
-impl SchemaEdit {
     /// The edit as the contract's `edit_schema` takes it: the same edit
     /// the Python client's setter passes for the same call.
     pub fn to_contract(&self) -> ops::SchemaEdit {

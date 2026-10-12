@@ -174,13 +174,13 @@ fn error_of(out: &Outgoing) -> Result<Answer> {
 /// is this host's failure, never the case's outcome. The case's edits are
 /// made to the description before `materialize` samples it.
 pub fn run(case: &Case, bases: &Bases) -> Result<Observed> {
-    let edits: Vec<SchemaEdit> = case
-        .input
-        .edits
-        .iter()
-        .flatten()
-        .map(SchemaEdit::from)
-        .collect();
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
     run_edited(case, bases, &edits)
 }
 
