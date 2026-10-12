@@ -804,22 +804,29 @@ entries:
     a valid date; actual years above 9999 remain refused) and validates the
     query.
   new_behavior: >-
-    The interim date reader of T1.6a does not read a field of five or more
-    digits: validate_query ends with kind unsupported, UNSUPPORTED_REQUEST
-    (Phase 1 decision E10). T1.6b reads them, and a reference-accepted query
-    in the adapter tests, pinned as refused now, must flip to accepted.
+    The interim date reader of T1.6a did not read a field of five or more
+    digits: validate_query ended with kind unsupported, UNSUPPORTED_REQUEST
+    (Phase 1 decision E10). From T1.6b the reader reads them by date rule
+    D8, as the reference does, so this change no longer stands.
   affected_inputs: >-
     S0 on the core route with packed or long zero-padded date fields that
     decode to a valid date (years above 9999 stay refused, date-rules.md).
   cases: [T1.6a, T1.6b]
-  status: approved
+  status: rejected
   approved_by: owner
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E69}
   notes: >-
-    Approved by the owner at the T1.7b check-in (2026-10-08) as a temporary gap until T1.6b. Phase 1 decisions E10 and H27, from the batch 2 code review. This
-    refuses input the reference accepts, so it needs the owner while it
-    stands; no path switches before T1.6b removes it, and T1.6b sets this
-    entry to rejected. T1.12's D8 and DT-9 cases stay diagnostic until then.
+    Approved by the owner at the T1.7b check-in (2026-10-08) as a temporary
+    gap until T1.6b, which was to set this entry to rejected (the owner's
+    plan, design.md's T1.6b row); set at T1.6b (E69). The reader is held to
+    the reference by sdm-pql-interim's tests/dates.json (7,749 D8 literals,
+    4,155 read) and the adapter's tests, whose DT-9 test now holds both
+    queries accepted with the reference's readings. T1.12's two diagnostic
+    cases (s0.boundary.date-packed, s0.boundary.date-long-field) stay
+    diagnostic byte for byte, since a changed case file needs an approved
+    entry naming it and this one is rejected; each has an acceptance twin
+    of the same input from T1.6b (s0.accept.date-packed,
+    s0.accept.date-long-field), baselined on all three runners.
 
 - id: DT-10
   title: Zone answers at the ends of the time range, by the zone's rules
@@ -2238,3 +2245,67 @@ entries:
     at T1.12's last review; the two depth cases' texts still say about
     455, left as written, since changing a case file changes the digest
     its reference observation is held to.
+
+- id: PQL-3
+  title: The day-first date literal warning given once per literal (D4)
+  kind: change
+  old_behavior: >-
+    The reference reads a date literal with pd.to_datetime each time a step
+    reads it, and pandas gives its UserWarning ("Parsing dates in %d/%m/%Y
+    format when dayfirst=False ...") each time: twice in a validation
+    (Constant built, then typed_value in the checks), more as the
+    materializer reads the literal again. Under Python's default warning
+    filter a caller sees it once per call site.
+  new_behavior: >-
+    The core gives DATE_LITERAL_DAY_FIRST (fields: the format and the
+    literal's span) once per day-first literal, from the validate_query run
+    that reads the query; materialize, which a public call reaches only
+    after validating, gives none, so the pure-Rust host's S1 path, which
+    starts no validate_query, gives none. The Python host words it in
+    pandas' sentence; on the S0 core route the core's is quiet while the
+    shadow check's old validator gives the reference's own (s0.SHADOWED,
+    bridge code until Phase 5), so a python-core caller sees what the old
+    route shows.
+  affected_inputs: >-
+    Queries with a date literal read day first whose format pandas names
+    (a four-digit year, one or two digits elsewhere), on the core route.
+  cases: [T1.6b]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E69}
+  notes: >-
+    Measured at T1.6b: the corpus's one day-first case gives the reference's
+    warning twice and the core's once, the same format
+    (sdm-core/tests/pql_corpus.rs compares the formats as a set);
+    test_a_day_first_literal_warns_on_the_core_as_on_the_old_route holds
+    the python-core caller to the old route's warnings. Recommendation:
+    approve; the count is the reference's reading count, not a rule.
+
+- id: PQL-4
+  title: A day-first literal whose middle field is written as its year
+  kind: change
+  old_behavior: >-
+    pandas guesses a literal's format by writing its reading back with
+    strftime; for a day-first literal whose middle field is a four-digit
+    number written as the year is (13/0001/1, read as the 13th of January
+    of the year 1), it names the middle field %Y and the last %m, and warns
+    "Parsing dates in %d/%Y/%m format ...", reading the same date.
+  new_behavior: >-
+    The core reads the same date and gives no D4 warning: D4 names a format
+    only for a four-digit year last and one or two digits elsewhere
+    (date-rules.md, "The PQL literal rules").
+  affected_inputs: >-
+    PQL date literals day first whose middle field has four digits and
+    equals the year written last (with its time of day, if any).
+  cases: [T1.6b]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E69}
+  notes: >-
+    Found by T1.6b's probes: 144 of the 1,134 literals of dates.json's
+    format_guess set, and 7 of the 330 generated queries of the pre-push
+    differential, differ only so; every reading agrees. Executable:
+    sdm-pql-interim's tests/dates.rs,
+    a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named
+    (diagnostic). A pandas artifact of format guessing, flagged to the
+    owner rather than copied (the T1.6b brief). Recommendation: approve.

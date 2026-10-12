@@ -151,6 +151,21 @@ In short:
 - Six, eight, twelve and fourteen digit fields are packed dates read by `dateutil` (D8).
 - Impossible dates, a year above 9999 and two long fields are refused (D9).
 
+### As the core reads them (T1.6b)
+
+The core reads a literal by these rules over its fields, written down from the reference's answers and held to them (`sdm-pql-interim`'s `tests/dates.json`, `dates.rs`; decision E69); no pandas or `dateutil` code is ported.
+
+- A literal whose every run of digits has four digits or fewer: D2's order; a year below 100 placed around the current year where no date field has three digits or more (D5); the year 0 only as a first field of exactly `0000`, a month and a day of one or two digits, and a time of day, if any, of fields of one or two digits (D7); a time of day by value, an hour to 23, a minute and a second to 59 (D6).
+- A literal with a run of five digits or more (D8):
+  - a first field of six digits is a year, month and day of two digits each, in D2's order, the year placed by D5; of eight, a four-digit year, a month and a day; of twelve, then an hour and minutes; of fourteen, then seconds;
+  - after such a field, each of the other two date fields, in order: with `-` as the separator once an hour is known, a UTC offset west of Greenwich (`HHMM`, or one or two digits of hours), the later one overriding; otherwise two or four digits are an hour (and minutes) when no hour is known yet, six digits an `HHMMSS` time; anything else is refused;
+  - any other first field: the three date fields in D2's order, a field of three digits or more a year as written, two such refused (D9), the year placed by D5 only where no date field has three digits or more (the long run then is in the time of day);
+  - a time of day after the date replaces the hour, minutes and seconds, each by value, except an hour of six, eight, twelve or fourteen digits, which is refused;
+  - the year 0 is refused, and an offset of a day or more.
+- D4: a reading day first (a first field of one or two digits, 13 to 31) warns when its format can be named: a four-digit year last, a month of one or two digits, a time of day of fields of one or two digits; a year below 1000 written with four digits only where the platform's `strftime` pads it (`HostFacts.platform.strftime_pads_year`). The format is written in the literal's separator: `%d/%m/%Y`, then ` %H:%M:%S`. pandas also guesses `%d/%Y/%m` for a literal whose middle field is written as its year (`13/0001/1`) and warns with it; the core names no format there (register PQL-4, proposed).
+- The current year is the clock's (`HostFacts.now`) in the host's local zone (`HostFacts.local_zone`), as `dateutil` places a two-digit year by the machine's local year; where the host names no zone, UTC's. `dateutil` reads that year once, when it is imported; the core reads it each run.
+- The warning is given once per day-first literal by the `validate_query` run that reads it (`DATE_LITERAL_DAY_FIRST`); the reference gives it each time it reads the literal (register PQL-3, proposed).
+
 ## Units and ranges
 
 - pandas 3 reads text at microsecond resolution (`datetime64[us]`), so digits past the sixth of a fraction are dropped; pandas 2 reads at nanoseconds.
