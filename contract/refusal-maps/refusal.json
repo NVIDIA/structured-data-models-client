@@ -39,7 +39,7 @@
       "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "packages/structured-data-models-client/src/sdm_client/query.py:438-441",
+      "where": "packages/structured-data-models-client/src/sdm_client/query.py:444-447",
       "holds": "raise self._refusal(",
       "why": "The reference's own refusal: python-core validates the query in the host as the reference does, and rust-host's materialize refuses it in the core (rust/crates/sdm-core/src/materialize.rs:603-607); T1.32d admits the case with it",
       "observed": {

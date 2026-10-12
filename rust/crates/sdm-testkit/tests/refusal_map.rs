@@ -186,13 +186,22 @@ fn run_probes(map: &Value) -> (BTreeMap<String, Value>, Digests, BTreeMap<String
         let ran = host::run_edited(&given, &bases, &edits).unwrap();
         let name = probe["id"].as_str().unwrap().to_owned();
         if let Some(described) = &ran.described {
-            let mut agreed = BTreeMap::from([
-                ("described".to_owned(), digest(described)),
-                (
+            let mut agreed = BTreeMap::from([("described".to_owned(), digest(described))]);
+            // The warnings, but on the AdventureWorks map's gap probe: this
+            // host stops at describe_source there, where python-core goes
+            // on to materialize, which gives warnings of its own from
+            // T1.28a (the notices of what the request leaves out).
+            let gap_probe = map.get("case").is_some()
+                && spec["derive"] == json!({"from": "case", "steps": []})
+                && spec["core"]
+                    .as_object()
+                    .is_some_and(|core| core.len() == 1 && core.contains_key("describe_source"));
+            if !gap_probe {
+                agreed.insert(
                     "warnings".to_owned(),
                     digest(&Value::from(ran.warnings.clone())),
-                ),
-            ]);
+                );
+            }
             for input in &ran.inputs {
                 if input["op"] == "materialize" {
                     agreed.insert("materialize_schema".into(), digest(&input["schema"]));

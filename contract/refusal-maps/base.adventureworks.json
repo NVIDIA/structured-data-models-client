@@ -1,35 +1,15 @@
 {
   "format": "sdm-refusal-map/1",
   "case": "base.adventureworks",
-  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is, its tables named, keys, time columns and relationships passed to Schema.from_source as the notebook passes them, its edits (the products' time column cleared, rowguid deleted) and materialize with inference_config, which describes the source on both runners; then without inference_config, which reaches predict's result on both runners from T1.26b, the core walking the order lines to the customers they refer to and sending the products' text as the reference's words; then with one hop, and without the text columns of the tables sampled, the probes that removed T1.26b's refusals until it landed, kept as the journey reached both ways. From T1.24 Schema.from_source with tables named has a core route and every option passes through to the core, which refuses by name what it does not take, and from T1.25 the core reads text as dates as the reference does, so the probes restore the inputs earlier probes masked while their rules had not landed (the tables' names, the keys, time columns and relationships given, the edit stamps, sparse and several timestamps, the text columns whose values could be dates): what the probes still remove is the scope this map gives T1.28a. A rule no probe reached past (predict with inference_config) is not in it and stays refused (P1B). rust-host starts the core operations, so it has a probe only where the case format can carry the input (gaps): its notebook probe runs without inference_config, as its probe without it does.",
+  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is, its tables named, keys, time columns and relationships passed to Schema.from_source as the notebook passes them, its edits (the products' time column cleared, rowguid deleted) and materialize with inference_config, which describes the source on both runners; then without inference_config, which reaches predict's result on both runners from T1.26b, the core walking the order lines to the customers they refer to and sending the products' text as the reference's words; then with one hop, and without the text columns of the tables sampled, the probes that removed T1.26b's refusals until it landed, kept as the journey reached both ways. From T1.24 Schema.from_source with tables named has a core route and every option passes through to the core, which refuses by name what it does not take, and from T1.25 the core reads text as dates as the reference does, so the probes restore the inputs earlier probes masked while their rules had not landed (the tables' names, the keys, time columns and relationships given, the edit stamps, sparse and several timestamps, the text columns whose values could be dates): and from T1.28a the notebook's call, inference_config included, reaches predict's result on python-core, the core reading the options as the engine reads them and writing those the model reads into the call, so the map has no entry; the probes after it are kept as the journey reached both ways. rust-host starts the core operations, so it has a probe only where the case format can carry the input (gaps): its notebook probe runs without inference_config, as its probe without it does.",
   "gaps": [
     {
       "input": "materialize's inference_config",
-      "contract": "materialize's input carries the option by name from contract version 13 (decision E61) and predict's none; the case format's core input for materialize carries neither, so rust-host has no probe that names it",
-      "owner": "T1.28a"
+      "contract": "materialize's input carries the call's option values, inference_config among them, from contract version 19 (Materialize.values, T1.28a), which python-core sends; the case format's core input for materialize carries none, so rust-host has no probe that names it; T1.28b, which completes the call's inference options on predict, owner to confirm",
+      "owner": "T1.28b"
     }
   ],
-  "entries": [
-    {
-      "id": "materialize/inference_config",
-      "operation": "materialize",
-      "rule": "inference_config",
-      "owner": "T1.28a",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:1210",
-      "holds": null,
-      "why": "The inference options the call carries (E45(a): only those kumo-relational reads) are written by sdm-request (T1.28a); from T1.24 the host passes the option's name through to the core (contract version 13), which refuses it by name, the value having no place in the contract yet",
-      "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "inference_config"
-        }
-      }
-    }
-  ],
+  "entries": [],
   "probes": [
     {
       "id": "notebook",
@@ -132,7 +112,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/inference_config"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {

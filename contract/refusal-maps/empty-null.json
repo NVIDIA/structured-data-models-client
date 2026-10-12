@@ -9,12 +9,12 @@
     "null.some-times",
     "null.target-all-null"
   ],
-  "reading": "The first refusal of each probe; each case of the empty-null family probed as it is. The null feature, null target, null times and the entity without facts reach predict's result on both runners; the empty fact table is refused by name at describe_source; the empty indices are refused by the host as the reference refuses them, which rust-host cannot carry (gap).",
+  "reading": "The first refusal of each probe; each case of the empty-null family probed as it is. The null feature, null target, null times and the entity without facts reach predict's result on both runners; the empty fact table is refused by name at describe_source; the empty indices are refused by the core as the reference refuses them (T1.28a), which rust-host cannot carry (gap).",
   "gaps": [
     {
       "input": "an empty indices (empty.indices)",
-      "contract": "materialize's indices hold at least one entity (case.schema.json), so the case's core is describe_source alone, which succeeds on rust-host",
-      "owner": "T1.28a"
+      "contract": "materialize's indices hold at least one entity in the case format (case.schema.json), so the case's core is describe_source alone, which succeeds on rust-host; the core refuses empty indices (T1.28a), which python-core reaches",
+      "owner": "T1.32d"
     }
   ],
   "entries": [
@@ -43,14 +43,14 @@
     },
     {
       "id": "materialize/empty_indices",
-      "operation": "materialize (the host, before the core)",
+      "operation": "materialize",
       "rule": "INVALID_REQUEST: indices names no entity",
-      "owner": "T1.28a",
+      "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "packages/structured-data-models-client/src/sdm_client/materializers/relational.py:137",
-      "holds": "if len(indices) == 0:",
-      "why": "The reference's own refusal, made by the host's shared code before the core runs; the ledger's row for an empty indices moves it into sdm-request (T1.28a). rust-host cannot carry the call (gap)",
+      "where": "rust/crates/sdm-core/src/materialize.rs:1528",
+      "holds": "the entities to predict for are none",
+      "why": "The reference's own refusal, which the core makes from T1.28a (the ledger's row moved into the core: python-core hands the empty indices to it), INVALID_REQUEST as the reference's; rust-host cannot carry the call (gap), owned by the package that admits the case",
       "observed": {
         "python-core": {
           "stage": "materialize",

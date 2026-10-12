@@ -14,7 +14,7 @@
     "time.timestamp-s",
     "time.timestamptz"
   ],
-  "reading": "The first refusal of each probe; each case of the time family probed as it is, and where the refused column is not the question's time column, without it: the time-of-day and interval features, the second of users' two time candidates, and the time column passed in. From T1.25 the date, zoned and text time columns reach predict's result on both runners, as the ns and s timestamps do; the US dates and the one unreadable value are read as dates by inference, as the reference reads them, and fail the time bounds' CAST in the source, as the reference's same statement fails, under another code (DT-12).",
+  "reading": "The first refusal of each probe; each case of the time family probed as it is, and where the refused column is not the question's time column, without it: the time-of-day and interval features, the second of users' two time candidates, and the time column passed in. From T1.25 the date, zoned and text time columns reach predict's result on both runners, as the ns and s timestamps do, and from T1.28a the time-of-day feature, sent as the reference sends it (a timestamp column its engine reads as holding no time, each cell null); the US dates and the one unreadable value are read as dates by inference, as the reference reads them, and fail the time bounds' CAST in the source, as the reference's same statement fails, under another code (DT-12).",
   "gaps": [],
   "entries": [
     {
@@ -27,40 +27,17 @@
       "holds": "ErrorCode::UnsupportedType,",
       "why": "DuckDB's INTERVAL (month_day_nano_interval) refused by name in place of the reference's unnamed RuntimeError: register P1B-8, proposed, which T1.32e resolves when it admits time.feature-interval. The probe without the column reaches predict's result on both runners",
       "observed": {
-        "rust-host": {
-          "code": "UNSUPPORTED_TYPE",
-          "operation": null,
-          "rule": null
-        },
         "python-core": {
           "stage": "from_source",
           "error": "StructuredDataError",
           "code": "UNSUPPORTED_TYPE",
           "operation": null,
           "rule": null
-        }
-      }
-    },
-    {
-      "id": "materialize/wire_dtype",
-      "operation": "materialize",
-      "rule": "wire_dtype",
-      "owner": "T1.28a",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-request/src/payload.rs:150",
-      "why": "A time-of-day (TIME) feature, described from T1.23 as the reference describes it (a timestamp column its engine reads as holding no time), has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
-      "observed": {
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "wire_dtype"
         },
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "wire_dtype"
+        "rust-host": {
+          "code": "UNSUPPORTED_TYPE",
+          "operation": null,
+          "rule": null
         }
       }
     },
@@ -74,14 +51,14 @@
       "holds": "let time = format!(\"CAST({} AS TIMESTAMP)\", identifier(&at.column));",
       "why": "Text read as dates by inference (US dates; ISO dates with one unreadable value) that DuckDB's CAST in the time bounds cannot read: the reference's same statement fails and its client reports INTERNAL_ERROR, the core's provider error is PROVIDER_ERROR, a code proposed in register DT-12, which T1.32e settles when it admits the cases",
       "observed": {
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
           "code": "PROVIDER_ERROR",
           "operation": null,
           "rule": null
         },
-        "python-core": {
-          "stage": "materialize",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "PROVIDER_ERROR",
           "operation": null,
           "rule": null
@@ -622,7 +599,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/wire_dtype"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -673,7 +650,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/wire_dtype"
+        "expect": "success"
       }
     },
     {
