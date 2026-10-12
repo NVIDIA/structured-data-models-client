@@ -40,7 +40,7 @@ the archive's copy here (``padded-years.tsv``).
 Run it with the reference's interpreter, isolated, from the repository root:
 
     ~/code/sdmc-reference/.venv/bin/python -I \\
-        rust/crates/sdm-pql-interim/tests/dates_record.py ~/code/sdmc-reference
+        rust/crates/sdm-pql/tests/dates_record.py ~/code/sdmc-reference
 """
 
 from __future__ import annotations

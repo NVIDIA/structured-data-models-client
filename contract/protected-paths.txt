@@ -47,7 +47,7 @@ rust/crates/sdm-core/tests/pql_corpus.rs
 rust/crates/sdm-core/tests/pql_compare/**
 rust/crates/sdm-core/tests/pql_quirks.rs
 rust/crates/sdm-core/tests/pql_custom_profiles.rs
-rust/crates/sdm-pql-interim/tests/**
+rust/crates/sdm-pql/tests/**
 rust/testdata/**
 rust/crates/sdm-contract/schema/**
 rust/crates/sdm-contract/tests/*.json

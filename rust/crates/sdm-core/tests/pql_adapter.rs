@@ -513,11 +513,10 @@ impl sdm_core::Zones for Bundled {
 
 #[test]
 fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
-    // `sdm-pql-interim/tests/dates.json`'s `local_year`: 2026-12-31T23:30 in New
+    // `sdm-pql/tests/dates.json`'s `local_year`: 2026-12-31T23:30 in New
     // York, 2027-01-01T04:30Z, where the reference's dateutil places a
     // two-digit year by the local year, 2026, not UTC's.
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../sdm-pql-interim/tests/dates.json");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sdm-pql/tests/dates.json");
     let vectors: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let local = &vectors["local_year"];

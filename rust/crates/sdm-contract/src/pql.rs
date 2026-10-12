@@ -6,7 +6,7 @@
 //! against its schema, as the core's PQL adapter hands it to the rest of the
 //! core.
 //!
-//! The parser behind the adapter (`sdm-pql-interim`, decision E18) gives its
+//! The parser behind the adapter (`sdm-pql`, decision E18) gives its
 //! answer in this format, so nothing past the adapter depends on the
 //! parser's own types. The format has a
 //! version of its own, independent of the contract's: its JSON Schema is

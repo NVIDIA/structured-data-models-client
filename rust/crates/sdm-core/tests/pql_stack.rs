@@ -94,7 +94,7 @@ fn sources(krate: &str) -> Vec<PathBuf> {
 fn the_adapter_grows_one_stack_per_call_and_the_parser_none() {
     // Every call that grows a stack, in code, outside comments.
     let mut sites = Vec::new();
-    for krate in ["sdm-core", "sdm-pql-interim"] {
+    for krate in ["sdm-core", "sdm-pql"] {
         for path in sources(krate) {
             let text = std::fs::read_to_string(&path).unwrap();
             for (n, line) in text.lines().enumerate() {

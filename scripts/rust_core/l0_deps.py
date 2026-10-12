@@ -93,7 +93,7 @@ SHIPPED = (DOMAIN, HOST, BINDING)
 CLASSES: dict[str, str] = {
     'sdm-contract': DOMAIN,
     'sdm-core': DOMAIN,
-    'sdm-pql-interim': DOMAIN,
+    'sdm-pql': DOMAIN,
     'sdm-data': DOMAIN,
     'sdm-schema': DOMAIN,
     'sdm-engine': DOMAIN,
@@ -104,7 +104,7 @@ CLASSES: dict[str, str] = {
     'sdm-testkit': DEV,
 }
 
-PARSER = 'sdm-pql-interim'
+PARSER = 'sdm-pql'
 # The first-party crates each crate may depend on, directly, by any kind of
 # edge: the design's graph ("Data access"), with sdm-contract the leaf every
 # crate shares. A domain crate's set is the transitive closure of the chain
@@ -112,7 +112,7 @@ PARSER = 'sdm-pql-interim'
 # binding and the test kit take only the edges drawn for them.
 ALLOWED: dict[str, frozenset[str]] = {
     'sdm-contract': frozenset(),
-    'sdm-pql-interim': frozenset(),
+    'sdm-pql': frozenset(),
     'sdm-wire': frozenset({'sdm-contract'}),
     'sdm-schema': frozenset({'sdm-contract'}),
     'sdm-data': frozenset({'sdm-contract'}),

@@ -311,7 +311,7 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
     case(
         'a dev edge on the parser',
         lambda m: m.edge('sdm-request', l0_deps.PARSER, 'dev'),
-        'sdm-request -> sdm-pql-interim (dev)',
+        'sdm-request -> sdm-pql (dev)',
     )
     case(
         'sdm-host on sdm-testkit',
@@ -444,10 +444,8 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
     with_crate(
         'the parser named outside the adapter',
         'sdm-core',
-        lambda d: append(
-            d / 'src/dispatch.rs', '\nuse sdm_pql_interim::parser;\n'
-        ),
-        'sdm-core/src/dispatch.rs: names sdm_pql_interim',
+        lambda d: append(d / 'src/dispatch.rs', '\nuse sdm_pql::parser;\n'),
+        'sdm-core/src/dispatch.rs: names sdm_pql',
     )
 
     def renamed(m: Metadata) -> None:
@@ -455,7 +453,7 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         m.edge('sdm-core', l0_deps.PARSER, name='pqlp')
 
     with_crate(
-        'the parser renamed (pqlp = { package = "sdm-pql-interim" })',
+        'the parser renamed (pqlp = { package = "sdm-pql" })',
         'sdm-core',
         lambda d: append(d / 'src/dispatch.rs', '\nuse pqlp::parse;\n'),
         'sdm-core/src/dispatch.rs: names pqlp, the parser',
@@ -464,10 +462,8 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
     with_crate(
         "the parser named in sdm-core's tests",
         'sdm-core',
-        lambda d: (d / 'tests/parser.rs').write_text(
-            'use sdm_pql_interim::parse;\n'
-        ),
-        'sdm-core/tests/parser.rs: names sdm_pql_interim',
+        lambda d: (d / 'tests/parser.rs').write_text('use sdm_pql::parse;\n'),
+        'sdm-core/tests/parser.rs: names sdm_pql',
     )
     with_crate(
         'test_ops compiled into the shipped build',
@@ -2421,7 +2417,7 @@ def scan_cases(results: list[Result]) -> None:
         'an allowlisted name outside the parser crate',
         lambda r: append(
             r / crates / 'sdm-core/src/run.rs',
-            '\nfn f(_: sdm_pql_interim::pyint::PyInt) {}\n',
+            '\nfn f(_: sdm_pql::pyint::PyInt) {}\n',
         ),
         '`PyInt` is Python-emulation vocabulary',
     )
@@ -2437,12 +2433,12 @@ def scan_cases(results: list[Result]) -> None:
         lambda r: append(
             r / l0_scan.ALLOWLIST, 'rust/crates/sdm-core/src/run.rs\n'
         ),
-        'is outside rust/crates/sdm-pql-interim/src',
+        'is outside rust/crates/sdm-pql/src',
     )
     vocabulary(
         'an allowlist entry that does not exist',
         lambda r: append(
-            r / l0_scan.ALLOWLIST, 'rust/crates/sdm-pql-interim/src/gone.rs\n'
+            r / l0_scan.ALLOWLIST, 'rust/crates/sdm-pql/src/gone.rs\n'
         ),
         'gone.rs does not exist',
     )
