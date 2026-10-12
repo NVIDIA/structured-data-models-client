@@ -134,9 +134,14 @@ def read_manifest(tree: Any, language: str, report: Report) -> Any:
     path = MANIFESTS[language]
     try:
         manifest = _yaml(_text(tree, path), path)
-        schema = json.loads(_text(tree, SCHEMA))
-    except (Unreadable, ValueError, RecursionError) as error:
-        report.fail('read', str(error) or f'{SCHEMA}: not JSON it reads')
+        schema_text = _text(tree, SCHEMA)
+    except Unreadable as error:
+        report.fail('read', str(error))
+        return None
+    try:
+        schema = json.loads(schema_text)
+    except (ValueError, RecursionError):
+        report.fail('read', f'{SCHEMA}: not JSON it reads')
         return None
     import jsonschema
 
@@ -444,14 +449,21 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
             report.fail('read', f"the checkpoint's {error}")
             continue
         if old_text is None:
-            summary.append(f'rule 8: {language}: no manifest at the checkpoint')
+            # Every checkpoint holds both manifests (Phase 0 wrote them):
+            # with none, rule 8 has nothing to hold the candidate to.
+            report.fail('read', f"the checkpoint's {path}: missing")
             continue
         try:
             old = _yaml(old_text, f"the checkpoint's {path}")
-            decisions = _text(before, DECISIONS)
         except Unreadable as error:
             report.fail('read', str(error))
             continue
+        try:
+            decisions = _text(before, DECISIONS)
+        except Unreadable as error:
+            # No row authorizes anything: rule 8 still runs.
+            report.fail('read', f"the checkpoint's {error}")
+            decisions = ''
         if language not in manifests:
             continue  # its read or schema failure is reported
         if not (
