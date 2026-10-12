@@ -53,6 +53,7 @@ from sdm_client._routing import RouteError
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.run import run
+from sdm_client._rust.s0 import SHADOWED
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
@@ -278,10 +279,13 @@ def gather(
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
+    # The day-first warning of a date literal is the old validator's on
+    # this route, which the query met in `_resolve` (`s0.SHADOWED`).
     finished = run(
         operation,
         attachments,
         provider=DuckDBProvider(source.connection),
+        quiet=SHADOWED,
         state=materializer._core_sampler_state,
     )
     state = finished.result['state']

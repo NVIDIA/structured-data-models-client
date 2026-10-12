@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The adapter's stack and the deepest validated query: the adapter grows
-//! one stack per call and the interim parser none of its own; the deepest
+//! one stack per call and the parser none of its own; the deepest
 //! tree the parser accepts round-trips through the validated-query format,
 //! and text one level deeper is refused by its reader.
 

@@ -491,7 +491,7 @@ fn a_test_only_operation_that_panics_is_contained_wherever_it_panics() {
         assert!(is_panic(&err), "{at:?}");
         let location = text(&err, "location");
         if at == PanicAt::AdapterStack {
-            // Inside the interim parser itself.
+            // Inside the parser itself.
             assert!(location.contains("parser.rs"), "{location}");
         } else {
             assert!(!location.is_empty());

@@ -145,6 +145,7 @@ WARNINGS: dict[str, type[Warning]] = {
     'CONTEXT_COVERAGE': UserWarning,
     'TIME_VALUES_UNREAD': UserWarning,
     'DATES_READ_DAY_FIRST': UserWarning,
+    'DATE_LITERAL_DAY_FIRST': UserWarning,
 }
 
 #: The words of a link that does not refer to its table's key, around
@@ -221,6 +222,15 @@ SAID: dict[str, dict[str | None, str]] = {
         )
     },
     'DATES_READ_DAY_FIRST': {
+        None: (
+            'Parsing dates in {format} format when dayfirst=False (the '
+            'default) was specified. Pass `dayfirst=True` or specify a format '
+            'to silence this warning.'
+        )
+    },
+    # A query's date literal read day first (date rule D4), in pandas' words,
+    # as the reference's `pd.to_datetime` gives them.
+    'DATE_LITERAL_DAY_FIRST': {
         None: (
             'Parsing dates in {format} format when dayfirst=False (the '
             'default) was specified. Pass `dayfirst=True` or specify a format '

@@ -737,3 +737,25 @@ def test_the_sampler_s_warnings_are_worded_as_the_core_worded_them() -> None:
             'again in this run.',
         )
     ]
+
+
+def test_a_day_first_date_literal_is_worded_as_pandas_words_it() -> None:
+    # T1.6b: date rule D4's warning, the format the core names, in the
+    # words of the reference's `pd.to_datetime`, as a UserWarning.
+    assert _shown(
+        _warning(
+            'DATE_LITERAL_DAY_FIRST',
+            format='%d.%m.%Y %H:%M:%S',
+            start_row=1,
+            start_col=41,
+            end_row=1,
+            end_col=41,
+        )
+    ) == [
+        (
+            'UserWarning',
+            '[DATE_LITERAL_DAY_FIRST] Parsing dates in %d.%m.%Y %H:%M:%S format '
+            'when dayfirst=False (the default) was specified. Pass '
+            '`dayfirst=True` or specify a format to silence this warning.',
+        )
+    ]

@@ -8,9 +8,8 @@ r"""S0: validating a predictive query on the core.
 
 ``PredictiveQuery._resolve`` comes here on the core route. The core's
 ``validate_query`` decides validity; a refusal is the caller's
-``INVALID_REQUEST``, and a refusal of the core's own (``UNSUPPORTED_REQUEST``
-for a date literal it does not read yet) raises as its code maps, never as
-a refusal of the query. An accepted query finishes through the old
+``INVALID_REQUEST``, and a refusal of the core's own (a local zone it cannot
+read, say) raises as its code maps, never as a refusal of the query. An accepted query finishes through the old
 materializer, which needs the old validator's resolved query; until S1 is
 switched, that is also the shadow check, and a disagreement is
 ``INTERNAL_ERROR`` (design, "Routing seam").
@@ -22,6 +21,12 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
+
+#: The core's warnings the old validator gives on this route in the
+#: reference's own words: a day-first date literal (D4), which the shadow
+#: check's validator reads with ``pd.to_datetime``. Bridge code: it goes with
+#: the shadow check in Phase 5, and the core's warning is shown then.
+SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST'})
 
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
@@ -96,7 +101,7 @@ def validate(
         1: codec.attachment(text),
         2: codec.attachment(_schema(definition)),
     }
-    result = run(operation, attachments).result
+    result = run(operation, attachments, quiet=SHADOWED).result
     reasons = [
         diagnostic['message']
         for diagnostic in result['diagnostics']

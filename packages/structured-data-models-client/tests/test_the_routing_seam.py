@@ -33,7 +33,7 @@ from sdm_client import (
     _routing,
 )
 from sdm_client._rust import s0
-from sdm_client.errors import UnsupportedRequestError
+from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST = ROOT / 'docs/design/rust-core/phase-0/scope-python.yaml'
@@ -271,11 +271,7 @@ def test_a_core_route_without_the_native_module_fails_naming_it() -> None:
     assert 'sdm_client._native' in result.stdout
 
 
-def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
-    core: list[str],
-) -> None:
-    # Register DT-9: the interim date reader answers a field of five digits
-    # or more with UNSUPPORTED_REQUEST (E10); the old validator accepts it.
+def _orders_schema() -> Any:
     users = pd.DataFrame({'user_id': [1, 2, 3]})
     orders = pd.DataFrame(
         {
@@ -286,17 +282,65 @@ def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
     )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        schema = Schema.from_data({'users': users, 'orders': orders})
-    text = (
-        'PREDICT COUNT(orders.* WHERE orders.ts > 20240101-01-01, 0, 30, '
-        'days) FOR EACH users.user_id'
+        return Schema.from_data({'users': users, 'orders': orders})
+
+
+def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
+    core: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A local zone the run cannot read is the core's refusal of the host's
+    # facts, raised as its code maps, never as a refusal of the query.
+    from sdm_client._rust import facts
+
+    monkeypatch.setattr(
+        facts, 'local_zone', lambda *_: {'iana': 'Mars/Olympus'}
     )
-    with pytest.raises(UnsupportedRequestError) as raised:
-        PredictiveQuery(text, schema)._resolve(RELATIONAL)
-    assert raised.value.code == 'UNSUPPORTED_REQUEST'
-    assert '20240101' not in str(raised.value)
+    text = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
+    with pytest.raises(StructuredDataError) as raised:
+        PredictiveQuery(text, _orders_schema())._resolve(RELATIONAL)
+    assert raised.value.code == 'INVALID_REQUEST'
+    assert raised.value.details['field'] == 'facts.local_zone'
     assert raised.value.__cause__ is None
     assert raised.value.__suppress_context__
+
+
+def test_a_date_dt9_held_back_is_accepted_on_the_core(core: list[str]) -> None:
+    # Register DT-9 (rejected at T1.6b): a packed date and a long field the
+    # interim reader answered with UNSUPPORTED_REQUEST are read by D8, and
+    # the old validator, the shadow check, agrees.
+    for literal in ('20240101-01-01', '2024-01-01 00000:00:00'):
+        text = (
+            f'PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, '
+            'days) FOR EACH users.user_id'
+        )
+        PredictiveQuery(text, _orders_schema())._resolve(RELATIONAL)
+        assert core[-1] == text
+
+
+def test_a_day_first_literal_warns_on_the_core_as_on_the_old_route(
+    core: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # D4: the old validator, still run beside the core here, gives the
+    # reference's own warning, and the core's is quiet (s0.SHADOWED), so
+    # the caller sees what the old route shows.
+    text = (
+        'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024, 0, 30, days) '
+        'FOR EACH users.user_id'
+    )
+    schema = _orders_schema()
+
+    def shown() -> list[tuple[str, str]]:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            PredictiveQuery(text, schema)._resolve(RELATIONAL)
+        return [(type(w.message).__name__, str(w.message)) for w in caught]
+
+    on_core = shown()
+    assert core == [text]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    assert on_core == shown()
+    assert on_core and all('%d/%m/%Y' in said for _, said in on_core)
+    assert not any('DATE_LITERAL_DAY_FIRST' in said for _, said in on_core)
 
 
 def test_a_disagreement_with_the_old_validator_is_internal(
