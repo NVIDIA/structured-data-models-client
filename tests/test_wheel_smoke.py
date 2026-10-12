@@ -313,23 +313,103 @@ def test_a_file_with_no_record_of_its_tests_is_refused(
         )
 
 
+def _parameters(node: ast.AST) -> int | None:
+    """How many parameter sets a test's ``parametrize`` decorators give, or
+    None when one is not written as a literal list or tuple (0: none)."""
+    count = 0
+    for decorator in getattr(node, 'decorator_list', []):
+        if not (
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == 'parametrize'
+        ):
+            continue
+        values = (
+            decorator.args[1]
+            if len(decorator.args) > 1
+            else next(
+                (k.value for k in decorator.keywords if k.arg == 'argvalues'),
+                None,
+            )
+        )
+        if not isinstance(values, (ast.List, ast.Tuple)):
+            return None
+        count = (count or 1) * len(values.elts)
+    return count
+
+
+def _defined_tests(source: str) -> dict[str, int | None]:
+    """A test file's tests as pytest names them after the file, each with its
+    parameter count: module-level functions, async ones included, and the
+    methods of ``Test`` classes, as ``Class::method``."""
+    found: dict[str, int | None] = {}
+    test_function = (ast.FunctionDef, ast.AsyncFunctionDef)
+    for node in ast.parse(source).body:
+        if isinstance(node, test_function) and node.name.startswith('test_'):
+            found[node.name] = _parameters(node)
+        elif isinstance(node, ast.ClassDef) and node.name.startswith('Test'):
+            for item in node.body:
+                if isinstance(item, test_function) and item.name.startswith(
+                    'test_'
+                ):
+                    found[f'{node.name}::{item.name}'] = _parameters(item)
+    return found
+
+
 def test_the_expected_tests_are_the_files_own() -> None:
-    """Every test file of the binding is recorded, with each test function
-    it defines; a parametrized one under each of its parameters."""
+    """Every test file of the binding is recorded, with each test it defines,
+    async tests and test classes' methods included; a parametrized one under
+    each of its parameters, as many as its literal parameter list holds, and
+    a test with no parameters under its bare name."""
     tests = smoke.REPO / smoke.TESTS
     assert sorted(smoke.EXPECTED) == sorted(
         p.name for p in tests.glob('test_*.py')
     )
     for name, recorded in smoke.EXPECTED.items():
-        tree = ast.parse((tests / name).read_text())
-        defined = {
-            node.name
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name.startswith('test_')
-        }
-        assert {test.split('[', 1)[0] for test in recorded} == defined, name
+        defined = _defined_tests((tests / name).read_text())
+        assert {test.split('[', 1)[0] for test in recorded} == set(defined), (
+            name
+        )
         assert len(set(recorded)) == len(recorded), name
+        for test, count in defined.items():
+            bare = [x for x in recorded if x == test]
+            with_parameters = [x for x in recorded if x.startswith(test + '[')]
+            if count == 0:
+                assert bare and not with_parameters, (name, test)
+            elif count is None:
+                assert with_parameters and not bare, (name, test)
+            else:
+                assert len(with_parameters) == count and not bare, (name, test)
+
+
+def test_the_expected_tests_sync_sees_classes_async_tests_and_parameters() -> (
+    None
+):
+    """The sync check's reading, on a file holding each shape it must see."""
+    source = (
+        'import pytest\n'
+        'def test_plain(): pass\n'
+        'async def test_async(): pass\n'
+        "@pytest.mark.parametrize('x', [1, 2, 3])\n"
+        'def test_three(x): pass\n'
+        "@pytest.mark.parametrize('x', VALUES)\n"
+        'def test_unknown(x): pass\n'
+        'class TestGroup:\n'
+        '    def test_member(self): pass\n'
+        '    async def test_async_member(self): pass\n'
+        '    def helper(self): pass\n'
+        'class Helper:\n'
+        '    def test_not_collected(self): pass\n'
+        'def helper_test(): pass\n'
+    )
+    assert _defined_tests(source) == {
+        'test_plain': 0,
+        'test_async': 0,
+        'test_three': 3,
+        'test_unknown': None,
+        'TestGroup::test_member': 0,
+        'TestGroup::test_async_member': 0,
+    }
 
 
 def test_the_tests_run_with_nothing_of_the_caller_s_pytest(

@@ -42,7 +42,7 @@ Four things differ from a laptop, each found by running on every LTS runtime and
   Databricks builds its preinstalled packages against the NumPy it ships.
   Installing with NumPy left unbounded can let pandas take NumPy beneath them to a new major version, after which the Python process cannot start; within NumPy 1, a newer release still runs packages built against an older one.
   Where the runtime ships NumPy 1.26 or later, pinning it leaves pip to choose a pandas that fits it.
-  Where it ships an older one (DBR 14.3 LTS and 15.4 LTS, serverless environments 1 and 2, each NumPy 1.23.5), the client's floor of 1.26 cannot be met by the runtime's own, so the install upgrades NumPy, and pandas and pyarrow with it; `numpy~=1.26.0` holds NumPy to the 1.26 line. That path is to be validated (T1.35).
+  Where it ships an older one (DBR 14.3 LTS and 15.4 LTS, serverless environments 1 and 2, each NumPy 1.23.5), the client's floor of 1.26 cannot be met by the runtime's own, so the install upgrades NumPy, and pandas and pyarrow with it; `numpy~=1.26.0` holds NumPy to the 1.26 line. That path is pending validation.
 - **Write version bounds with `~=`, not `<` or `>`.**
   A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
 - **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**
