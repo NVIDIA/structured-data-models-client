@@ -2356,8 +2356,8 @@ entries:
     one alone does (contract/tests/test_runners.py).
   affected_inputs: Any public call whose result reaches to_pandas() under pandas 2.2.0 with pyarrow 14.
   cases: [T1.18]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E65}
   notes: >-
     Runtime-only, so a register entry naming the cell, never an exclusion
@@ -2368,8 +2368,10 @@ entries:
     imported, and the newest lane (pandas 3, NumPy 2, the newest pyarrow)
     none (wheel_smoke.py's to_pandas_warnings, in each lane's
     environment.json): the warning is the runtime's, which the client
-    neither causes nor changes. Disposition recommended at T1.17: approve
-    as kept; the decision is the independent reviewer's (checkpoint 7).
+    neither causes nor changes. Approved as kept by the reviewers (Codex,
+    T1.17 round 1), whose own run of the CI artifacts showed the warning
+    before the client's import in the floor lane alone; reviewer-owned
+    (checkpoint 7), not the owner's.
 
 # --- PQL validation (T1.12) ---------------------------------------------------
 
