@@ -2279,7 +2279,8 @@ entries:
   notes: >-
     Measured at T1.6b: the corpus's one day-first case gives the reference's
     warning twice and the core's once, the same format
-    (sdm-core/tests/pql_corpus.rs compares the formats as a set);
+    (sdm-core/tests/pql_corpus.rs compares the formats as a set, and fails
+    where the core warns twice at one literal);
     test_a_day_first_literal_warns_on_the_core_as_on_the_old_route holds
     the python-core caller to the old route's warnings for an accepted
     query, and to the old route's one warning, worded the same behind the
