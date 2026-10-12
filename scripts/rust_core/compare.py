@@ -257,7 +257,12 @@ def _observations(
             # Nested past the parser is refused by name, never a traceback.
             report.fail(f'{path.name}:{number}: runner failure: not JSON')
             continue
-        problem = runner._invalid(validate, observation)
+        try:
+            problem = runner._invalid(validate, observation)
+        except RecursionError:
+            # Python 3.14's parser reads what earlier ones refused, and the
+            # validator then recurses past the limit: refused by name too.
+            problem = 'nested past what the validator reads'
         if problem is not None:
             report.fail(
                 f'{path.name}:{number}: runner failure: not a valid '
