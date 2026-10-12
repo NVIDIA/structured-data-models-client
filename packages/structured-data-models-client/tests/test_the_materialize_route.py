@@ -1346,3 +1346,37 @@ def test_a_state_the_core_refuses_is_not_handed_back_again(
         (6, 1),
         (4, 0),
     ]
+
+
+@pytest.mark.parametrize('said', [True, False])
+def test_the_host_drops_a_state_on_the_core_s_word_not_the_field_it_names(
+    monkeypatch: pytest.MonkeyPatch, said: bool
+) -> None:
+    # The core's refusal of a held state names its field and says to drop
+    # it (drop_held, decision E74); seen with the two told apart, the host
+    # follows drop_held alone: kept where the refusal names the field but
+    # does not say to drop it, dropped where it says so naming no field.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    read = codec.read
+
+    def apart(control: bytes, attachments: dict[int, Any]) -> dict[str, Any]:
+        message = read(control, attachments)
+        error = message.get('error')
+        if message['message'] == 'error' and error is not None:
+            assert error.get('drop_held') == ['sampler_state']
+            assert error['fields']['field']['v'] == 'sampler_state.version'
+            if said:
+                del error['fields']['field']
+            else:
+                del error['drop_held']
+        return message
+
+    monkeypatch.setattr(codec, 'read', apart)
+    _, schema = _shop_logged()
+    query = PredictiveQuery(QUERY, schema)
+    held = {'version': 99, 'memo': b'{}'}
+    query._relational_materializer._core_sampler_state['held'] = held
+    with pytest.raises(StructuredDataError):
+        query.materialize(indices=[0, 1], anchor_time=ANCHOR)
+    kept = query._relational_materializer._core_sampler_state
+    assert ('held' in kept) is not said

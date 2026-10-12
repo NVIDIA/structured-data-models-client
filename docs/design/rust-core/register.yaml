@@ -819,7 +819,7 @@ entries:
     Approved by the owner at the T1.7b check-in (2026-10-08) as a temporary
     gap until T1.6b, which was to set this entry to rejected (the owner's
     plan, design.md's T1.6b row); set at T1.6b (E69). The reader is held to
-    the reference by sdm-pql-interim's tests/dates.json (7,749 D8 literals,
+    the reference by sdm-pql's tests/dates.json (7,749 D8 literals,
     4,155 read) and the adapter's tests, whose DT-9 test now holds both
     queries accepted with the reference's readings. T1.12's two diagnostic
     cases (s0.boundary.date-packed, s0.boundary.date-long-field) stay
@@ -2317,7 +2317,7 @@ entries:
     Found by T1.6b's probes: 144 of the 1,134 literals of dates.json's
     format_guess set, and 7 of the 330 generated queries of the pre-push
     differential, differ only so; every reading agrees. Executable:
-    sdm-pql-interim's tests/dates.rs,
+    sdm-pql's tests/dates.rs,
     a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named
     (diagnostic). A pandas artifact of format guessing, flagged to the
     owner rather than copied (the T1.6b brief). Recommendation: approve.
