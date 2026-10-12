@@ -67,6 +67,11 @@ pub struct Observed {
     /// What the DuckDB provider ran, and DuckDB's query log, for a case
     /// whose operations read data (the observation's `driver`, T1.11e).
     pub driver: Option<Value>,
+    /// What this host passed each `edit_schema` and `materialize`'s held
+    /// schema, in order (T1.24b), as the Python runner records them in
+    /// `core.edits`: apart from `inputs`, whose shape a gate's checkpoint
+    /// fixes, and written by no observation yet.
+    pub edits: Vec<Value>,
 }
 
 /// The core's answer to the case's operation.
@@ -254,6 +259,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         answer,
         warnings: vec![],
         driver: None,
+        edits: vec![],
     })
 }
 
@@ -441,6 +447,7 @@ fn describe_on(
         answer: Answer::Validated(false),
         warnings: Vec::new(),
         driver: None,
+        edits: Vec::new(),
     };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
@@ -513,7 +520,7 @@ fn edit_schema(
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let edit_bytes = serde_json::to_vec(&edit.to_contract())?;
     observed.operations.push("edit_schema".into());
-    observed.inputs.push(json!({
+    observed.edits.push(json!({
         "op": "edit_schema",
         "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
         "held": serde_json::from_slice::<Value>(&held_bytes)?,
@@ -674,11 +681,14 @@ fn materialize(
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let query_bytes = serde_json::to_vec(&case.input.pql)?;
     observed.operations.push("materialize".into());
+    observed.edits.push(json!({
+        "op": "materialize",
+        "held": serde_json::from_slice::<Value>(&held_bytes)?,
+    }));
     observed.inputs.push(json!({
         "op": "materialize",
         "provider": serde_json::to_value(&provider)?,
         "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
-        "held": serde_json::from_slice::<Value>(&held_bytes)?,
         "query": serde_json::from_slice::<Value>(&query_bytes)?,
         "indices": serde_json::to_value(&indices)?,
         "anchor_time": serde_json::to_value(&anchor_time)?,
@@ -822,6 +832,7 @@ pub fn materialize_repeatedly(case: &Case, bases: &Bases, calls: usize) -> Resul
             answer: Answer::Validated(false),
             warnings: Vec::new(),
             driver: None,
+            edits: Vec::new(),
         };
         materialize(
             case,

@@ -24,8 +24,9 @@ core hosts (decision E67). What holds them:
   (``reference.jsonl``, recorded on python-ref under T1.13's rules)
   records;
 - the two core hosts agree: what python-core's host started the core with
-  (``core.inputs``: the description, the schema held and the edit of each
-  ``edit_schema``, and ``materialize``'s inputs), the core's error code and
+  (``core.inputs``, and ``core.edits``: the description, the schema held
+  and the edit of each ``edit_schema``, and ``materialize``'s held schema),
+  the core's error code and
   the request state are the ones ``contract/pinned/edits.core.json`` pins
   as digests, which ``sdm-testkit``'s ``tests/edit_cases.rs`` holds
   rust-host to, so CI gates the two hosts' equality where neither job runs
@@ -53,7 +54,7 @@ CASES = sorted(FIXTURES.glob('edit.*.json'))
 REFERENCE = FIXTURES / 'reference.jsonl'
 PINNED = ROOT / 'contract/pinned/edits.core.json'
 FORMAT = 'sdm-edits-pin/1'
-FIELDS = ('inputs', 'error', 'materialized')
+FIELDS = ('inputs', 'edits', 'error', 'materialized')
 
 
 def digest(value: Any) -> str:
@@ -72,6 +73,7 @@ def agreed(observation: dict[str, Any]) -> dict[str, Any]:
     error = core['error']
     return {
         'inputs': digest(core['inputs']),
+        'edits': digest(core.get('edits', [])),
         'error': None if error is None else error['code'],
         'materialized': (
             None
@@ -153,7 +155,8 @@ def test_each_edit_case_ends_as_the_reference_ends_it(
         assert mine['outcome']['stage'] == expect['stage'], case['id']
         assert mine['outcome']['code'] == expect.get('code'), case['id']
         # Each edit the case makes is the core's, up to a refused one.
-        ops = [each['op'] for each in mine['core']['inputs']]
+        # identity.operations: every core run started, in order.
+        ops = mine['identity']['operations']
         made = ops.count('edit_schema')
         if expect['outcome'] == 'refusal':
             assert made == len(case['input']['edits']), case['id']
@@ -176,8 +179,9 @@ def test_the_core_hosts_agree_as_the_pin_holds_them(
                     'about': (
                         "python-core's run of the edit.* cases, as "
                         'contract/tests/test_edit_cases.py writes it: per '
-                        "case, the digest of the core's inputs, the core's "
-                        'error code, and the digest of the request state; '
+                        "case, the digests of the core's inputs and of the "
+                        "edits' starts, the core's error code, and the "
+                        'digest of the request state; '
                         "sdm-testkit's tests/edit_cases.rs holds rust-host "
                         'to it (T1.24b).'
                     ),

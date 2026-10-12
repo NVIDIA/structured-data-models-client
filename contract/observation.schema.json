@@ -185,26 +185,13 @@
                 }
               },
               {
-                "description": "edit_schema's start (T1.24b): the description the core last answered, the schema as the host holds it, and the edit.",
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["op", "schema", "held", "edit"],
-                "properties": {
-                  "op": {"const": "edit_schema"},
-                  "schema": {"description": "The contract's SourceDescription.", "type": "object"},
-                  "held": {"description": "The contract's HeldSchema.", "type": "object"},
-                  "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
-                }
-              },
-              {
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["op", "provider", "schema", "query", "indices", "anchor_time", "seed"],
                 "properties": {
                   "op": {"const": "materialize"},
                   "provider": {"type": "object"},
-                  "schema": {"description": "The contract's SourceDescription: the description the core last answered.", "type": "object"},
-                  "held": {"description": "The contract's HeldSchema: the schema as the host holds it (T1.24b; a runner of an earlier checkpoint records none).", "type": "object"},
+                  "schema": {"description": "The contract's SourceDescription.", "type": "object"},
                   "query": {"type": "string"},
                   "indices": {"description": "One Arrow column, each value a contract scalar.", "type": ["array", "null"], "items": {"type": "object"}},
                   "anchor_time": {"type": ["object", "null"]},
@@ -287,6 +274,35 @@
           "properties": {
             "kind": {"type": "string", "pattern": "^[a-z_]+$"},
             "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}
+          }
+        },
+        "edits": {
+          "description": "From T1.24b, beside inputs, whose shape a gate's checkpoint fixes: each edit_schema's start (the description the core last answered, the schema as the host holds it, the edit) and materialize's held schema, in order. A runner of an earlier checkpoint records none.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "schema", "held", "edit"],
+                "properties": {
+                  "op": {"const": "edit_schema"},
+                  "schema": {"description": "The contract's SourceDescription.", "type": "object"},
+                  "held": {"description": "The contract's HeldSchema.", "type": "object"},
+                  "edit": {"description": "The contract's SchemaEdit.", "type": "object"}
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op", "held"],
+                "properties": {
+                  "op": {"const": "materialize"},
+                  "held": {"description": "The contract's HeldSchema.", "type": "object"}
+                }
+              }
+            ]
           }
         }
       }

@@ -18,7 +18,7 @@ use sdm_testkit::host::{self, Answer};
 use sdm_testkit::{bases, case};
 use serde_json::{Value, json};
 
-const FIELDS: [&str; 3] = ["inputs", "error", "materialized"];
+const FIELDS: [&str; 4] = ["inputs", "edits", "error", "materialized"];
 
 fn contract() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract")
@@ -122,6 +122,7 @@ fn observed() -> BTreeMap<String, Value> {
             loaded.case.id.clone(),
             json!({
                 "inputs": digest(&Value::from(ran.inputs.clone())),
+                "edits": digest(&Value::from(ran.edits.clone())),
                 "error": error,
                 "materialized": ran.materialized.as_ref().map_or(Value::Null, |m| digest(m).into()),
             }),

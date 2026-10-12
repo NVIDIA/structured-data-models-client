@@ -536,9 +536,8 @@ def _core_consistent(
         # From T1.24b the user's edits follow the description, each an
         # edit_schema, and a refused one ends the call with its error
         # beside the description (decision E67).
-        edited = bool(core['inputs']) and (
-            core['inputs'][-1].get('op') == 'edit_schema'
-        )
+        edits = core.get('edits') or []
+        edited = bool(edits) and edits[-1].get('op') == 'edit_schema'
         if (core['described'] is None) == (core['error'] is None) and not (
             edited and core['described'] is not None
         ):

@@ -419,6 +419,9 @@ class _Capture:
     def __init__(self) -> None:
         self.operations: list[str] = []
         self.inputs: list[dict[str, Any]] = []
+        #: What the host passed ``edit_schema`` and ``materialize``'s held
+        #: schema, in order (T1.24b).
+        self.edits: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
@@ -488,8 +491,9 @@ class _Capture:
         elif operation['op'] == 'edit_schema':
             # The schema and the edit a setter passed (T1.24b): the
             # description the core last answered, the schema as the host
-            # holds it, and the edit.
-            self.inputs.append(
+            # holds it, and the edit; kept apart from ``inputs``, whose
+            # shape a gate's checkpoint fixes.
+            self.edits.append(
                 {
                     'op': 'edit_schema',
                     'schema': json.loads(attachments[operation['schema']]),
@@ -499,12 +503,20 @@ class _Capture:
             )
         elif operation['op'] == 'materialize':
             indices = operation['indices']
+            if operation.get('held') is not None:
+                # The schema as the host holds it beside the description
+                # (T1.24b), apart from ``inputs`` as an edit is.
+                self.edits.append(
+                    {
+                        'op': 'materialize',
+                        'held': json.loads(attachments[operation['held']]),
+                    }
+                )
             self.inputs.append(
                 {
                     'op': 'materialize',
                     'provider': operation['provider'],
                     'schema': json.loads(attachments[operation['schema']]),
-                    'held': json.loads(attachments[operation['held']]),
                     'query': json.loads(attachments[operation['query']]),
                     'indices': (
                         None
@@ -577,7 +589,7 @@ class _Capture:
             self.materialized['query'] = json.loads(value)
 
     def core(self) -> dict[str, Any]:
-        return {
+        core: dict[str, Any] = {
             'inputs': self.inputs,
             'fetches': self.fetches,
             'accepted': self.accepted,
@@ -586,6 +598,9 @@ class _Capture:
             'predicted': self.predicted,
             'error': self.error,
         }
+        if self.edits:
+            core['edits'] = self.edits
+        return core
 
 
 def _result_rows(stream: Any) -> dict[str, Any]:
