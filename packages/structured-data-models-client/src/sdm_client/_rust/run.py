@@ -163,9 +163,9 @@ def run(
     try:
         handle = core.Run.start(start, attachments)
     except core.CoreError as refused:
-        if state is not None and held is not None and _names_the_state(refused):
-            # A state the core refuses is no state to hand back again: the
-            # next run starts without one.
+        if state is not None and held is not None and _drops_the_state(refused):
+            # The core says the state it refused is to be dropped (decision
+            # E74): the next run starts without one.
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
@@ -175,16 +175,16 @@ def run(
             _keep(core, handle, state)
 
 
-def _names_the_state(refused: Any) -> bool:
-    r"""Whether the core's refusal of a start names the sampler state
-    handed to it (``field`` ``sampler_state``, or a field of it)."""
+def _drops_the_state(refused: Any) -> bool:
+    r"""Whether the core's refusal of a start tells the host to drop the
+    sampler state handed to it (``drop_held``, decision E74): the core's
+    word, never the field the error names."""
     try:
         message = codec.read(refused.control, refused.attachments)
-        field = message['error']['fields'].get('field') or {}
+        dropped = message['error'].get('drop_held') or []
     except (codec.CodecError, KeyError, TypeError, AttributeError):
         return False
-    value = field.get('v') if isinstance(field, dict) else None
-    return isinstance(value, str) and value.split('.')[0] == 'sampler_state'
+    return isinstance(dropped, list) and 'sampler_state' in dropped
 
 
 def _keep(core: Any, handle: Any, state: dict[str, Any]) -> None:

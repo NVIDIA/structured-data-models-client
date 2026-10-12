@@ -11,7 +11,7 @@ use sdm_contract::ops::{
     SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceDescription, SourceSpec,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HeldState, Scalar};
 use sdm_engine::time::Zones;
 
 use crate::attached::{check_attachments, take_json, take_json_if};
@@ -123,7 +123,9 @@ pub fn start(
             // The sampler state's version first, by name, before anything of
             // the state is read, as a request state's (decision H23); then
             // its memo, which a run reads only if it was made under this
-            // provider and description (decision E52).
+            // provider and description (decision E52). Each refusal of the
+            // state tells the host to drop it (decision E74), so its next
+            // run starts afresh rather than being refused the same way.
             let memo = match &request.sampler_state {
                 None => None,
                 Some(state) => {
@@ -134,11 +136,16 @@ pub fn start(
                             "the sampler state is of a version this core does not read",
                         )
                         .with_field("field", Detail::text("sampler_state.version"))
-                        .with_field("version", Detail::Scalar(Scalar::UInt32(state.version))));
+                        .with_field("version", Detail::Scalar(Scalar::UInt32(state.version)))
+                        .dropping(HeldState::SamplerState));
                     }
-                    let memo: SamplerMemo = take_json(&mut attachments, state.memo)
-                        .map_err(|e| e.with_field("field", Detail::text("sampler_state")))?;
-                    crate::materialize::check_memo(&memo)?;
+                    let memo: SamplerMemo =
+                        take_json(&mut attachments, state.memo).map_err(|e| {
+                            e.with_field("field", Detail::text("sampler_state"))
+                                .dropping(HeldState::SamplerState)
+                        })?;
+                    crate::materialize::check_memo(&memo)
+                        .map_err(|e| e.dropping(HeldState::SamplerState))?;
                     Some(memo)
                 }
             };

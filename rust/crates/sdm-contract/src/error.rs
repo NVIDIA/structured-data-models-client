@@ -4,8 +4,8 @@
 
 //! Errors and warnings.
 //!
-//! An error is `{kind, code, message, fields, cause, retryable}` with a
-//! closed list of kinds and a closed list of codes; a warning travels on its
+//! An error is `{kind, code, message, fields, cause, retryable,
+//! drop_held}` with a closed list of kinds and a closed list of codes; a warning travels on its
 //! own channel, in order. No string here names a Python or Java class: each
 //! host maps every code to its own classes through one reviewed table,
 //! never reading message text. Codes are promised, message text is not.
@@ -255,6 +255,18 @@ impl Detail {
     }
 }
 
+/// A state a host holds between runs and hands back to the core with a
+/// later run's start, opaque to it.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum HeldState {
+    /// The sampler state a materializer's last run left
+    /// (`Materialize.sampler_state`, decision E52).
+    SamplerState,
+}
+
 /// An error the core reports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -274,6 +286,13 @@ pub struct CoreError {
     /// provider and transport errors, false otherwise.
     #[serde(default)]
     pub retryable: bool,
+    /// The states the host handed this run that it must drop rather than
+    /// hand back again: the core refused them, so a later run given them
+    /// would be refused the same way (decision E74). The host follows this
+    /// alone, never reading which field an error names; empty for any
+    /// other error.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub drop_held: Vec<HeldState>,
 }
 
 impl CoreError {
@@ -292,6 +311,7 @@ impl CoreError {
             fields: BTreeMap::new(),
             cause: None,
             retryable: false,
+            drop_held: Vec::new(),
         }
     }
 
@@ -363,6 +383,16 @@ impl CoreError {
     #[must_use]
     pub fn with_field(mut self, name: &str, value: Detail) -> Self {
         self.fields.insert(name.to_owned(), value);
+        self
+    }
+
+    /// This error, telling the host to drop the held state `state` it
+    /// handed the run (decision E74).
+    #[must_use]
+    pub fn dropping(mut self, state: HeldState) -> Self {
+        if !self.drop_held.contains(&state) {
+            self.drop_held.push(state);
+        }
         self
     }
 

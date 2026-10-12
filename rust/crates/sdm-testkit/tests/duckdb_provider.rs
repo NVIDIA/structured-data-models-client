@@ -1410,3 +1410,34 @@ fn a_materializer_s_later_calls_skip_what_its_first_read() {
     assert!(answered[0].is_some());
     assert!(answered.iter().all(|a| *a == answered[0]));
 }
+
+/// Decision E74 on this host, the parity of the Python host's
+/// `test_a_state_the_core_refuses_is_not_handed_back_again`: a sampler state
+/// the core refuses at the start (of another version, or a memo that does
+/// not read) is one the core says to drop, and the host follows it alone:
+/// the next call starts afresh, reading what a materializer's first call
+/// reads, rather than being refused the same way.
+#[test]
+fn a_sampler_state_the_core_refuses_is_dropped_on_its_word() {
+    let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
+    let bases = bases::load(&contract().join("bases.yaml")).unwrap();
+    for (held, field) in [
+        ((99, b"{}".to_vec()), "sampler_state.version"),
+        ((1, b"not a memo".to_vec()), "sampler_state"),
+    ] {
+        let calls =
+            host::materialize_repeatedly_holding(&loaded[0].case, &bases, 2, Some(held)).unwrap();
+        let Answer::Error { fields, .. } = &calls[0].answer else {
+            panic!("{field}: {:?}", calls[0].answer);
+        };
+        assert_eq!(fields["field"], field);
+        assert!(calls[0].materialized.is_none(), "{field}");
+        let reads: Vec<&str> = calls[1]
+            .fetches
+            .iter()
+            .map(|f| f["request"]["request"].as_str().unwrap())
+            .collect();
+        assert_eq!(reads[..2], ["describe", "time_bounds"], "{field}");
+        assert!(calls[1].materialized.is_some(), "{field}");
+    }
+}

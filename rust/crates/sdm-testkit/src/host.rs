@@ -175,6 +175,17 @@ fn error_of(out: &Outgoing) -> Result<Answer> {
     }
 }
 
+/// Whether an `error` control message tells the host to drop the sampler
+/// state it handed the run (`drop_held`, decision E74).
+fn drops_sampler(out: &Outgoing) -> Result<bool> {
+    match read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))? {
+        ControlMessage::Error { error } => Ok(error
+            .drop_held
+            .contains(&sdm_contract::HeldState::SamplerState)),
+        _ => bail!("the host gave a message that is not an error"),
+    }
+}
+
 /// Runs `case`'s core operation, building its data from `bases`; an `Err`
 /// is this host's failure, never the case's outcome. The case's edits are
 /// made to the description before `materialize` samples it.
@@ -734,6 +745,13 @@ fn materialize(
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
+            // The core's word on the sampler state handed to it (decision
+            // E74): one it says to drop is not handed back again.
+            if let Some(held) = sampler
+                && drops_sampler(&refused)?
+            {
+                *held = None;
+            }
             observed.answer = error_of(&refused)?;
             return Ok(None);
         }
@@ -798,6 +816,18 @@ fn keep_sampler(handle: &HostRun, held: &mut Option<HeldSampler>) -> Result<()> 
 /// (decision E52), over one DuckDB base: what each call observed, its
 /// fetches and warnings, as a binding's materializer makes its calls.
 pub fn materialize_repeatedly(case: &Case, bases: &Bases, calls: usize) -> Result<Vec<Observed>> {
+    materialize_repeatedly_holding(case, bases, calls, None)
+}
+
+/// [`materialize_repeatedly`], the first call handed `held` as the
+/// sampler state its materializer holds, as a host would hand back one
+/// kept from before.
+pub fn materialize_repeatedly_holding(
+    case: &Case,
+    bases: &Bases,
+    calls: usize,
+    held: Option<HeldSampler>,
+) -> Result<Vec<Observed>> {
     let core = case.core.as_ref();
     let (Some(describe_spec), Some(spec)) = (
         core.and_then(|c| c.describe_source.as_ref()),
@@ -820,7 +850,7 @@ pub fn materialize_repeatedly(case: &Case, bases: &Bases, calls: usize) -> Resul
             .take()
             .ok_or_else(|| anyhow!("{}: nothing was described", case.id))?,
     )?;
-    let mut held = None;
+    let mut held = held;
     let mut seen = Vec::with_capacity(calls);
     for _ in 0..calls {
         let mut observed = Observed {

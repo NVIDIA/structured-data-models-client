@@ -31,7 +31,8 @@ use sdm_contract::ops::{
 };
 use sdm_contract::run::StartRun;
 use sdm_contract::{
-    CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, ColumnType, CoreError, Detail, ErrorCode, HeldState, HostFacts, Scalar, Step,
+    Unit,
 };
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, Run, UnknownZone, Zones,
@@ -1542,6 +1543,17 @@ fn handing_back(
     options: &[&str],
     indices: Vec<Option<i64>>,
 ) -> Result<Run, CoreError> {
+    handing_back_changed(description, held, options, indices, |_| ())
+}
+
+/// [`handing_back`], with `change` made to the start's attachments.
+fn handing_back_changed(
+    description: &SourceDescription,
+    held: Option<&Left>,
+    options: &[&str],
+    indices: Vec<Option<i64>>,
+    change: impl FnOnce(&mut Attachments),
+) -> Result<Run, CoreError> {
     let (mut operation, mut attachments) = materialize_start(host(), description, QUERY, None);
     let Operation::Materialize(start) = &mut operation else {
         unreachable!()
@@ -1567,6 +1579,7 @@ fn handing_back(
         AttachmentId(3),
         Attachment::Arrow(ArrowData::new(entities.schema(), vec![entities])),
     );
+    change(&mut attachments);
     materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
 }
 
@@ -1713,6 +1726,9 @@ fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
     };
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(field(&err), "sampler_state.version");
+    // Each refusal of the state says, in so many words, to drop it
+    // (decision E74); the hosts follow that, never the field.
+    assert_eq!(err.drop_held, [HeldState::SamplerState]);
     // A memo that is not one: not JSON, of another shape, a field more or
     // retyped, a table's bounds twice, nested past the reader's depth, or
     // wide past any memo's fields.
@@ -1757,7 +1773,26 @@ fn a_state_of_another_version_or_unreadable_is_refused_by_name() {
             panic!("{what}: read");
         };
         assert_eq!(field(&err), "sampler_state", "{what}");
+        assert_eq!(err.drop_held, [HeldState::SamplerState], "{what}");
     }
+}
+
+#[test]
+fn only_a_refusal_of_the_held_state_says_to_drop_it() {
+    // A refusal of anything else of the start, with a sound state handed,
+    // leaves the state to the host (decision E74).
+    let mut first = handing_back(&shop(), None, &[], vec![Some(0), Some(1)]).unwrap();
+    steps_to_the_result(&mut first, &|| indexes(&[]));
+    let held = left(&mut first).unwrap();
+    let Err(err) = handing_back_changed(&shop(), Some(&held), &[], vec![Some(0)], |a| {
+        a.insert(
+            AttachmentId(2),
+            Attachment::Bytes(b"\xffnot a query".to_vec()),
+        );
+    }) else {
+        panic!("a query that is not JSON was read");
+    };
+    assert!(err.drop_held.is_empty(), "{err:?}");
 }
 
 #[test]

@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/17",
+  "$id": "sdm-contract/18",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -4151,6 +4151,13 @@
           "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
           "type": "boolean",
           "default": false
+        },
+        "drop_held": {
+          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldState"
+          }
         }
       },
       "additionalProperties": false,
@@ -4286,6 +4293,16 @@
           "items": {
             "$ref": "#/$defs/Scalar"
           }
+        }
+      ]
+    },
+    "HeldState": {
+      "description": "A state a host holds between runs and hands back to the core with a\nlater run's start, opaque to it.",
+      "oneOf": [
+        {
+          "description": "The sampler state a materializer's last run left\n(`Materialize.sampler_state`, decision E52).",
+          "type": "string",
+          "const": "sampler_state"
         }
       ]
     },
