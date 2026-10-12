@@ -35,9 +35,10 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
 8. against the manifests at ``--checkpoint``: no path or cell is removed, no
    path moves to a later slice and no cell's ``expect`` turns ``unknown``
    (each would take it out of rule 5), unless a row of the checkpoint's
-   ``docs/design/rust-core/phase-1/decisions.md``, its status reading
-   "approved by owner" and a date, names the ID in backticks; a row the
-   candidate writes never authorizes its own change.
+   ``docs/design/rust-core/phase-1/decisions.md``, its status starting
+   "approved by owner" and a date with nothing after but a parenthesis or
+   a note, none withdrawing it (``owner_approved``), names the ID in
+   backticks; a row the candidate writes never authorizes its own change.
 
 Rules 6 and 7 are Phase 2's (``--gate S1``); ``--gate S0`` was cut by the
 owner (E66(f)), its rule 5 run by ``--check`` for the active slice. A file it
@@ -72,8 +73,28 @@ SLICES = ('S0', 'S1', 'S2', 'S3')
 #: The language and slice whose coverage gates (design, "Coverage
 #: generator"): S0 in Python.
 ACTIVE = ('python', 'S0')
+#: The deepest nesting a case or the schema may hold (they hold 8 and 7):
+#: deeper is refused by name on every Python, whether its parser recurses
+#: (a RecursionError through 3.13) or not (3.14 reads 100,000 levels).
+MAX_DEPTH = 64
 CASE_ID = re.compile(r'[a-z0-9][a-z0-9._-]*')
-OWNER = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}')
+#: An owner's approval, as a decisions row's status (its last column) reads
+#: it: these words at its start and a date, followed by nothing, a
+#: parenthesis, or a note after "; " or ", " (the forms decisions.md uses).
+OWNER = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}(?:(?: \(|[;,] ).*)?')
+#: A note that withdraws or qualifies the approval voids it: fail closed.
+WITHDRAWN = re.compile(
+    r'not approved|unapproved|reject|revoke|withdraw|supersede|to confirm',
+    re.IGNORECASE,
+)
+ROW = re.compile(r'\| [A-Z][A-Z0-9-]* \|')
+
+
+def owner_approved(status: str) -> bool:
+    r"""The status is the owner's approval, read from its start: never a
+    substring of another status ("not approved by owner ...")."""
+    status = status.strip()
+    return bool(OWNER.fullmatch(status)) and not WITHDRAWN.search(status)
 
 
 class Unreadable(Exception):
@@ -128,36 +149,72 @@ def _strings(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(x, str) for x in value)
 
 
-def read_manifest(tree: Any, language: str, report: Report) -> Any:
+def _deeper(value: Any, limit: int) -> bool:
+    r"""``value`` nests past ``limit`` levels, walked without recursion."""
+    stack = [(value, 1)]
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, (dict, list)):
+            if depth > limit:
+                return True
+            children = item.values() if isinstance(item, dict) else item
+            stack.extend((child, depth + 1) for child in children)
+    return False
+
+
+def _json(text: str, name: str) -> Any:
+    r"""A JSON document, or :class:`Unreadable` naming why not: not JSON,
+    or nested past :data:`MAX_DEPTH`, the same refusal on every Python."""
+    try:
+        value = json.loads(text)
+    except RecursionError:
+        raise Unreadable(f'{name}: nested past {MAX_DEPTH} levels') from None
+    except ValueError:
+        raise Unreadable(f'{name}: not JSON it reads') from None
+    if _deeper(value, MAX_DEPTH):
+        raise Unreadable(f'{name}: nested past {MAX_DEPTH} levels')
+    return value
+
+
+def read_schema(tree: Any, report: Report) -> Any:
+    r"""The manifests' validator, or None, the problem reported once."""
+    import jsonschema
+
+    try:
+        schema = _json(_text(tree, SCHEMA), SCHEMA)
+        if not isinstance(schema, dict):
+            raise Unreadable(f'{SCHEMA}: not a schema it reads')
+        cls = jsonschema.validators.validator_for(schema)
+        cls.check_schema(schema)
+    except Unreadable as error:
+        report.fail('read', str(error))
+        return None
+    except (jsonschema.SchemaError, RecursionError):
+        report.fail('read', f'{SCHEMA}: not a schema it reads')
+        return None
+    return cls(schema)
+
+
+def read_manifest(
+    tree: Any, language: str, validator: Any, report: Report
+) -> Any:
     r"""A manifest, read and held to the schema, or None, the problem
     reported: the rules need its shape."""
     path = MANIFESTS[language]
     try:
         manifest = _yaml(_text(tree, path), path)
-        schema_text = _text(tree, SCHEMA)
     except Unreadable as error:
         report.fail('read', str(error))
         return None
-    try:
-        schema = json.loads(schema_text)
-    except (ValueError, RecursionError):
-        report.fail('read', f'{SCHEMA}: not JSON it reads')
-        return None
-    import jsonschema
-
     found = []
     try:
-        cls = jsonschema.validators.validator_for(schema)
-        cls.check_schema(schema)
-        for error in cls(schema).iter_errors(manifest):
+        for error in validator.iter_errors(manifest):
             where = '/'.join(str(part) for part in error.absolute_path)
             found.append(
                 f'{path}: {where or "(root)"} fails {error.validator!r}'
             )
     except RecursionError:
         found.append(f'{path}: nested past what the validator reads')
-    except jsonschema.SchemaError:
-        found.append(f'{SCHEMA}: not a schema')
     if isinstance(manifest, dict) and manifest.get('language') != language:
         found.append(f'{path}: its language is not {language}')
     for problem in sorted(found):
@@ -180,13 +237,9 @@ def read_cases(tree: Any, report: Report) -> dict[str, dict[str, Any]] | None:
         return None
     for name in names:
         try:
-            case = json.loads(_text(tree, name))
+            case = _json(_text(tree, name), name)
         except Unreadable as error:
             report.fail('read', str(error))
-            unread = True
-            continue
-        except (ValueError, RecursionError):
-            report.fail('read', f'{name}: not JSON it reads')
             unread = True
             continue
         problem = None
@@ -371,8 +424,8 @@ def rule_8(
     rows = [
         line
         for line in decisions.splitlines()
-        if line.startswith('| ')
-        and OWNER.search(line.strip().strip('|').split('|')[-1])
+        if ROW.match(line)
+        and owner_approved(line.strip().strip('|').split('|')[-1])
     ]
 
     def approved(name: str) -> bool:
@@ -428,8 +481,9 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
         report.fail('read', str(error))
         return report, summary
     manifests = {}
-    for language in MANIFESTS:
-        manifest = read_manifest(candidate, language, report)
+    validator = read_schema(candidate, report)
+    for language in MANIFESTS if validator is not None else ():
+        manifest = read_manifest(candidate, language, validator, report)
         if manifest is not None:
             manifests[language] = manifest
             rule_1(language, manifest, report)
