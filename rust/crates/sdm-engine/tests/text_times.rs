@@ -290,7 +290,11 @@ fn core_answer(reader: &Reader, outcome: &str, example: &Value) -> Result<Value,
                 |n: usize| f64::from(u8::from(named)) * 0.3 + n as f64 / first.len() as f64 >= 1.0;
             match reader.share(&first) {
                 Ok(share) if score(share.fewest) != score(share.listed) => {
-                    json!("text_time_order")
+                    if share.most > share.listed || share.unshaped > 0 {
+                        json!("text_time")
+                    } else {
+                        json!("text_time_order")
+                    }
                 }
                 Ok(share)
                     if score(share.fewest)

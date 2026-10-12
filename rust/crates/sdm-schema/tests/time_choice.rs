@@ -31,7 +31,10 @@ use sdm_schema::infer::{self, LeftOut, PassedOver, Taken, TextShare, TextTimes, 
 /// an offset (`+01`) is held against offsets mixed, `code` is text outside
 /// the shapes, counted at most only under a name that says time, and
 /// anything else (`2024-02-DD`) is a value the reader does not decide,
-/// counted in the share at most; the reading refuses both.
+/// counted in the share at most; the reading refuses both. `either` reads
+/// as a time in one order of day and month only: counted among the values
+/// read in either order, not at fewest, and refused by the reading as an
+/// order left open.
 struct Days;
 
 impl Days {
@@ -41,6 +44,9 @@ impl Days {
         }
         if value == "code" {
             return Err(TextUnread::Undecided);
+        }
+        if value == "either" {
+            return Err(TextUnread::Order);
         }
         let (date, offset) = match value.split_once('+') {
             Some((date, offset)) => (date, Some(offset.to_owned())),
@@ -83,12 +89,13 @@ impl TextTimes for Days {
             return Err(TextUnread::MixedZones);
         }
         let codes = values.iter().flatten().filter(|v| **v == "code").count();
+        let either = values.iter().flatten().filter(|v| **v == "either").count();
         let fewest = read.iter().filter(|r| matches!(r, Ok(Some(_)))).count();
-        let open = read.iter().filter(|r| r.is_err()).count() - codes;
+        let open = read.iter().filter(|r| r.is_err()).count() - codes - either;
         Ok(TextShare {
             fewest,
-            listed: fewest,
-            most: fewest + open,
+            listed: fewest + either,
+            most: fewest + either + open,
             unshaped: codes,
         })
     }
@@ -598,4 +605,32 @@ fn text_outside_the_shapes_is_no_time_unless_the_name_says_time() {
         stype(&of(vec![("ts", texts(&most))]).unwrap(), "ts"),
         Stype::Timestamp
     );
+}
+
+#[test]
+fn an_order_the_values_leave_open_is_refused_where_it_decides_the_score() {
+    // Values read as times in one order of day and month only: the score
+    // is 0.3 at fewest and 1.3 in either order, so the order decides it.
+    let open = texts(&[Some("either"); 10]);
+    assert_eq!(
+        of(vec![("ts", Arc::clone(&open))]).unwrap_err(),
+        "text_time_order"
+    );
+    // Where the order does not decide the score, nothing is refused: one
+    // in two read in either order cannot reach 1.0 under a name that does
+    // not say time.
+    let short = texts(&[Some("either"), Some("no date")]);
+    assert_ne!(
+        stype(&of(vec![("happened", short)]).unwrap(), "happened"),
+        Stype::Timestamp
+    );
+    // A value outside the list as well: refused for it, `text_time`, as a
+    // source's column with both is (the core's reader refuses a value
+    // outside the list before an open order).
+    let mut both: Vec<Option<&str>> = vec![Some("either"); 9];
+    both.push(Some("2024-02-02"));
+    assert_eq!(of(vec![("ts", texts(&both))]).unwrap_err(), "text_time");
+    let mut coded: Vec<Option<&str>> = vec![Some("either"); 9];
+    coded.push(Some("code"));
+    assert_eq!(of(vec![("ts", texts(&coded))]).unwrap_err(), "text_time");
 }

@@ -525,9 +525,12 @@ pub struct TextShare {
 /// reference sums them in floating point. The share is counted at fewest
 /// and at most: where the values the list reads decide otherwise in the
 /// two orders of day and month, the text is refused `text_time_order`
-/// (register DT-16); where the most, counting the values the list does not
-/// read but the client's shapes hold and, under a name that says time,
-/// every value it does not read, decides otherwise, `text_time` (DT-15).
+/// (register DT-16), or `text_time` where a value outside the list is
+/// among them, as a source's column is refused (`Reader::column`: a value
+/// outside the list before an open order); where the most, counting the
+/// values the list does not read but the client's shapes hold and, under
+/// a name that says time, every value it does not read, decides otherwise,
+/// `text_time` (DT-15).
 /// So text outside the shapes is no time under any other name (DT-17).
 /// Offsets mixed, which the reference refuses unnamed, are refused by name
 /// (`text_time_zones`, register DT-11).
@@ -555,7 +558,10 @@ fn text_holds_dates(
     let score = |held: usize| named + held as f64 / first.len() as f64 >= 1.0;
     let named_time = named > 0.0;
     match times.share(&first) {
-        Ok(share) if score(share.fewest) != score(share.listed) => Err(not_yet("text_time_order")),
+        Ok(share) if score(share.fewest) != score(share.listed) => {
+            let outside = share.most > share.listed || share.unshaped > 0;
+            Err(not_yet(if outside { "text_time" } else { "text_time_order" }))
+        }
         Ok(share)
             if score(share.fewest)
                 == score(share.most + if named_time { share.unshaped } else { 0 }) =>

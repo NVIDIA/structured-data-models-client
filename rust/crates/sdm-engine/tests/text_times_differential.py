@@ -173,7 +173,9 @@ def decision(score_of: float, named: bool) -> bool:
 
 def core_decides(first: list[str], named: bool) -> object:
     """The core's answer to whether text is a timestamp: an order of day
-    and month that changes the score is refused text_time_order; else the
+    and month that changes the score is refused text_time_order, or
+    text_time where a value outside the list is among the values (T1.6b,
+    as a source's column is refused); else the
     share at fewest and at most, the most counting the values in the
     client's shapes the list does not read and, under a name that says
     time, every value it does not read, refused text_time where the two
@@ -184,7 +186,7 @@ def core_decides(first: list[str], named: bool) -> object:
     fewest, listed, most, unshaped = share
     low = decision(fewest / len(first), named)
     if low != decision(listed / len(first), named):
-        return 'text_time_order'
+        return 'text_time' if most > listed or unshaped else 'text_time_order'
     high = decision((most + (unshaped if named else 0)) / len(first), named)
     return low if low == high else 'text_time'
 
@@ -220,8 +222,8 @@ def classify_inference(
     ):
         return None, ref_decision, core_decision
     if core_decision == 'text_time':
-        # Refused by values outside the list in both orders (the order of
-        # the rest decides the score alike, or it would be text_time_order).
+        # Refused by values outside the list in both orders, whether or not
+        # the order of the rest decides the score.
         assert record.column(first, utc=False) == 'outside', first
         return 'a', ref_decision, core_decision
     if core_decision == 'text_time_order':
