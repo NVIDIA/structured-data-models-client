@@ -86,9 +86,11 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
             return json.loads(response.read() or b'{}')
     except urllib.error.HTTPError as error:
         detail = error.read().decode(errors='replace')[:400]
-        raise SystemExit(f'{method} {path} returned {error.code}: {detail}')
+        raise SystemExit(
+            f'{method} {path} returned {error.code}: {detail}'
+        ) from error
     except urllib.error.URLError as error:
-        raise SystemExit(f'{method} {path} failed: {error.reason}')
+        raise SystemExit(f'{method} {path} failed: {error.reason}') from error
 
 
 def wait_for(uuid: str, what: str) -> None:
@@ -184,8 +186,10 @@ def main() -> None:
                 f'Portal project {project_id} is {actual!r}, not {name!r}'
             )
         print(f'dry run: {name} ({len(by_project[project_id])} files)')
-        wait_for(submit(project_id, name, by_project[project_id], False),
-                 f'dry run {name}')
+        wait_for(
+            submit(project_id, name, by_project[project_id], False),
+            f'dry run {name}',
+        )
 
     # Pass two: from here a failure can leave part of the release live, which
     # is why the whole of pass one had to pass first.
@@ -194,8 +198,9 @@ def main() -> None:
     try:
         for project_id, name in PROJECTS.items():
             print(f'publishing: {name}')
-            wait_for(submit(project_id, name, by_project[project_id], True),
-                     name)
+            wait_for(
+                submit(project_id, name, by_project[project_id], True), name
+            )
             published.append(name)
     finally:
         lines = [f'published: {n}' for n in published]

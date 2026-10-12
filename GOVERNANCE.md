@@ -47,9 +47,9 @@ it is called out in [CHANGELOG.md](CHANGELOG.md) under a heading that says so,
 with the migration in the same entry.
 
 Publishing is automated. A version tag on a commit that is on `main` and
-whose CI passed builds every distribution and uploads it through PyPI
-Trusted Publishing, with no stored token. [RELEASING.md](RELEASING.md)
-describes what a maintainer does; `.github/workflows/publish.yml` is what
+whose CI passed builds every distribution, attaches it to the GitHub
+Release, and asks NVIDIA's Kitmaker service to publish those artifacts to
+PyPI. [RELEASING.md](RELEASING.md) describes what a maintainer does; `.github/workflows/publish.yml` is what
 actually runs.
 
 ## Changing this document
