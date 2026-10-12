@@ -22,8 +22,10 @@ graph; these check the text:
   string literal, never run, with ``CORE_CRATES``' parser entry under that
   name (``parser_crates``), so a gate running its checkpoint's copy over a
   candidate that renames the crate judges the candidate's name (a bug fix at
-  T1.28w, E56(a)); a copy missing, unparsed, not a literal, or naming
-  another crate is refused.
+  T1.28w, E56(a)); a copy missing, unparsed, not a literal, not shaped as
+  a crate's name (letters, digits, ``-`` and ``_``), naming another crate
+  or no directory under ``rust/crates``, or differing from the tree's
+  ``l0_deps.py``'s ``PARSER`` is refused.
 - ``sql``: no SQL fragment and no provider match in ``sdm-schema``,
   ``sdm-engine``, ``sdm-request`` or ``sdm-core`` (migration plan,
   "Ownership"; ``sdm-core`` from T1.21c). It is a
@@ -129,6 +131,11 @@ import tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = Path('scripts/rust_core/l0_scan.py')
+# l0_deps.py's copy in the tree, whose PARSER the tree's PARSER_CRATE must
+# match (it imports this module, so the path is named here).
+DEPS_SCRIPT = Path('scripts/rust_core/l0_deps.py')
+# A crate's name as Cargo takes it: no space, no path.
+_CRATE_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]*')
 
 # The crates whose code ships and whose rules are the core's: the domain
 # crates and the host layer. The binding, sdm-py, talks to Python by design,
@@ -375,25 +382,41 @@ def tree_name(
         )
         if isinstance(target, ast.Name) and target.id == name:
             value = node.value  # type: ignore[union-attr]
-    if (
-        isinstance(value, ast.Constant)
-        and isinstance(value.value, str)
-        and value.value
-    ):
-        return value.value, []
-    return None, [f"the tree's {script}: {name} is not a string literal"]
+    if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+        return None, [f"the tree's {script}: {name} is not a string literal"]
+    if not _CRATE_NAME.fullmatch(value.value):
+        return None, [
+            f"the tree's {script}: {name} is {value.value!r}, not a crate's "
+            'name (letters, digits, - and _)'
+        ]
+    return value.value, []
 
 
 def parser_crates(root: Path) -> tuple[str, tuple[str, ...], list[str]]:
     """The parser crate's name in the tree at ``root`` (its copy of this
     file's ``PARSER_CRATE``), and ``CORE_CRATES`` with the parser under it;
-    a name this copy gives another crate is refused."""
+    a name this copy gives another crate, a name with no crate directory,
+    and a name other than the tree's ``l0_deps.py``'s are refused."""
     name, problems = tree_name(root, SCRIPT, 'PARSER_CRATE')
     others = {*CORE_CRATES, *DIALECT_FREE_CRATES, *DEV_CRATES} - {PARSER_CRATE}
-    if name in others:
-        problems = [
-            f"the tree's {SCRIPT}: PARSER_CRATE names {name}, another crate"
-        ]
+    if name is not None and not problems:
+        deps, unread = tree_name(root, DEPS_SCRIPT, 'PARSER')
+        if name in others:
+            problems = [
+                f"the tree's {SCRIPT}: PARSER_CRATE names {name}, another crate"
+            ]
+        elif not (root / 'rust/crates' / name).is_dir():
+            problems = [
+                f"the tree's {SCRIPT}: PARSER_CRATE names {name}, which is no "
+                'directory under rust/crates'
+            ]
+        elif unread:
+            problems = unread
+        elif deps != name:
+            problems = [
+                f"the tree's {SCRIPT}: PARSER_CRATE names {name}, but its "
+                f'{DEPS_SCRIPT} PARSER names {deps}'
+            ]
     if name is None or problems:
         return PARSER_CRATE, CORE_CRATES, problems
     crates = tuple(name if c == PARSER_CRATE else c for c in CORE_CRATES)

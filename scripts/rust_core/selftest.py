@@ -45,8 +45,10 @@ temporary repository.
 The parser crate's name is the checked tree's own copy of each L0 guard's
 (T1.28w): a tree whose crates and guard data rename the parser passes, as
 does the tree unrenamed; crates renamed under data that are not, data
-renamed over crates that are not, and a guard copy missing, not a literal
-or naming another crate fail.
+renamed over crates that are not, and a guard copy missing, not a literal,
+not shaped as a crate's name (a trailing space, a path) or naming another
+crate fail, as does ``l0_scan.py``'s name naming no crate directory or
+differing from ``l0_deps.py``'s.
 
 Phase 1 design, task T1.10c (formerly T1.16); the rest of ``selftest.py``,
 the seeded faults of the runners and the gate, arrives with T1.19.
@@ -2373,6 +2375,7 @@ def scan_cases(results: list[Result]) -> None:
         'rust/crates',
         'scripts/rust_core/emulation-allowlist.txt',
         str(l0_scan.SCRIPT),
+        str(l0_scan.DEPS_SCRIPT),
     )
     crates = 'rust/crates'
 
@@ -3861,14 +3864,15 @@ def parser_name_cases(results: list[Result], base: dict[str, Any]) -> None:
         crates=True,
         data=False,
         deps_fails=f'{RENAMED}: a workspace crate with no class',
-        scan_fails=f'is outside rust/crates/{l0_scan.PARSER_CRATE}/src',
+        scan_fails=f'names {l0_scan.PARSER_CRATE}, which is no directory under '
+        'rust/crates',
     )
     named(
         'renamed in the guard data, not in its crates',
         crates=False,
         data=True,
         deps_fails=f'{RENAMED}: classified, but not a workspace crate',
-        scan_fails=f'is outside rust/crates/{RENAMED}/src',
+        scan_fails=f'names {RENAMED}, which is no directory under rust/crates',
     )
     named(
         "the tree's guard copies missing",
@@ -3893,6 +3897,47 @@ def parser_name_cases(results: list[Result], base: dict[str, Any]) -> None:
         change=both("'sdm-core'"),
         deps_fails='PARSER names sdm-core, another crate',
         scan_fails='PARSER_CRATE names sdm-core, another crate',
+    )
+    named(
+        'the name with a trailing space',
+        crates=False,
+        data=False,
+        change=both(repr(l0_deps.PARSER + ' ')),
+        deps_fails=f'PARSER is {l0_deps.PARSER + " "!r}, not a crate',
+        scan_fails=f'PARSER_CRATE is {l0_deps.PARSER + " "!r}, not a crate',
+    )
+    named(
+        'the name a path',
+        crates=False,
+        data=False,
+        change=both(repr('../crates/' + l0_deps.PARSER)),
+        deps_fails="PARSER is '../crates/",
+        scan_fails="PARSER_CRATE is '../crates/",
+    )
+
+    def scan_only(root: Path) -> None:
+        assign(l0_scan.SCRIPT, 'PARSER_CRATE', repr(RENAMED))(root)
+
+    named(
+        "l0_scan.py's name naming no crate directory",
+        crates=False,
+        data=False,
+        change=scan_only,
+        deps_fails=None,
+        scan_fails=f'names {RENAMED}, which is no directory under rust/crates',
+    )
+
+    def scan_differs(root: Path) -> None:
+        (root / 'rust/crates' / RENAMED / 'src').mkdir(parents=True)
+        scan_only(root)
+
+    named(
+        "l0_scan.py's name differing from l0_deps.py's, a crate directory",
+        crates=False,
+        data=False,
+        change=scan_differs,
+        deps_fails=None,
+        scan_fails=f'but its {l0_scan.DEPS_SCRIPT} PARSER names {l0_deps.PARSER}',
     )
 
 

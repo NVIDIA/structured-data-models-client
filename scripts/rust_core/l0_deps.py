@@ -26,7 +26,9 @@ features, every target platform) and checks:
   this copy's with the parser's under that name (``tree_crates``), so a gate
   running its checkpoint's copy over a candidate that renames the crate
   judges the candidate's name (a bug fix at T1.28w, E56(a)); a copy
-  missing, unparsed, not a literal, or naming another crate is refused;
+  missing, unparsed, not a literal, not shaped as a crate's name, or naming
+  another crate is refused (``l0_scan.py`` also holds its own copy's name
+  to this one's and to a crate directory);
 - nothing shipped (domain, host or binding) reaches ``sdm-testkit`` over
   normal or build edges;
 - no domain crate, and not ``sdm-host``, reaches ``pyo3``, ``jni``,
