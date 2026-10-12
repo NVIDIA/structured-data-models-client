@@ -125,9 +125,9 @@ pub(crate) fn run(
         TestOperation::Panic { at, payload } => match at {
             PanicAt::Start => panic!("{payload}"),
             PanicAt::Body => Run::new(move |_| async move { panic!("{payload}") }),
-            // Inside the interim parser, on the adapter's grown stack.
+            // Inside the parser, on the adapter's grown stack.
             PanicAt::AdapterStack => Run::new(move |_| async move {
-                sdm_pql_interim::parser::panic_in_next_parse(payload);
+                sdm_pql::parser::panic_in_next_parse(payload);
                 let profile = Profile::resolve(&ProfileSpec {
                     name: ProfileName::Relational,
                     model: None,

@@ -1451,7 +1451,7 @@ dependencies = [
  "sdm-contract",
  "sdm-data",
  "sdm-engine",
- "sdm-pql-interim",
+ "sdm-pql",
  "sdm-request",
  "sdm-schema",
  "sdm-wire",
@@ -1504,7 +1504,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sdm-pql-interim"
+name = "sdm-pql"
 version = "1.0.0"
 dependencies = [
  "jiff",

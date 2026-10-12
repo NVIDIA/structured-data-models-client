@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [package]
-name = "sdm-pql-interim"
-description = "The interim PQL parser, reachable only through sdm-core's adapter"
+name = "sdm-pql"
+description = "The PQL parser, reachable only through sdm-core's adapter"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -8,7 +8,7 @@
 //! means, the capabilities are what a model will answer, and a capability
 //! only ever refuses. The capability checks run on top of a validated query,
 //! through the features the PQL adapter reads off it, so they stay the same
-//! when the PQL team's crate replaces the interim parser.
+//! whatever the parser behind the adapter is.
 
 use std::collections::BTreeSet;
 

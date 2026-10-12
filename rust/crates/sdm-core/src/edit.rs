@@ -20,7 +20,7 @@ use crate::run::{Asker, Attachment, internal};
 /// Whether a column of `dtype` can mean `stype`, as the language answers
 /// it (`Stype.supports_dtype`).
 pub(crate) fn supports(stype: Stype, dtype: Dtype) -> bool {
-    crate::pql::interim_stype(stype).supports_dtype(crate::pql::interim_dtype(dtype))
+    crate::pql::parser_stype(stype).supports_dtype(crate::pql::parser_dtype(dtype))
 }
 
 /// The body of an `edit_schema` run.

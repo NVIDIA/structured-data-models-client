@@ -14,7 +14,7 @@ publish.workspace = true
 
 [features]
 # Operations only tests reach; a shipped build leaves it off.
-test-ops = ["sdm-contract/test-ops", "sdm-pql-interim/test-ops"]
+test-ops = ["sdm-contract/test-ops", "sdm-pql/test-ops"]
 
 [dependencies]
 arrow-array.workspace = true
@@ -23,7 +23,7 @@ arrow-select.workspace = true
 jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-engine = { path = "../sdm-engine" }
-sdm-pql-interim = { path = "../sdm-pql-interim" }
+sdm-pql = { path = "../sdm-pql" }
 sdm-request = { path = "../sdm-request" }
 sdm-schema = { path = "../sdm-schema" }
 sdm-wire = { path = "../sdm-wire" }

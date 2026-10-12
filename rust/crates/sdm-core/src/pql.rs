@@ -26,10 +26,10 @@ use sdm_contract::pql::{
     ProblemType, QueryMode, TimeUnit, ValidatedQuery, Window,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
-use sdm_pql_interim as interim;
-use sdm_pql_interim::ast::{self, ConstValue, Kind, NodeRef};
-use sdm_pql_interim::literal::Literal;
-use sdm_pql_interim::types as t;
+use sdm_pql as parser;
+use sdm_pql::ast::{self, ConstValue, Kind, NodeRef};
+use sdm_pql::literal::Literal;
+use sdm_pql::types as t;
 
 use crate::profiles::{
     Mode, Profile, QueryFeatures, check_capabilities, check_parsed_capabilities,
@@ -86,7 +86,7 @@ pub fn validate(
 const STACK_BYTES: usize = 256 << 20;
 
 /// Runs `f` on the stack the adapter validates on: grown once per adapter
-/// call, here and nowhere else (the interim parser grows none of its own),
+/// call, here and nowhere else (the parser grows none of its own),
 /// so parsing, resolving, reading the tree and dropping it all fit in it.
 pub fn on_adapter_stack<R>(f: impl FnOnce() -> R) -> R {
     stacker::grow(STACK_BYTES, f)
@@ -114,14 +114,14 @@ fn resolve_here(
     profile: &Profile,
     facts: &HostFacts,
 ) -> Result<Validation, CoreError> {
-    let reader = interim::dates::Reader {
+    let reader = parser::dates::Reader {
         year: clock_year(&facts.now)?,
     };
     let mode = match profile.mode {
-        Mode::Training => interim::Mode::Training,
-        Mode::Inference => interim::Mode::Inference,
+        Mode::Training => parser::Mode::Training,
+        Mode::Inference => parser::Mode::Inference,
     };
-    let parsed = match interim::parse(query, mode, reader).map_err(unsupported)? {
+    let parsed = match parser::parse(query, mode, reader).map_err(unsupported)? {
         Ok(parsed) => parsed,
         Err(response) => return Ok(Validation::refused(diagnostics(&response))),
     };
@@ -129,13 +129,13 @@ fn resolve_here(
     if !refused.is_empty() {
         return Ok(Validation::refused(refused));
     }
-    let filters = interim::Filters {
+    let filters = parser::Filters {
         key_columns: profile.capabilities.key_columns_in_filters,
         timestamp_columns: profile.capabilities.timestamp_columns_in_filters,
     };
-    let validated = match interim::resolve(parsed, &schema_definition(schema), mode, filters) {
-        interim::Resolved::Accepted(validated) => validated,
-        interim::Resolved::Refused(response) => {
+    let validated = match parser::resolve(parsed, &schema_definition(schema), mode, filters) {
+        parser::Resolved::Accepted(validated) => validated,
+        parser::Resolved::Refused(response) => {
             return Ok(Validation::refused(diagnostics(&response)));
         }
     };
@@ -161,13 +161,13 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 
 /// The refusal of a query the interim parser cannot read yet: where the
 /// literal is, as fields, never the literal itself (decision H17).
-fn unsupported(interrupted: interim::Interrupted) -> CoreError {
+fn unsupported(interrupted: parser::Interrupted) -> CoreError {
     let mut error = CoreError::new(
         ErrorKind::Unsupported,
         ErrorCode::UnsupportedRequest,
         format!(
             "{}; the interim PQL parser cannot validate this query",
-            interim::ast::DEFERRED
+            parser::ast::DEFERRED
         ),
     );
     if let Some(at) = interrupted.0 {
@@ -223,16 +223,16 @@ fn year_of_day(days: i64) -> i64 {
     yoe + era * 400 + i64::from(month <= 2)
 }
 
-// --- The schema, into the interim parser's form ------------------------------
+// --- The schema, into the parser's form ------------------------------------
 
 /// A name, where an empty one means none, as the reference reads a schema.
 fn name(value: &Option<String>) -> Option<String> {
     value.clone().filter(|v| !v.is_empty())
 }
 
-fn schema_definition(schema: &QuerySchema) -> interim::SchemaDefinition {
-    use interim::schema::{Column, ColumnKey, ColumnKeyGroup, TableDefinition};
-    interim::SchemaDefinition {
+fn schema_definition(schema: &QuerySchema) -> parser::SchemaDefinition {
+    use parser::schema::{Column, ColumnKey, ColumnKeyGroup, TableDefinition};
+    parser::SchemaDefinition {
         tables: schema
             .tables
             .iter()
@@ -242,8 +242,8 @@ fn schema_definition(schema: &QuerySchema) -> interim::SchemaDefinition {
                     .iter()
                     .map(|c| Column {
                         name: c.name.clone(),
-                        stype: interim_stype(c.stype),
-                        dtype: interim_dtype(c.dtype),
+                        stype: parser_stype(c.stype),
+                        dtype: parser_dtype(c.dtype),
                     })
                     .collect();
                 let definition = TableDefinition {
@@ -284,7 +284,7 @@ macro_rules! same_names {
 }
 
 same_names!(
-    interim_dtype,
+    parser_dtype,
     contract_dtype,
     Dtype,
     t::Dtype,
@@ -311,7 +311,7 @@ same_names!(
 );
 
 same_names!(
-    interim_stype,
+    parser_stype,
     contract_stype,
     Stype,
     t::Stype,
@@ -330,7 +330,7 @@ same_names!(
 
 // --- Diagnostics -------------------------------------------------------------
 
-fn span(span: Option<interim::Span>) -> Option<Span> {
+fn span(span: Option<parser::Span>) -> Option<Span> {
     let span = span?;
     let at = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
     Some(Span {
@@ -342,7 +342,7 @@ fn span(span: Option<interim::Span>) -> Option<Span> {
 }
 
 /// A response's errors, then its warnings.
-fn diagnostics(response: &interim::ValidationResponse) -> Vec<PqlDiagnostic> {
+fn diagnostics(response: &parser::ValidationResponse) -> Vec<PqlDiagnostic> {
     let errors = response.errors.iter().map(|e| PqlDiagnostic {
         code: e.code.to_owned(),
         message: e.message.clone(),
@@ -360,7 +360,7 @@ fn diagnostics(response: &interim::ValidationResponse) -> Vec<PqlDiagnostic> {
 
 // --- The validated query -----------------------------------------------------
 
-fn validated_query(validated: &interim::ValidatedQuery) -> Result<ValidatedQuery, CoreError> {
+fn validated_query(validated: &parser::ValidatedQuery) -> Result<ValidatedQuery, CoreError> {
     let q = &validated.query;
     let optional = |n: &Option<NodeRef>| n.as_ref().map(node).transpose();
     Ok(ValidatedQuery {
@@ -379,7 +379,7 @@ fn validated_query(validated: &interim::ValidatedQuery) -> Result<ValidatedQuery
             .to_i64()
             .and_then(|n| u32::try_from(n).ok())
             .ok_or_else(|| internal("a validated query forecasts past u32"))?,
-        entity_clause: if q.for_each == interim::validator::model::FOR {
+        entity_clause: if q.for_each == parser::validator::model::FOR {
             EntityClause::For
         } else {
             EntityClause::ForEach
@@ -404,7 +404,7 @@ fn column_ref(fqn: &str) -> Result<ColumnRef, CoreError> {
     })
 }
 
-fn window(range: &interim::dor::DateOffsetRange) -> Result<Window, CoreError> {
+fn window(range: &parser::dor::DateOffsetRange) -> Result<Window, CoreError> {
     let narrow = |v: i64| i32::try_from(v).map_err(|_| internal("a window past int32"));
     Ok(Window {
         start: range.start.map(narrow).transpose()?,
@@ -485,7 +485,7 @@ fn literal(n: &NodeRef, value: &ConstValue) -> Result<PqlLiteral, CoreError> {
     })
 }
 
-/// One node of the interim parser's tree, in the validated-query format.
+/// One node of the parser's tree, in the validated-query format.
 fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
     let borrowed = n.borrow();
     let base = &borrowed.base;
@@ -557,7 +557,7 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
             .as_ref()
             .map(|r| window(&r.borrow()))
             .transpose()?,
-        span: base.location.and_then(|l| span(interim::Span::at(l))),
+        span: base.location.and_then(|l| span(parser::Span::at(l))),
         kind,
     })
 }
