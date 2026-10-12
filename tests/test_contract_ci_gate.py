@@ -170,6 +170,8 @@ def _git(work: Path, *args: str) -> str:
         'renamed',
         'ratchet-too',
         'not-warnings',
+        'embedded',
+        'unprefixed',
         'landed',
         'after-landing',
         'unreadable',
@@ -184,7 +186,9 @@ def test_the_floor_cell_reports_only_a_comparator_before_t1_18_landed(
     landing of T1.18, whatever its comparator's text, and says so; a
     checkpoint that is T1.18's landing or descends from it gates, its
     comparator's constant renamed or not, as do a failing ratchet beside
-    the comparator, a difference other than ``warnings``, a checkpoint git
+    the comparator, a difference other than ``warnings`` (a warnings
+    marker inside another record or outside gate.sh's prefix among them),
+    a checkpoint git
     cannot read, and another cell's job."""
     job = (
         'contract-python-dbr17-pandas2'
@@ -214,9 +218,17 @@ def test_the_floor_cell_reports_only_a_comparator_before_t1_18_landed(
     )
     failed = ['compare'] + (['ratchet'] if seed == 'ratchet-too' else [])
     differs = ['warnings'] + (['result'] if seed == 'not-warnings' else [])
-    summary = ''.join(
-        f'echo "    | DIFFERS {rule}: a case: differs"\n' for rule in differs
-    ) + ''.join(f'echo "  FAIL {name}"\n' for name in failed)
+    records = [f'    | DIFFERS {rule}: a case: differs' for rule in differs]
+    if seed == 'embedded':
+        # A warnings marker inside another rule's record.
+        records.append(
+            '    | DIFFERS result: malformed output DIFFERS warnings: a case differs'
+        )
+    if seed == 'unprefixed':
+        records.append('DIFFERS warnings: a case: differs')
+    summary = ''.join(f"echo '{record}'\n" for record in records) + ''.join(
+        f'echo "  FAIL {name}"\n' for name in failed
+    )
     _executable(
         work / 'scripts/rust_core/gate.sh',
         '#!/usr/bin/env bash\n'

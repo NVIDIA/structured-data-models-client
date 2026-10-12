@@ -658,10 +658,12 @@ jobs:
             # the checkpoint's history holds no landing of T1.18, which every
             # later checkpoint descends from; a checkpoint git cannot read
             # never reports; and only `warnings` differences, the cell's
-            # measured one (HOST-3).
-            differs=$(grep 'DIFFERS ' gate.log || true)
+            # measured one (HOST-3): every line naming a difference must be
+            # a comparator record of that rule, anchored at gate.sh's
+            # prefix, so a marker inside another record never qualifies.
+            differs=$(grep 'DIFFERS' gate.log || true)
             if [ "$(grep '^  FAIL ' gate.log)" = '  FAIL compare' ] &&
-              [ -n "$differs" ] && ! grep -v 'DIFFERS warnings: ' <<<"$differs" | grep -q . &&
+              [ -n "$differs" ] && ! grep -vE '^    \| DIFFERS warnings: ' <<<"$differs" | grep -q . &&
               subjects=$(git log --format=%s "${checkpoint}" --) &&
               ! grep -q '^Land T1\.18: ' <<<"$subjects"; then
               echo "gate: REPORT-ONLY in $CELL: the checkpoint ($checkpoint) predates T1.18's landing,"
