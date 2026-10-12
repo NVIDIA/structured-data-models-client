@@ -331,11 +331,9 @@ def run(client):
                     task='classification',
                 ),
                 model=KumoTabular(),
-                outputs=['explanation'],
+                outputs=['rankings'],
             )
-            fail(
-                e, 'explanation was accepted by a model that does not serve it'
-            )
+            fail(e, 'rankings was accepted by a model that does not serve it')
         except StructuredDataError as exc:
             note(e, str(exc)[:120])
 

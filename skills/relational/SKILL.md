@@ -163,8 +163,7 @@ would break rather than letting the endpoint return a 500.
 
 **The table limit is on the graph a request carries, not on the schema.** A
 schema may describe far more than fifteen tables; what counts is how many the
-query actually reaches. An explanation has a second limit besides its one row:
-it must fit the 1,000-row context budget.
+query actually reaches.
 
 ## Asking for more than one answer each
 
