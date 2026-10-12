@@ -16,7 +16,7 @@
       "rule": "static_target",
       "owner": "T1.27",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:332",
+      "where": "rust/crates/sdm-core/src/materialize.rs:335",
       "why": "materialize takes a windowed SUM's target only. base.binary's COUNT(orders.*, 0, 30, days) > 0 is refused here, and behind static_target are its condition target, its COUNT(*) (aggregation, materialize.rs:224), its orders.* (target_filter, :226) and its boolean label; base.multiclass's users.country, a static target, is refused before any label. T1.27 computes both labels over fetched Arrow. Masked behind it too, as they surface: for T1.28a, the classification task's layout in the payload (the classes, their order, ['IN', 'DE', 'US'], and the positive class) and the static target's context leakage; for T1.28b, boolean and text predictions in the result",
       "observed": {
         "python-core": {
