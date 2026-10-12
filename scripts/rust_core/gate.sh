@@ -10,6 +10,8 @@
 #   scripts/rust_core/gate.sh (--base REV | --phase-push BEFORE)
 #       [--protected-paths TEXT] [--run RUNNERS] [--observations FILE]...
 #       [--out DIR] [--no-l0]
+#       [--only CHECK | --locked 1a|1b [--evidence DIR]
+#        [--wheel FILE --test-ops-wheel FILE]]
 #
 # --base is the phase-branch tip recorded at package start (or, in CI on a
 # topic branch, the tip at run time); --phase-push BEFORE is CI on a push to
@@ -50,10 +52,52 @@
 #                 checkpoint's baseline or an approved transition from it);
 #   l0            the checkpoint's l0_deps.py (with the bridge freeze, based
 #                 at the checkpoint) and l0_scan.py on the candidate's tree;
-#                 --no-l0 leaves them to the job that has cargo.
+#                 --no-l0 leaves them to the job that has cargo;
+#   coverage      the checkpoint's coverage.py --check on the candidate's
+#                 commit: the scope manifests' rules, S0's paths each with
+#                 an acceptance case, and no path or cell removed against
+#                 the checkpoint without the owner (T1.15).
 #
-# --out keeps the observations made, for ratchet.py accept. Locked checks,
-# --only and the evidence file are T1.19's (decision E53(b)).
+# --out keeps the observations made, for ratchet.py accept.
+#
+# The local modes (T1.15, with T1.19 merged in; decisions E53(b), H26, E77):
+#
+#   --only CHECK  runs one check, observations, ratchet, compare, l0 or
+#                 coverage, and nothing else: the summary lists it alone
+#                 and the last line says it was not the gate. The evidence
+#                 a check needs is made inside it: under --only compare
+#                 the observations (--run or --observations) and the
+#                 effective expectations (ratchet.py effective), with no
+#                 ratchet check.
+#   --locked HALF the locked acceptance checks of HALF, 1a or 1b (design,
+#                 "Locked acceptance checks"): every check above, the
+#                 observations always, and the locked checks' own steps:
+#                   runners      the observations cover python-core,
+#                                python-old and rust-host;
+#                   l1           cargo test --workspace on the candidate:
+#                                the L1 corpus and the goldens;
+#                   seeded       (1a) the seeded-fault suite: SEEDED's
+#                                files under pytest, then the L0 guards'
+#                                self-tests (selftest.py --no-clippy);
+#                   wheel-smoke  (1a) the checkpoint's wheel_smoke.py in
+#                                its two clean containers, on --wheel and
+#                                --test-ops-wheel (CI's native-wheel and
+#                                native-test-ops artifacts), failing
+#                                without them;
+#                   inventory    (1b) the 40 cases of the Phase 1b
+#                                inventory and base.adventureworks are
+#                                acceptance cases.
+#                 Check 1 is runners, observations, ratchet, compare,
+#                 coverage and l1; 2 is seeded; 3 is wheel-smoke; 4 is
+#                 runners, observations, ratchet, compare, l1 and
+#                 inventory; 5 is observations, ratchet, compare and
+#                 inventory; 6, in both halves, is l0 and every step run.
+#                 It prints the table of the half's checks, writes
+#                 DIR/gate/<candidate sha>.json (--evidence DIR, by default
+#                 sdm-gate-evidence in the clone's git directory, refused
+#                 inside the worktree: the evidence stays outside the tested
+#                 tree), adding its half to one the other half wrote, and
+#                 exits non-zero when a locked check fails.
 
 set -uo pipefail
 
@@ -67,6 +111,11 @@ runs=''
 observations=()
 out=''
 l0=1
+only=''
+locked=''
+evidence=''
+wheel=''
+test_ops_wheel=''
 harness=0
 candidate=''
 for_harness=()
@@ -89,6 +138,19 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       mkdir -p "$2" && out=$(cd "$2" && pwd); for_harness+=("$1" "$out"); shift 2 ;;
     --no-l0) l0=0; for_harness+=("$1"); shift ;;
+    --only | --locked)
+      [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
+      if [ "$1" = --only ]; then only=$2; else locked=$2; fi
+      for_harness+=("$1" "$2"); shift 2 ;;
+    --evidence | --wheel | --test-ops-wheel)
+      [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
+      case "$2" in /*) given_path=$2 ;; *) given_path=$PWD/$2 ;; esac
+      case "$1" in
+        --evidence) evidence=$given_path ;;
+        --wheel) wheel=$given_path ;;
+        *) test_ops_wheel=$given_path ;;
+      esac
+      for_harness+=("$1" "$given_path"); shift 2 ;;
     # Internal: the checkpoint's copy, judging the candidate at DIR.
     --harness-for) harness=1; candidate=$2; shift 2 ;;
     -h | --help) usage; exit 0 ;;
@@ -96,6 +158,23 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ ${#where[@]} -eq 2 ] || { echo 'gate.sh: give --base or --phase-push' >&2; exit 2; }
+case "$only" in
+  '' | observations | ratchet | compare | coverage) ;;
+  l0) [ "$l0" = 1 ] || { echo 'gate.sh: --only l0 with --no-l0 runs nothing' >&2; exit 2; } ;;
+  *) echo "gate.sh: --only takes observations, ratchet, compare, l0 or coverage, not $only" >&2; exit 2 ;;
+esac
+case "$locked" in
+  '' | 1a | 1b) ;;
+  *) echo "gate.sh: --locked takes 1a or 1b, not $locked" >&2; exit 2 ;;
+esac
+if [ -n "$only" ] && [ -n "$locked" ]; then
+  echo 'gate.sh: --only runs one check and --locked the locked ones; give one' >&2
+  exit 2
+fi
+if [ -z "$locked" ] && [ -n "$evidence$wheel$test_ops_wheel" ]; then
+  echo 'gate.sh: --evidence, --wheel and --test-ops-wheel are --locked'"'"'s' >&2
+  exit 2
+fi
 
 PYTHON=${PYTHON:-python3}
 here=$(cd "$(dirname "$0")/../.." && pwd)
@@ -132,6 +211,20 @@ if [ "$harness" = 0 ]; then
     exit $?
   fi
   here=$candidate
+fi
+
+# The evidence stays outside the tested tree (design, "CI"): the clone's git
+# directory, or a directory outside the worktree.
+if [ -n "$locked" ]; then
+  if [ -z "$evidence" ]; then
+    evidence=$(git -C "$candidate" rev-parse --path-format=absolute --git-common-dir)/sdm-gate-evidence || exit 2
+  fi
+  case "$evidence/" in
+    "$candidate"/.git/*) ;;
+    "$candidate"/*)
+      echo "gate.sh: the evidence directory $evidence is inside the worktree it judges" >&2
+      exit 2 ;;
+  esac
 fi
 
 # --- the harness: $here judges $candidate ---------------------------------------
@@ -216,46 +309,172 @@ observe() {
     echo "$runner: $made/$runner.jsonl"
   done
 }
+refuse() {
+  echo "the given observations were made by the candidate's own runner, and"
+  echo "the overlay differs from the checkpoint's: make them with --run"
+  return 1
+}
+# The gate judges behaviour: without observations it would check the tree
+# alone and say nothing of the outcomes, baselines or availability.
+no_evidence() {
+  echo 'no observations: give --run RUNNERS or --observations FILE; the'
+  echo 'tree checks alone are no gate'
+  return 1
+}
+evidence_of() {
+  if [ -n "$runs" ]; then
+    observe
+  elif [ ${#observations[@]} -eq 0 ]; then
+    no_evidence
+  elif [ "$differs" = 1 ]; then
+    refuse
+  else
+    printf 'given: %s\n' "${observations[@]}"
+  fi
+}
+# Under --only, the evidence a check needs is made inside that check.
+prepare() {
+  [ -n "$only" ] || return 0
+  if [ -n "$runs" ]; then
+    observe
+  elif [ ${#observations[@]} -gt 0 ] && [ "$differs" = 1 ]; then
+    refuse
+  fi
+}
+want() { [ -z "$only" ] || [ "$only" = "$1" ]; }
+
 given=("${observations[@]+"${observations[@]}"}")
-if [ -n "$runs" ]; then
-  step observations observe
-  for runner in ${runs//,/ }; do given+=("$made/$runner.jsonl"); done
-elif [ ${#given[@]} -gt 0 ] && [ "$differs" = 1 ]; then
-  refuse() {
-    echo "the given observations were made by the candidate's own runner, and"
-    echo "the overlay differs from the checkpoint's: make them with --run"
-    return 1
-  }
-  step observations refuse
-fi
-if [ ${#given[@]} -eq 0 ]; then
-  # The gate judges behaviour: without observations it would check the tree
-  # alone and say nothing of the outcomes, baselines or availability.
-  no_evidence() {
-    echo 'no observations: give --run RUNNERS or --observations FILE; the'
-    echo 'tree checks alone are no gate'
-    return 1
-  }
-  step observations no_evidence
+for runner in ${runs//,/ }; do given+=("$made/$runner.jsonl"); done
+if [ -n "$locked" ] || [ "$only" = observations ] ||
+  { [ -z "$only" ] && { [ -n "$runs" ] || [ ${#given[@]} -eq 0 ] || [ "$differs" = 1 ]; }; }; then
+  step observations evidence_of
 fi
 
 with=()
 for file in "${given[@]+"${given[@]}"}"; do with+=(--observations "$file"); done
-step ratchet "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
-  --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
-  --effective-out "$scratch/effective.json" \
-  "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
+judge_ratchet() {
+  prepare || return 1
+  "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
+    --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
+    --effective-out "$scratch/effective.json" \
+    "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
+}
+want ratchet && step ratchet judge_ratchet
 
-if [ ${#given[@]} -gt 0 ]; then
-  step compare "$PYTHON" "$here/scripts/rust_core/compare.py" \
+judge_compare() {
+  if [ -n "$only" ]; then
+    prepare || return 1
+    [ ${#given[@]} -gt 0 ] || { no_evidence; return 1; }
+    "$PYTHON" "$here/scripts/rust_core/ratchet.py" effective --repo "$candidate" \
+      "${where[@]}" --out "$scratch/effective.json" || return 1
+  fi
+  "$PYTHON" "$here/scripts/rust_core/compare.py" \
     --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
     --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
     --expect "$scratch/effective.json" "${given[@]}"
+}
+if want compare && { [ ${#given[@]} -gt 0 ] || [ -n "$only" ]; }; then
+  step compare judge_compare
 fi
 
-if [ "$l0" = 1 ]; then
+if [ "$l0" = 1 ] && want l0; then
   step l0 sh -c '"$1" "$2/scripts/rust_core/l0_deps.py" --root "$3" --base "$4" && "$1" "$2/scripts/rust_core/l0_scan.py" --root "$3"' \
     sh "$PYTHON" "$here" "$candidate" "$checkpoint"
+fi
+
+if want coverage; then
+  step coverage "$PYTHON" "$here/scripts/rust_core/coverage.py" --check \
+    --repo "$candidate" --rev "$head" --checkpoint "$checkpoint"
+fi
+
+# --- the locked checks' own steps (--locked) --------------------------------
+
+# The seeded-fault suite of locked check 2: each check's seeded faults
+# (as-built, T1.15's table); no file here runs gate.sh --locked itself.
+SEEDED=(
+  contract/tests/test_gate_controls.py
+  contract/tests/test_payload_and_result_rules.py
+  contract/tests/test_capture.py
+  contract/tests/test_result_vectors.py
+  contract/tests/test_materialize_route.py
+  tests/test_contract_ratchet.py
+  tests/test_contract_register.py
+  tests/test_contract_coverage.py
+)
+runners_cover() {
+  "$PYTHON" - "${given[@]+"${given[@]}"}" <<'EOF'
+import json, sys
+seen = set()
+for path in sys.argv[1:]:
+    try:
+        with open(path, encoding='utf-8') as file:
+            for line in file:
+                seen.add(json.loads(line)['identity']['runner'])
+    except (OSError, ValueError, RecursionError, KeyError, TypeError):
+        sys.exit(f'{path}: not observations it reads')
+missing = sorted({'python-core', 'python-old', 'rust-host'} - seen)
+if missing:
+    sys.exit(f'no observations of {", ".join(missing)}')
+print('python-core, python-old and rust-host observed')
+EOF
+}
+seeded_suite() {
+  (cd "$candidate" && "$PYTHON" -m pytest -q -p no:cacheprovider "${SEEDED[@]}") &&
+    (cd "$candidate" && "$PYTHON" scripts/rust_core/selftest.py --no-clippy)
+}
+smoke() {
+  if [ -z "$wheel" ] || [ -z "$test_ops_wheel" ]; then
+    echo "no wheels: give --wheel and --test-ops-wheel (CI's native-wheel and"
+    echo 'native-test-ops artifacts)'
+    return 1
+  fi
+  local lane status=0
+  for lane in floor newest; do
+    "$PYTHON" "$here/scripts/rust_core/wheel_smoke.py" --lane "$lane" \
+      --wheel "$wheel" --test-ops-wheel "$test_ops_wheel" \
+      --out "$scratch/wheel-smoke/$lane" --container || status=1
+  done
+  return $status
+}
+inventory() {
+  "$PYTHON" - "$candidate" "$head" <<'EOF'
+import json, subprocess, sys
+import yaml
+repo, head = sys.argv[1:]
+def show(path):
+    return subprocess.run(['git', '-C', repo, 'show', f'{head}:{path}'],
+                          capture_output=True, text=True, check=True).stdout
+try:
+    listed = yaml.safe_load(show('docs/design/rust-core/phase-0/phase-1b-inventory.yaml'))
+    wanted = [str(case['id']) for case in listed['cases']]
+    names = subprocess.run(['git', '-C', repo, 'ls-tree', '-r', '-z', '--name-only', head,
+                            'contract/cases'], capture_output=True, text=True, check=True).stdout
+    status = {}
+    for name in names.split('\0'):
+        if name.endswith('.json'):
+            case = json.loads(show(name))
+            status[case['id']] = case['status']
+except (subprocess.CalledProcessError, yaml.YAMLError, ValueError, RecursionError, KeyError,
+        TypeError):
+    sys.exit('the inventory or the cases: not what it reads')
+if len(set(wanted)) != 40:
+    sys.exit(f'the inventory holds {len(set(wanted))} cases, not the locked 40')
+short = [case for case in wanted + ['base.adventureworks'] if status.get(case) != 'acceptance']
+if short:
+    sys.exit(f'{len(short)} of 41 not acceptance cases: {", ".join(short)}')
+print('the 40 inventory cases and base.adventureworks are acceptance cases')
+EOF
+}
+if [ -n "$locked" ]; then
+  step runners runners_cover
+  step l1 sh -c 'cd "$1/rust" && CARGO_TARGET_DIR="$1/rust/target" cargo test --workspace --locked' \
+    sh "$candidate"
+  if [ "$locked" = 1a ]; then
+    step seeded seeded_suite
+    step wheel-smoke smoke
+  else
+    step inventory inventory
+  fi
 fi
 
 echo
@@ -263,8 +482,72 @@ echo "gate summary (judged by $judge):"
 for i in "${!names[@]}"; do
   printf '  %-4s %s\n' "${results[$i]}" "${names[$i]}"
 done
+
+# The locked checks' table and evidence (H26).
+if [ -n "$locked" ]; then
+  result_of() {
+    local i
+    for i in "${!names[@]}"; do
+      [ "${names[$i]}" = "$1" ] && { echo "${results[$i]}"; return; }
+    done
+    echo missing
+  }
+  if [ "$locked" = 1a ]; then
+    checks=('1:runners observations ratchet compare coverage l1' '2:seeded' '3:wheel-smoke')
+  else
+    checks=('4:runners observations ratchet compare l1 inventory' '5:observations ratchet compare inventory')
+  fi
+  checks+=("6:l0 ${names[*]}")
+  echo
+  echo "locked checks ($locked):"
+  table=()
+  for entry in "${checks[@]}"; do
+    number=${entry%%:*}
+    verdict=ok
+    for name in ${entry#*:}; do
+      [ "$(result_of "$name")" = ok ] || verdict=FAIL
+    done
+    [ "$verdict" = ok ] || failed=1
+    printf '  %-4s check %s: %s\n' "$verdict" "$number" "${entry#*:}"
+    table+=("$number=$verdict=${entry#*:}")
+  done
+  steps=()
+  for i in "${!names[@]}"; do steps+=("${names[$i]}=${results[$i]}"); done
+  mkdir -p "$evidence/gate" &&
+    "$PYTHON" - "$evidence/gate/$head.json" "$head" "$locked" "$checkpoint" "$base" \
+      "$failed" "${#steps[@]}" "${steps[@]}" "${table[@]}" <<'EOF'
+import json, os, sys
+path, head, half, checkpoint, base, failed, count = sys.argv[1:8]
+steps = dict(item.split('=', 1) for item in sys.argv[8:8 + int(count)])
+checks = {}
+for item in sys.argv[8 + int(count):]:
+    number, verdict, names = item.split('=', 2)
+    checks[number] = {'result': verdict, 'steps': names.split()}
+found = {'sha': head, 'halves': {}}
+if os.path.exists(path):
+    with open(path, encoding='utf-8') as file:
+        found = json.load(file)
+    if found.get('sha') != head or not isinstance(found.get('halves'), dict):
+        sys.exit(f'{path}: not this candidate\'s evidence')
+found['halves'][half] = {'checkpoint': checkpoint, 'base': base,
+                         'passed': failed == '0', 'checks': checks, 'steps': steps}
+with open(path + '.tmp', 'w', encoding='utf-8') as file:
+    json.dump(found, file, indent=2, sort_keys=True)
+    file.write('\n')
+os.replace(path + '.tmp', path)
+print(f'evidence: {path}')
+EOF
+  [ $? = 0 ] || { echo 'gate: the evidence was not written'; failed=1; }
+fi
+
 if [ "$failed" = 1 ]; then
   echo 'gate: FAILED'
   exit 1
 fi
-echo 'gate: passed'
+if [ -n "$only" ]; then
+  echo "gate: passed (--only $only: one check, not the gate)"
+elif [ -n "$locked" ]; then
+  echo "gate: passed (--locked $locked)"
+else
+  echo 'gate: passed'
+fi
