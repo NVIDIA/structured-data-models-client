@@ -1,0 +1,46 @@
+{
+  "about": "python-core's run of the edit.* cases, as contract/tests/test_edit_cases.py writes it: per case, the digest of the core's inputs, the core's error code, and the digest of the request state; sdm-testkit's tests/edit_cases.rs holds rust-host to it (T1.24b).",
+  "cases": {
+    "edit.accepted-meaning-key-links": {
+      "error": null,
+      "inputs": "70a91ee2750beef40b2e63733f3969aed29f9e2e8973b9bf8b233d3ae45f1953",
+      "materialized": "062b64ccbbf27a2ebc2d2137884a9812e0d182f7f32fd648656ba553f08ef1b3"
+    },
+    "edit.key-missing-column": {
+      "error": "INVALID_REQUEST",
+      "inputs": "6f9fc2c20b5d60a91600464eaa2c0aa1bbbf24baab51f2edf1aa7bff175e1b9a",
+      "materialized": null
+    },
+    "edit.key-time-column": {
+      "error": "INVALID_REQUEST",
+      "inputs": "cfe66917b8ebebf9a5943ae83cce02e13cf1ab152bf3467486153bb39fcaeeb7",
+      "materialized": null
+    },
+    "edit.leave-out-the-key": {
+      "error": "INVALID_REQUEST",
+      "inputs": "885c0fd6f42705c8e5e98d8e19db43cdc855baa8d26e294b2072917cc5c41aba",
+      "materialized": null
+    },
+    "edit.link-not-the-key": {
+      "error": "INVALID_REQUEST",
+      "inputs": "4c655d8a0b8ec4a1871c59795a12c3aeb564117b0b3114ccbfdb08b3f522108c",
+      "materialized": null
+    },
+    "edit.meaning-not-carried": {
+      "error": "INVALID_REQUEST",
+      "inputs": "d4832b7a0141a655b3357a6b31de93c27155a7668326b7abe06070bbe0370400",
+      "materialized": null
+    },
+    "edit.meaning-unknown": {
+      "error": "INVALID_REQUEST",
+      "inputs": "6c9e3541d92294063853d4cb0f6c5f9d4f5d83e09c28c4d26951feef61c1b137",
+      "materialized": null
+    },
+    "edit.time-column-not-a-time": {
+      "error": "INVALID_REQUEST",
+      "inputs": "5833ba3d1f6f14bb5e56a8d2bbeb2a871e1b8f4798af06bd7db563ea6e8ba6c9",
+      "materialized": null
+    }
+  },
+  "format": "sdm-edits-pin/1"
+}
