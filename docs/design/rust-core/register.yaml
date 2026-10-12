@@ -2056,7 +2056,13 @@ entries:
     tests/test_the_schema_edits.py,
     test_a_schema_changed_past_its_description_is_refused_by_name, and
     sdm-schema's and sdm-core's tests. A refusal of an input the reference
-    accepts, so for the owner. Never self-approved.
+    accepts, so for the owner. Never self-approved. A sub-case, from
+    T1.24b's review: where the change leaves a value the held schema
+    writes as no text (a column's dtype assigned None, a table's
+    source_name or a column's key in the dictionary that is not a string),
+    the next edit or materialize fails as INVALID_MESSAGE, the held
+    schema not reading as the contract's HeldSchema, rather than as
+    schema_edited.
 # --- The host layer -------------------------------------------------------------
 
 - id: HOST-1
