@@ -1557,7 +1557,6 @@ dependencies = [
  "duckdb",
  "sdm-contract",
  "sdm-host",
- "sdm-request",
  "serde",
  "serde_json",
  "sha2",

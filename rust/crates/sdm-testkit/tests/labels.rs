@@ -95,6 +95,31 @@ fn core_examples(name: &str) -> Vec<Example> {
     examples(&batch)
 }
 
+/// `ns` nanoseconds since the epoch as the payload writes a time
+/// (`YYYY-MM-DDTHH:MM:SS.ffffffZ`), by H. Hinnant's `civil_from_days`.
+fn iso_microseconds(ns: i64) -> String {
+    let micros = ns.div_euclid(1_000);
+    let seconds = micros.div_euclid(1_000_000);
+    let fraction = micros.rem_euclid(1_000_000);
+    let days = seconds.div_euclid(86_400);
+    let of_day = seconds.rem_euclid(86_400);
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{fraction:06}Z",
+        of_day / 3_600,
+        of_day / 60 % 60,
+        of_day % 60
+    )
+}
+
 fn examples(batch: &RecordBatch) -> Vec<Example> {
     let entity = batch.column_by_name("entity").unwrap();
     let anchor = batch
@@ -109,7 +134,7 @@ fn examples(batch: &RecordBatch) -> Vec<Example> {
                 DataType::Utf8 => Value::from(entity.as_string::<i32>().value(row)),
                 other => panic!("an entity key of {other}"),
             },
-            anchor: sdm_request::payload::iso_microseconds(anchor.value(row)),
+            anchor: iso_microseconds(anchor.value(row)),
             target: match target.data_type() {
                 DataType::Float32 => {
                     Value::from(f64::from(target.as_primitive::<Float32Type>().value(row)))
