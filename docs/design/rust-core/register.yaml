@@ -2262,10 +2262,13 @@ entries:
     that reads the query; materialize, which a public call reaches only
     after validating, gives none, so the pure-Rust host's S1 path, which
     starts no validate_query, gives none. The Python host words it in
-    pandas' sentence; on the S0 core route the core's is quiet while the
-    shadow check's old validator gives the reference's own (s0.SHADOWED,
-    bridge code until Phase 5), so a python-core caller sees what the old
-    route shows.
+    pandas' sentence behind its code. On the S0 core route, for a query the
+    core accepts, the core's is held back while the shadow check's old
+    validator gives the reference's own (s0.SHADOWED, bridge code until
+    Phase 5), so the caller sees what the old route shows; for a query the
+    core refuses, which meets no shadow check, the core's is shown, once
+    per day-first literal read, where the reference gives one per read
+    (once for a query refused after its literal is read).
   affected_inputs: >-
     Queries with a date literal read day first whose format pandas names
     (a four-digit year, one or two digits elsewhere), on the core route.
@@ -2278,7 +2281,10 @@ entries:
     warning twice and the core's once, the same format
     (sdm-core/tests/pql_corpus.rs compares the formats as a set);
     test_a_day_first_literal_warns_on_the_core_as_on_the_old_route holds
-    the python-core caller to the old route's warnings. Recommendation:
+    the python-core caller to the old route's warnings for an accepted
+    query, and to the old route's one warning, worded the same behind the
+    code, for two refused after the literal is read (T1.6b fix round 1,
+    Codex P2: the warning was held back on refusal too). Recommendation:
     approve; the count is the reference's reading count, not a rule.
 
 - id: PQL-4
