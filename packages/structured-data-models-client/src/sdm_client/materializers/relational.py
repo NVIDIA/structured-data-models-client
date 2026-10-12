@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: the old route's rules, which the core route no longer runs
-# (T1.28a moved them into the core: design, "Host-held semantics"), go with
-# the old engine in Phase 5.
+# Bridge code: the core route's branch of materialize, deleted in Phase 5
+# with the old engine; the old route's rules here, which the core route no
+# longer runs (T1.28a moved them into the core: design, "Host-held
+# semantics"), go with it.
 
 r"""Gather and encode relational requests with the relational engine."""
 

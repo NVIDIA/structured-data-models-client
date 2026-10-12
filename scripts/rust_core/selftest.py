@@ -882,9 +882,9 @@ def freeze_cases(results: list[Result]) -> None:
                 append(r / relational, shared_helper),
                 edit(
                     r / relational,
-                    '        statistic = _statistic_asked_for(options)\n',
-                    '        _refuse_big(indices)\n'
-                    '        statistic = _statistic_asked_for(options)\n',
+                    '            statistic = _statistic_asked_for(options)\n',
+                    '            _refuse_big(indices)\n'
+                    '            statistic = _statistic_asked_for(options)\n',
                 ),
             ),
             f'{relational}::RelationalMaterializer.materialize',
@@ -1051,8 +1051,8 @@ def freeze_cases(results: list[Result]) -> None:
             'a swallowing try',
             lambda r: edit(
                 r / materialize,
-                '    materializer._check_entity_count(indices)\n',
-                '    try:\n        materializer._check_entity_count(indices)\n'
+                '    described, held = description(schema)\n',
+                '    try:\n        described, held = description(schema)\n'
                 '    except StructuredDataError:\n        pass\n',
             ),
             gather,
@@ -1061,10 +1061,10 @@ def freeze_cases(results: list[Result]) -> None:
             'an aliased contextlib.suppress',
             lambda r: edit(
                 r / materialize,
-                '    materializer._check_entity_count(indices)\n',
+                '    described, held = description(schema)\n',
                 '    import contextlib\n\n    quiet = contextlib.suppress\n'
                 '    with quiet(ValueError):\n'
-                '        materializer._check_entity_count(indices)\n',
+                '        described, held = description(schema)\n',
             ),
             gather,
         ),
@@ -1084,8 +1084,8 @@ def freeze_cases(results: list[Result]) -> None:
             "a default by 'or'",
             lambda r: edit(
                 r / materialize,
-                "    seed = options.get('random_seed')\n",
-                "    seed = options.get('random_seed') or 0\n",
+                "    anchor = options.get('anchor_time')\n",
+                "    anchor = options.get('anchor_time') or 0\n",
             ),
             gather,
         ),
@@ -1269,15 +1269,17 @@ def freeze_cases(results: list[Result]) -> None:
 
     # The review's false positives of round 2, each a declared refactor.
     def shadowed(root: Path) -> None:
+        # A local of _gather renamed as the module's ``dates`` import (from
+        # T1.28a, when _tables_linked_to left the freeze).
         path = root / relational
         text = path.read_text()
-        start = text.index('def _tables_linked_to(')
-        stop = text.index('return frozenset(seen)', start) + len(
-            'return frozenset(seen)'
-        )
+        start = text.index('    def _gather(')
+        stop = text.index(
+            'return tuple(part.payload for part in parts)', start
+        ) + len('return tuple(part.payload for part in parts)')
         path.write_text(
             text[:start]
-            + text[start:stop].replace('seen', 'dates')
+            + text[start:stop].replace('parts', 'dates')
             + text[stop:]
         )
 
@@ -1293,7 +1295,7 @@ def freeze_cases(results: list[Result]) -> None:
         (
             'a local shadowing an import',
             shadowed,
-            f'{relational}::_tables_linked_to',
+            f'{relational}::RelationalMaterializer._gather',
         ),
         (
             'a copy on a value',
@@ -1534,17 +1536,20 @@ def freeze_cases(results: list[Result]) -> None:
                 rewrite=True,
                 declare=adapter_moved,
             )
+    # From T1.28a the entity cap left the freeze, so the rule moved is
+    # _gather's refusal of a gathering of nothing.
     entity_rule = (
-        '        if len(indices) > ceiling:\n'
+        '        if not parts:\n'
         '            raise StructuredDataError(\n'
-        "                f'{len(indices):,} entities were asked for, and {described} '\n"
-        "                f'{ceiling:,} at a time; split them across calls',\n"
-        "                code='UNSUPPORTED_REQUEST',\n"
+        "                'the engine gathered nothing for this query',\n"
+        "                code='INVALID_REQUEST',\n"
         '            )\n'
     )
     moved_cap = {
-        f'{relational}::{entity_count}': {'moved': 'the entity cap (T1.28)'},
-        gather: {'moved': 'the entity cap (T1.28)'},
+        f'{relational}::RelationalMaterializer._gather': {
+            'moved': 'the empty gathering (T1.28)'
+        },
+        gather: {'moved': 'the empty gathering (T1.28)'},
     }
     case(
         'control: a rule moved from relational.py into the glue, both declared moved',
@@ -1562,8 +1567,8 @@ def freeze_cases(results: list[Result]) -> None:
     )
 
     statistic = (
-        '        if statistic is not None:\n'
-        '            _record_the_statistic(payloads, statistic)\n'
+        '            if statistic is not None:\n'
+        '                _record_the_statistic(payloads, statistic)\n'
     )
     case(
         'control: a rule moved into Rust, declared moved',
@@ -1626,22 +1631,26 @@ def freeze_cases(results: list[Result]) -> None:
         f'{materialize}::_anchor_of: new against the base',
         rewrite=True,
     )
+    # From T1.28a, RelationalMaterializer._gather: _tables_linked_to left
+    # the freeze.
     case(
         'a covered function dropped from the baseline',
         lambda r: baseline(
             r,
-            lambda d: d['files'][key_of['relational']].pop('_tables_linked_to'),
+            lambda d: d['files'][key_of['relational']].pop(
+                'RelationalMaterializer._gather'
+            ),
         ),
-        '_tables_linked_to: covered code the baseline does not hold',
+        'RelationalMaterializer._gather: covered code the baseline does not hold',
     )
     case(
         'a covered function renamed away',
         lambda r: edit(
             r / relational,
-            'def _tables_linked_to(',
-            'def _tables_reached_from(',
+            '    def _gather(',
+            '    def _gather_rows(',
         ),
-        '_tables_linked_to: COVERED names it, but the file defines no such',
+        'RelationalMaterializer._gather: COVERED names it, but the file defines no such',
         rewrite=True,
     )
 
