@@ -122,13 +122,15 @@ def run(
     model: Model | None = None,
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
+    kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
     A warning whose code ``quiet`` names is not shown: the caller has shown
-    it already. ``given`` collects the code of every warning the run gave,
-    shown or not.
+    it already, or decides once the run ends whether to show it, from
+    ``kept``, which then receives it (``errors.warn_held``). ``given``
+    collects the code of every warning the run gave, shown or not.
 
     ``state``, for a ``materialize``, is where its materializer keeps the
     sampler state (decision E52): the state held there (``'held'``) is
@@ -167,7 +169,7 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(core, handle, provider, model, quiet, given)
+        return _steps(core, handle, provider, model, quiet, given, kept)
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -211,6 +213,7 @@ def _steps(
     model: Model | None,
     quiet: frozenset[str],
     given: set[str] | None,
+    kept: list[dict[str, Any]] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
@@ -218,11 +221,11 @@ def _steps(
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
-            _warn(handle, quiet, given)
+            _warn(handle, quiet, given, kept)
             errors.raise_from_core(
                 failed.control, failed.attachments, driver_class=driver_class
             )
-        _warn(handle, quiet, given)
+        _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
         if step['message'] != 'step':
             raise StructuredDataError(
@@ -321,8 +324,15 @@ def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
     return taken
 
 
-def _warn(handle: Any, quiet: frozenset[str], given: set[str] | None) -> None:
+def _warn(
+    handle: Any,
+    quiet: frozenset[str],
+    given: set[str] | None,
+    kept: list[dict[str, Any]] | None = None,
+) -> None:
     taken = handle.take_warnings()
     if taken is not None:
         control, sent = taken
-        errors.warn_from_core(control, sent, quiet=quiet, given=given)
+        errors.warn_from_core(
+            control, sent, quiet=quiet, given=given, held=kept
+        )

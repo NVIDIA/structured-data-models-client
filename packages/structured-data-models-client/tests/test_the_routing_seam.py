@@ -316,30 +316,61 @@ def test_a_date_dt9_held_back_is_accepted_on_the_core(core: list[str]) -> None:
         assert core[-1] == text
 
 
+def _shown(text: str, schema: Any) -> tuple[list[str], str | None]:
+    r"""The warnings ``_resolve`` shows, and the code it refuses with."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        try:
+            PredictiveQuery(text, schema)._resolve(RELATIONAL)
+            code = None
+        except StructuredDataError as refused:
+            code = refused.code
+    return [f'{type(w.message).__name__}: {w.message}' for w in caught], code
+
+
 def test_a_day_first_literal_warns_on_the_core_as_on_the_old_route(
     core: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # D4: the old validator, still run beside the core here, gives the
-    # reference's own warning, and the core's is quiet (s0.SHADOWED), so
-    # the caller sees what the old route shows.
-    text = (
+    # D4. Accepted: the old validator, still run beside the core here (the
+    # shadow check), gives the reference's own warning and the core's is
+    # held back (s0.SHADOWED), so the caller sees what the old route shows.
+    # Refused, after the literal was read (an unknown table, then a literal
+    # that names no date): no shadow check runs, and the core's warning is
+    # shown, once per literal, in the reference's words (register PQL-3).
+    accepted = (
         'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024, 0, 30, days) '
         'FOR EACH users.user_id'
     )
+    refused = [
+        'PREDICT COUNT(orders.* WHERE missing.ts > 13/01/2024, 0, 30, days) '
+        'FOR EACH users.user_id',
+        'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024 AND orders.ts < '
+        '2023-02-29, 0, 30, days) FOR EACH users.user_id',
+    ]
     schema = _orders_schema()
-
-    def shown() -> list[tuple[str, str]]:
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter('always')
-            PredictiveQuery(text, schema)._resolve(RELATIONAL)
-        return [(type(w.message).__name__, str(w.message)) for w in caught]
-
-    on_core = shown()
-    assert core == [text]
+    on_core = {text: _shown(text, schema) for text in [accepted, *refused]}
+    assert core == [accepted, *refused]
     monkeypatch.delenv(_routing.ENVIRONMENT)
-    assert on_core == shown()
-    assert on_core and all('%d/%m/%Y' in said for _, said in on_core)
-    assert not any('DATE_LITERAL_DAY_FIRST' in said for _, said in on_core)
+    on_old = {text: _shown(text, schema) for text in [accepted, *refused]}
+    said = (
+        'UserWarning: Parsing dates in %d/%m/%Y format when dayfirst=False '
+        '(the default) was specified. Pass `dayfirst=True` or specify a '
+        'format to silence this warning.'
+    )
+    assert on_core[accepted] == on_old[accepted]
+    assert on_core[accepted][1] is None and said in on_core[accepted][0]
+    for text in refused:
+        (core_shown, core_code), (old_shown, old_code) = (
+            on_core[text],
+            on_old[text],
+        )
+        assert core_code == old_code == 'INVALID_REQUEST', text
+        assert old_shown == [said], text
+        assert core_shown == [
+            said.replace(
+                'UserWarning: ', 'UserWarning: [DATE_LITERAL_DAY_FIRST] '
+            )
+        ], text
 
 
 def test_a_disagreement_with_the_old_validator_is_internal(

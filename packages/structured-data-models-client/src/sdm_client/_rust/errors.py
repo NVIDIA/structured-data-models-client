@@ -473,9 +473,11 @@ def warn_from_core(
     attachments: dict[int, Any],
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
+    held: list[dict[str, Any]] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
-    those whose code ``quiet`` names: one the caller has shown already.
+    those whose code ``quiet`` names: one the caller has shown already, or
+    may show itself, kept in ``held`` when it is given (:func:`warn_held`).
     Each code given is added to ``given``, shown or not."""
     message = codec.read(control, attachments)
     # Warnings of a code GROUPED holds, one after another with the same
@@ -486,6 +488,8 @@ def warn_from_core(
         if given is not None:
             given.add(code)
         if code in quiet:
+            if held is not None:
+                held.append(warning)
             continue
         group = GROUPED.get(code)
         key = (
@@ -514,6 +518,19 @@ def warn_from_core(
             text = said(warning)
         warnings.warn(
             f'[{code}] {text}',
+            category=WARNINGS.get(code, SDMWarning),
+            stacklevel=caller_stacklevel(),
+        )
+
+
+def warn_held(held: list[dict[str, Any]]) -> None:
+    r"""Shows warnings :func:`warn_from_core` held back, in order, each as it
+    would have been shown (none of them a code :data:`GROUPED` holds)."""
+    for warning in held:
+        code = warning['code']
+        assert code not in GROUPED, code
+        warnings.warn(
+            f'[{code}] {said(warning)}',
             category=WARNINGS.get(code, SDMWarning),
             stacklevel=caller_stacklevel(),
         )

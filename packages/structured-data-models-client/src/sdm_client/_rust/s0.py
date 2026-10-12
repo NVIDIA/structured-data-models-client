@@ -19,13 +19,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from sdm_client._rust import errors
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
 #: The core's warnings the old validator gives on this route in the
-#: reference's own words: a day-first date literal (D4), which the shadow
-#: check's validator reads with ``pd.to_datetime``. Bridge code: it goes with
-#: the shadow check in Phase 5, and the core's warning is shown then.
+#: reference's own words when the core accepts the query: a day-first date
+#: literal (D4), which the shadow check's validator reads with
+#: ``pd.to_datetime``. They are held while the core validates and shown
+#: only when it refuses, since a refused query meets no shadow check.
+#: Bridge code: it goes with the shadow check in Phase 5, and the core's
+#: warning is shown then.
 SHADOWED = frozenset({'DATE_LITERAL_DAY_FIRST'})
 
 if TYPE_CHECKING:
@@ -101,7 +105,12 @@ def validate(
         1: codec.attachment(text),
         2: codec.attachment(_schema(definition)),
     }
-    result = run(operation, attachments, quiet=SHADOWED).result
+    kept: list[dict[str, Any]] = []
+    result = run(operation, attachments, quiet=SHADOWED, kept=kept).result
+    if not result['accepted']:
+        # No shadow check follows a refusal: the core's warnings are the
+        # only ones the caller gets.
+        errors.warn_held(kept)
     reasons = [
         diagnostic['message']
         for diagnostic in result['diagnostics']
