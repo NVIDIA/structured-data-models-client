@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The adapter's own rules: a model that cannot answer a time range refuses
-//! before resolution; the two filter capabilities reach resolution; a
-//! literal the interim parser cannot read yet is no answer at all; and an
-//! accepted query is handed on in the validated-query format.
+//! before resolution; the two filter capabilities reach resolution; date
+//! literals are read by D1 to D9, packed dates and long fields included,
+//! and a day-first one warns (D4); and an accepted query is handed on in
+//! the validated-query format.
 
 #![allow(
     clippy::disallowed_methods,
@@ -17,11 +18,20 @@ use std::collections::BTreeMap;
 
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Capability, ProfileName, ProfileSpec, QuerySchema};
-use sdm_contract::pql::{Aggregation, EntityClause, NodeKind, QueryMode};
-use sdm_contract::{ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
-use sdm_core::pql::{resolve, validate};
+use sdm_contract::pql::{Aggregation, EntityClause, NodeKind, PqlLiteral, QueryMode};
+use sdm_contract::{CoreWarning, Detail, HostFacts, Scalar, Unit};
+use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve, validate};
 use sdm_core::profiles::Profile;
 use serde_json::json;
+/// Zones that hold nothing: these facts name no local zone, so none is
+/// resolved.
+struct NoZones;
+
+impl sdm_core::Zones for NoZones {
+    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
+        Err(sdm_core::UnknownZone)
+    }
+}
 
 fn facts() -> HostFacts {
     HostFacts {
@@ -68,7 +78,7 @@ fn profile(name: ProfileName, capabilities: &[(Capability, bool)]) -> Profile {
 }
 
 fn codes_of(query: &str, profile: &Profile) -> Vec<String> {
-    resolve(query, &shop(), profile, &facts())
+    resolve(query, &shop(), profile, &facts(), &NoZones)
         .unwrap()
         .diagnostics
         .into_iter()
@@ -86,6 +96,7 @@ fn a_time_range_is_refused_before_resolution() {
         &shop(),
         &profile(ProfileName::Tabular, &[]),
         &facts(),
+        &NoZones,
     )
     .unwrap();
     assert!(validation.query.is_none());
@@ -129,21 +140,109 @@ fn the_filter_capabilities_reach_resolution() {
     );
 }
 
-#[test]
-fn a_literal_the_interim_parser_cannot_read_is_no_answer() {
-    let query = "PREDICT COUNT(orders.* WHERE orders.ts > 20240101/00/123456, 0, 30, days) FOR \
-                 EACH users.user_id";
-    let err = validate(
-        query,
+/// The time constant of a query `PREDICT COUNT(orders.* WHERE orders.ts >
+/// <literal>, ...)`: its reading and offset, and the warnings the reading
+/// gave.
+fn read_literal(literal: &str) -> (Option<(String, Option<i32>)>, Vec<CoreWarning>) {
+    let query = format!(
+        "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH users.user_id"
+    );
+    let validation = resolve(
+        &query,
         &shop(),
         &profile(ProfileName::Relational, &[]),
         &facts(),
+        &NoZones,
     )
-    .unwrap_err();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+    .unwrap();
+    let Some(query) = validation.query else {
+        return (None, validation.warnings);
+    };
+    let mut found = None;
+    let mut visit = vec![&query.target];
+    while let Some(node) = visit.pop() {
+        match &node.kind {
+            NodeKind::Constant {
+                literal: PqlLiteral::Time { value, offset, .. },
+            } => found = Some((value.clone(), *offset)),
+            NodeKind::Join { target, .. } | NodeKind::Aggregation { target, .. } => {
+                visit.push(target);
+            }
+            NodeKind::Filter { target, condition } => visit.extend([&**target, &**condition]),
+            NodeKind::Condition { target, value, .. } => visit.extend([&**target, &**value]),
+            _ => {}
+        }
+    }
+    (found, validation.warnings)
+}
+
+#[test]
+fn packed_dates_and_long_fields_are_read_by_d8() {
+    // Register DT-9's two queries, refused as unsupported before T1.6b,
+    // and D8's examples, each as the reference reads it (b413e9a).
+    for (literal, value, offset) in [
+        ("20240101-01-01", "2024-01-01T01:00:00", Some(-3600)),
+        ("2024-01-01 00000:00:00", "2024-01-01T00:00:00", None),
+        ("20240101/00/123456", "2024-01-01T12:34:56", None),
+        ("230203-06-09", "2003-02-23T06:00:00", Some(-32_400)),
+        ("00001/1/2", "0001-01-02T00:00:00", None),
+    ] {
+        let (found, warnings) = read_literal(literal);
+        assert_eq!(found, Some((value.to_owned(), offset)), "{literal}");
+        assert!(warnings.is_empty(), "{literal}");
+    }
+    // A long field that names no date is refused as the reference refuses
+    // it: PQL_VALUE_INVALID_LITERAL, never unsupported.
+    let refused = codes_of(
+        "PREDICT COUNT(orders.* WHERE orders.ts > 20240101-01-24, 0, 30, days) FOR EACH \
+         users.user_id",
+        &profile(ProfileName::Relational, &[]),
     );
+    assert_eq!(refused, ["PQL_VALUE_INVALID_LITERAL"]);
+}
+
+#[test]
+fn a_day_first_literal_warns_with_its_format_and_place_never_its_text() {
+    let (found, warnings) = read_literal("29.02.2024 10:00:00");
+    assert_eq!(found, Some(("2024-02-29T10:00:00".to_owned(), None)));
+    let [warning] = &warnings[..] else {
+        panic!("one warning: {warnings:?}");
+    };
+    assert_eq!(warning.code, DATE_LITERAL_DAY_FIRST);
+    assert_eq!(warning.fields["format"], Detail::text("%d.%m.%Y %H:%M:%S"));
+    let at = |n: u64| Detail::Scalar(Scalar::UInt64(n));
+    assert_eq!(warning.fields["start_row"], at(1));
+    assert_eq!(warning.fields["start_col"], at(41));
+    let written = serde_json::to_string(warning).unwrap();
+    assert!(!written.contains("29.02"), "{written}");
+    // A month-first reading, and a day-first one whose format pandas cannot
+    // name (a two-digit year), give none; two day-first literals give two.
+    assert!(read_literal("01.02.2024").1.is_empty());
+    assert!(read_literal("13/1/24").1.is_empty());
+    let both = resolve(
+        "PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2024 AND orders.ts < 31/01/2024, 0, 30, \
+         days) FOR EACH users.user_id",
+        &shop(),
+        &profile(ProfileName::Relational, &[]),
+        &facts(),
+        &NoZones,
+    )
+    .unwrap();
+    assert!(both.query.is_some());
+    assert_eq!(both.warnings.len(), 2);
+    // A query refused after its literal was read still warns, as the
+    // reference warns when it reads it.
+    let refused = resolve(
+        "PREDICT COUNT(orders.* WHERE orders.nope > 13/01/2024, 0, 30, days) FOR EACH \
+         users.user_id",
+        &shop(),
+        &profile(ProfileName::Relational, &[]),
+        &facts(),
+        &NoZones,
+    )
+    .unwrap();
+    assert!(refused.query.is_none());
+    assert_eq!(refused.warnings.len(), 1);
 }
 
 #[test]
@@ -153,6 +252,7 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
         &shop(),
         &profile(ProfileName::Relational, &[]),
         &facts(),
+        &NoZones,
     )
     .unwrap();
     assert!(validation.diagnostics.is_empty());
@@ -182,7 +282,7 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
     assert_eq!(time_column.as_ref().unwrap().column, "ts");
 }
 
-/// The interim parser's nesting limit (`parser::MAX_DEPTH`).
+/// The parser's nesting limit (`parser::MAX_DEPTH`).
 const MAX_DEPTH: usize = 1000;
 
 fn nots(depth: usize) -> String {
@@ -232,8 +332,9 @@ fn on_a_stack_of(bytes: usize) {
             let answers: Vec<bool> = deepest()
                 .iter()
                 .map(|query| {
-                    validate(query, &shop(), &relational, &facts())
+                    validate(query, &shop(), &relational, &facts(), &NoZones)
                         .unwrap()
+                        .0
                         .accepted
                 })
                 .collect();
@@ -271,7 +372,9 @@ fn a_long_and_or_or_chain_is_refused_at_the_depth_limit_in_bounded_time() {
             for op in ["AND", "OR"] {
                 let started = std::time::Instant::now();
                 let validation =
-                    validate(&chain(op, 10_000), &shop(), &relational, &facts()).unwrap();
+                    validate(&chain(op, 10_000), &shop(), &relational, &facts(), &NoZones)
+                        .unwrap()
+                        .0;
                 assert!(!validation.accepted, "{op}");
                 assert_eq!(validation.diagnostics.len(), 1, "{op}");
                 assert_eq!(validation.diagnostics[0].code, "PQL_PARSE_SYNTAX", "{op}");
@@ -323,7 +426,8 @@ fn a_tree_taller_than_the_limit_is_refused_whatever_its_shape_in_bounded_time() 
                 negated_chain(500, 499),
             ] {
                 let started = std::time::Instant::now();
-                let validation = validate(&query, &shop(), &relational, &facts()).unwrap();
+                let (validation, _) =
+                    validate(&query, &shop(), &relational, &facts(), &NoZones).unwrap();
                 assert!(!validation.accepted);
                 assert_eq!(validation.diagnostics.len(), 1);
                 assert_eq!(validation.diagnostics[0].code, "PQL_PARSE_SYNTAX");
@@ -336,7 +440,8 @@ fn a_tree_taller_than_the_limit_is_refused_whatever_its_shape_in_bounded_time() 
             // At the limit (1,000 levels; one more is refused above), of
             // either shape, accepted.
             for query in [negated_chain(500, 498), nested_groups(10, 98)] {
-                let validation = validate(&query, &shop(), &relational, &facts()).unwrap();
+                let (validation, _) =
+                    validate(&query, &shop(), &relational, &facts(), &NoZones).unwrap();
                 assert!(validation.accepted, "{:?}", validation.diagnostics);
             }
         })
@@ -392,43 +497,5 @@ fn resolution_s_capability_diagnostics_come_in_the_reference_s_order() {
     ];
     for (query, profile, want) in cases {
         assert_eq!(codes_of(query, profile), want, "{query}");
-    }
-}
-
-#[test]
-fn a_date_the_reference_reads_and_the_interim_reader_does_not_is_pinned_as_refused() {
-    // Register DT-9: the reference accepts both (b413e9a); the interim
-    // reader (E10) answers a field of five digits or more with
-    // UNSUPPORTED_REQUEST. T1.6b completes the reader and flips this test
-    // to accepted.
-    for literal in ["20240101-01-01", "2024-01-01 00000:00:00"] {
-        let query = format!(
-            "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH \
-             users.user_id"
-        );
-        let err = validate(
-            &query,
-            &shop(),
-            &profile(ProfileName::Relational, &[]),
-            &facts(),
-        )
-        .unwrap_err();
-        assert_eq!(
-            (err.kind, err.code),
-            (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest),
-            "{literal}"
-        );
-        // The literal is input: the refusal gives its position, never its
-        // text (decision H17).
-        let written = format!("{} {err:?}", serde_json::to_string(&err).unwrap());
-        assert!(!written.contains(literal), "{written}");
-        assert!(!written.contains(&literal[..8]), "{written}");
-        assert_eq!(
-            err.fields.get("start_row"),
-            Some(&sdm_contract::Detail::Scalar(sdm_contract::Scalar::UInt64(
-                1
-            )))
-        );
-        assert!(err.fields.contains_key("start_col"));
     }
 }

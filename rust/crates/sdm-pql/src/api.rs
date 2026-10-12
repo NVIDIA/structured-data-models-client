@@ -21,11 +21,7 @@ use crate::schema::SchemaDefinition;
 use crate::validator::predictive_query::PredictiveQueryValidator;
 use crate::visitor::{ParseError, parse_query};
 
-/// Why a call gave no answer: the query uses something the interim parser
-/// cannot read yet, and where in the query, never quoting it. This is never
-/// a diagnostic about the query.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Interrupted(pub Option<crate::ast::Location>);
+pub use crate::visitor::DateWarning;
 
 /// A query the grammar accepts, not yet resolved against a schema.
 #[derive(Debug)]
@@ -50,20 +46,26 @@ pub enum Resolved {
     Refused(ValidationResponse),
 }
 
-/// `text` parsed for `mode`, date literals read with `reader`; a refusal is
-/// one diagnostic without a span.
-pub fn parse(
-    text: &str,
-    mode: Mode,
-    reader: Reader,
-) -> Result<Result<Parsed, ValidationResponse>, Interrupted> {
-    match parse_query(text, mode, reader) {
-        Ok(query) => Ok(Ok(Parsed { query })),
-        Err(ParseError::Failure(failure)) => Ok(Err(ValidationResponse::error(
-            ValidationError::new(failure.title, failure.message, failure.code, None),
-        ))),
-        Err(ParseError::Deferred(reason)) => Err(Interrupted(reason)),
-    }
+/// What parsing gives: the parsed query, or a refusal, one diagnostic
+/// without a span; and D4's warning for each day-first date literal read,
+/// in the order read, whether or not the query parses.
+#[derive(Debug)]
+pub struct Parse {
+    pub outcome: Result<Parsed, ValidationResponse>,
+    pub warnings: Vec<DateWarning>,
+}
+
+/// `text` parsed for `mode`, date literals read with `reader`.
+pub fn parse(text: &str, mode: Mode, reader: Reader) -> Parse {
+    let (parsed, warnings) = parse_query(text, mode, reader);
+    let outcome =
+        match parsed {
+            Ok(query) => Ok(Parsed { query }),
+            Err(ParseError::Failure(failure)) => Err(ValidationResponse::error(
+                ValidationError::new(failure.title, failure.message, failure.code, None),
+            )),
+        };
+    Parse { outcome, warnings }
 }
 
 /// `parsed` resolved against `schema` for `mode`, with the filter

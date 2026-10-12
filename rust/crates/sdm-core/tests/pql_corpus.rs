@@ -12,12 +12,12 @@
 //! recorded by `record_readings.py`). A refused query gives the same errors
 //! in count, code and span, unknown-name errors as a multiset, since the
 //! reference orders them from a Python set; messages are not promised. The
-//! date warnings the reference gave are compared by count.
+//! date warnings the reference gave are compared by format (D4).
 //!
-//! Until T1.6b completes the parser, not every case agrees: the cases that
-//! differ, and the parts of each that do, are pinned in
-//! `tests/pql/known-differing.json`. Any other difference fails, and so does
-//! a pinned part that agrees, so the list can only shrink.
+//! The cases that differ, and the parts of each that do, are pinned in
+//! `tests/pql/known-differing.json`, empty since T1.6b. Any other
+//! difference fails, and so does a pinned part that agrees, so the list can
+//! only shrink.
 
 #![allow(
     clippy::disallowed_methods,
@@ -29,8 +29,8 @@ use std::path::Path;
 
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{ColumnRef, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Severity};
-use sdm_contract::{HostFacts, Scalar, Unit};
-use sdm_core::pql::resolve;
+use sdm_contract::{Detail, HostFacts, Scalar, Unit};
+use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve};
 use sdm_core::profiles::Profile;
 use serde_json::{Map, Value, json};
 
@@ -61,6 +61,15 @@ fn known_differing() -> BTreeMap<String, BTreeSet<String>> {
             (text(&case["id"]).unwrap(), parts)
         })
         .collect()
+}
+/// Zones that hold nothing: these facts name no local zone, so none is
+/// resolved.
+struct NoZones;
+
+impl sdm_core::Zones for NoZones {
+    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
+        Err(sdm_core::UnknownZone)
+    }
 }
 
 /// The host facts of the recording: the clock in 2026.
@@ -370,6 +379,18 @@ fn first_difference(a: &Value, b: &Value, path: &str) -> String {
     }
 }
 
+/// The format of the reference's day-first warning, pandas' `UserWarning`
+/// "Parsing dates in <format> format when dayfirst=False ...".
+fn reference_format(message: &str) -> String {
+    let rest = message
+        .strip_prefix("Parsing dates in ")
+        .unwrap_or_else(|| panic!("not a day-first warning: {message}"));
+    let (format, _) = rest
+        .split_once(" format when dayfirst=False")
+        .unwrap_or_else(|| panic!("not a day-first warning: {message}"));
+    format.to_owned()
+}
+
 /// Error codes the reference gives in the order of a Python set.
 fn names_unknown(code: &str) -> bool {
     matches!(
@@ -403,7 +424,7 @@ fn differences(case: &Value, schema: &QuerySchema) -> BTreeMap<&'static str, Str
     let mut out = BTreeMap::new();
     let query = case["query"].as_str().unwrap();
     let profile = profile(case["profile"].as_str().unwrap());
-    let got = match resolve(query, schema, &profile, &facts()) {
+    let got = match resolve(query, schema, &profile, &facts(), &NoZones) {
         Ok(got) => got,
         Err(error) => {
             out.insert(
@@ -413,23 +434,44 @@ fn differences(case: &Value, schema: &QuerySchema) -> BTreeMap<&'static str, Str
             return out;
         }
     };
-    // Warnings, by count, where the corpus records them all: an accepted
-    // case's tree holds the validator's warnings (none, which `validated`
-    // checks) and `warnings` the date reader's; a refused case's record
-    // holds no warnings of the validator's, so its are not compared.
-    let want_warnings = case
-        .get("warnings")
-        .and_then(Value::as_array)
-        .map_or(0, Vec::len);
-    let found_warnings = got
+    // Warnings, where the corpus records them all. The validator's: an
+    // accepted case's tree holds them (none, which `validated` checks), and
+    // the adapter gives none either. The date reader's (D4): each format
+    // the reference warned of, the adapter warns of, and no other; the
+    // reference repeats a warning each time it reads the literal (twice in
+    // a validation), the adapter gives it once per literal (register
+    // PQL-3), so the formats are compared as a set. A refused case's record
+    // holds no warnings, so its are not compared.
+    let validator_warnings = got
         .diagnostics
         .iter()
         .filter(|d| d.severity == Severity::Warning)
         .count();
-    if case.get("tree").is_some() && want_warnings != found_warnings {
+    let want_formats: BTreeSet<String> = case
+        .get("warnings")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|w| reference_format(w["message"].as_str().unwrap()))
+        .collect();
+    let found_formats: BTreeSet<String> = got
+        .warnings
+        .iter()
+        .map(|w| {
+            assert_eq!(w.code, DATE_LITERAL_DAY_FIRST);
+            match &w.fields["format"] {
+                Detail::Scalar(Scalar::Utf8(text)) => text.clone(),
+                other => panic!("a format that is not text: {other:?}"),
+            }
+        })
+        .collect();
+    if case.get("tree").is_some() && (validator_warnings != 0 || want_formats != found_formats) {
         out.insert(
             "warnings",
-            format!("{found_warnings} warnings, where the reference gives {want_warnings}"),
+            format!(
+                "{validator_warnings} validator warnings and date formats {found_formats:?}, \
+                 where the reference gives none and {want_formats:?}"
+            ),
         );
     }
     let found_errors: Vec<(String, Value)> = got

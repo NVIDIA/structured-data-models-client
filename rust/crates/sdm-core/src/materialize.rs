@@ -143,6 +143,9 @@ pub(crate) struct Inputs {
     pub num_context_samples: Option<u64>,
     pub options: Vec<String>,
     pub facts: HostFacts,
+    /// The zones the run resolves names with: the host's local zone, which
+    /// places a date literal's two-digit year (`pql::local_year`).
+    pub zones: Arc<dyn sdm_engine::time::Zones>,
     /// The memo the host handed back, made under this provider and
     /// description (decision E52).
     pub memo: Option<SamplerMemo>,
@@ -979,6 +982,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         anchor_time,
         seed,
         facts,
+        zones,
         ..
     } = inputs;
     // A table the schema names otherwise than the source does is read by
@@ -1024,7 +1028,17 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         model: None,
         capabilities: Default::default(),
     });
-    let validation = crate::pql::resolve(&query, &query_schema(&description), &profile, &facts)?;
+    let validation = crate::pql::resolve(
+        &query,
+        &query_schema(&description),
+        &profile,
+        &facts,
+        &*zones,
+    )?;
+    // D4's warning, each time a run reads the query's literals.
+    for warning in &validation.warnings {
+        asker.warn(warning.clone());
+    }
     let (Some(validated), Some(source_query)) = (validation.query, validation.text) else {
         return Err(invalid(
             "the query does not resolve against the schema",

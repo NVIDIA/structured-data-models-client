@@ -137,8 +137,14 @@ pub(crate) fn run(
                     tables: vec![],
                     links: vec![],
                 };
-                crate::pql::validate("PREDICT t.c FOR EACH t.id", &schema, &profile, &facts)
-                    .map(OperationResult::ValidateQuery)
+                crate::pql::validate(
+                    "PREDICT t.c FOR EACH t.id",
+                    &schema,
+                    &profile,
+                    &facts,
+                    &*zones,
+                )
+                .map(|(validation, _)| OperationResult::ValidateQuery(validation))
             }),
         },
         // One known event, then a long call, so a binding's tests can show

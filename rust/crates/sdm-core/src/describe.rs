@@ -46,7 +46,8 @@ use crate::run::{
 
 /// The reader of text times for a run whose clock is `facts.now`: its
 /// year, in UTC, places a two-digit year, as the date literals' reader
-/// places one (`pql::clock_year`).
+/// placed one before T1.6b; date literals now read the year in the local
+/// zone (`pql::local_year`).
 pub(crate) fn text_reader(facts: &HostFacts) -> Result<Reader, CoreError> {
     let Scalar::Timestamp { unit, value, .. } = &facts.now else {
         return Err(internal("the host's clock is not a ts scalar"));

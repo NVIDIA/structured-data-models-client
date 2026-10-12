@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use crate::dates::DateTime;
+use crate::dates::Stamp;
 use crate::float_repr::float_repr;
 use crate::pyint::PyInt;
 
@@ -20,7 +20,7 @@ pub enum Literal {
     Int(PyInt),
     Float(f64),
     Str(String),
-    Time(DateTime),
+    Time(Stamp),
     List(Vec<Literal>),
 }
 

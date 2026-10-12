@@ -59,20 +59,22 @@ pub fn start(
         .with_field("field", Detail::text("facts.now")));
     }
     check_attachments(&start.operation.attachments(), &attachments)?;
-    // Only the test-only operations resolve a zone yet; T1.25's time module
-    // and T1.6b's local-zone year take them from here.
-    #[cfg(not(feature = "test-ops"))]
-    let _ = zones;
     let mut attachments = attachments;
     let facts = start.facts;
     Ok(match start.operation {
         Operation::ValidateQuery(request) => {
             let query: String = take_json(&mut attachments, request.query)?;
             let schema: QuerySchema = take_json(&mut attachments, request.schema)?;
-            Run::new(move |_asker| async move {
+            let zones = Arc::clone(&zones);
+            Run::new(move |asker| async move {
                 let profile = Profile::resolve(&request.profile);
-                crate::pql::validate(&query, &schema, &profile, &facts)
-                    .map(OperationResult::ValidateQuery)
+                let (validation, warnings) =
+                    crate::pql::validate(&query, &schema, &profile, &facts, &*zones)?;
+                // D4's warning, on the run's warnings channel.
+                for warning in warnings {
+                    asker.warn(warning);
+                }
+                Ok(OperationResult::ValidateQuery(validation))
             })
         }
         Operation::DescribeSource(request) => {
@@ -155,6 +157,7 @@ pub fn start(
                 num_context_samples: request.num_context_samples,
                 options: request.options,
                 facts,
+                zones: Arc::clone(&zones),
             };
             Run::with_data(access, move |asker| crate::materialize::run(asker, inputs))
         }

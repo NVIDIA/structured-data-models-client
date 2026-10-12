@@ -23,6 +23,15 @@ use sdm_contract::{HostFacts, Scalar, Unit};
 use sdm_core::pql::{on_adapter_stack, resolve};
 use sdm_core::profiles::Profile;
 use serde_json::json;
+/// Zones that hold nothing: these facts name no local zone, so none is
+/// resolved.
+struct NoZones;
+
+impl sdm_core::Zones for NoZones {
+    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
+        Err(sdm_core::UnknownZone)
+    }
+}
 
 fn facts() -> HostFacts {
     HostFacts {
@@ -162,7 +171,7 @@ fn validated(query: &str) -> ValidatedQuery {
         model: None,
         capabilities: Default::default(),
     });
-    resolve(query, &shop(), &profile, &facts())
+    resolve(query, &shop(), &profile, &facts(), &NoZones)
         .unwrap()
         .query
         .expect("accepted")

@@ -1,11 +1,5 @@
 {
  "format": "sdm-pql-known-differing/1",
- "about": "The PQL corpus cases (corpus.json) the adapter is known to answer differently from the reference, each with the parts that differ: answer, validity, tree, readings, errors or warnings. pql_corpus.rs fails on any other difference, on a listed part that agrees, and on a listed id the corpus lacks, so the list can only shrink; the checkpoint's ratchet takes it only as a subset of the checkpoint's (Phase 1 design, KNOWN_DIFFERING). T1.6b empties it.",
- "cases": [
-  {
-   "id": "literal/predict-count-orders-where-orders-ordered-at-29-02-2024-0-30-days-for-",
-   "parts": ["warnings"],
-   "why": "D4's day-first warning is not given until T1.6b (decision E10); validity, tree and reading agree"
-  }
- ]
+ "about": "The PQL corpus cases (corpus.json) the adapter is known to answer differently from the reference, each with the parts that differ: answer, validity, tree, readings, errors or warnings. pql_corpus.rs fails on any other difference, on a listed part that agrees, and on a listed id the corpus lacks, so the list can only shrink; the checkpoint's ratchet takes it only as a subset of the checkpoint's (Phase 1 design, KNOWN_DIFFERING). Empty since T1.6b.",
+ "cases": []
 }

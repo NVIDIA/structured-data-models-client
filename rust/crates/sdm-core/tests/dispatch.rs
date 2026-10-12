@@ -715,3 +715,69 @@ fn tables_named_wrongly_are_refused_before_anything_is_fetched() {
         );
     }
 }
+
+/// A `validate_query` run of `query` over one table `t` with a time column,
+/// under `facts`.
+fn validate_run(query: &str, facts: HostFacts) -> Result<sdm_core::Run, CoreError> {
+    let schema: QuerySchema = serde_json::from_value(serde_json::json!({
+        "tables": [{"name": "t", "columns": [
+            {"name": "id", "dtype": "int", "stype": "ID"},
+            {"name": "c", "dtype": "int", "stype": "categorical"},
+            {"name": "ts", "dtype": "time", "stype": "timestamp"}],
+         "primary_key": "id", "time_column": "ts", "end_time_column": null}],
+        "links": [],
+    }))
+    .unwrap();
+    let operation = validate();
+    start(
+        &root(),
+        StartRun {
+            contract: CONTRACT_VERSION,
+            facts,
+            operation,
+        },
+        Attachments::from([
+            (AttachmentId(1), json(&query)),
+            (AttachmentId(2), json(&schema)),
+        ]),
+    )
+}
+
+#[test]
+fn a_day_first_date_literal_warns_on_the_run_s_warnings_channel() {
+    let mut run = validate_run(
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts < 01/02/2024",
+        facts(),
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::ValidateQuery(validation),
+    } = run.next().unwrap()
+    else {
+        panic!("validate_query did not finish with its result");
+    };
+    assert!(validation.accepted, "{:?}", validation.diagnostics);
+    // The warning is the run's, not a diagnostic of the query.
+    assert!(validation.diagnostics.is_empty());
+    let warnings = run.take_warnings();
+    let codes: Vec<&str> = warnings.iter().map(|w| w.code.as_str()).collect();
+    assert_eq!(codes, ["DATE_LITERAL_DAY_FIRST"]);
+    assert_eq!(
+        warnings[0].fields["format"],
+        sdm_contract::Detail::text("%d/%m/%Y")
+    );
+    assert!(sdm_core::warning_codes().contains(&("DATE_LITERAL_DAY_FIRST", &[][..])));
+}
+
+#[test]
+fn a_local_zone_the_run_cannot_resolve_is_refused_by_name() {
+    let mut facts = facts();
+    facts.local_zone = Some(sdm_contract::facts::LocalZone::Iana("Mars/Olympus".into()));
+    let mut run = validate_run("PREDICT t.c FOR EACH t.id", facts).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(
+        (err.kind, err.code),
+        (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest)
+    );
+    assert_eq!(named(&err, "field"), "facts.local_zone");
+}

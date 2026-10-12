@@ -13,7 +13,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::dates::{DateTime, Reader, Reading};
+use crate::dates::{DayFirst, Reader, Reading, Stamp};
 use crate::dor::{DateOffsetRange, DorRef};
 use crate::escapes::unescape;
 use crate::literal::{Literal, read_float};
@@ -218,7 +218,9 @@ pub enum Kind {
     Constant {
         value: ConstValue,
         /// A date literal's reading, made when the constant is built.
-        time: Option<DateTime>,
+        time: Option<Stamp>,
+        /// D4's warning, when the reading is day first and names its format.
+        day_first: Option<DayFirst>,
     },
     Condition {
         target: NodeRef,
@@ -262,22 +264,15 @@ pub struct Node {
 pub enum BuildError {
     Syntax(String),
     Literal(String),
-    /// A literal the interim parser cannot read yet, where it is; never a
-    /// diagnostic, and never quoting the literal, which is input.
-    Deferred(Option<Location>),
 }
 
 impl BuildError {
     pub fn message(&self) -> &str {
         match self {
             BuildError::Syntax(m) | BuildError::Literal(m) => m,
-            BuildError::Deferred(_) => DEFERRED,
         }
     }
 }
-
-/// What a deferred literal's refusal says, naming no input.
-pub const DEFERRED: &str = "a date literal is read by a rule the interim parser does not have yet";
 
 type Built = Result<NodeRef, BuildError>;
 
@@ -332,17 +327,23 @@ pub fn constant(
         location,
         ..Base::default()
     };
-    let time = match (&value, dtype) {
+    let (time, day_first) = match (&value, dtype) {
         (ConstValue::Text(text), Some(NodeDtype::Plain(d))) if d.is_timestamp() => {
             match reader.read(text) {
-                Reading::Read(time) => Some(time),
-                Reading::Refused => None,
-                Reading::Deferred => return Err(BuildError::Deferred(location)),
+                Reading::Read { stamp, day_first } => (Some(stamp), day_first),
+                Reading::Refused => (None, None),
             }
         }
-        _ => None,
+        _ => (None, None),
     };
-    let node = finish(wrap(base, Kind::Constant { value, time }))?;
+    let node = finish(wrap(
+        base,
+        Kind::Constant {
+            value,
+            time,
+            day_first,
+        },
+    ))?;
     if typed_value(&node).is_err() {
         let text = match &node.borrow().kind {
             Kind::Constant {
@@ -767,7 +768,7 @@ pub fn render(node: &NodeRef, rich: bool) -> String {
 /// `Constant.typed_value`: what the constant stands for.
 pub fn typed_value(node: &NodeRef) -> Result<Literal, String> {
     let n = node.borrow();
-    let Kind::Constant { value, time } = &n.kind else {
+    let Kind::Constant { value, time, .. } = &n.kind else {
         return Ok(Literal::Null);
     };
     let Some(dtype) = n.base.dtype else {
@@ -956,7 +957,10 @@ mod tests {
     use super::*;
     use crate::types::TimeUnit;
 
-    const READER: Reader = Reader { year: 2026 };
+    const READER: Reader = Reader {
+        year: 2026,
+        pads_year: false,
+    };
 
     fn col_condition() -> NodeRef {
         let two = constant(
@@ -1007,6 +1011,7 @@ mod tests {
             crate::profiles::Mode::Training,
             READER,
         )
+        .0
         .unwrap();
         let target = &query.target_ast;
         let range = |r: Option<DorRef>| r.map(|r| r.borrow().clone());

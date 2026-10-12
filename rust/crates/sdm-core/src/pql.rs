@@ -2,13 +2,19 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The PQL adapter: the one module that names a PQL implementation.
+//! The PQL adapter: the one module that names the PQL parser.
 //!
-//! Behind it is the interim parser, `sdm-pql-interim`, until the PQL team's
-//! crate takes its place. Whatever sits behind it answers in the
-//! validated-query format ([`sdm_contract::pql`]), and the model capability
-//! checks ([`crate::profiles`]) read that format, so nothing past this module
-//! changes when the implementation does.
+//! Behind it is `sdm-pql`, this client's own parser (decision E18). It
+//! answers in the validated-query format ([`sdm_contract::pql`]), and the
+//! model capability checks ([`crate::profiles`]) read that format, so
+//! nothing past this module depends on the parser's own types.
+//!
+//! Date literals are read by the host's facts: two-digit years around the
+//! current year in the host's local zone, and D4's day-first warning by the
+//! platform's year padding (`date-rules.md`, "The PQL literal rules"). A
+//! day-first literal whose format can be named gives a
+//! [`DATE_LITERAL_DAY_FIRST`] warning, which the run gives on its warnings
+//! channel, once per such literal each time a run reads the query.
 //!
 //! A query is validated as the reference's `predictive_query.validate`
 //! validates it: parsed; refused if the model cannot answer a target with a
@@ -18,6 +24,7 @@
 
 use std::collections::BTreeSet;
 
+use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::{
     ColumnRef, Dtype, PqlDiagnostic, QuerySchema, QueryValidation, Severity, Span, Stype,
 };
@@ -25,7 +32,8 @@ use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
     ProblemType, QueryMode, TimeUnit, ValidatedQuery, Window,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_engine::time::{Instant, Zones};
 use sdm_pql as parser;
 use sdm_pql::ast::{self, ConstValue, Kind, NodeRef};
 use sdm_pql::literal::Literal;
@@ -34,6 +42,14 @@ use sdm_pql::types as t;
 use crate::profiles::{
     Mode, Profile, QueryFeatures, check_capabilities, check_parsed_capabilities,
 };
+
+/// D4's warning: a date literal read day first, whose format, as `strftime`
+/// writes it, is the `format` field, and whose place in the query is
+/// `start_row`, `start_col`, `end_row` and `end_col`.
+pub const DATE_LITERAL_DAY_FIRST: &str = "DATE_LITERAL_DAY_FIRST";
+
+/// Every warning the adapter gives, with its variants (none).
+pub const WARNINGS: &[(&str, &[&str])] = &[(DATE_LITERAL_DAY_FIRST, &[])];
 
 /// A query's validation, with the validated query when it was accepted.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,14 +61,18 @@ pub struct Validation {
     /// The query, when it has no errors, written back as the reference's
     /// `ValidatedPredictiveQuery.to_string()` writes it.
     pub text: Option<String>,
+    /// D4's warning for each day-first date literal read, in the order
+    /// read, accepted or not.
+    pub warnings: Vec<CoreWarning>,
 }
 
 impl Validation {
-    fn refused(diagnostics: Vec<PqlDiagnostic>) -> Self {
+    fn refused(diagnostics: Vec<PqlDiagnostic>, warnings: Vec<CoreWarning>) -> Self {
         Validation {
             diagnostics,
             query: None,
             text: None,
+            warnings,
         }
     }
 
@@ -76,8 +96,11 @@ pub fn validate(
     schema: &QuerySchema,
     profile: &Profile,
     facts: &HostFacts,
-) -> Result<QueryValidation, CoreError> {
-    on_adapter_stack(|| resolve_here(query, schema, profile, facts).map(|v| v.to_result()))
+    zones: &dyn Zones,
+) -> Result<(QueryValidation, Vec<CoreWarning>), CoreError> {
+    on_adapter_stack(|| {
+        resolve_here(query, schema, profile, facts, zones).map(|v| (v.to_result(), v.warnings))
+    })
 }
 
 /// The stack a validation runs on, as deep as the deepest query the parser
@@ -104,8 +127,9 @@ pub fn resolve(
     schema: &QuerySchema,
     profile: &Profile,
     facts: &HostFacts,
+    zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
-    on_adapter_stack(|| resolve_here(query, schema, profile, facts))
+    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones))
 }
 
 fn resolve_here(
@@ -113,21 +137,25 @@ fn resolve_here(
     schema: &QuerySchema,
     profile: &Profile,
     facts: &HostFacts,
+    zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
     let reader = parser::dates::Reader {
-        year: clock_year(&facts.now)?,
+        year: local_year(facts, zones)?,
+        pads_year: facts.platform.strftime_pads_year,
     };
     let mode = match profile.mode {
         Mode::Training => parser::Mode::Training,
         Mode::Inference => parser::Mode::Inference,
     };
-    let parsed = match parser::parse(query, mode, reader).map_err(unsupported)? {
+    let parse = parser::parse(query, mode, reader);
+    let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
+    let parsed = match parse.outcome {
         Ok(parsed) => parsed,
-        Err(response) => return Ok(Validation::refused(diagnostics(&response))),
+        Err(response) => return Ok(Validation::refused(diagnostics(&response), warnings)),
     };
     let refused = check_parsed_capabilities(parsed.target_has_time_range(), profile);
     if !refused.is_empty() {
-        return Ok(Validation::refused(refused));
+        return Ok(Validation::refused(refused, warnings));
     }
     let filters = parser::Filters {
         key_columns: profile.capabilities.key_columns_in_filters,
@@ -136,7 +164,7 @@ fn resolve_here(
     let validated = match parser::resolve(parsed, &schema_definition(schema), mode, filters) {
         parser::Resolved::Accepted(validated) => validated,
         parser::Resolved::Refused(response) => {
-            return Ok(Validation::refused(diagnostics(&response)));
+            return Ok(Validation::refused(diagnostics(&response), warnings));
         }
     };
     let query = validated_query(&validated)?;
@@ -147,38 +175,17 @@ fn resolve_here(
             diagnostics: found,
             query: Some(query),
             text: Some(validated.query.to_string_with(false, false)),
+            warnings,
         });
     }
-    let warnings = found.split_off(found.iter().take_while(|d| is_error(d)).count());
+    let later = found.split_off(found.iter().take_while(|d| is_error(d)).count());
     found.extend(refusals);
-    found.extend(warnings);
-    Ok(Validation::refused(found))
+    found.extend(later);
+    Ok(Validation::refused(found, warnings))
 }
 
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {
     diagnostic.severity == Severity::Error
-}
-
-/// The refusal of a query the interim parser cannot read yet: where the
-/// literal is, as fields, never the literal itself (decision H17).
-fn unsupported(interrupted: parser::Interrupted) -> CoreError {
-    let mut error = CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        format!(
-            "{}; the interim PQL parser cannot validate this query",
-            parser::ast::DEFERRED
-        ),
-    );
-    if let Some(at) = interrupted.0 {
-        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
-        error = error
-            .with_field("start_row", count(at.start_row))
-            .with_field("start_col", count(at.start_col))
-            .with_field("end_row", count(at.end_row))
-            .with_field("end_col", count(at.end_col));
-    }
-    error
 }
 
 fn internal(message: impl Into<String>) -> CoreError {
@@ -187,19 +194,62 @@ fn internal(message: impl Into<String>) -> CoreError {
 
 // --- Host facts --------------------------------------------------------------
 
-/// The year of the host's clock, in UTC, which places a two-digit year in a
-/// date literal. Counted with civil arithmetic, so any clock an int64 holds
-/// has a year (decision E6).
-fn clock_year(now: &Scalar) -> Result<i16, CoreError> {
-    let Scalar::Timestamp { unit, value, .. } = now else {
+/// D4's warning for one literal, as the run gives it: the format and where
+/// the literal is, never its text.
+fn day_first_warning(warning: &parser::DateWarning) -> CoreWarning {
+    let mut fields = std::collections::BTreeMap::new();
+    fields.insert(
+        "format".to_owned(),
+        Detail::text(warning.day_first.format()),
+    );
+    if let Some(at) = warning.location.and_then(parser::Span::at) {
+        let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
+        fields.insert("start_row".to_owned(), count(at.start_row));
+        fields.insert("start_col".to_owned(), count(at.start_col));
+        fields.insert("end_row".to_owned(), count(at.end_row));
+        fields.insert("end_col".to_owned(), count(at.end_col));
+    }
+    CoreWarning {
+        code: DATE_LITERAL_DAY_FIRST.to_owned(),
+        message: "a date literal was read day first".to_owned(),
+        fields,
+    }
+}
+
+/// The current year in the host's local zone, which places a two-digit
+/// year in a date literal, as the reference's `dateutil` places it by the
+/// machine's local time: the clock, `facts.now`, in `facts.local_zone`,
+/// resolved through the run's zones (an IANA name) or read as a POSIX `TZ`
+/// string; in UTC where the host names no zone. A zone the run cannot
+/// resolve is refused by name.
+pub fn local_year(facts: &HostFacts, zones: &dyn Zones) -> Result<i16, CoreError> {
+    let Scalar::Timestamp { unit, value, .. } = &facts.now else {
         return Err(internal("the host's clock is not a ts scalar"));
     };
-    let per_second: i64 = match unit {
-        Unit::Ns => 1_000_000_000,
-        Unit::Us => 1_000_000,
+    let unit = match unit {
+        Unit::Ns => arrow_schema::TimeUnit::Nanosecond,
+        Unit::Us => arrow_schema::TimeUnit::Microsecond,
     };
-    let days = value.div_euclid(per_second).div_euclid(86_400);
-    let year = year_of_day(days);
+    let now = Instant::from_count(*value, unit);
+    let unread = || {
+        CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "the host's local zone is not one this run can read",
+        )
+        .with_field("field", Detail::text("facts.local_zone"))
+    };
+    let year = match &facts.local_zone {
+        None => now.civil(0).year,
+        Some(LocalZone::Iana(name)) => {
+            let zone = zones.zone(name).map_err(|_| unread())?;
+            now.to_local(&zone).civil.year
+        }
+        Some(LocalZone::Posix(text)) => {
+            let zone = jiff::tz::TimeZone::posix(text).map_err(|_| unread())?;
+            now.to_local(&zone).civil.year
+        }
+    };
     i16::try_from(year).map_err(|_| {
         CoreError::new(
             ErrorKind::InvalidRequest,
@@ -208,19 +258,6 @@ fn clock_year(now: &Scalar) -> Result<i16, CoreError> {
         )
         .with_field("field", Detail::text("facts.now"))
     })
-}
-
-/// The proleptic Gregorian year of a day counted from 1970-01-01 (Howard
-/// Hinnant's `civil_from_days`).
-fn year_of_day(days: i64) -> i64 {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    yoe + era * 400 + i64::from(month <= 2)
 }
 
 // --- The schema, into the parser's form ------------------------------------
@@ -476,10 +513,10 @@ fn literal(n: &NodeRef, value: &ConstValue) -> Result<PqlLiteral, CoreError> {
         },
         Literal::Float(_) => PqlLiteral::Float { text: text.clone() },
         Literal::Str(value) => PqlLiteral::String { value },
-        Literal::Time(time) => PqlLiteral::Time {
+        Literal::Time(stamp) => PqlLiteral::Time {
             text: text.clone(),
-            value: time.to_string(),
-            offset: None,
+            value: stamp.at.to_string(),
+            offset: stamp.offset,
         },
         Literal::List(_) => return Err(internal("a list constant written as text")),
     })
@@ -687,39 +724,49 @@ fn ranks_foreign_key(target: &PqlNode, schema: &QuerySchema) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdm_contract::facts::PlatformFacts;
+    use sdm_engine::time::UnknownZone;
+
+    /// Zones that hold only New York, from `jiff`'s bundled database.
+    struct NewYork;
+
+    impl Zones for NewYork {
+        fn zone(&self, name: &str) -> Result<jiff::tz::TimeZone, UnknownZone> {
+            if name != "America/New_York" {
+                return Err(UnknownZone);
+            }
+            jiff::tz::TimeZone::posix("EST5EDT,M3.2.0,M11.1.0").map_err(|_| UnknownZone)
+        }
+    }
+
+    fn facts(micros: i64, local_zone: Option<LocalZone>) -> HostFacts {
+        HostFacts {
+            now: Scalar::Timestamp {
+                unit: Unit::Us,
+                zone: Some("UTC".into()),
+                value: micros,
+            },
+            local_zone,
+            zone_roots: vec![],
+            platform: PlatformFacts {
+                os: "linux".into(),
+                strftime_pads_year: false,
+            },
+        }
+    }
 
     #[test]
-    fn the_clock_year_is_civil() {
-        let days = |y: i64, m: i64, d: i64| {
-            // Days from 1970-01-01, by counting forward from a known date.
-            let y = if m <= 2 { y - 1 } else { y };
-            let era = y.div_euclid(400);
-            let yoe = y - era * 400;
-            let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
-            era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468
-        };
-        for (y, m, d) in [
-            (1970, 1, 1),
-            (1969, 12, 31),
-            (2000, 2, 29),
-            (2026, 10, 8),
-            (9999, 12, 31),
-            (1, 1, 1),
-            (0, 3, 1),
-        ] {
-            assert_eq!(year_of_day(days(y, m, d)), y, "{y}-{m}-{d}");
-        }
-        let now = Scalar::Timestamp {
-            unit: Unit::Ns,
-            zone: Some("UTC".into()),
-            value: i64::MIN,
-        };
-        assert_eq!(clock_year(&now).unwrap(), 1677);
-        let far = Scalar::Timestamp {
-            unit: Unit::Us,
-            zone: Some("UTC".into()),
-            value: i64::MAX,
-        };
-        assert!(clock_year(&far).is_err());
+    fn the_year_is_the_clock_in_the_local_zone() {
+        // 2027-01-01T04:30Z is 2026-12-31T23:30 in New York.
+        let new_year = 1_798_777_800_000_000;
+        let iana = Some(LocalZone::Iana("America/New_York".into()));
+        let posix = Some(LocalZone::Posix("EST5EDT,M3.2.0,M11.1.0".into()));
+        assert_eq!(local_year(&facts(new_year, None), &NewYork).unwrap(), 2027);
+        assert_eq!(local_year(&facts(new_year, iana), &NewYork).unwrap(), 2026);
+        assert_eq!(local_year(&facts(new_year, posix), &NewYork).unwrap(), 2026);
+        let unknown = Some(LocalZone::Iana("Mars/Olympus".into()));
+        let refused = local_year(&facts(new_year, unknown), &NewYork).unwrap_err();
+        assert_eq!(refused.fields["field"], Detail::text("facts.local_zone"));
+        assert!(local_year(&facts(i64::MIN, None), &NewYork).is_err());
     }
 }

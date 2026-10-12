@@ -22,6 +22,15 @@ use sdm_contract::{HostFacts, Scalar, Unit};
 use sdm_core::pql::resolve;
 use sdm_core::profiles::Profile;
 use serde_json::Value;
+/// Zones that hold nothing: these facts name no local zone, so none is
+/// resolved.
+struct NoZones;
+
+impl sdm_core::Zones for NoZones {
+    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
+        Err(sdm_core::UnknownZone)
+    }
+}
 
 fn facts() -> HostFacts {
     HostFacts {
@@ -76,8 +85,14 @@ fn every_journey_query_gives_the_reference_answer() {
             model: None,
             capabilities: BTreeMap::new(),
         });
-        let got = resolve(case["query"].as_str().unwrap(), &schema, &profile, &facts())
-            .unwrap_or_else(|e| panic!("{id}: {e:?}"));
+        let got = resolve(
+            case["query"].as_str().unwrap(),
+            &schema,
+            &profile,
+            &facts(),
+            &NoZones,
+        )
+        .unwrap_or_else(|e| panic!("{id}: {e:?}"));
         assert_eq!(
             got.query.is_some(),
             case["accepted"] == true,

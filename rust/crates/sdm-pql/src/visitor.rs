@@ -10,9 +10,11 @@
 //! literal that cannot be read is `PQL_VALUE_INVALID_LITERAL`, anything else
 //! `PQL_PARSE_SYNTAX`.
 
+use std::cell::RefCell;
+
 use crate::ast::{self, BuildError, ConstValue, Location, NodeDtype, NodeRef};
 use crate::codes;
-use crate::dates::Reader;
+use crate::dates::{DayFirst, Reader};
 use crate::dor::DateOffsetRange;
 use crate::lexer::{self, Kind, Token};
 use crate::names;
@@ -41,12 +43,10 @@ impl ParseFailure {
     }
 }
 
-/// Why text is not a parsed query: a diagnostic, or a literal the interim
-/// parser cannot read yet.
+/// Why text is not a parsed query: a diagnostic.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Failure(ParseFailure),
-    Deferred(Option<crate::ast::Location>),
 }
 
 impl ParseError {
@@ -64,16 +64,38 @@ impl From<BuildError> for ParseError {
                 title: "Invalid constant",
                 message,
             }),
-            BuildError::Deferred(location) => ParseError::Deferred(location),
         }
     }
 }
 
 type Visited<T> = Result<T, ParseError>;
 
+/// A day-first date literal's warning (D4), and where the literal is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DateWarning {
+    pub day_first: DayFirst,
+    pub location: Option<crate::ast::Location>,
+}
+
 /// `PQLParser(mode).to_parsed_predictive_query(query)`, reading date
-/// literals with `reader`.
-pub fn parse_query(query: &str, mode: Mode, reader: Reader) -> Visited<ParsedQuery> {
+/// literals with `reader`, with the warnings of the literals it read, in
+/// the order it read them, whether or not the query parses.
+pub fn parse_query(
+    query: &str,
+    mode: Mode,
+    reader: Reader,
+) -> (Visited<ParsedQuery>, Vec<DateWarning>) {
+    let warned = RefCell::new(Vec::new());
+    let parsed = visit(query, mode, reader, &warned);
+    (parsed, warned.into_inner())
+}
+
+fn visit(
+    query: &str,
+    mode: Mode,
+    reader: Reader,
+    warned: &RefCell<Vec<DateWarning>>,
+) -> Visited<ParsedQuery> {
     // `EXPLAIN` and `EVALUATE` are flags, stripped before the grammar sees
     // the text; locations count from what is left.
     let mut text: Vec<char> = query.chars().skip_while(|&c| is_space(c)).collect();
@@ -128,6 +150,7 @@ pub fn parse_query(query: &str, mode: Mode, reader: Reader) -> Visited<ParsedQue
     let visitor = Visitor {
         tokens: &tokens,
         reader,
+        warned,
     };
     visitor.prog(&prog, mode, evaluate, explain)
 }
@@ -135,6 +158,7 @@ pub fn parse_query(query: &str, mode: Mode, reader: Reader) -> Visited<ParsedQue
 struct Visitor<'a> {
     tokens: &'a [Token],
     reader: Reader,
+    warned: &'a RefCell<Vec<DateWarning>>,
 }
 
 impl Visitor<'_> {
@@ -375,12 +399,23 @@ impl Visitor<'_> {
                     text.push(' ');
                     text.push_str(self.text(*time));
                 }
-                Ok(ast::constant(
+                let node = ast::constant(
                     ConstValue::Text(text),
                     Some(NodeDtype::Plain(Dtype::Time)),
                     location,
                     self.reader,
-                )?)
+                )?;
+                if let ast::Kind::Constant {
+                    day_first: Some(day_first),
+                    ..
+                } = node.borrow().kind
+                {
+                    self.warned.borrow_mut().push(DateWarning {
+                        day_first,
+                        location,
+                    });
+                }
+                Ok(node)
             }
             Const::Array { items, .. } => {
                 let children = items
