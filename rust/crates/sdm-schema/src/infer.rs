@@ -28,28 +28,28 @@ use sdm_contract::catalog::{CatalogColumn, CatalogKey, KeyKind};
 /// rows unread, which the reference then reads the whole table for.
 pub const PREVIEW_ROWS: u64 = 1_000;
 
-/// How inference reads text as times: the reference's engine reading,
-/// `pd.to_datetime(values, errors='coerce')`, or its `utc=True` form, each
-/// value's instant in nanoseconds since the epoch, in UTC, or `None`.
-/// `sdm-engine::time::text` holds it (T1.25), above this crate; `sdm-core`
-/// hands it in.
+/// How inference reads text as times, by the core's list of formats
+/// (`date-rules.md`, "The core's text formats"): each value's instant in
+/// nanoseconds since the epoch, in UTC, or `None`. `sdm-engine::time::text`
+/// holds it (T1.25, T1.25b), above this crate; `sdm-core` hands it in.
 pub trait TextTimes {
+    /// The values read, to UTC where `utc`; `Undecided` for a value outside
+    /// the list or an order left open, `MixedZones` for offsets mixed.
     fn read(&self, values: &[Option<&str>], utc: bool) -> Result<Vec<Option<i128>>, TextUnread>;
 
-    /// How many of `values` read as no time whichever way the reference
-    /// reads them, or `None` when the reading might be refused for offsets
-    /// mixed: what bounds the share a reading that does not decide reads.
-    fn never_read(&self, values: &[Option<&str>]) -> Option<usize>;
+    /// How many of `values` read as times, at fewest and at most
+    /// ([`TextShare`]): what decides the score.
+    fn share(&self, values: &[Option<&str>]) -> Result<TextShare, TextUnread>;
 
-    /// The format the reference guesses from `values` when it puts the day
-    /// before the month, which the reference warns of as it reads them.
+    /// The format of `values`' day-first dates when the values decide that
+    /// the day comes first, which inference warns of.
     fn day_first_format(&self, values: &[Option<&str>]) -> Option<String>;
 }
 
 /// Why text does not read as times.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextUnread {
-    /// A value's reading takes a rule the reader does not port.
+    /// A value outside the reader's formats, or an order left open.
     Undecided,
     /// Offsets mixed where the reading is not to UTC: the reference's
     /// reading raises, and its inference refuses the source.
@@ -506,15 +506,28 @@ fn stype_of(
     })
 }
 
-/// Text is a timestamp to the reference (`contains_timestamp`) when its
-/// first 100 values hold one, and a name that says time is worth 0.3 and
-/// the share of those values its engine reads as dates (`times`, without
-/// `utc`) the rest, scoring 1.0 or more, summed as the reference sums them
-/// in floating point. Where the reading does not decide, the values that
-/// never read bound the share: below the score, the text is no timestamp;
-/// otherwise it is refused (`text_time`, register P1B-2). Offsets mixed,
-/// which the reference refuses unnamed, are refused by name
-/// (`text_time_zones`, register DT-11).
+/// How many values read as times, at fewest and at most: the two orders'
+/// counts where the values decide none, the most counting every value in
+/// the client's shapes that the list does not read; and how many are
+/// outside the shapes too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextShare {
+    pub fewest: usize,
+    pub most: usize,
+    pub unshaped: usize,
+}
+
+/// Text is a timestamp by the reference's score (`contains_timestamp`)
+/// over the values the core's list reads (`times`): its first 100 values
+/// hold one, and a name that says time is worth 0.3 and the share of those
+/// values read as times the rest, scoring 1.0 or more, summed as the
+/// reference sums them in floating point. The share is counted at fewest
+/// and at most: the most counts the values the list does not read but the
+/// client's shapes hold, and, under a name that says time, every value the
+/// list does not read; where the two decide otherwise, the text is refused
+/// (`text_time`, register DT-15 to DT-17). So text outside the shapes is no
+/// time under any other name. Offsets mixed, which the reference refuses
+/// unnamed, are refused by name (`text_time_zones`, register DT-11).
 fn text_holds_dates(
     name: &str,
     sample: &[Option<Value>],
@@ -533,19 +546,20 @@ fn text_holds_dates(
     if first.is_empty() {
         return Ok(false);
     }
-    // The format its reading guesses, if day first, which it warns of.
+    // The format of its day-first dates, which it warns of.
     *day_first = times.day_first_format(&first);
     let named = if names::says_time(name) { 0.3 } else { 0.0 };
-    let score = |held: usize| named + held as f64 / first.len() as f64;
-    match times.read(&first, false) {
-        Ok(read) => Ok(score(read.iter().flatten().count()) >= 1.0),
+    let score = |held: usize| named + held as f64 / first.len() as f64 >= 1.0;
+    let named_time = named > 0.0;
+    match times.share(&first) {
+        Ok(share)
+            if score(share.fewest)
+                == score(share.most + if named_time { share.unshaped } else { 0 }) =>
+        {
+            Ok(score(share.fewest))
+        }
+        Ok(_) | Err(TextUnread::Undecided) => Err(not_yet("text_time")),
         Err(TextUnread::MixedZones) => Err(not_yet("text_time_zones")),
-        // A reading that does not decide still says the share it reads
-        // can be no more than the values that never read leave.
-        Err(TextUnread::Undecided) => match times.never_read(&first) {
-            Some(never) if score(first.len() - never) < 1.0 => Ok(false),
-            _ => Err(not_yet("text_time")),
-        },
     }
 }
 

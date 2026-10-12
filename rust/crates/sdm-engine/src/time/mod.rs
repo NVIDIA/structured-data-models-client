@@ -19,10 +19,10 @@
 //!   read there ([`Instant::to_local`], [`localize`]): before a zone's
 //!   first transition its offset is the one it starts with, after its last
 //!   the rule its database ends with repeats every cycle.
-//! - [`text_shapes`] is the shapes `date-rules.md` names a date in text
-//!   by, and [`text`] reads a column of text as the reference reads it
-//!   (register DT-7): the engine's inference over a preview, and its
-//!   reading of a SQL source's values, one by one.
+//! - [`text_shapes`] is the client's two shapes `date-rules.md` names a
+//!   date in text by, and [`text`] reads text by the core's fixed list of
+//!   formats within them (`date-rules.md`, "The core's text formats";
+//!   T1.25b), refusing by name any other text it is asked to read.
 
 pub mod text;
 pub mod text_shapes;

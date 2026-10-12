@@ -407,8 +407,11 @@ fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreErro
 /// `to_datetime`): a timestamp with a zone at its UTC instants, the zone
 /// dropped; a date at its midnight; text by the reading the provider
 /// declares (`ProviderCapabilities::text_times`, register DT-7), never by
-/// a dialect, each value read as no time dropped and warned of
-/// (`TIME_VALUES_UNREAD`), as the reference drops it and warns.
+/// a dialect: by the core's list (`date-rules.md`, "The core's text
+/// formats"), refusing a value outside it, an order of day and month the
+/// fetch leaves open and offsets mixed by name ([`text_unread`]), and a
+/// blank value dropped and warned of (`TIME_VALUES_UNREAD`), as the
+/// reference drops it and warns.
 pub(crate) struct Times {
     reader: Reader,
     text: Option<TextTimes>,
@@ -508,10 +511,7 @@ impl Times {
                     Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
                     None => return Err(not_yet("text_times")),
                 }
-                .map_err(|unread| match unread {
-                    Unread::Undecided => not_yet("text_time"),
-                    Unread::MixedZones => not_yet("text_time_zones"),
-                })?;
+                .map_err(text_unread)?;
                 let mut unread = 0;
                 let mut examples: Vec<Scalar> = Vec::new();
                 for (value, at) in values.iter().zip(&read) {
@@ -1391,4 +1391,13 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             query,
         },
     }))
+}
+
+/// A text time reading's refusal, by its rule's name.
+fn text_unread(unread: Unread) -> CoreError {
+    match unread {
+        Unread::Outside => not_yet("text_time"),
+        Unread::Order => not_yet("text_time_order"),
+        Unread::MixedZones => not_yet("text_time_zones"),
+    }
 }

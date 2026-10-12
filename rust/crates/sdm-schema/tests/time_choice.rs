@@ -23,51 +23,73 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::catalog::CatalogColumn;
 use sdm_contract::ops::Stype;
 use sdm_contract::{Detail, Scalar};
-use sdm_schema::infer::{self, LeftOut, PassedOver, Taken, TextTimes, TextUnread};
+use sdm_schema::infer::{self, LeftOut, PassedOver, Taken, TextShare, TextTimes, TextUnread};
 
 /// A reading of text as times for these tests, standing in for the
-/// engine's (`sdm-engine::time::text`, held to pandas there): `YYYY-MM-DD`
-/// reads as that day's midnight, `no date` reads as no time, an offset
-/// (`+01`) is held against offsets mixed, and anything else is undecided.
+/// engine's (`sdm-engine::time::text`, held to its own vectors there):
+/// `2024-01-DD` reads as that day's midnight, `no date` reads as no time,
+/// an offset (`+01`) is held against offsets mixed, `code` is text outside
+/// the shapes, counted at most only under a name that says time, and
+/// anything else (`2024-02-DD`) is a value the reader does not decide,
+/// counted in the share at most; the reading refuses both.
 struct Days;
+
+impl Days {
+    fn one(value: &str) -> Result<Option<(i128, Option<String>)>, TextUnread> {
+        if value == "no date" {
+            return Ok(None);
+        }
+        if value == "code" {
+            return Err(TextUnread::Undecided);
+        }
+        let (date, offset) = match value.split_once('+') {
+            Some((date, offset)) => (date, Some(offset.to_owned())),
+            None => (value, None),
+        };
+        let parts: Vec<i64> = date
+            .split('-')
+            .map(|p| p.parse().map_err(|_| TextUnread::Undecided))
+            .collect::<Result<_, _>>()?;
+        let [y, m, d] = parts[..] else {
+            return Err(TextUnread::Undecided);
+        };
+        // Days from 2024-01-01 within 2024's January, enough here.
+        if y != 2024 || m != 1 {
+            return Err(TextUnread::Undecided);
+        }
+        Ok(Some((i128::from(day(d - 1)) * 1_000, offset)))
+    }
+
+    fn mixed<'a>(offsets: impl Iterator<Item = &'a Option<String>>) -> bool {
+        offsets.collect::<std::collections::BTreeSet<_>>().len() > 1
+    }
+}
 
 impl TextTimes for Days {
     fn read(&self, values: &[Option<&str>], utc: bool) -> Result<Vec<Option<i128>>, TextUnread> {
-        let mut offsets = std::collections::BTreeSet::new();
         let read = values
             .iter()
-            .map(|value| {
-                let Some(value) = value else { return Ok(None) };
-                if *value == "no date" {
-                    return Ok(None);
-                }
-                let (date, offset) = match value.split_once('+') {
-                    Some((date, offset)) => (date, Some(offset)),
-                    None => (*value, None),
-                };
-                offsets.insert(offset.map(str::to_owned));
-                let parts: Vec<i64> = date
-                    .split('-')
-                    .map(|p| p.parse().map_err(|_| TextUnread::Undecided))
-                    .collect::<Result<_, _>>()?;
-                let [y, m, d] = parts[..] else {
-                    return Err(TextUnread::Undecided);
-                };
-                // Days from 2024-01-01 within 2024's January, enough here.
-                if y != 2024 || m != 1 {
-                    return Err(TextUnread::Undecided);
-                }
-                Ok(Some(i128::from(day(d - 1)) * 1_000))
-            })
+            .map(|value| value.map_or(Ok(None), Days::one))
             .collect::<Result<Vec<_>, _>>()?;
-        if !utc && offsets.len() > 1 {
+        if !utc && Days::mixed(read.iter().flatten().map(|(_, o)| o)) {
             return Err(TextUnread::MixedZones);
         }
-        Ok(read)
+        Ok(read.into_iter().map(|r| r.map(|(at, _)| at)).collect())
     }
 
-    fn never_read(&self, values: &[Option<&str>]) -> Option<usize> {
-        Some(values.iter().flatten().filter(|v| **v == "no date").count())
+    fn share(&self, values: &[Option<&str>]) -> Result<TextShare, TextUnread> {
+        let read: Vec<_> = values.iter().flatten().map(|v| Days::one(v)).collect();
+        if Days::mixed(read.iter().flatten().flatten().map(|(_, o)| o)) {
+            return Err(TextUnread::MixedZones);
+        }
+        let codes = values.iter().flatten().filter(|v| **v == "code").count();
+        let fewest = read.iter().filter(|r| matches!(r, Ok(Some(_)))).count();
+        let open = read.iter().filter(|r| r.is_err()).count() - codes;
+        Ok(TextShare {
+            fewest,
+            most: fewest + open,
+            unshaped: codes,
+        })
     }
 
     fn day_first_format(&self, _: &[Option<&str>]) -> Option<String> {
@@ -507,8 +529,8 @@ fn a_text_time_column_is_passed_over_for_its_text_and_chosen_by_its_instants() {
 }
 
 #[test]
-fn text_the_reading_does_not_decide_is_refused_by_name_unless_it_cannot_be_one() {
-    // A value the reading does not decide.
+fn text_the_reading_does_not_decide_is_refused_by_name_where_it_could_change_the_score() {
+    // A value the reading does not decide, which could make the score.
     let undecided = texts(&[Some("2024-02-02"), Some("2024-01-03")]);
     assert_eq!(of(vec![("happened", undecided)]).unwrap_err(), "text_time");
     // Offsets mixed, which the reference refuses.
@@ -517,8 +539,8 @@ fn text_the_reading_does_not_decide_is_refused_by_name_unless_it_cannot_be_one()
         of(vec![("happened", mixed)]).unwrap_err(),
         "text_time_zones"
     );
-    // Undecided, but one value never reads and the name does not say time:
-    // no timestamp, decided.
+    // Undecided, but one value reads as no time and the name does not say
+    // time: no timestamp at most, decided.
     let bounded = texts(&[Some("2024-02-02"), Some("no date")]);
     assert_ne!(
         stype(
@@ -527,12 +549,12 @@ fn text_the_reading_does_not_decide_is_refused_by_name_unless_it_cannot_be_one()
         ),
         Stype::Timestamp
     );
-    // With the name's 0.3, one in two never reading cannot reach 1.0.
+    // With the name's 0.3, one in two reading as no time cannot reach 1.0.
     assert_ne!(
         stype(&of(vec![("ts", bounded)]).unwrap(), "ts"),
         Stype::Timestamp
     );
-    // But one in ten never reading can: still refused.
+    // But one in ten reading as no time can: still refused.
     let mut close: Vec<Option<&str>> = vec![Some("2024-02-02"); 9];
     close.push(Some("no date"));
     assert_eq!(of(vec![("ts", texts(&close))]).unwrap_err(), "text_time");
@@ -552,4 +574,27 @@ fn text_the_reading_does_not_decide_is_refused_by_name_unless_it_cannot_be_one()
     );
     let alone = of(vec![("b_date", texts(&long))]).unwrap();
     assert_eq!(alone.time_column.as_deref(), Some("b_date"));
+}
+
+#[test]
+fn text_outside_the_shapes_is_no_time_unless_the_name_says_time() {
+    // Codes under a name that says nothing of time: no timestamp, decided,
+    // whatever another reader would make of them.
+    let codes = texts(&[Some("code"), Some("code"), Some("2024-01-02")]);
+    assert_ne!(
+        stype(
+            &of(vec![("account", Arc::clone(&codes))]).unwrap(),
+            "account"
+        ),
+        Stype::Timestamp
+    );
+    // Under a name that says time they could make the score: refused.
+    assert_eq!(of(vec![("ts", codes)]).unwrap_err(), "text_time");
+    // Unless the values the list reads decide it either way.
+    let mut most: Vec<Option<&str>> = vec![Some("2024-01-02"); 9];
+    most.push(Some("code"));
+    assert_eq!(
+        stype(&of(vec![("ts", texts(&most))]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
 }

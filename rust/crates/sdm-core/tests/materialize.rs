@@ -1135,9 +1135,10 @@ fn a_date_a_zoned_timestamp_and_text_are_read_to_their_instants() {
 fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() {
     let text = || shop_with_times(ColumnType::Utf8, Dtype::String);
     let days = |n: usize| Arc::new(StringArray::from(vec!["2024-01-05"; n])) as ArrayRef;
-    // No reading declared, the client's rules (not ported), a value whose
-    // reading takes a rule outside the shapes, and offsets mixed: each by
-    // its rule's name, before any text is read as a time.
+    // No reading declared, the client's rules (not ported), a value outside
+    // the core's list of formats (T1.25b), day and month values the fetch
+    // puts in no order, and offsets mixed: each by its rule's name, before
+    // any text is read as a time.
     for (provider, ts, wanted) in [
         (host_reading(None), Box::new(days) as Column, "text_times"),
         (
@@ -1148,6 +1149,21 @@ fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() 
         (
             host_reading(Some(TextTimes::ValueByValue)),
             Box::new(|n| Arc::new(StringArray::from(vec!["March 5 2024"; n])) as ArrayRef),
+            "text_time",
+        ),
+        (
+            host_reading(Some(TextTimes::ValueByValue)),
+            Box::new(|n| Arc::new(StringArray::from(vec!["not a date"; n])) as ArrayRef),
+            "text_time",
+        ),
+        (
+            host_reading(Some(TextTimes::ValueByValue)),
+            Box::new(|n| Arc::new(StringArray::from(vec!["01/05/2024"; n])) as ArrayRef),
+            "text_time_order",
+        ),
+        (
+            host_reading(Some(TextTimes::ValueByValue)),
+            Box::new(|n| Arc::new(StringArray::from(vec!["2024-02-30"; n])) as ArrayRef),
             "text_time",
         ),
         (
@@ -1177,8 +1193,10 @@ fn text_times_are_read_as_the_provider_declares_and_refused_by_name_otherwise() 
 
 #[test]
 fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
-    // The reference's engine drops a value its reading takes as no time and
-    // warns of it, with how many of how many and three examples.
+    // A blank value holds no time: dropped and warned of, as the
+    // reference's engine drops a value it reads as none, with how many of
+    // how many and three examples. (A value naming no date, `2024-02-30`,
+    // is outside the core's list and refused, T1.25b.)
     let mut run = materialize(
         host_reading(Some(TextTimes::ValueByValue)),
         &shop_with_times(ColumnType::Utf8, Dtype::String),
@@ -1187,7 +1205,7 @@ fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
     )
     .unwrap();
     let (payload, warnings) = times_to_the_end(&mut run, &|n| {
-        Arc::new(StringArray::from(vec!["not a date"; n])) as ArrayRef
+        Arc::new(StringArray::from(vec!["  "; n])) as ArrayRef
     });
     payload.unwrap();
     let unread: Vec<_> = warnings
@@ -1201,7 +1219,7 @@ fn a_text_time_read_as_no_time_is_dropped_and_warned_of() {
         assert_eq!(warning.fields["unread"], warning.fields["rows"]);
         assert_eq!(
             warning.fields["examples"],
-            Detail::List(vec![Scalar::Utf8("not a date".into())])
+            Detail::List(vec![Scalar::Utf8("  ".into())])
         );
     }
 }

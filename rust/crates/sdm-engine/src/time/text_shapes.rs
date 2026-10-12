@@ -19,9 +19,11 @@
 //!
 //! A value matches whole, as given; whether surrounding white space is
 //! taken off first is the caller's rule. Digits are ASCII digits: the
-//! reference's pattern also takes other scripts' digits, which no reader
-//! here decides (they are refused as undecided, register P1B-2). Which
-//! date a shape names, and whether pandas reads it, is [`super::text`]'s.
+//! reference's pattern also takes other scripts' digits, which the core's
+//! list does not (register DT-15). Which of these values the core reads,
+//! and as what, is [`super::text`]'s, by `date-rules.md`'s "The core's text
+//! formats": the shapes are the text it recognises as written as a date,
+//! the list the part of them it reads.
 
 /// Which field a shape leads with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

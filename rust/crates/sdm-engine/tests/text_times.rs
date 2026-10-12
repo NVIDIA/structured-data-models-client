@@ -2,35 +2,28 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `sdm_engine::time::text` against pandas, from `text-times.json`,
-//! recorded from pandas 3.0.6 by `text_times_record.py` (a protected path:
-//! never recorded again to pass a dependency bump, F4): columns of text
-//! over `date-rules.md`'s shapes, junk, codes and the T0.6 corpus, each read
-//! as the reference's engine reads it for inference (`coerce`), for the
-//! time column's choice (`utc`) and value by value (`each`, DT-7).
+//! `sdm_engine::time::text` against its own spec, from `text-times.json`,
+//! recorded by `text_times_record.py` (a protected path: never recorded
+//! again to pass a dependency bump, F4), which reads `date-rules.md`'s "The
+//! core's text formats" apart from the Rust reader, with Python's `re` and
+//! `datetime` and no pandas (T1.25b): columns over every format of the
+//! list, values outside it, the orders of day and month, two-digit years at
+//! the pivot and offsets mixed, each read as the core reads text: the
+//! values (`column`), to UTC (`utc`), the share inference scores
+//! (`share`) and the day-first format it warns of (`day_first`).
 //!
-//! Wherever the reader decides, its answer is pandas': each instant, each
-//! missing time, and the refusal of mixed offsets. Where it does not
-//! (`Unread::Undecided`), the reading takes a rule outside the shapes and
-//! the core refuses it by name. [`check`] fails closed: a perturbed
-//! answer, and evidence missing, empty or retyped, each fail (seeded
-//! below), and so does a run deciding fewer columns than recorded here.
+//! Every reading is compared, none skipped. [`check`] fails closed: a
+//! perturbed answer, and evidence missing, empty or retyped, each fail
+//! (seeded below), and so does a run comparing fewer columns than
+//! recorded.
 
-use sdm_engine::time::text::{Reader, Unread};
+use sdm_engine::time::text::{Reader, Share, Unread};
 use serde_json::{Value, json};
 
 const VECTORS: &str = include_str!("text-times.json");
 
-/// What a run compared: readings decided and agreeing, and undecided;
-/// the bounds `never_read` gave, each held to pandas' reading; and the
-/// day-first formats pandas warned of, where the reading decided.
-#[derive(Debug, Default, PartialEq, Eq)]
-struct Counts {
-    agreed: usize,
-    undecided: usize,
-    bounded: usize,
-    day_first: usize,
-}
+/// The columns recorded, each read four ways.
+const COLUMNS: usize = 2_345;
 
 fn values(column: &Value, at: &str) -> Result<Vec<Option<String>>, String> {
     let items = column
@@ -47,20 +40,24 @@ fn values(column: &Value, at: &str) -> Result<Vec<Option<String>>, String> {
         .collect()
 }
 
-/// pandas' reading as the reader writes one: each instant in nanoseconds.
-fn expected(reading: &Value, at: &str) -> Result<Result<Vec<Option<i128>>, &'static str>, String> {
+/// A recorded reading of the values: each instant in nanoseconds, or the
+/// refusal named.
+fn expected(reading: &Value, at: &str) -> Result<Result<Vec<Option<i128>>, Unread>, String> {
     match reading {
-        Value::String(s) if s == "MIXED" => Ok(Err("MIXED")),
-        Value::String(s) if s == "ERR" => Ok(Err("ERR")),
-        Value::String(s) if s == "CLOCK" => Ok(Err("CLOCK")),
+        Value::String(s) => match s.as_str() {
+            "outside" => Ok(Err(Unread::Outside)),
+            "order" => Ok(Err(Unread::Order)),
+            "mixed" => Ok(Err(Unread::MixedZones)),
+            _ => Err(format!("{at}: not a reading")),
+        },
         Value::Array(items) => items
             .iter()
             .map(|v| match v {
                 Value::Null => Ok(None),
-                Value::Number(n) => n
-                    .as_i64()
-                    .map(|us| Some(i128::from(us) * 1_000))
-                    .ok_or_else(|| format!("{at}: not an integer")),
+                Value::String(n) => n
+                    .parse::<i128>()
+                    .map(Some)
+                    .map_err(|_| format!("{at}: not an instant")),
                 _ => Err(format!("{at}: neither an instant nor null")),
             })
             .collect::<Result<Vec<_>, _>>()
@@ -69,9 +66,36 @@ fn expected(reading: &Value, at: &str) -> Result<Result<Vec<Option<i128>>, &'sta
     }
 }
 
-fn check(document: &Value) -> Result<Counts, String> {
-    if document["format"] != "sdm-text-times/1" {
-        return Err("not an sdm-text-times/1 document".into());
+fn expected_share(share: &Value, at: &str) -> Result<Result<Share, Unread>, String> {
+    match share {
+        Value::String(s) if s == "mixed" => Ok(Err(Unread::MixedZones)),
+        Value::Array(counts) => match counts[..] {
+            [
+                Value::Number(ref a),
+                Value::Number(ref b),
+                Value::Number(ref c),
+            ] => {
+                let count = |n: &serde_json::Number| {
+                    n.as_u64()
+                        .and_then(|n| usize::try_from(n).ok())
+                        .ok_or_else(|| format!("{at}: not a count"))
+                };
+                Ok(Ok(Share {
+                    fewest: count(a)?,
+                    most: count(b)?,
+                    unshaped: count(c)?,
+                }))
+            }
+            _ => Err(format!("{at}: not a share")),
+        },
+        _ => Err(format!("{at}: not a share")),
+    }
+}
+
+/// The columns compared, or every difference found.
+fn check(document: &Value) -> Result<usize, String> {
+    if document["format"] != "sdm-text-times/2" {
+        return Err("not an sdm-text-times/2 document".into());
     }
     let year = document["year"].as_i64().ok_or("no year")?;
     let reader = Reader::new(year);
@@ -79,49 +103,11 @@ fn check(document: &Value) -> Result<Counts, String> {
         .as_array()
         .filter(|c| !c.is_empty())
         .ok_or("no columns")?;
-    let mut counts = Counts::default();
     let mut differences = Vec::new();
     for (i, column) in columns.iter().enumerate() {
         let owned = values(&column["values"], &format!("column {i}"))?;
         let given: Vec<Option<&str>> = owned.iter().map(|v| v.as_deref()).collect();
-        // The values that never read: pandas reads no more than the rest,
-        // and does not refuse the column for its offsets.
-        if let Some(never) = reader.never_read(&given) {
-            let want = expected(&column["coerce"], &format!("column {i} coerce"))?;
-            let present = given.iter().flatten().count();
-            match want {
-                Ok(read) if read.iter().flatten().count() <= present - never => {
-                    counts.bounded += 1;
-                }
-                // The clock's time, which reads, and holds no offset.
-                Err("CLOCK") => {}
-                _ => differences.push(format!(
-                    "column {i} never_read: {given:?}: {never} never read, pandas {want:?}"
-                )),
-            }
-        }
-        // The day-first format pandas warned of, where the inference's
-        // reading decides.
-        if !matches!(reader.column(&given, false), Err(Unread::Undecided)) {
-            let warned = match &column["day_first"] {
-                Value::Null => None,
-                Value::String(format) => Some(format.clone()),
-                _ => {
-                    return Err(format!(
-                        "column {i}: day_first is neither a format nor null"
-                    ));
-                }
-            };
-            let guessed = reader.day_first_format(&given);
-            if guessed != warned {
-                differences.push(format!(
-                    "column {i} day_first: {given:?}: pandas {warned:?}, reader {guessed:?}"
-                ));
-            } else if warned.is_some() {
-                counts.day_first += 1;
-            }
-        }
-        for kind in ["coerce", "utc", "each"] {
+        for (kind, utc) in [("column", false), ("utc", true)] {
             let at = format!("column {i} {kind}");
             let want = expected(&column[kind], &at)?;
             if let Ok(want) = &want
@@ -129,34 +115,41 @@ fn check(document: &Value) -> Result<Counts, String> {
             {
                 return Err(format!("{at}: a reading of another length"));
             }
-            let got = match kind {
-                "coerce" => reader.column(&given, false),
-                "utc" => reader.column(&given, true),
-                _ => reader.each(&given),
-            };
-            let agrees = match (&got, &want) {
-                (Err(Unread::Undecided), _) => {
-                    counts.undecided += 1;
-                    continue;
-                }
-                (Err(Unread::MixedZones), Err("MIXED")) => true,
-                (Ok(read), Ok(want)) => {
-                    read.iter()
-                        .map(|at| at.map(|at| at.nanos()))
-                        .collect::<Vec<_>>()
-                        == *want
-                }
-                _ => false,
-            };
-            if agrees {
-                counts.agreed += 1;
-            } else {
-                differences.push(format!("{at}: {given:?}: pandas {want:?}, reader {got:?}"));
+            let got = reader
+                .column(&given, utc)
+                .map(|read| read.into_iter().map(|at| at.map(|at| at.nanos())).collect());
+            if got != want {
+                differences.push(format!("{at}: {given:?}: want {want:?}, got {got:?}"));
             }
+        }
+        let at = format!("column {i} share");
+        let want = expected_share(&column["share"], &at)?;
+        let got = reader.share(&given);
+        if got != want {
+            differences.push(format!("{at}: {given:?}: want {want:?}, got {got:?}"));
+        }
+        let want = match &column["day_first"] {
+            Value::Null => None,
+            Value::String(format) => Some(format.clone()),
+            _ => {
+                return Err(format!(
+                    "column {i}: day_first is neither a format nor null"
+                ));
+            }
+        };
+        let got = reader.day_first_format(&given);
+        if got != want {
+            differences.push(format!(
+                "column {i} day_first: {given:?}: want {want:?}, got {got:?}"
+            ));
+        }
+        // `each` is the column's reading not to UTC.
+        if reader.each(&given) != reader.column(&given, false) {
+            differences.push(format!("column {i} each: {given:?}"));
         }
     }
     if differences.is_empty() {
-        Ok(counts)
+        Ok(columns.len())
     } else {
         Err(format!(
             "{} differ: {:#?}",
@@ -170,113 +163,188 @@ fn document() -> Value {
     serde_json::from_str(VECTORS).unwrap()
 }
 
-/// The readings the reader decided when the vectors were recorded: a
-/// change that decides fewer is seen, and one that decides more is a
-/// change to record here.
-const DECIDED: usize = 18_084;
-/// The columns `never_read` bounded when the vectors were recorded.
-const BOUNDED: usize = 404;
-/// The day-first formats pandas warned of where the reading decided.
-const DAY_FIRST: usize = 219;
-
 #[test]
-fn the_reader_reads_text_as_pandas_does_wherever_it_decides() {
-    let counts = check(&document()).unwrap();
-    assert_eq!(counts.agreed, DECIDED, "{counts:?}");
-    assert!(counts.undecided > 0);
-    assert_eq!(counts.bounded, BOUNDED, "{counts:?}");
-    assert_eq!(counts.day_first, DAY_FIRST, "{counts:?}");
+fn the_reader_reads_text_as_its_spec_says() {
+    assert_eq!(check(&document()), Ok(COLUMNS));
+}
+
+/// Every kind of answer is held somewhere: no vector set that only reads,
+/// or only refuses, passes for the whole.
+#[test]
+fn the_vectors_hold_every_answer() {
+    let doc = document();
+    let columns = doc["columns"].as_array().unwrap();
+    for kind in ["outside", "order", "mixed"] {
+        assert!(columns.iter().any(|c| c["column"] == kind), "{kind}");
+    }
+    assert!(
+        columns
+            .iter()
+            .any(|c| c["utc"].is_array() && c["column"] == "mixed")
+    );
+    assert!(columns.iter().any(|c| c["day_first"].is_string()));
+    assert!(columns.iter().any(|c| {
+        c["column"]
+            .as_array()
+            .is_some_and(|r| r.iter().any(Value::is_null))
+    }));
+    assert!(columns.iter().any(|c| c["share"][0] != c["share"][1]));
+    assert!(columns.iter().any(|c| c["share"][2].as_u64() > Some(0)));
 }
 
 #[test]
 fn the_check_fails_closed() {
     let doc = document();
-    // A perturbed instant.
-    let mut perturbed = doc.clone();
-    let column = perturbed["columns"]
-        .as_array_mut()
-        .unwrap()
-        .iter_mut()
-        .find(|c| c["values"] == json!(["2024-01-05"]))
-        .unwrap();
-    column["coerce"][0] = json!(column["coerce"][0].as_i64().unwrap() + 1);
-    assert!(check(&perturbed).unwrap_err().contains("differ"));
-    // A reading pandas refused for its mixed offsets, said read.
-    let mut refused = doc.clone();
-    let reader = Reader::new(doc["year"].as_i64().unwrap());
-    let column = refused["columns"]
-        .as_array_mut()
-        .unwrap()
-        .iter_mut()
-        .find(|c| {
-            let owned = values(&c["values"], "").unwrap();
-            let given: Vec<Option<&str>> = owned.iter().map(|v| v.as_deref()).collect();
-            reader.column(&given, false) == Err(Unread::MixedZones)
-        })
-        .unwrap();
-    column["coerce"] = json!(vec![
-        Value::Null;
-        column["values"].as_array().unwrap().len()
-    ]);
-    assert!(check(&refused).unwrap_err().contains("differ"));
-    // Evidence missing, empty or retyped.
-    for broken in [
-        json!({"format": "sdm-text-times/1", "year": 2026}),
-        json!({"format": "sdm-text-times/1", "year": 2026, "columns": []}),
-        json!({"format": "sdm-text-times/1", "year": 2026, "columns": [{"values": []}]}),
-        json!({"format": "sdm-text-times/1", "year": 2026, "columns": [{"values": ["2024-01-05"]}]}),
-        json!({"format": "sdm-text-times/1", "year": 2026, "columns": [{"values": ["2024-01-05"], "coerce": "read", "utc": [1], "each": [1]}]}),
-        json!({"format": "sdm-text-times/1", "year": 2026, "columns": [{"values": [5], "coerce": [1], "utc": [1], "each": [1]}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": []}),
-        json!({"format": "sdm-text-times/1", "columns": []}),
-    ] {
-        assert!(check(&broken).is_err(), "{broken}");
-    }
-}
-
-/// A later value writing an offset's minutes past 59, under the format the
-/// first value guessed (T1.25's second review, pinned at T1.26a with no
-/// change to the reader, whose expansion waits on the owner's H21
-/// decision): pandas reads it as no time and refuses the values one by one
-/// for their mixed offsets. Not under ISO, the reader agrees; under ISO
-/// the inference's two readings are undecided, refused by name
-/// (`text_time`) where pandas gives no time for that value, register
-/// P1B-2.
-#[test]
-fn a_later_value_with_minutes_past_59_is_read_as_pinned() {
-    let doc = document();
-    let reader = Reader::new(doc["year"].as_i64().unwrap());
-    let column = |pair: [&str; 2]| -> (Vec<Option<String>>, Value) {
-        let found = doc["columns"]
+    let find = |doc: &mut Value, values: Value| -> usize {
+        doc["columns"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|c| c["values"] == json!(pair))
-            .unwrap_or_else(|| panic!("{pair:?} is recorded"));
-        (values(&found["values"], pair[0]).unwrap(), found.clone())
+            .position(|c| c["values"] == values)
+            .unwrap_or_else(|| panic!("{values} is recorded"))
     };
-    let (iso, recorded) = column(["2024-01-01T01:02:03+01:00", "2024-01-02T01:02:03+01:99"]);
-    let given: Vec<Option<&str>> = iso.iter().map(|v| v.as_deref()).collect();
-    assert_eq!(recorded["coerce"][1], Value::Null);
-    assert_eq!(recorded["utc"][1], Value::Null);
-    assert_eq!(reader.column(&given, false), Err(Unread::Undecided));
-    assert_eq!(reader.column(&given, true), Err(Unread::Undecided));
-    assert_eq!(recorded["each"], json!("MIXED"));
-    assert_eq!(reader.each(&given), Err(Unread::MixedZones));
-
-    let (slash, recorded) = column(["01/15/2024 01:02:03+01:00", "01/16/2024 01:02:03+01:99"]);
-    let given: Vec<Option<&str>> = slash.iter().map(|v| v.as_deref()).collect();
-    for (utc, kind) in [(false, "coerce"), (true, "utc")] {
-        let read: Vec<Option<i128>> = reader
-            .column(&given, utc)
-            .unwrap()
-            .iter()
-            .map(|at| at.map(|at| at.nanos()))
-            .collect();
-        let want = expected(&recorded[kind], kind).unwrap().unwrap();
-        assert_eq!(read, want, "{kind}");
-        assert_eq!(read[1], None, "{kind}");
+    // A perturbed instant.
+    let mut perturbed = doc.clone();
+    let i = find(&mut perturbed, json!(["2024-01-05"]));
+    let n: i128 = perturbed["columns"][i]["column"][0]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    perturbed["columns"][i]["column"][0] = json!((n + 1).to_string());
+    assert!(check(&perturbed).unwrap_err().contains("differ"));
+    // A refusal said read, a read said refused, another refusal named.
+    for (values, field, said) in [
+        (json!(["March 3 2020"]), "column", json!([null])),
+        (json!(["2024-01-05"]), "utc", json!("outside")),
+        (json!(["01/02/2024"]), "column", json!("outside")),
+        (
+            json!(["2024-01-05", "AW00011205"]),
+            "share",
+            json!([1, 1, 0]),
+        ),
+        (json!(["15/03/2024"]), "day_first", Value::Null),
+    ] {
+        let mut changed = doc.clone();
+        let i = find(&mut changed, values.clone());
+        changed["columns"][i][field] = said;
+        assert!(
+            check(&changed).unwrap_err().contains("differ"),
+            "{values} {field}"
+        );
     }
-    assert_eq!(recorded["each"], json!("MIXED"));
-    assert_eq!(reader.each(&given), Err(Unread::MixedZones));
+    // Evidence missing, empty or retyped.
+    for broken in [
+        json!({"format": "sdm-text-times/2", "year": 2026}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": []}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": []}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"]}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": "read", "utc": ["1"], "share": [1, 1, 0], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": [1], "utc": ["1"], "share": [1, 1, 0], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": [5], "column": ["1"], "utc": ["1"], "share": [1, 1, 0], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1], "day_first": null}]}),
+        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1], "day_first": 5}]}),
+        json!({"format": "sdm-text-times/1", "year": 2026, "columns": []}),
+        json!({"format": "sdm-text-times/2", "columns": []}),
+    ] {
+        assert!(check(&broken).is_err(), "{broken}");
+    }
+    // A run comparing fewer columns than recorded.
+    let mut fewer = doc.clone();
+    fewer["columns"].as_array_mut().unwrap().pop();
+    assert_ne!(check(&fewer), Ok(COLUMNS));
+}
+
+const DIFFERENTIAL: &str = include_str!("text-times-differential.json");
+
+/// The core's answer for one of the report's examples, as the report
+/// writes it.
+fn core_answer(reader: &Reader, outcome: &str, example: &Value) -> Result<Value, String> {
+    let owned = values(&example["values"], outcome)?;
+    let given: Vec<Option<&str>> = owned.iter().map(|v| v.as_deref()).collect();
+    let reading = |read: Result<Vec<Option<sdm_engine::time::Instant>>, Unread>| match read {
+        Ok(read) => json!(
+            read.into_iter()
+                .map(|at| at.map(|at| at.nanos().to_string()))
+                .collect::<Vec<_>>()
+        ),
+        Err(Unread::Outside) => json!("outside"),
+        Err(Unread::Order) => json!("order"),
+        Err(Unread::MixedZones) => json!("mixed"),
+    };
+    Ok(match outcome {
+        "materialize" => reading(reader.each(&given)),
+        "time_choice" => reading(reader.column(&given, true)),
+        "inference" => {
+            let named = example["named"].as_bool().ok_or("no name's weight")?;
+            let first: Vec<Option<&str>> = given
+                .iter()
+                .flatten()
+                .filter(|v| !v.is_empty())
+                .take(100)
+                .map(|v| Some(*v))
+                .collect();
+            let score =
+                |n: usize| f64::from(u8::from(named)) * 0.3 + n as f64 / first.len() as f64 >= 1.0;
+            match reader.share(&first) {
+                Ok(share)
+                    if score(share.fewest)
+                        == score(share.most + if named { share.unshaped } else { 0 }) =>
+                {
+                    json!(score(share.fewest))
+                }
+                Ok(_) => json!("text_time"),
+                Err(_) => json!("text_time_zones"),
+            }
+        }
+        "day_first" => json!(reader.day_first_format(&given)),
+        _ => return Err(format!("{outcome}: not an outcome")),
+    })
+}
+
+/// The differential report (`text-times-differential.json`, recorded by
+/// `text_times_differential.py` from pandas 3.0.6 over the inputs T1.25
+/// recorded) holds the core: each example's answer is the core's, each
+/// reference answer differs from it, and the counts add up.
+#[test]
+fn the_differential_reports_the_core_as_it_reads() {
+    let report: Value = serde_json::from_str(DIFFERENTIAL).unwrap();
+    assert_eq!(report["format"], "sdm-text-times-differential/1");
+    let reader = Reader::new(report["year"].as_i64().unwrap());
+    let outcomes = report["outcomes"].as_object().unwrap();
+    assert_eq!(
+        outcomes.keys().collect::<Vec<_>>(),
+        ["materialize", "time_choice", "inference", "day_first"]
+    );
+    let mut examples = 0;
+    for (outcome, held) in outcomes {
+        let classes = held["classes"].as_object().unwrap();
+        let differing: u64 = classes.values().map(|c| c["count"].as_u64().unwrap()).sum();
+        assert_eq!(
+            held["agree"].as_u64().unwrap() + differing,
+            held["columns"].as_u64().unwrap(),
+            "{outcome}"
+        );
+        for (class, entry) in classes {
+            assert!(
+                class == "a" || class == "c" || class.starts_with("b."),
+                "{class}"
+            );
+            let listed = entry["examples"].as_array().unwrap();
+            assert!(!listed.is_empty(), "{outcome} {class}");
+            for example in listed {
+                let core = core_answer(&reader, outcome, example).unwrap();
+                assert_eq!(core, example["core"], "{outcome} {class}: {example}");
+                assert_ne!(core, example["reference"], "{outcome} {class}: {example}");
+                if class == "a" {
+                    assert!(
+                        core == "outside" || core == "text_time",
+                        "{outcome}: {example}"
+                    );
+                }
+                examples += 1;
+            }
+        }
+    }
+    assert!(examples > 0);
 }

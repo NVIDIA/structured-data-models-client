@@ -1282,17 +1282,18 @@ def test_a_listed_table_is_held_to_the_schema_s_rule_on_names(
 #: T1.24 (None: described). Each view's rows are the database's catalog,
 #: so which rule the core meets first depends on what the source holds.
 SYSTEM_VIEWS = [
-    # Register entry P1B-10 (proposed): a view holding a MAP column, which
-    # the reference fails unnamed, reading the map as text.
-    ('one table', 'duckdb_tables', 'text_time', 'RuntimeError'),
+    # Register entry P1B-10: a view holding a MAP column, which the
+    # reference fails unnamed, reading the map as text.
+    ('one table', 'duckdb_tables', 'column_type', 'RuntimeError'),
     ('shop', 'duckdb_tables', 'column_type', 'RuntimeError'),
-    # Register entry P1B-11 (proposed): a view whose preview holds no row.
+    # Register entry P1B-11: a view whose preview holds no row.
     ('one table', 'duckdb_views', 'empty_table', 'RuntimeError'),
-    # Register entry P1B-2 (proposed): views the reference describes, whose
-    # text the core refuses as text that could hold dates.
-    ('one table', 'duckdb_columns', 'text_time', None),
-    ('one table', 'pg_class', 'text_time', None),
-    ('shop', 'pg_class', 'text_time', None),
+    # Views the reference describes, whose text the core refused as text
+    # that could hold dates (P1B-2) until its text was read by the list
+    # (T1.25b): described on both routes.
+    ('one table', 'duckdb_columns', None, None),
+    ('one table', 'pg_class', None, None),
+    ('shop', 'pg_class', None, None),
     ('shop', 'duckdb_columns', None, None),
 ]
 
@@ -1440,30 +1441,33 @@ def _offset_events(zone: str) -> Any:
 
 
 @pytest.mark.parametrize(
-    ('zone', 'read'),
+    ('zone', 'read', 'core_reads'),
     [
-        # An offset of a day or more, either way: no time, so no timestamp
-        # (T1.25 fix round 1, Codex P2).
-        ('+24:00', False),
-        ('+99:00', False),
-        ('+2360', False),
-        ('-25:00', False),
-        # Below a day, minutes past 59 count on, and zero either sign.
-        ('+01:99', True),
-        ('+0160', True),
-        ('+23:59', True),
-        ('-23:59', True),
-        ('+00', True),
-        ('-00', True),
-        ('Z', True),
+        # An offset of a day or more, either way: no time to the reference
+        # (T1.25 fix round 1, Codex P2); outside the core's list from
+        # T1.25b, refused by name (register DT-15).
+        ('+24:00', False, False),
+        ('+99:00', False, False),
+        ('+2360', False, False),
+        ('-25:00', False, False),
+        # Minutes past 59, which the reference counts on: outside the list.
+        ('+01:99', True, False),
+        ('+0160', True, False),
+        # Offsets the list reads, and zero either sign.
+        ('+23:59', True, True),
+        ('-23:59', True, True),
+        ('+00', True, True),
+        ('-00', True, True),
+        ('Z', True, True),
     ],
 )
-def test_text_with_an_offset_is_a_timestamp_as_the_reference_reads_it(
-    monkeypatch: pytest.MonkeyPatch, zone: str, read: bool
+def test_text_with_an_offset_is_read_by_the_list_or_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch, zone: str, read: bool, core_reads: bool
 ) -> None:
-    # The old route describes each with its engine's pandas reading; the
-    # core reads the same, and text it decides is no timestamp meets the
-    # next rule, multicategorical (a value holds ':'), not a time column.
+    # The old route describes each with its engine's pandas reading. The
+    # core reads an offset in the list as a timestamp as the reference
+    # does, and refuses text outside the list (text_time) where it could
+    # make the column one (T1.25b).
     monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with warnings.catch_warnings():
@@ -1473,7 +1477,7 @@ def test_text_with_an_offset_is_a_timestamp_as_the_reference_reads_it(
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        if read:
+        if core_reads:
             core = Schema.from_source(DuckDBSource(_offset_events(zone)))
             assert core['events'].time_column == 'event_date'
             assert (
@@ -1482,4 +1486,4 @@ def test_text_with_an_offset_is_a_timestamp_as_the_reference_reads_it(
         else:
             with pytest.raises(StructuredDataError) as refused:
                 Schema.from_source(DuckDBSource(_offset_events(zone)))
-            assert refused.value.details['rule'] == 'multicategorical'
+            assert refused.value.details['rule'] == 'text_time'

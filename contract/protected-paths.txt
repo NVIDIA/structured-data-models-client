@@ -53,9 +53,11 @@ rust/crates/sdm-engine/tests/*.json
 rust/crates/sdm-engine/tests/rs1.rs
 rust/crates/sdm-engine/tests/rs1_record.py
 # The time vectors' checks and recorders (T1.25): text-times.json and
-# time-ranges.json are rust/crates/sdm-engine/tests/*.json above.
+# time-ranges.json are rust/crates/sdm-engine/tests/*.json above, as is
+# T1.25b's text-times-differential.json, which its recorder writes.
 rust/crates/sdm-engine/tests/text_times.rs
 rust/crates/sdm-engine/tests/text_times_record.py
+rust/crates/sdm-engine/tests/text_times_differential.py
 rust/crates/sdm-engine/tests/time_ranges.rs
 rust/crates/sdm-engine/tests/time_ranges_record.py
 # The words vectors' check and recorder (T1.26b): words.json is
