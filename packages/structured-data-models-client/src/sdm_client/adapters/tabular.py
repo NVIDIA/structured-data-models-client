@@ -92,7 +92,9 @@ class TabularAdapter:
         have to carry the same context, so splitting would multiply the upload
         without raising the cap.
         """
-        yield self._envelope(request, outputs)
+        envelope = self._envelope(request, outputs)
+        self._check_explanation_rows(request, outputs)
+        yield envelope
 
     def session_plan(
         self, request: Request, outputs: tuple[str, ...]
@@ -123,6 +125,7 @@ class TabularAdapter:
             raise _a_row_the_pinned_schema_cannot_hold(
                 request, declared, error
             ) from error
+        self._check_explanation_rows(request, outputs)
         yield {
             key: envelope[key] for key in _SESSION_SCORING if key in envelope
         }
@@ -163,12 +166,16 @@ class TabularAdapter:
         request_id: str = '',
         metadata: Mapping[str, Any] | None = None,
     ) -> PredictionResult:
+        explanation = next(
+            (item.explanation for item in items if item.explanation), None
+        )
         return PredictionResult(
             model=model,
             request_id=request_id,
             items=as_declared_target(_named_entities(items, payload), payload),
             metadata=dict(metadata or {}),
             outputs=outputs,
+            explanation=explanation,
         )
 
     def explain_error(
@@ -181,6 +188,27 @@ class TabularAdapter:
     def close(self) -> None:
         r"""Nothing to release: this adapter sends through the client's own
         transport and opens nothing of its own."""
+
+    def _check_explanation_rows(
+        self, request: Request, outputs: tuple[str, ...]
+    ) -> None:
+        r"""Refuse an explanation over more rows than the endpoint explains.
+
+        The endpoint explains one row at a time and refuses more with
+        ``UNSUPPORTED_OUTPUT``, so the limit is named here before anything is
+        sent. Only the rows being scored count: a session's pinned context is
+        never judged by it.
+        """
+        if 'explanation' not in outputs:
+            return
+        allowed = self.spec.runtime.limits['explanation_predict_rows']
+        scored = len(request.predict.instance_table)
+        if scored != allowed:
+            raise UnsupportedRequestError(
+                f'an explanation covers exactly {allowed} row, and this '
+                f'request scores {scored}; ask for one at a time',
+                details={'model': self.spec.model_id, 'scored': scored},
+            )
 
     def _envelope(
         self,

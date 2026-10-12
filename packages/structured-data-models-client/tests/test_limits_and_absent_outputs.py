@@ -324,24 +324,29 @@ def explanation_plan(request):
     )
 
 
-def test_an_explanation_is_refused_on_the_mode_the_endpoint_refuses_it_on():
-    """A graph that supplies 120 rows for a request of 1,500 still selects the
-    larger-context mode, and that is what the endpoint gates explaining on."""
-    with pytest.raises(StructuredDataError) as raised:
-        explanation_plan(gathered(context_rows=120, run_mode='best'))
-    assert 'num_context_samples' in str(raised.value)
+def test_explains_larger_context():
+    """An explanation is sent under the larger-context run mode.
+
+    Assumptions:
+    - The Kumo Relational SDM NIM explains under either context budget.
+    - The payload scores one entity.
+    """
+    assert explanation_plan(gathered(context_rows=120, run_mode='best'))
 
 
 def test_a_small_context_asked_for_smally_still_explains():
     assert explanation_plan(gathered(context_rows=120, run_mode='fast'))
 
 
-def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
-    """Nothing the engine gathers arrives without a run_mode, but a hand-built
-    payload can, and the rows are then all there is to read."""
+def test_explains_without_mode():
+    """An explanation is sent whatever the context size when no run mode is
+    named.
+
+    Assumptions:
+    - The payload scores one entity and names no run_mode.
+    """
     assert explanation_plan(gathered(context_rows=120, run_mode=None))
-    with pytest.raises(StructuredDataError):
-        explanation_plan(gathered(context_rows=1_001, run_mode=None))
+    assert explanation_plan(gathered(context_rows=1_001, run_mode=None))
 
 
 # --- a context that teaches nothing, on both routes -------------------------
