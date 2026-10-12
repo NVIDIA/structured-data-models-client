@@ -110,7 +110,7 @@ Its fields are parsed by `jiff`'s `strtime` with the format it is written in, wh
 - the date and the time of day must name one: a month of 1 to 12, a day the month has, an hour of 0 to 23, a minute and a second of 0 to 59 (no leap second), and an offset's hours 0 to 23 and minutes 0 to 59;
 - a two-digit year is placed in the hundred years around the clock's year, from 50 years before it to 49 after, the client's rule ("Two-digit years" above; the run's `HostFacts.now` in UTC); a year of three or four digits is the year written;
 - a value with a zone reads as the instant its wall clock names at that offset (`Z`, `UTC` and `GMT` at zero), one without as its wall clock in UTC;
-- the instant must lie in the years 1 to 9999, in UTC;
+- the year written must be 1 to 9999, and so must the instant's year, in UTC, so that no offset carries a year outside the list into it (`0000-12-31T23:00-02:00` is outside);
 - a value empty once its white space is gone holds no time, as a missing one.
 
 Every other value is outside the list: dates in words (`March 3 2020`), packed digits (`20240101`), dots (`15.01.2024`), fields written short (`2024-1-5`), two separators (`2024/01-05`), a value naming no date (`2024-02-30`, `32-12-24`), a second of 60, a fraction past nine digits, an offset of a day or more or with minutes past 59, another zone name (`EST`, `utc`), the year 0, and words such as `now`, `today` or `NaT`.
@@ -127,9 +127,12 @@ Where the rule decides that the day comes first, inference warns (`DATES_READ_DA
 Each refusal is `UNSUPPORTED_REQUEST` naming its rule.
 
 - `materialize` reads a fetched text time column by the reading its provider declares (`text_times`, register DT-7: `value_by_value` is this list): a value outside the list is refused (`text_time`), as are an order left open (`text_time_order`) and offsets mixed (`text_time_zones`, DT-11); a blank value is dropped and warned of (`TIME_VALUES_UNREAD`), as the reference drops it.
-- The time column's choice reads a text time column's preview to UTC, offsets mixed taken; a value outside the list, or an order left open, is refused (`text_time`) only where the choice asks where the column starts.
+- The time column's choice reads a text time column's preview to UTC, offsets mixed taken; a value outside the list (`text_time`), or an order left open (`text_time_order`), is refused only where the choice asks where the column starts.
 - Inference's score (`contains_timestamp`, "Where text becomes a date" above): 0.3 for a name that says time and the share of the first 100 non-empty values read as times, a timestamp at 1.0 or more.
-  The share is counted at fewest, the fewer of the two orders' counts where the values decide none, and at most, the more of them counting the values in the client's shapes the list does not read and, under a name that says time, every value the list does not read; where the two decide otherwise the text is refused (`text_time`), and offsets mixed among the values read are refused (`text_time_zones`).
+  The share is counted at fewest, the fewer of the two orders' counts where the values decide none.
+  Where the values read in either order decide the score otherwise, the order is left open and the text is refused (`text_time_order`).
+  Otherwise the share is counted at most too, adding the values in the client's shapes the list reads in neither order and, under a name that says time, every value the list does not read; where that decides otherwise the text is refused (`text_time`).
+  Offsets mixed among the values read are refused (`text_time_zones`).
   So under a name that does not say time, text outside the client's shapes is no time, as the client's own inference holds (`client/core/dates.py`: inference does not read loose text as dates, which would read part codes as dates): `AW00011205` is no timestamp.
 
 ## The PQL literal rules

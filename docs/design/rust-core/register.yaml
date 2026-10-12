@@ -725,7 +725,8 @@ entries:
     else by name), recorded at T1.25b (E68): the core reads no value by
     dateutil, and such a value is outside its list and refused by name
     (DT-15). No reader of a frame's time column existed in the core, so no
-    case changes.
+    case changes. This reverses phase-0 owner decision 30 by the class
+    wording of E66(h); the tracker's Journey row names it for the owner.
 
 - id: DT-7
   title: The engine's text-date reading on SQL sources
@@ -1002,12 +1003,16 @@ entries:
     time column's choice where it asks where such a column starts, and by
     inference where such values could make the score (under a name that
     says time, every value outside the list; under another, the ones in the
-    client's shapes; the rest is DT-17).
+    client's shapes; the rest is DT-17) and the values in the list decide
+    it alike in either order of day and month (an order they leave open is
+    text_time_order, DT-16). A value is outside the list in both orders,
+    the year written as well as the instant in the years 1 to 9999 (from
+    fix round 1: 0000-12-31T23:00-02:00 is outside).
   affected_inputs: >-
     Sources holding text times outside the list: the classes above. Over the
     13,456 columns T1.25 recorded pandas' readings of
     (rust/crates/sdm-engine/tests/text-times-differential.json, class a):
-    10,623 materialize readings, 10,623 time-column readings and 18,856 of
+    10,623 materialize readings, 10,623 time-column readings and 18,815 of
     26,908 inference decisions; over T1.25b's 60 generated DuckDB sources,
     a zone named EST, dates in words, dots, packed digits and codes under a
     name that says time, and a text feature holding a junk value, a value
@@ -1021,10 +1026,15 @@ entries:
     Approved by the owner's T1.25b answer of 2026-10-11, relayed by the
     orchestrator (E66(h)): "A named refusal of text outside the documented
     formats is approved by the owner's T1.25b answer (2026-10-11)." Each
-    refusal here is of a value outside the documented list; checked so by
-    the differential's classifier (class a: the core's answer is the named
-    refusal) and held by text_times.rs over the report's examples. No
-    baselined case changes (the gate passes with no transition).
+    refusal here is made by a value outside the documented list in both
+    orders of day and month: the reading refuses text_time only then, an
+    order of the values in the list left open being text_time_order
+    (DT-16); the differential's classifier asserts such a value for each
+    class a answer, and text_times.rs holds every class a example to it,
+    with the review's open-order column (03/15/99, 15/11/00) as a negative
+    control (fix round 1: 41 inference decisions T1.25b first counted here
+    moved to DT-16's b.order_open). No baselined case changes (the gate
+    passes with no transition).
 
 - id: DT-16
   title: Text in the core's list read, refused or warned of otherwise than the reference
@@ -1045,7 +1055,10 @@ entries:
     together (date-rules.md, "The core's text formats"). The kinds, as the
     differential names them (text-times-differential.json): b.order_open, an
     order the values leave open is refused (text_time_order) where the
-    reference reads month first (01/05/2024 alone); b.order_decided, a value
+    reference reads month first (01/05/2024 alone), and, in inference and
+    the time column's choice, a column whose order changes the score or
+    the start (03/15/99 beside 15/11/00), both under their own rule
+    text_time_order; b.order_decided, a value
     read in the order the column decides (02/01/2024 beside 15/03/2024 is
     the 2nd of January, the 1st of February to the engine); b.format_guess,
     a value the reference's guessed format reads as no time is read (a
@@ -1057,13 +1070,16 @@ entries:
     it raised; b.range, a year past 2262 read where a nanosecond column
     reads NaT (materialize then refuses it, DT-14); b.order_rule, the day-
     first warning given where the client's rule decides the day comes first
-    (a two-digit year, an ambiguous first value) and not where pandas guesses
-    it from a value the list does not read.
+    over the column's day or month first values (a two-digit year, an
+    ambiguous first value, a stray value outside the list beside them) and
+    not where pandas guesses it from a first value the core does not read
+    as day or month first.
   affected_inputs: >-
     Over the 13,456 columns T1.25 recorded: materialize 1,166 (1,150
     b.order_open, 15 b.order_decided, 1 b.range); the time column's choice
-    1,203; inference 357 of 26,908 decisions (272 b.offsets, 67
-    b.format_guess, the rest range or mixed); the warning 361 of 2,810. Over
+    1,203; inference 398 of 26,908 decisions (272 b.offsets, 67
+    b.format_guess, 41 b.order_open, the rest range or mixed); the warning
+    372 of 2,810 (b.order_rule). Over
     T1.25b's 60 generated sources: European dates (dd/mm/yyyy, dd-mm-yyyy
     HH:MM) typed a timestamp and warned of, two-digit European years read
     and warned of, US-and-ISO and mixed ISO layouts typed a timestamp, an
@@ -1103,9 +1119,12 @@ entries:
     any name the reference would not make one of either.
   affected_inputs: >-
     Over the 13,456 columns T1.25 recorded: 459 of 26,908 inference
-    decisions and 11 day-first warnings (class c), every one a column of the
-    clock's words (now, today) or of dates in words or packed digits under a
-    name that does not say time. None of T1.25b's 60 generated sources.
+    decisions (class c), columns under a name that does not say time whose
+    values outside the client's shapes (the clock's words now and today,
+    dates in words, ordinals such as 5th, a bare year such as 2024) pandas
+    reads as dates. No day-first warning differs for this reason (the 11
+    T1.25b first counted here are in-list order-rule differences, DT-16,
+    fix round 1). None of T1.25b's 60 generated sources.
   cases: [T1.25b]
   refs: [DT-15, P1B-2]
   status: proposed
@@ -1304,7 +1323,7 @@ entries:
     (DT-15); offsets mixed are refused by name (text_time_zones, DT-11), and
     an order of day and month the values leave open by text_time_order
     (DT-16). Measured at T1.25b over the T0.6 corpus's 121 column cases as
-    source columns under a name that says time and one that does not: the
+    source columns under two names, neither saying time to the score: the
     core describes 60 of the 242 as the reference does, warnings included;
     on 36 it decides, as the reference does, that the text is no timestamp
     and then refuses multicategorical; it refuses 98 by text_time (DT-15)
