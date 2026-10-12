@@ -269,6 +269,27 @@ def test_a_meaning_given_as_a_stype_is_kept_as_given(
     assert schema['orders']['user_id'].stype is Stype.categorical
 
 
+@pytest.mark.parametrize('route', ['core', 'old'])
+def test_a_key_and_a_time_column_given_as_numpy_text_are_kept_as_given(
+    route: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A name given as ``np.str_``, a ``str`` subclass, is the object each
+    # table holds after the edit, on the core as the reference's setters
+    # keep it (T1.24b's review, taken at T1.27).
+    import numpy as np
+
+    schema = _schema(route, monkeypatch)
+    schema['orders'].time_column = np.str_('ts')
+    assert type(schema['orders'].time_column) is np.str_
+    schema['users'].time_column = np.str_('seen')
+    assert type(schema['users'].time_column) is np.str_
+    assert schema['users'].time_column == 'seen'
+    schema['users'].primary_key = np.str_('user_id')
+    assert type(schema['users'].primary_key) is np.str_
+    schema['users'].time_column = None
+    assert schema['users'].time_column is None
+
+
 def test_a_setter_that_skips_the_core_fails_here(
     monkeypatch: pytest.MonkeyPatch, started: list[str]
 ) -> None:

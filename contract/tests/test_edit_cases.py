@@ -8,20 +8,23 @@ Run where the contract tests run:
 
     python -m pytest contract/tests -q
 
-The ``edit.*`` cases (``contract/fixtures/edit-cases``, in the case
-format, outside ``contract/cases`` until the format's new edits are the
-gate's checkpoint's, as its README says) make edits to the schema
+The ``edit.*`` cases (``contract/cases/s1``, moved there at T1.27 from
+T1.24b's fixtures, once the gate's checkpoint loads the format's new
+edits; diagnostic, so the corpus reports them and this test gates them)
+make edits to the schema
 ``Schema.from_source`` returned, each through the case format's edits:
 seven the reference refuses at the assignment (a key on a column the table
 lacks or on its time column, a time column that cannot hold a time, a
 meaning that is no semantic type or one the values cannot carry, a link to
-a column that is not the key, the key left out) and one whose four edits it
-takes, then materializes. Each edit is the core's ``edit_schema`` on both
+a column that is not the key, the key left out) and two whose edits it
+takes, then materializes: four edits, and from T1.27 a time column set on
+a VARCHAR column of dates, so the time column's rule is reached over text
+on both core hosts. Each edit is the core's ``edit_schema`` on both
 core hosts (decision E67). What holds them:
 
 - the reference's outcome: python-core's outcome is each case's
-  ``expect``, which the reference observation recorded beside the cases
-  (``reference.jsonl``, recorded on python-ref under T1.13's rules)
+  ``expect``, which each case's line of the committed reference file
+  (``contract/reference``, recorded on python-ref under T1.13's rules)
   records;
 - the two core hosts agree: what python-core's host started the core with
   (``core.inputs``, and ``core.edits``: the description, the schema held
@@ -49,9 +52,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
-FIXTURES = ROOT / 'contract/fixtures/edit-cases'
-CASES = sorted(FIXTURES.glob('edit.*.json'))
-REFERENCE = FIXTURES / 'reference.jsonl'
+CASES = sorted((ROOT / 'contract/cases/s1').glob('edit.*.json'))
+REFERENCE = ROOT / 'contract/reference'
 PINNED = ROOT / 'contract/pinned/edits.core.json'
 FORMAT = 'sdm-edits-pin/1'
 FIELDS = ('inputs', 'edits', 'error', 'materialized')
@@ -135,7 +137,7 @@ def observed(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 def test_there_are_refused_and_accepted_edit_cases() -> None:
     expects = [json.loads(path.read_text())['expect'] for path in CASES]
     assert sum(e['outcome'] == 'refusal' for e in expects) == 7
-    assert sum(e['outcome'] == 'success' for e in expects) == 1
+    assert sum(e['outcome'] == 'success' for e in expects) == 2
 
 
 def test_each_edit_case_ends_as_the_reference_ends_it(
@@ -143,7 +145,8 @@ def test_each_edit_case_ends_as_the_reference_ends_it(
 ) -> None:
     reference = {
         line['case']: line
-        for line in map(json.loads, REFERENCE.read_text().splitlines())
+        for path in sorted(REFERENCE.glob('*.jsonl'))
+        for line in map(json.loads, path.read_text().splitlines())
     }
     for path in CASES:
         case = json.loads(path.read_text())
@@ -183,7 +186,8 @@ def test_the_core_hosts_agree_as_the_pin_holds_them(
                         "edits' starts, the core's error code, and the "
                         'digest of the request state; '
                         "sdm-testkit's tests/edit_cases.rs holds rust-host "
-                        'to it (T1.24b).'
+                        'to it (T1.24b; the cases in contract/cases/s1 '
+                        'from T1.27).'
                     ),
                     'cases': seen,
                 },

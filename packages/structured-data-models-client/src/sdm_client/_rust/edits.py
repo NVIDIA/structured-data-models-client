@@ -243,6 +243,11 @@ def table(table: Any, key: str, value: Any) -> bool:
         schema,
         {'edit': 'time_column', 'table': name, 'column': _name_or_none(value)},
     )
+    # The time column as the caller gave it, which the answer names: a
+    # ``str`` subclass (``np.str_``) kept as given, as the reference keeps
+    # it, and as the key above.
+    if value is not None:
+        object.__setattr__(table, 'time_column', value)
     return True
 
 

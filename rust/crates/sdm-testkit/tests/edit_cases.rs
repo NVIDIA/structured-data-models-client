@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The schema's edits on the pure-Rust host (T1.24b, decision E67): each
-//! `edit.*` case's (`contract/fixtures/edit-cases`) edits are the core's `edit_schema`, as on python-core,
+//! `edit.*` case's (`contract/cases/s1`, moved there from T1.24b's
+//! fixtures at T1.27) edits are the core's `edit_schema`, as on python-core,
 //! and what this host starts the core with, the core's error code and the
 //! request state are the ones `contract/pinned/edits.core.json` pins from
 //! python-core's run (`contract/tests/test_edit_cases.py`), so CI gates the
@@ -13,7 +14,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use sdm_testkit::edits::{Link, SchemaEdit};
 use sdm_testkit::host::{self, Answer};
 use sdm_testkit::{bases, case};
 use serde_json::{Value, json};
@@ -47,53 +47,10 @@ fn digest(value: &Value) -> String {
     case::sha256(serde_json::to_string(&canonical(value)).unwrap().as_bytes())
 }
 
-/// A case's edit as this host makes it, every edit of the case format
-/// named (`SchemaEdit::from_case` names the two a gate's checkpoint loader
-/// holds, until it holds these).
-fn schema_edit(edit: &case::Edit) -> SchemaEdit {
-    match edit {
-        case::Edit::ClearTimeColumn { table } => SchemaEdit::ClearTimeColumn {
-            table: table.0.clone(),
-        },
-        case::Edit::DeleteColumn { table, column } => SchemaEdit::DeleteColumn {
-            table: table.0.clone(),
-            column: column.0.clone(),
-        },
-        case::Edit::SetPrimaryKey { table, column } => SchemaEdit::SetPrimaryKey {
-            table: table.0.clone(),
-            column: column.0.clone(),
-        },
-        case::Edit::SetTimeColumn { table, column } => SchemaEdit::SetTimeColumn {
-            table: table.0.clone(),
-            column: column.0.clone(),
-        },
-        case::Edit::SetStype {
-            table,
-            column,
-            stype,
-        } => SchemaEdit::SetStype {
-            table: table.0.clone(),
-            column: column.0.clone(),
-            stype: stype.0.clone(),
-        },
-        case::Edit::SetRelationships { relationships } => SchemaEdit::SetRelationships {
-            relationships: relationships
-                .iter()
-                .map(|link| Link {
-                    source_table: link.source_table.0.clone(),
-                    source_column: link.source_column.0.clone(),
-                    target_table: link.target_table.0.clone(),
-                    target_column: link.target_column.0.clone(),
-                })
-                .collect(),
-        },
-    }
-}
-
 /// Each edit case, run on this host: what the pin holds of it, by case.
 fn observed() -> BTreeMap<String, Value> {
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
-    let mut paths: Vec<PathBuf> = std::fs::read_dir(contract().join("fixtures/edit-cases"))
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(contract().join("cases/s1"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
         .filter(|path| {
@@ -105,15 +62,7 @@ fn observed() -> BTreeMap<String, Value> {
     paths.sort();
     let mut seen = BTreeMap::new();
     for loaded in case::load(&paths).unwrap() {
-        let edits: Vec<SchemaEdit> = loaded
-            .case
-            .input
-            .edits
-            .iter()
-            .flatten()
-            .map(schema_edit)
-            .collect();
-        let ran = host::run_edited(&loaded.case, &bases, &edits).unwrap();
+        let ran = host::run(&loaded.case, &bases).unwrap();
         let error = match &ran.answer {
             Answer::Error { code, .. } => Value::from(code.clone()),
             _ => Value::Null,
@@ -182,7 +131,7 @@ fn problems(pin: &Value, seen: &BTreeMap<String, Value>) -> Vec<String> {
 #[test]
 fn the_edit_cases_on_this_host_are_the_pin_s() {
     let seen = observed();
-    assert_eq!(seen.len(), 8);
+    assert_eq!(seen.len(), 9);
     assert_eq!(problems(&pin(), &seen), Vec::<String>::new());
     // Seven refused at an edit, as the reference refuses them.
     let refused = seen
