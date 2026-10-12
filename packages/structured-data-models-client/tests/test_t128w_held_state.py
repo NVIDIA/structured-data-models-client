@@ -43,7 +43,6 @@ ANCHOR = pd.Timestamp('2024-03-01')
 
 @pytest.fixture(autouse=True)
 def _core(monkeypatch: pytest.MonkeyPatch) -> None:
-    pytest.importorskip('sdm_client._native')
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
 
 

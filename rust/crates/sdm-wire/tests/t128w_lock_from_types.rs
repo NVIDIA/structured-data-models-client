@@ -17,6 +17,11 @@
 //!   node at that path names, and each required key is one the types
 //!   always write.
 
+#![allow(
+    clippy::disallowed_methods,
+    reason = "test code: reads the committed schema files and the lock"
+)]
+
 use std::path::PathBuf;
 
 use sdm_contract::ops::Stype;

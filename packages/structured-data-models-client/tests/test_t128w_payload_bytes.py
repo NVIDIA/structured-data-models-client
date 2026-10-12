@@ -40,7 +40,6 @@ VECTORS = json.loads(
 
 @pytest.fixture(autouse=True)
 def _core(monkeypatch: pytest.MonkeyPatch) -> None:
-    pytest.importorskip('sdm_client._native')
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
 
 
@@ -102,13 +101,15 @@ def test_the_core_s_payload_bytes_are_the_reference_s(
         return
     try:
         got = _core_bytes(sample, monkeypatch)
-    except UnsupportedRequestError:
+    except UnsupportedRequestError as refused:
         # A sum over a DECIMAL column is T1.27's ``target_type``, refused by
         # name on the core until it lands: not a payload this package
-        # writes. Any other sample the core does not take fails.
-        if not _decimal_target(sample):
-            raise
-        pytest.skip('the core refuses a DECIMAL target (T1.27 target_type)')
+        # writes, so the refusal is held instead. Any other sample the
+        # core does not take fails; once T1.27 takes it, its bytes are
+        # compared below.
+        assert _decimal_target(sample), refused
+        assert refused.code == 'UNSUPPORTED_REQUEST'
+        return
     want = sample['payload'].encode('utf-8')
     if got != want:
         at = next(
