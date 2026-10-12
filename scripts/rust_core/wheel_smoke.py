@@ -67,6 +67,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -229,14 +230,24 @@ def check_resolved(lane: Lane, versions: dict[str, str]) -> None:
             raise SmokeFailed(f'{name} resolved to {found}, not {wanted}')
 
 
+#: This repository's distributions, which a freeze names by their files.
+OWN = {
+    'structured-data-models-client',
+    'structured-data-models-api',
+    'structured-data-models-pql',
+    'structured-data-models-connectors',
+    'structured-data-models-relational-engine',
+}
+
+
 def third_party(freeze: str) -> list[str]:
     """The freeze's lines but this repository's own distributions."""
     return sorted(
         line
         for line in freeze.splitlines()
         if line.strip()
-        and not line.startswith('structured-data-models-')
         and not line.startswith('-')
+        and re.split(r'[=@ ]', line, maxsplit=1)[0].strip() not in OWN
     )
 
 
