@@ -18,9 +18,9 @@ arrow-schema.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-engine = { path = "../sdm-engine" }
 sdm-wire = { path = "../sdm-wire" }
-serde_json.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 # The schema check, to hold the payload the producer builds to the
 # definition the contract's lock holds (T1.22).
 sdm-contract = { path = "../sdm-contract", features = ["test-ops"] }

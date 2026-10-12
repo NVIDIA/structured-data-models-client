@@ -1878,32 +1878,48 @@
       ]
     },
     "StatePayload": {
+      "title": "StatePayload",
+      "description": "The payload of one prediction request.",
       "type": "object",
       "properties": {
         "model": {
+          "description": "The model the request was laid out for.",
           "type": "string"
         },
         "task": {
+          "description": "What is predicted, of which entity.",
           "type": "object",
           "properties": {
             "kind": {
+              "description": "The task's kind, as the engine names it (`regression`).",
               "type": "string"
             },
             "target": {
+              "description": "The label column of the instance table.",
               "type": "object",
               "properties": {
                 "column_name": {
                   "type": "string"
                 },
                 "dtype": {
-                  "type": "string"
+                  "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                  "type": "string",
+                  "enum": [
+                    "int64",
+                    "float32",
+                    "float64",
+                    "string",
+                    "stringlist",
+                    "bool",
+                    "timestamp[us]"
+                  ]
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "column_name",
                 "dtype"
-              ],
-              "additionalProperties": false
+              ]
             },
             "entity_table_names": {
               "type": "array",
@@ -1912,31 +1928,47 @@
               }
             },
             "anchor_time_column": {
+              "description": "The instance table's column holding each example's anchor time,\nwhere the examples have one.",
               "type": "string"
             }
           },
+          "additionalProperties": false,
           "required": [
             "kind",
             "target",
             "entity_table_names"
-          ],
-          "additionalProperties": false
+          ]
         },
         "schema": {
+          "description": "The schema of the request's tables and the links between them.",
           "type": "object",
           "properties": {
             "instance_table": {
+              "description": "One table's schema: its columns, in order, and its key.",
               "type": "object",
               "properties": {
                 "columns": {
                   "type": "object",
                   "additionalProperties": {
+                    "description": "One column's spec.",
                     "type": "object",
                     "properties": {
                       "dtype": {
-                        "type": "string"
+                        "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                        "type": "string",
+                        "enum": [
+                          "int64",
+                          "float32",
+                          "float64",
+                          "string",
+                          "stringlist",
+                          "bool",
+                          "timestamp[us]"
+                        ]
                       },
                       "stype": {
+                        "description": "The column's semantic type, where the schema gives one.",
+                        "type": "string",
                         "enum": [
                           "numerical",
                           "categorical",
@@ -1950,16 +1982,18 @@
                         ]
                       },
                       "nullable": {
+                        "description": "`false` for a column of the key; never written otherwise.",
                         "type": "boolean"
                       }
                     },
+                    "additionalProperties": false,
                     "required": [
                       "dtype"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 },
                 "primary_key": {
+                  "description": "A table's key: one column, or several.",
                   "anyOf": [
                     {
                       "type": "string"
@@ -1973,26 +2007,40 @@
                   ]
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "columns",
                 "primary_key"
-              ],
-              "additionalProperties": false
+              ]
             },
             "related_tables": {
               "type": "object",
               "additionalProperties": {
+                "description": "One table's schema: its columns, in order, and its key.",
                 "type": "object",
                 "properties": {
                   "columns": {
                     "type": "object",
                     "additionalProperties": {
+                      "description": "One column's spec.",
                       "type": "object",
                       "properties": {
                         "dtype": {
-                          "type": "string"
+                          "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                          "type": "string",
+                          "enum": [
+                            "int64",
+                            "float32",
+                            "float64",
+                            "string",
+                            "stringlist",
+                            "bool",
+                            "timestamp[us]"
+                          ]
                         },
                         "stype": {
+                          "description": "The column's semantic type, where the schema gives one.",
+                          "type": "string",
                           "enum": [
                             "numerical",
                             "categorical",
@@ -2006,16 +2054,18 @@
                           ]
                         },
                         "nullable": {
+                          "description": "`false` for a column of the key; never written otherwise.",
                           "type": "boolean"
                         }
                       },
+                      "additionalProperties": false,
                       "required": [
                         "dtype"
-                      ],
-                      "additionalProperties": false
+                      ]
                     }
                   },
                   "primary_key": {
+                    "description": "A table's key: one column, or several.",
                     "anyOf": [
                       {
                         "type": "string"
@@ -2029,16 +2079,17 @@
                     ]
                   }
                 },
+                "additionalProperties": false,
                 "required": [
                   "columns",
                   "primary_key"
-                ],
-                "additionalProperties": false
+                ]
               }
             },
             "relationships": {
               "type": "array",
               "items": {
+                "description": "A link from columns of one table to columns of another; the link from\nthe instance table names no source table.",
                 "type": "object",
                 "properties": {
                   "source_table": {
@@ -2060,30 +2111,36 @@
                     }
                   }
                 },
+                "additionalProperties": false,
                 "required": [
                   "source_columns",
                   "target_table",
                   "target_columns"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           },
+          "additionalProperties": false,
           "required": [
             "instance_table",
             "related_tables",
             "relationships"
-          ],
-          "additionalProperties": false
+          ]
         },
         "context": {
+          "description": "The examples with a label, and the rows sampled for them.",
           "type": "object",
           "properties": {
             "instance_table": {
+              "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
               "type": "object",
               "properties": {
                 "format": {
-                  "const": "arrays"
+                  "description": "How rows are written: `arrays` alone.",
+                  "type": "string",
+                  "enum": [
+                    "arrays"
+                  ]
                 },
                 "columns": {
                   "type": "array",
@@ -2094,24 +2151,30 @@
                 "rows": {
                   "type": "array",
                   "items": {
-                    "type": "array"
+                    "type": "array",
+                    "items": true
                   }
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "format",
                 "columns",
                 "rows"
-              ],
-              "additionalProperties": false
+              ]
             },
             "related_tables": {
               "type": "object",
               "additionalProperties": {
+                "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
                 "type": "object",
                 "properties": {
                   "format": {
-                    "const": "arrays"
+                    "description": "How rows are written: `arrays` alone.",
+                    "type": "string",
+                    "enum": [
+                      "arrays"
+                    ]
                   },
                   "columns": {
                     "type": "array",
@@ -2122,33 +2185,40 @@
                   "rows": {
                     "type": "array",
                     "items": {
-                      "type": "array"
+                      "type": "array",
+                      "items": true
                     }
                   }
                 },
+                "additionalProperties": false,
                 "required": [
                   "format",
                   "columns",
                   "rows"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           },
+          "additionalProperties": false,
           "required": [
             "instance_table",
             "related_tables"
-          ],
-          "additionalProperties": false
+          ]
         },
         "predict": {
+          "description": "The examples to predict, and the rows sampled for them.",
           "type": "object",
           "properties": {
             "instance_table": {
+              "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
               "type": "object",
               "properties": {
                 "format": {
-                  "const": "arrays"
+                  "description": "How rows are written: `arrays` alone.",
+                  "type": "string",
+                  "enum": [
+                    "arrays"
+                  ]
                 },
                 "columns": {
                   "type": "array",
@@ -2159,24 +2229,30 @@
                 "rows": {
                   "type": "array",
                   "items": {
-                    "type": "array"
+                    "type": "array",
+                    "items": true
                   }
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "format",
                 "columns",
                 "rows"
-              ],
-              "additionalProperties": false
+              ]
             },
             "related_tables": {
               "type": "object",
               "additionalProperties": {
+                "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
                 "type": "object",
                 "properties": {
                   "format": {
-                    "const": "arrays"
+                    "description": "How rows are written: `arrays` alone.",
+                    "type": "string",
+                    "enum": [
+                      "arrays"
+                    ]
                   },
                   "columns": {
                     "type": "array",
@@ -2187,26 +2263,28 @@
                   "rows": {
                     "type": "array",
                     "items": {
-                      "type": "array"
+                      "type": "array",
+                      "items": true
                     }
                   }
                 },
+                "additionalProperties": false,
                 "required": [
                   "format",
                   "columns",
                   "rows"
-                ],
-                "additionalProperties": false
+                ]
               }
             }
           },
+          "additionalProperties": false,
           "required": [
             "instance_table",
             "related_tables"
-          ],
-          "additionalProperties": false
+          ]
         },
         "output": {
+          "description": "The outputs asked for.",
           "type": "object",
           "properties": {
             "fields": {
@@ -2216,15 +2294,17 @@
               }
             },
             "prediction_statistic": {
+              "description": "A regression's statistic, as the caller chose it: the reader's, not\nthe writer's (the Python host records it on the payload).",
               "type": "string"
             }
           },
+          "additionalProperties": false,
           "required": [
             "fields"
-          ],
-          "additionalProperties": false
+          ]
         },
         "inference": {
+          "description": "How the model is run.",
           "type": "object",
           "properties": {
             "run_mode": {
@@ -2234,6 +2314,7 @@
               "type": "boolean"
             },
             "inference_config": {
+              "description": "The engine's inference options, as it writes them.",
               "type": "object",
               "properties": {
                 "kind": {
@@ -2241,6 +2322,7 @@
                 },
                 "num_estimators": {
                   "type": "integer",
+                  "format": "uint64",
                   "minimum": 0
                 },
                 "column_shuffle": {
@@ -2253,6 +2335,7 @@
                   "type": "boolean"
                 },
                 "class_shuffle": {
+                  "description": "The reader's, not the writer's.",
                   "type": "boolean"
                 },
                 "target_transforms": {
@@ -2265,6 +2348,7 @@
                   "type": "string"
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "kind",
                 "num_estimators",
@@ -2273,39 +2357,43 @@
                 "hop_shuffle",
                 "target_transforms",
                 "output_type"
-              ],
-              "additionalProperties": false
+              ]
             }
           },
+          "additionalProperties": false,
           "required": [
             "run_mode",
             "use_prediction_time",
             "inference_config"
-          ],
-          "additionalProperties": false
+          ]
         },
         "metadata": {
+          "description": "What the request was made from.",
           "type": "object",
           "properties": {
             "source_query": {
+              "description": "The query, as the reference writes it back; none when it is empty.",
               "type": "string"
             },
             "num_context_examples": {
               "type": "integer",
+              "format": "uint64",
               "minimum": 0
             },
             "num_prediction_examples": {
               "type": "integer",
+              "format": "uint64",
               "minimum": 0
             }
           },
+          "additionalProperties": false,
           "required": [
             "num_context_examples",
             "num_prediction_examples"
-          ],
-          "additionalProperties": false
+          ]
         }
       },
+      "additionalProperties": false,
       "required": [
         "model",
         "task",
@@ -2316,7 +2404,6 @@
         "inference",
         "metadata"
       ],
-      "additionalProperties": false,
       "x-request-state-version": 1
     },
     "EndpointMetadata": {

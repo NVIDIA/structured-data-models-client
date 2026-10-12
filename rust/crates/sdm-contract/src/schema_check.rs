@@ -5,14 +5,18 @@
 //! Test-only (the `test-ops` feature): a JSON value checked against a
 //! definition of the contract's own schema ([`crate::schema_json`]), so a
 //! producer's tests can hold what it writes to the definition the lock
-//! holds (T1.22: the request state's payload).
+//! holds (T1.22: the request state's payload, whose definition `sdm-wire`'s
+//! typed payload derives from T1.28w).
 //!
-//! It reads the keywords the contract's definitions use and fails closed
-//! on any other, so a definition cannot pass by naming a keyword it does
-//! not check: `type`, `properties`, `required`, `additionalProperties`,
-//! `items`, `prefixItems`, `anyOf`, `oneOf`, `enum`, `const`, `minimum`,
-//! `$ref` within the schema, and the annotations (`description`, `title`,
-//! `examples`, `format` and any `x-` keyword), which it does not read.
+//! It is not a JSON Schema implementation: it reads only the keywords the
+//! definition it is used on holds (the request state's payload: `type` of
+//! `object`, `array`, `string`, `boolean` or `integer`, `properties`,
+//! `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `minimum`,
+//! the schemas `true` and `false`, and the annotations `description`, `title`, `format`
+//! and any `x-` keyword, which it does not read) and fails closed on any
+//! other, so a definition cannot pass by naming a keyword it does not
+//! check; a definition that comes to need another needs it added here,
+//! with a test (T1.28w).
 
 use serde_json::Value;
 
@@ -24,10 +28,10 @@ pub fn check(name: &str, value: &Value) -> Result<(), String> {
     let definition = root["$defs"]
         .get(name)
         .ok_or_else(|| format!("the schema defines no {name}"))?;
-    node(&root, definition, value, "$")
+    node(definition, value, "$")
 }
 
-const ANNOTATIONS: [&str; 4] = ["description", "title", "examples", "format"];
+const ANNOTATIONS: [&str; 3] = ["description", "title", "format"];
 
 fn type_holds(kind: &str, value: &Value) -> Result<bool, String> {
     Ok(match kind {
@@ -35,51 +39,31 @@ fn type_holds(kind: &str, value: &Value) -> Result<bool, String> {
         "array" => value.is_array(),
         "string" => value.is_string(),
         "boolean" => value.is_boolean(),
-        "null" => value.is_null(),
-        "number" => value.is_number(),
         "integer" => value.is_i64() || value.is_u64(),
         other => return Err(format!("a type this check does not read: {other}")),
     })
 }
 
-fn node(root: &Value, schema: &Value, value: &Value, at: &str) -> Result<(), String> {
+fn node(schema: &Value, value: &Value, at: &str) -> Result<(), String> {
     let map = match schema {
         Value::Bool(true) => return Ok(()),
         Value::Bool(false) => return Err(format!("{at}: nothing is allowed here")),
         Value::Object(map) => map,
-        _ => return Err(format!("{at}: the schema here is not a schema")),
+        _ => return Err(format!("{at}: a schema this check does not read")),
     };
     for (keyword, rule) in map {
         if ANNOTATIONS.contains(&keyword.as_str()) || keyword.starts_with("x-") {
             continue;
         }
         match keyword.as_str() {
-            "$ref" => {
-                let name = rule
-                    .as_str()
-                    .and_then(|r| r.strip_prefix("#/$defs/"))
-                    .ok_or_else(|| format!("{at}: a $ref this check does not follow"))?;
-                let target = root["$defs"]
-                    .get(name)
-                    .ok_or_else(|| format!("{at}: $ref to no definition {name}"))?;
-                node(root, target, value, at)?;
-            }
             "type" => {
-                let kinds: Vec<&str> = match rule {
-                    Value::String(one) => vec![one.as_str()],
-                    Value::Array(several) => several.iter().filter_map(Value::as_str).collect(),
-                    _ => return Err(format!("{at}: type is not a type")),
-                };
-                let mut holds = false;
-                for kind in kinds {
-                    holds |= type_holds(kind, value)?;
-                }
-                if !holds {
+                let kind = rule
+                    .as_str()
+                    .ok_or_else(|| format!("{at}: a type this check does not read: {rule}"))?;
+                if !type_holds(kind, value)? {
                     return Err(format!("{at}: not of type {rule}"));
                 }
             }
-            "const" if value != rule => return Err(format!("{at}: not {rule}")),
-            "const" => {}
             "enum" => {
                 let options = rule
                     .as_array()
@@ -118,7 +102,7 @@ fn node(root: &Value, schema: &Value, value: &Value, at: &str) -> Result<(), Str
                     .ok_or_else(|| format!("{at}: properties is not a map"))?;
                 for (key, item) in object {
                     if let Some(sub) = properties.get(key) {
-                        node(root, sub, item, &format!("{at}.{key}"))?;
+                        node(sub, item, &format!("{at}.{key}"))?;
                     }
                 }
             }
@@ -129,44 +113,77 @@ fn node(root: &Value, schema: &Value, value: &Value, at: &str) -> Result<(), Str
                 let named = map.get("properties").and_then(Value::as_object);
                 for (key, item) in object {
                     if !named.is_some_and(|n| n.contains_key(key)) {
-                        node(root, rule, item, &format!("{at}.{key}"))
+                        node(rule, item, &format!("{at}.{key}"))
                             .map_err(|e| format!("{e} (a key the definition does not name)"))?;
                     }
                 }
             }
             "items" => {
                 let Value::Array(items) = value else { continue };
-                let skip = map
-                    .get("prefixItems")
-                    .and_then(Value::as_array)
-                    .map_or(0, Vec::len);
-                for (n, item) in items.iter().enumerate().skip(skip) {
-                    node(root, rule, item, &format!("{at}[{n}]"))?;
+                for (n, item) in items.iter().enumerate() {
+                    node(rule, item, &format!("{at}[{n}]"))?;
                 }
             }
-            "prefixItems" => {
-                let Value::Array(items) = value else { continue };
-                let prefix = rule
-                    .as_array()
-                    .ok_or_else(|| format!("{at}: prefixItems is not a list"))?;
-                for (n, (sub, item)) in prefix.iter().zip(items).enumerate() {
-                    node(root, sub, item, &format!("{at}[{n}]"))?;
-                }
-            }
-            "anyOf" | "oneOf" => {
+            "anyOf" => {
                 let options = rule
                     .as_array()
-                    .ok_or_else(|| format!("{at}: {keyword} is not a list"))?;
-                let held = options
-                    .iter()
-                    .filter(|o| node(root, o, value, at).is_ok())
-                    .count();
-                if held == 0 || (keyword == "oneOf" && held > 1) {
-                    return Err(format!("{at}: {held} of {keyword}'s options hold"));
+                    .ok_or_else(|| format!("{at}: anyOf is not a list"))?;
+                if !options.iter().any(|o| node(o, value, at).is_ok()) {
+                    return Err(format!("{at}: none of anyOf's options hold"));
                 }
             }
             other => return Err(format!("{at}: a keyword this check does not read: {other}")),
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::node;
+
+    #[test]
+    fn a_keyword_or_type_the_payload_does_not_use_fails_closed() {
+        for schema in [
+            json!({"const": 1}),
+            json!({"oneOf": [true]}),
+            json!({"$ref": "#/$defs/StatePayload"}),
+            json!({"prefixItems": [true]}),
+            json!({"pattern": "a"}),
+            json!({"maximum": 1}),
+            json!({"type": "null"}),
+            json!({"type": "number"}),
+            json!({"type": ["string", "null"]}),
+            json!(1),
+        ] {
+            let err = node(&schema, &json!(1), "$").expect_err("an unread keyword passed");
+            assert!(err.contains("does not read"), "{schema}: {err}");
+        }
+    }
+
+    #[test]
+    fn the_definition_holds_to_the_keywords_it_reads() {
+        let schema = json!({
+            "type": "object",
+            "properties": {"n": {"type": "integer", "minimum": 0}, "k": {"enum": ["a"]}},
+            "required": ["n"],
+            "additionalProperties": false
+        });
+        assert_eq!(node(&schema, &json!({"n": 1, "k": "a"}), "$"), Ok(()));
+        for (value, problem) in [
+            (json!({"n": -1}), "below"),
+            (json!({"n": "1"}), "not of type"),
+            (json!({"k": "a"}), "n is missing"),
+            (json!({"n": 1, "k": "b"}), "not one of"),
+            (json!({"n": 1, "x": 1}), "nothing is allowed here"),
+        ] {
+            let err = node(&schema, &value, "$").expect_err("a fault held");
+            assert!(err.contains(problem), "{value}: {err}");
+        }
+        let either = json!({"anyOf": [{"type": "string"}, {"type": "array", "items": true}]});
+        assert_eq!(node(&either, &json!([1]), "$"), Ok(()));
+        assert!(node(&either, &json!(1), "$").is_err());
+    }
 }

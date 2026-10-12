@@ -1563,6 +1563,8 @@ dependencies = [
 name = "sdm-wire"
 version = "1.0.0"
 dependencies = [
+ "schemars",
+ "sdm-contract",
  "serde",
  "serde_json",
 ]

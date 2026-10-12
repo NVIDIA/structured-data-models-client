@@ -321,6 +321,74 @@ impl Value {
     }
 }
 
+/// A value written as [`Value::to_bytes`] writes it: each number its token,
+/// members in order. This is how a payload's cells are written
+/// ([`crate::payload`]).
+impl serde::Serialize for Value {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{Error, SerializeMap, SerializeSeq};
+        match self {
+            Value::Null => serializer.serialize_unit(),
+            Value::Bool(value) => serializer.serialize_bool(*value),
+            Value::Number(token) => RawValue::from_string(token.clone())
+                .map_err(|_| S::Error::custom("a number token that is not JSON"))?
+                .serialize(serializer),
+            Value::Text(text) => serializer.serialize_str(text),
+            Value::Array(items) => {
+                let mut seq = serializer.serialize_seq(Some(items.len()))?;
+                for item in items {
+                    seq.serialize_element(item)?;
+                }
+                seq.end()
+            }
+            Value::Object(members) => {
+                let mut map = serializer.serialize_map(Some(members.len()))?;
+                for (name, member) in members {
+                    map.serialize_entry(name, member)?;
+                }
+                map.end()
+            }
+        }
+    }
+}
+
+/// Any JSON value: a payload's cell holds whatever its column's dtype
+/// gives.
+impl schemars::JsonSchema for Value {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Value".into()
+    }
+
+    fn inline_schema() -> bool {
+        true
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::Schema::from(true)
+    }
+}
+
+impl Value {
+    /// An integer, as its digits.
+    pub fn int(value: i64) -> Value {
+        Value::Number(value.to_string())
+    }
+
+    /// A finite double, as the shortest text that reads back as the same
+    /// double; `None` for a NaN or an infinity, which JSON does not hold.
+    pub fn float(value: f64) -> Option<Value> {
+        if !value.is_finite() {
+            return None;
+        }
+        serde_json::to_string(&value).ok().map(Value::Number)
+    }
+
+    /// An array of texts.
+    pub fn texts<'a>(values: impl IntoIterator<Item = &'a str>) -> Value {
+        Value::Array(values.into_iter().map(Value::text).collect())
+    }
+}
+
 fn write_text(text: &str, out: &mut Vec<u8>) {
     // serde_json escapes a string's quotes, backslashes and control
     // characters; writing a `str` to a `Vec` cannot fail.

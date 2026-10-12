@@ -6,7 +6,10 @@
 //! lays it out (`predict_request_to_json`): the task, the schema, the
 //! context and predict halves, each an instance table and the related
 //! tables sampled for it, the output fields, the inference options and the
-//! metadata.
+//! metadata. The payload is `sdm-wire`'s typed one
+//! ([`sdm_wire::payload::StatePayload`]), whose derived schema is the
+//! contract's locked definition of it (T1.28w); each cell is a JSON value
+//! whose number is the token written ([`sdm_wire::json::Value`]).
 //!
 //! Each column's wire dtype comes from the Arrow type sampled, by the
 //! reference's rule for that type (`_dtype_name`): integers as `int64`,
@@ -27,8 +30,11 @@ use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
-
-use crate::json::Json;
+use sdm_wire::json::Value;
+use sdm_wire::payload::{
+    ColumnSpec, Dtype, Format, Half, Inference, InferenceConfig, Metadata, Named, Output,
+    PayloadSchema, PrimaryKey, Relationship, Rows, StatePayload, TableSchema, Target, Task,
+};
 
 /// The column of every table that names the example a row belongs to.
 pub const INSTANCE_ID: &str = "instance_id";
@@ -126,7 +132,7 @@ fn internal(message: &str) -> CoreError {
 }
 
 /// The wire dtype of a column of `data_type`, or a refusal naming the rule.
-pub fn wire_dtype(data_type: &DataType) -> Result<&'static str, CoreError> {
+pub fn wire_dtype(data_type: &DataType) -> Result<Dtype, CoreError> {
     Ok(match data_type {
         DataType::Int8
         | DataType::Int16
@@ -135,39 +141,38 @@ pub fn wire_dtype(data_type: &DataType) -> Result<&'static str, CoreError> {
         | DataType::UInt8
         | DataType::UInt16
         | DataType::UInt32
-        | DataType::UInt64 => "int64",
-        DataType::Float32 => "float32",
-        DataType::Float64 => "float64",
-        DataType::Utf8 => "string",
-        DataType::Boolean => "bool",
-        DataType::Timestamp(_, None) => "timestamp[us]",
+        | DataType::UInt64 => Dtype::Int64,
+        DataType::Float32 => Dtype::Float32,
+        DataType::Float64 => Dtype::Float64,
+        DataType::Utf8 => Dtype::String,
+        DataType::Boolean => Dtype::Bool,
+        DataType::Timestamp(_, None) => Dtype::TimestampMicros,
         _ => return Err(sdm_engine::not_yet("wire_dtype")),
     })
 }
 
 /// An integer cell: past the JSON-safe range, its digits as text; past
 /// int64, refused, as the reference refuses it.
-fn int_cell(value: i128, column: &str) -> Result<Json, CoreError> {
+fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
     if value < i128::from(i64::MIN) || value > i128::from(i64::MAX) {
         return Err(invalid("a value is outside the range int64 holds", column));
     }
     if value.abs() > JSON_SAFE {
-        return Ok(Json::Text(value.to_string()));
+        return Ok(Value::Text(value.to_string()));
     }
-    Ok(Json::Int(value as i64))
+    Ok(Value::int(value as i64))
 }
 
-fn float_cell(value: f64, column: &str) -> Result<Json, CoreError> {
+fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
     if value.is_nan() {
-        return Ok(Json::Null);
+        return Ok(Value::Null);
     }
-    if value.is_infinite() {
-        return Err(invalid(
+    Value::float(value).ok_or_else(|| {
+        invalid(
             "a value is not finite, and a request holds finite numbers or nulls",
             column,
-        ));
-    }
-    Ok(Json::Float(value))
+        )
+    })
 }
 
 /// `ns` nanoseconds since the epoch as the reference writes a time:
@@ -217,9 +222,9 @@ fn to_ns(value: i64, unit: TimeUnit, column: &str) -> Result<i64, CoreError> {
 }
 
 /// Row `row` of `array`, written under its wire dtype.
-pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Json, CoreError> {
+pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Value, CoreError> {
     if array.is_null(row) {
-        return Ok(Json::Null);
+        return Ok(Value::Null);
     }
     macro_rules! int {
         ($t:ty) => {
@@ -240,8 +245,8 @@ pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Json, CoreErro
             column,
         ),
         DataType::Float64 => float_cell(array.as_primitive::<Float64Type>().value(row), column),
-        DataType::Utf8 => Ok(Json::text(array.as_string::<i32>().value(row))),
-        DataType::Boolean => Ok(Json::Bool(array.as_boolean().value(row))),
+        DataType::Utf8 => Ok(Value::text(array.as_string::<i32>().value(row))),
+        DataType::Boolean => Ok(Value::Bool(array.as_boolean().value(row))),
         DataType::Timestamp(unit, None) => {
             let value = match unit {
                 TimeUnit::Second => array.as_primitive::<TimestampSecondType>().value(row),
@@ -253,7 +258,7 @@ pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Json, CoreErro
                 }
                 TimeUnit::Nanosecond => array.as_primitive::<TimestampNanosecondType>().value(row),
             };
-            Ok(Json::Text(iso_microseconds(to_ns(value, *unit, column)?)))
+            Ok(Value::Text(iso_microseconds(to_ns(value, *unit, column)?)))
         }
         _ => Err(sdm_engine::not_yet("wire_dtype")),
     }
@@ -262,16 +267,19 @@ pub fn cell(array: &ArrayRef, row: usize, column: &str) -> Result<Json, CoreErro
 /// An integer key cell as the float a column of keys and nulls holds it
 /// at: its value rounded to the nearest double, as pandas reads such a
 /// column.
-fn float_key(cell: &Json) -> Result<Json, CoreError> {
+fn float_key(cell: &Value) -> Result<Value, CoreError> {
     let value = match cell {
-        Json::Int(value) => *value as f64,
-        Json::Text(digits) => digits
+        Value::Number(token) => token
+            .parse::<i64>()
+            .map_err(|_| internal("an integer key is not an integer"))?
+            as f64,
+        Value::Text(digits) => digits
             .parse::<i128>()
             .map_err(|_| internal("an integer key's digits do not read"))?
             as f64,
         _ => return Err(internal("an integer key is not an integer")),
     };
-    Ok(Json::Float(value))
+    Value::float(value).ok_or_else(|| internal("an integer key is not finite"))
 }
 
 /// `prefix`, or `prefix_1`, `prefix_2` and on, whichever `occupied` does not
@@ -293,8 +301,8 @@ type Related = (String, Frame, String, Vec<(String, Stype)>);
 /// One column of a frame: its name, wire dtype and cells.
 struct FrameColumn {
     name: String,
-    dtype: &'static str,
-    cells: Vec<Json>,
+    dtype: Dtype,
+    cells: Vec<Value>,
 }
 
 /// A table as the reference's frame of it: columns in order, one cell per
@@ -315,7 +323,7 @@ impl Frame {
 
     /// The rows `keep` selects, as `arrays` JSON, under each column's
     /// dtype; `drop` names a column left out.
-    fn table(&self, keep: impl Fn(usize) -> bool, drop: Option<&str>) -> Json {
+    fn table(&self, keep: impl Fn(usize) -> bool, drop: Option<&str>) -> Rows {
         let columns: Vec<&FrameColumn> = self
             .columns
             .iter()
@@ -323,24 +331,21 @@ impl Frame {
             .collect();
         let rows = (0..self.rows)
             .filter(|row| keep(*row))
-            .map(|row| Json::Array(columns.iter().map(|c| c.cells[row].clone()).collect()))
+            .map(|row| columns.iter().map(|c| c.cells[row].clone()).collect())
             .collect();
-        Json::object([
-            ("format", Json::text("arrays")),
-            (
-                "columns",
-                Json::texts(columns.iter().map(|c| c.name.as_str())),
-            ),
-            ("rows", Json::Array(rows)),
-        ])
+        Rows {
+            format: Format::Arrays,
+            columns: columns.iter().map(|c| c.name.clone()).collect(),
+            rows,
+        }
     }
 }
 
 fn int_column(name: &str, values: impl Iterator<Item = usize>) -> FrameColumn {
     FrameColumn {
         name: name.to_owned(),
-        dtype: "int64",
-        cells: values.map(|v| Json::Int(v as i64)).collect(),
+        dtype: Dtype::Int64,
+        cells: values.map(|v| Value::int(v as i64)).collect(),
     }
 }
 
@@ -368,57 +373,45 @@ fn sampled_column(
         SampledColumn::Words(words) => Ok(FrameColumn {
             name: name.to_owned(),
             dtype: if rows.is_empty() {
-                "string"
+                Dtype::String
             } else {
-                "stringlist"
+                Dtype::StringList
             },
             cells: rows
                 .iter()
-                .map(|&row| Json::texts(words[row].iter().map(String::as_str)))
+                .map(|&row| Value::texts(words[row].iter().map(String::as_str)))
                 .collect(),
         }),
     }
 }
 
-fn stype_name(stype: Stype) -> &'static str {
-    match stype {
-        Stype::Numerical => "numerical",
-        Stype::Categorical => "categorical",
-        Stype::Multicategorical => "multicategorical",
-        Stype::Id => "ID",
-        Stype::Text => "text",
-        Stype::Timestamp => "timestamp",
-        Stype::Sequence => "sequence",
-        Stype::Image => "image",
-        Stype::Unsupported => "unsupported",
-    }
-}
-
 /// A table's schema: each column's dtype, its semantic type where one is
 /// given, and not nullable where it is part of the key.
-fn table_schema(frame: &Frame, stypes: &[(String, Stype)], key: &[String]) -> Json {
+fn table_schema(frame: &Frame, stypes: &[(String, Stype)], key: &[String]) -> TableSchema {
     let columns = frame
         .columns
         .iter()
         .map(|c| {
-            let mut spec = vec![("dtype".to_owned(), Json::text(c.dtype))];
-            if let Some((_, stype)) = stypes.iter().rev().find(|(n, _)| *n == c.name) {
-                spec.push(("stype".to_owned(), Json::text(stype_name(*stype))));
-            }
-            if key.contains(&c.name) {
-                spec.push(("nullable".to_owned(), Json::Bool(false)));
-            }
-            (c.name.clone(), Json::Object(spec))
+            let spec = ColumnSpec {
+                dtype: c.dtype,
+                stype: stypes
+                    .iter()
+                    .rev()
+                    .find(|(n, _)| *n == c.name)
+                    .map(|(_, stype)| *stype),
+                nullable: key.contains(&c.name).then_some(false),
+            };
+            (c.name.clone(), spec)
         })
         .collect();
     let primary_key = match key {
-        [one] => Json::text(one),
-        several => Json::texts(several.iter().map(String::as_str)),
+        [one] => PrimaryKey::One(one.clone()),
+        several => PrimaryKey::Several(several.to_vec()),
     };
-    Json::object([
-        ("columns", Json::Object(columns)),
-        ("primary_key", primary_key),
-    ])
+    TableSchema {
+        columns: Named(columns),
+        primary_key,
+    }
 }
 
 /// The payload of a regression's request, as the reference's engine
@@ -464,7 +457,7 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         .iter()
         .map(|row| match row {
             Some(row) => cell(key_array, *row, &reference),
-            None => Ok(Json::Null),
+            None => Ok(Value::Null),
         })
         .collect::<Result<Vec<_>, _>>()?;
     instance.columns.push(FrameColumn {
@@ -478,11 +471,11 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             occupied.push(name.clone());
             instance.columns.push(FrameColumn {
                 name: name.clone(),
-                dtype: "timestamp[us]",
+                dtype: Dtype::TimestampMicros,
                 cells: sampled
                     .anchors
                     .iter()
-                    .map(|a| Json::Text(iso_microseconds(*a)))
+                    .map(|a| Value::Text(iso_microseconds(*a)))
                     .collect(),
             });
             Some(name)
@@ -493,10 +486,10 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
     for value in &sampled.targets {
         target_cells.push(float_cell(f64::from(*value), TARGET)?);
     }
-    target_cells.resize(examples, Json::Null);
+    target_cells.resize(examples, Value::Null);
     instance.columns.push(FrameColumn {
         name: TARGET.to_owned(),
-        dtype: "float32",
+        dtype: Dtype::Float32,
         cells: target_cells,
     });
 
@@ -538,11 +531,12 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         if Some(target_column.as_str()) != entity.primary_key.as_deref() {
             return Err(internal("the entity table sends no key of its own"));
         }
-        relationships.push(Json::object([
-            ("source_columns", Json::texts([reference.as_str()])),
-            ("target_table", Json::text(&sampled.entity_table)),
-            ("target_columns", Json::texts([target_column.as_str()])),
-        ]));
+        relationships.push(Relationship {
+            source_table: None,
+            source_columns: vec![reference.clone()],
+            target_table: sampled.entity_table.clone(),
+            target_columns: vec![target_column.clone()],
+        });
     }
     // Each foreign key once, from the first of its links that gives a row
     // a key; a row given none is null, and an integer key column holding a
@@ -580,18 +574,18 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
         if values.iter().all(Option::is_none) {
             continue;
         }
-        let as_float = key_dtype == "int64" && values.iter().any(Option::is_none);
+        let as_float = key_dtype == Dtype::Int64 && values.iter().any(Option::is_none);
         let cells = values
             .into_iter()
             .map(|v| match v {
                 Some(cell) if as_float => float_key(&cell),
                 Some(cell) => Ok(cell),
-                None => Ok(Json::Null),
+                None => Ok(Value::Null),
             })
             .collect::<Result<_, _>>()?;
         let column = FrameColumn {
             name: link.fkey.clone(),
-            dtype: if as_float { "float64" } else { key_dtype },
+            dtype: if as_float { Dtype::Float64 } else { key_dtype },
             cells,
         };
         let frame = &mut frames[src].1;
@@ -600,12 +594,12 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             None => frame.columns.push(column),
         }
         frames[src].3.push((link.fkey.clone(), Stype::Id));
-        relationships.push(Json::object([
-            ("source_table", Json::text(&link.src)),
-            ("source_columns", Json::texts([link.fkey.as_str()])),
-            ("target_table", Json::text(&link.dst)),
-            ("target_columns", Json::texts([dst_key.as_str()])),
-        ]));
+        relationships.push(Relationship {
+            source_table: Some(link.src.clone()),
+            source_columns: vec![link.fkey.clone()],
+            target_table: link.dst.clone(),
+            target_columns: vec![dst_key.clone()],
+        });
         written.push(edge);
     }
 
@@ -620,11 +614,13 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
     instance_stypes.push((TARGET.to_owned(), Stype::Numerical));
     let mut instance_schema = table_schema(&instance, &instance_stypes, &[INSTANCE_ID.to_owned()]);
     if let Some(anchor) = &anchor_column
-        && let Json::Object(top) = &mut instance_schema
-        && let Some((_, Json::Object(columns))) = top.iter_mut().find(|(k, _)| k == "columns")
-        && let Some((_, spec)) = columns.iter_mut().find(|(k, _)| k == anchor)
+        && let Some((_, spec)) = instance_schema
+            .columns
+            .0
+            .iter_mut()
+            .find(|(k, _)| k == anchor)
     {
-        spec.set("nullable", Json::Bool(false));
+        spec.nullable = Some(false);
     }
     let related_schema = frames
         .iter()
@@ -635,7 +631,7 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
             )
         })
         .collect();
-    let half = |context: bool| -> Json {
+    let half = |context: bool| -> Half {
         let in_half = |instance: usize| (instance < num_train) == context;
         let instance_table = if context {
             instance.table(in_half, None)
@@ -652,80 +648,55 @@ pub fn regression(sampled: &Sampled) -> Result<Vec<u8>, CoreError> {
                 )
             })
             .collect();
-        Json::object([
-            ("instance_table", instance_table),
-            ("related_tables", Json::Object(related)),
-        ])
+        Half {
+            instance_table,
+            related_tables: Named(related),
+        }
     };
 
-    let mut task = vec![
-        ("kind".to_owned(), Json::text("regression")),
-        (
-            "target".to_owned(),
-            Json::object([
-                ("column_name", Json::text(TARGET)),
-                ("dtype", Json::text("float32")),
-            ]),
-        ),
-        (
-            "entity_table_names".to_owned(),
-            Json::texts([sampled.entity_table.as_str()]),
-        ),
-    ];
-    if let Some(anchor) = &anchor_column {
-        task.push(("anchor_time_column".to_owned(), Json::text(anchor)));
-    }
-    let mut metadata = Vec::new();
-    if !sampled.source_query.is_empty() {
-        metadata.push(("source_query".to_owned(), Json::text(&sampled.source_query)));
-    }
-    metadata.push((
-        "num_context_examples".to_owned(),
-        Json::Int(num_train as i64),
-    ));
-    metadata.push((
-        "num_prediction_examples".to_owned(),
-        Json::Int(sampled.num_test as i64),
-    ));
-    let payload = Json::object([
-        ("model", Json::text("kumo-relational")),
-        ("task", Json::Object(task)),
-        (
-            "schema",
-            Json::object([
-                ("instance_table", instance_schema),
-                ("related_tables", Json::Object(related_schema)),
-                ("relationships", Json::Array(relationships)),
-            ]),
-        ),
-        ("context", half(true)),
-        ("predict", half(false)),
-        (
-            "output",
-            Json::object([("fields", Json::texts(["prediction"]))]),
-        ),
-        (
-            "inference",
-            Json::object([
-                ("run_mode", Json::text("fast")),
-                ("use_prediction_time", Json::Bool(false)),
-                (
-                    "inference_config",
-                    Json::object([
-                        ("kind", Json::text("regression")),
-                        ("num_estimators", Json::Int(1)),
-                        ("column_shuffle", Json::Bool(false)),
-                        ("category_shuffle", Json::Bool(false)),
-                        ("hop_shuffle", Json::Bool(false)),
-                        ("target_transforms", Json::texts(["quantile"])),
-                        ("output_type", Json::text("median")),
-                    ]),
-                ),
-            ]),
-        ),
-        ("metadata", Json::Object(metadata)),
-    ]);
-    payload.to_bytes()
+    let payload = StatePayload {
+        model: "kumo-relational".to_owned(),
+        task: Task {
+            kind: "regression".to_owned(),
+            target: Target {
+                column_name: TARGET.to_owned(),
+                dtype: Dtype::Float32,
+            },
+            entity_table_names: vec![sampled.entity_table.clone()],
+            anchor_time_column: anchor_column,
+        },
+        schema: PayloadSchema {
+            instance_table: instance_schema,
+            related_tables: Named(related_schema),
+            relationships,
+        },
+        context: half(true),
+        predict: half(false),
+        output: Output {
+            fields: vec!["prediction".to_owned()],
+            prediction_statistic: None,
+        },
+        inference: Inference {
+            run_mode: "fast".to_owned(),
+            use_prediction_time: false,
+            inference_config: InferenceConfig {
+                kind: "regression".to_owned(),
+                num_estimators: 1,
+                column_shuffle: false,
+                category_shuffle: false,
+                hop_shuffle: false,
+                class_shuffle: None,
+                target_transforms: vec!["quantile".to_owned()],
+                output_type: "median".to_owned(),
+            },
+        },
+        metadata: Metadata {
+            source_query: (!sampled.source_query.is_empty()).then(|| sampled.source_query.clone()),
+            num_context_examples: num_train as u64,
+            num_prediction_examples: sampled.num_test as u64,
+        },
+    };
+    Ok(payload.to_bytes())
 }
 
 #[cfg(test)]

@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The request state's payload against the contract's locked definition
-//! of it (`$defs/StatePayload`, T1.22): the payload the producer
+//! of it (`$defs/StatePayload`, T1.22; from T1.28w the schema
+//! `sdm_wire::payload::StatePayload` derives): the payload the producer
 //! ([`sdm_request::payload::regression`]) builds holds, for a sample
 //! shaped as `base.regression`'s and for one shaped as the family cases
 //! that materialize (no anchor, a related table without a key, a text key,
@@ -246,6 +247,12 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         |p| p["context"]["instance_table"]["format"] = json!("records"),
         "format",
     );
+    // A dtype or stype the wire does not name (the typed payload's, T1.28w).
+    refused(
+        |p| p["schema"]["related_tables"]["orders"]["columns"]["price"]["dtype"] = json!("int32"),
+        "dtype",
+    );
+    refused(|p| p["task"]["target"]["dtype"] = json!("decimal"), "dtype");
     // Removed.
     refused(
         |p| {
