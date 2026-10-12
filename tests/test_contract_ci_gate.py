@@ -164,83 +164,42 @@ def _git(work: Path, *args: str) -> str:
 
 
 @pytest.mark.parametrize(
-    'seed',
+    'job',
     [
-        'comparator',
-        'renamed',
-        'ratchet-too',
-        'not-warnings',
-        'embedded',
-        'unprefixed',
-        'landed',
-        'after-landing',
-        'unreadable',
-        'other-cell',
+        'contract-python-ref-pandas3',
+        'contract-python-dbr17-pandas2',
+        'contract-python-floor-pandas2-2',
     ],
 )
-def test_the_floor_cell_reports_only_a_comparator_before_t1_18_landed(
-    tmp_path: Path, seed: str
-) -> None:
-    r"""T1.18's own run (E65(c)): the floor job reports a gate whose one
-    failing step is the comparator while the checkpoint's history holds no
-    landing of T1.18, whatever its comparator's text, and says so; a
-    checkpoint that is T1.18's landing or descends from it gates, its
-    comparator's constant renamed or not, as do a failing ratchet beside
-    the comparator, a difference other than ``warnings`` (a warnings
-    marker inside another record or outside gate.sh's prefix among them),
-    a checkpoint git
-    cannot read, and another cell's job."""
-    job = (
-        'contract-python-dbr17-pandas2'
-        if seed == 'other-cell'
-        else 'contract-python-floor-pandas2-2'
-    )
+def test_every_cell_gates_a_failing_comparator(tmp_path: Path, job: str) -> None:
+    r"""The control for the floor cell's waiver gone (T1.25b; it reported
+    T1.18's own run alone, E65(c)): a gate whose one failing step is the
+    comparator, all of whose differences are ``warnings`` ones, the
+    waiver's case, fails the step in every cell, the floor's among them,
+    and nothing is reported in its place."""
     [(_, step, job_env)] = [s for s in STEPS if s[0] == job]
+    assert 'REPORT_ONLY' not in step['run']
+    assert not any('REPORT_ONLY' in key for key in job_env)
     work = tmp_path / 'work'
-    (work / 'scripts/rust_core').mkdir(parents=True)
-    _git(work, 'init', '-q')
-    identity = ('-c', 'user.name=t', '-c', 'user.email=t@t')
-
-    def landing(subject: str, comparator: str) -> None:
-        (work / 'scripts/rust_core/compare.py').write_text(comparator)
-        _git(work, 'add', '.')
-        _git(work, *identity, 'commit', '-qm', subject)
-
-    landing('Land T1.26a: the one before', '# no cells\n')
-    if seed == 'renamed':
-        landing('Land T1.26b: a rename', 'REFERENCE_RUNTIME_CELL = 1\n')
-    if seed in ('landed', 'after-landing'):
-        landing('Land T1.18: L2 in CI', 'REFERENCE_RUNTIME_CELL = 1\n')
-    if seed == 'after-landing':
-        landing('Land T1.19: the next', 'REFERENCE_RUNTIME_CELL = 2\n')
-    checkpoint = (
-        'f' * 40 if seed == 'unreadable' else _git(work, 'rev-parse', 'HEAD')
-    )
-    failed = ['compare'] + (['ratchet'] if seed == 'ratchet-too' else [])
-    differs = ['warnings'] + (['result'] if seed == 'not-warnings' else [])
-    records = [f'    | DIFFERS {rule}: a case: differs' for rule in differs]
-    if seed == 'embedded':
-        # A warnings marker inside another rule's record.
-        records.append(
-            '    | DIFFERS result: malformed output DIFFERS warnings: a case differs'
-        )
-    if seed == 'unprefixed':
-        records.append('DIFFERS warnings: a case: differs')
-    summary = ''.join(f"echo '{record}'\n" for record in records) + ''.join(
-        f'echo "  FAIL {name}"\n' for name in failed
-    )
     _executable(
         work / 'scripts/rust_core/gate.sh',
         '#!/usr/bin/env bash\n'
-        f'echo "gate: base {checkpoint}, checkpoint {checkpoint}"\n'
-        + summary
-        + 'echo "gate: FAILED"\nexit 1\n',
+        'echo "gate: base x, checkpoint x"\n'
+        "echo '    | DIFFERS warnings: a case: differs'\n"
+        'echo "  FAIL compare"\n'
+        'mkdir -p gate-observations\n'
+        'for r in python-core python-old; do\n'
+        '  printf \'{"identity": {"cell": "%s"}}\\n\' "$CELL" '
+        '> gate-observations/$r.jsonl\n'
+        'done\n'
+        'echo "gate: FAILED"\nexit 1\n',
     )
     bin_dir = tmp_path / 'bin'
     _executable(
         bin_dir / 'python',
         '#!/usr/bin/env bash\n'
-        'if [ "$2" = where ]; then echo "--base x"; fi\nexit 0\n',
+        'if [ "$2" = where ]; then echo "--base x"; exit 0; fi\n'
+        'exec python3 "$@"\n',
     )
     done = subprocess.run(
         ['bash', '--noprofile', '--norc', '-e', '-c', step['run']],
@@ -251,14 +210,12 @@ def test_the_floor_cell_reports_only_a_comparator_before_t1_18_landed(
             'GITHUB_EVENT_NAME': 'push',
             'GITHUB_REF_NAME': LANE,
             **{k: str(v) for k, v in job_env.items()},
+            **{k: str(v) for k, v in (step.get('env') or {}).items()},
         },
         capture_output=True,
         text=True,
         check=False,
     )
-    if seed in ('comparator', 'renamed'):
-        assert done.returncode == 0, done.stdout + done.stderr
-        assert 'gate: REPORT-ONLY in floor-pandas2.2' in done.stdout
-    else:
-        assert done.returncode == 1, done.stdout + done.stderr
-        assert 'REPORT-ONLY' not in done.stdout
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'every observation in' in done.stdout, done.stdout + done.stderr
+    assert 'REPORT-ONLY' not in done.stdout

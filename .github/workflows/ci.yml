@@ -607,12 +607,10 @@ jobs:
         run: python -m pytest contract/tests -q
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
-      # REPORT_ONLY_BEFORE_CELLS (floor-pandas2.2 only) reports, not gates,
-      # a gate whose one failing step is the comparator while the
-      # checkpoint's history holds no landing of T1.18, which brings H1's
-      # cell rule (T1.18's own run), and says so; from T1.18's landing on,
-      # every checkpoint descends from it, so the cell gates.
-      # tests/test_contract_ci_gate.py runs this step's text.
+      # Every cell gates, the floor's too (T1.18's own run alone reported
+      # it, E65(c); the waiver went at T1.25b, every checkpoint descending
+      # from T1.18's landing). tests/test_contract_ci_gate.py runs this
+      # step's text.
       - &contract-gate
         name: gate (python-core, python-old)
         env:
@@ -636,7 +634,7 @@ jobs:
               --reference contract/reference/*.jsonl gate-observations/python-*.jsonl || status=$?
           else
             scripts/rust_core/gate.sh $where --run python-core,python-old --no-l0 \
-              --out gate-observations 2>&1 | tee gate.log || status=$?
+              --out gate-observations || status=$?
           fi
           python - <<'EOF' || exit 1
           import json, os, pathlib, sys
@@ -652,25 +650,6 @@ jobs:
                   sys.exit(f'{runner}: observed in {sorted(map(str, seen))}, not {cell}')
           print(f'every observation in {cell}')
           EOF
-          if [ "$status" != 0 ] && [ "${REPORT_ONLY_BEFORE_CELLS:-}" = 1 ] && [ -f gate.log ]; then
-            checkpoint=$(sed -n 's/^gate: base .*, checkpoint //p' gate.log)
-            # Bound to the package, not to the comparator's text: only while
-            # the checkpoint's history holds no landing of T1.18, which every
-            # later checkpoint descends from; a checkpoint git cannot read
-            # never reports; and only `warnings` differences, the cell's
-            # measured one (HOST-3): every line naming a difference must be
-            # a comparator record of that rule, anchored at gate.sh's
-            # prefix, so a marker inside another record never qualifies.
-            differs=$(grep 'DIFFERS' gate.log || true)
-            if [ "$(grep '^  FAIL ' gate.log)" = '  FAIL compare' ] &&
-              [ -n "$differs" ] && ! grep -vE '^    \| DIFFERS warnings: ' <<<"$differs" | grep -q . &&
-              subjects=$(git log --format=%s "${checkpoint}" --) &&
-              ! grep -q '^Land T1\.18: ' <<<"$subjects"; then
-              echo "gate: REPORT-ONLY in $CELL: the checkpoint ($checkpoint) predates T1.18's landing,"
-              echo "gate: whose comparator holds H1's cell rule, so its differences above are reported, not gated"
-              status=0
-            fi
-          fi
           exit $status
 
   contract-python-dbr17-pandas2:
@@ -696,7 +675,6 @@ jobs:
     env:
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
-      REPORT_ONLY_BEFORE_CELLS: '1'
     steps:
       - *contract-checkout
       - uses: actions/setup-python@v7
