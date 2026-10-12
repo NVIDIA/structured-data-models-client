@@ -147,8 +147,12 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # expectation and adds its routes.
     inventory = _inventory()
     defaults = inventory['defaults']
+    # T1.24b's edit cases, S1 cases of their own (moved here at T1.27), are
+    # no inventory case.
     committed = {
-        case['id']: case for case, _ in run_python.load_cases([CASES / 's1'])
+        case['id']: case
+        for case, _ in run_python.load_cases([CASES / 's1'])
+        if not case['id'].startswith('edit.')
     }
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks'
