@@ -1,21 +1,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the run mode, entity count, shape, limits and capped-context notice
-# (T1.28a) and the entities' cast to the key's type (T1.32a, checkpoint
-# 4), are deleted in Phase 1 by those tasks.
+# Bridge code: the host-held rule here (design, "Host-held semantics"),
+# the entities' cast to the key's type (T1.32a, checkpoint 4), is deleted
+# in Phase 1 by that task.
 # Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
-r"""``materialize`` on the core: the request's gathering (T1.11c).
+r"""``materialize`` on the core: the request (T1.11c, T1.28a).
 
 ``PredictiveQuery.materialize`` with ``indices`` over the schema of a DuckDB
-source comes here on the core route, in place of the relational engine's
-gathering (``RelationalMaterializer._gather``). Everything around that
-step stays the client's own, as on the old route: the checks of the call
-and the notices before it, and, after it, the notices of what the payload
-sends and leaves out, the context that answers the question taken out, and
-the ``Request`` built from the payload.
+source comes here on the core route, in place of the relational
+materializer's own (``RelationalMaterializer.materialize``), once the
+client has checked the option names. From T1.28a the core holds the
+request's rules (design, "Host-held semantics"): the context size's bound
+and the run mode it selects, the entity count, the subgraph's and the
+payload's limits, the empty and reserved-name refusals, the statistic,
+checked and recorded, the inference options, the context that answers the
+question taken out, and the notices of what the request leaves out, each
+given as a code and fields this client words (:mod:`.errors`). This module
+converts the call's values into the contract's fields, refusing a value of
+a type the contract cannot carry, as the client refuses it, and builds the
+``Request`` from the payload.
 
 The core's ``materialize`` samples the source through the DuckDB provider
 (:mod:`.providers.duckdb`) and lays out the payload the engine lays out;
@@ -46,7 +51,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
@@ -59,13 +63,20 @@ if TYPE_CHECKING:
     from predictive_query import ValidatedPredictiveQuery
 
     from sdm_client.materializers.relational import RelationalMaterializer
+    from sdm_client.request import Request
     from sdm_client.schema import Schema
 
-#: The options the contract carries in fields of their own;
-#: ``prediction_statistic`` is the client's own, recorded on the payload
-#: after the gathering, as on the old route. The core is told the names of
-#: the rest (decision E61).
-TAKEN = frozenset({'anchor_time', 'random_seed', 'prediction_statistic'})
+#: The options the contract carries in fields of their own (from T1.28a
+#: the statistic and the inference options too). The core is told the
+#: names of the rest (decision E61).
+TAKEN = frozenset(
+    {
+        'anchor_time',
+        'random_seed',
+        'prediction_statistic',
+        'inference_config',
+    }
+)
 
 #: The integer types a key the core samples may have, as pyarrow names
 #: them, by the contract's spelling.
@@ -220,6 +231,66 @@ def _indices(indices: Sequence[Any], schema: Schema, entity: str) -> Any:
     return pa.table({'indices': column})
 
 
+def _types(options: dict[str, Any]) -> None:
+    r"""Refuses an option whose value is of a type the contract cannot
+    carry, as the client refuses it (``INVALID_REQUEST``): a seed, a hop
+    count or a statistic of another type, hops that are not a sequence, and
+    inference options that are not a mapping, or hold a value JSON cannot.
+    The Python API's argument types; what the values mean is the core's."""
+    from numbers import Integral
+
+    def whole(name: str) -> None:
+        value = options.get(name)
+        if value is not None and (
+            isinstance(value, bool) or not isinstance(value, Integral)
+        ):
+            raise StructuredDataError(
+                f'{name} must be a whole number, got '
+                f'{type(value).__name__} {value!r}',
+                code='INVALID_REQUEST',
+            )
+
+    whole('random_seed')
+    whole('num_hops')
+    neighbors = options.get('num_neighbors')
+    if neighbors is not None and (
+        not isinstance(neighbors, Sequence)
+        or isinstance(neighbors, (str, bytes))
+    ):
+        raise StructuredDataError(
+            'num_neighbors must be a sequence of hop sizes',
+            code='INVALID_REQUEST',
+        )
+    statistic = options.get('prediction_statistic')
+    if 'prediction_statistic' in options and not isinstance(statistic, str):
+        raise StructuredDataError(
+            f'prediction_statistic is {statistic!r}, and a regression reports '
+            f"'mean' or 'median' of its predicted distribution",
+            code='INVALID_REQUEST',
+        )
+
+
+def _inference(given: Any) -> bytes | None:
+    r"""The caller's inference options as the contract's attachment: a
+    mapping's keys and values as JSON, which the core reads by the engine's
+    rules; none for none. One of another type, which the engine takes as its
+    own config object, is refused by name (register P1B-3); one holding a
+    value JSON cannot hold, as the client's transport refuses it."""
+    from collections.abc import Mapping
+
+    if given is None:
+        return None
+    if not isinstance(given, Mapping):
+        raise _not_taken('inference_config')
+    try:
+        return codec.attachment({str(k): v for k, v in given.items()})
+    except (TypeError, ValueError, RecursionError):
+        raise StructuredDataError(
+            'inference_config holds a value that cannot be sent as JSON',
+            code='INVALID_REQUEST',
+        ) from None
+
+
 def gather(
     materializer: RelationalMaterializer,
     query: ValidatedPredictiveQuery,
@@ -233,23 +304,18 @@ def gather(
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for what it does not
-            materialize yet; and the client's own checks of the call.
+            materialize yet; and the client's own checks of the call's
+            types.
     """
     from predictive_query.validator.utils import table_name
 
-    from sdm_client.materializers.relational import (
-        _warn_of_a_context_the_default_mode_capped,
-    )
-    from sdm_client.models import RELATIONAL_LIMITS
-
     schema = materializer.schema
-    materializer._run_mode_for(num_context_samples)
-    materializer._check_entity_count(indices)
-    materializer._check_shape(options, RELATIONAL_LIMITS)
+    _types(options)
     entity = table_name(query.entity_column)
     seed = options.get('random_seed')
     anchor = options.get('anchor_time')
     described, held = description(schema)
+    config = _inference(options.get('inference_config'))
     operation = {
         'op': 'materialize',
         'provider': {'provider': 'sql', 'dialect': 'duckdb'},
@@ -263,9 +329,28 @@ def gather(
         # call, never the default; the core says whether it takes it.
         'unseeded': 'random_seed' in options and seed is None,
         'anchor_entity': isinstance(anchor, str) and anchor == 'entity',
-        # Validated as a whole number by the client; the codec writes a
-        # NumPy integer as the JSON integer it is.
-        'num_context_samples': num_context_samples,
+        # Validated as a whole number by the client, of any size; the core
+        # bounds it (T1.28a).
+        'num_context_samples': (
+            None
+            if num_context_samples is None
+            else codec.seed(int(num_context_samples))
+        ),
+        # The hops the sampling options ask, which the core bounds before it
+        # refuses the options by name: the count given, and how many hop
+        # sizes the sequence holds.
+        'num_hops': (
+            None
+            if options.get('num_hops') is None
+            else codec.seed(int(options['num_hops']))
+        ),
+        'num_neighbors': (
+            None
+            if options.get('num_neighbors') is None
+            else codec.seed(len(options['num_neighbors']))
+        ),
+        'prediction_statistic': options.get('prediction_statistic'),
+        'inference_config': None if config is None else 5,
         'options': sorted(set(options) - TAKEN),
     }
     attachments = {
@@ -274,6 +359,8 @@ def gather(
         3: _indices(indices, schema, entity),
         4: codec.attachment(held),
     }
+    if config is not None:
+        attachments[5] = config
     source: Any = schema.source
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
@@ -287,12 +374,40 @@ def gather(
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
     finished.take(state['query'])
-    # What the client reads of the engine's task and its part: the context
-    # gathered, and the payload.
-    task: Any = SimpleNamespace(
-        num_context_examples=payload['metadata']['num_context_examples']
-    )
-    _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
-    part: Any = SimpleNamespace(payload=payload)
-    materializer._check_limits(part, RELATIONAL_LIMITS)
     return (payload,), {'version': state['version']}
+
+
+def materialize(
+    materializer: RelationalMaterializer,
+    query: ValidatedPredictiveQuery,
+    indices: Sequence[Any],
+    num_context_samples: int | None,
+    options: dict[str, Any],
+) -> Request:
+    r"""The request, gathered and laid out on the core (:func:`gather`),
+    as the client's ``Request`` of its payload."""
+    from predictive_query.validator.utils import table_name
+
+    from sdm_client.request import Request
+
+    payloads, core_state = gather(
+        materializer, query, indices, num_context_samples, options
+    )
+    request = Request.materialized(
+        payloads=payloads,
+        # The Request's own copy of whether the target is windowed, which
+        # the client reads of the query (design, "Host-held semantics").
+        windowed=getattr(query.target_ast, 'date_offset_range', None)
+        is not None,
+        schema=materializer.schema.snapshot(),
+        query=query.to_string(),
+        indices=list(indices),
+        entity_table=table_name(query.entity_column),
+        requested_inference={
+            'inference_config': options.get('inference_config') or {}
+        },
+    )
+    # The request state's version, which predict on the core hands back
+    # with the payload (T1.11d).
+    request._core_state = core_state
+    return request

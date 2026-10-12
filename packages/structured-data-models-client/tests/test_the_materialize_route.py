@@ -19,6 +19,7 @@ from __future__ import annotations
 import datetime
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import textwrap
@@ -195,11 +196,9 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
     [
         ({'num_neighbors': [8, 8]}, 'num_neighbors'),
         ({'context_anchor_time': ANCHOR}, 'context_anchor_time'),
-        ({'num_context_samples': 50}, 'num_context_samples'),
         ({'anchor_time': 'entity'}, 'anchor_entity'),
         # A seed given as None, which the reference reads as unseeded.
         ({'random_seed': None}, 'unseeded'),
-        ({'inference_config': {'num_estimators': 4}}, 'inference_config'),
         # The first in name order, before the seed, as the bridge refused
         # them until T1.24.
         (
@@ -225,6 +224,39 @@ def test_what_the_core_does_not_take_yet_is_refused_by_name(
     assert type(refused.value).__name__ == 'UnsupportedRequestError'
     assert refused.value.details['operation'] == 'materialize'
     assert refused.value.details['rule'] == rule
+
+
+def test_inference_options_not_a_mapping_are_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The contract carries a mapping's keys and values (T1.28a); the host
+    # refuses an inference config of another type, which the engine takes
+    # as its own config object, by name (P1B-3), before the core runs.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(inference_config=['num_estimators'])
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['rule'] == 'inference_config'
+
+
+@pytest.mark.parametrize('depth', [500, 100_000], ids=['past-the-core', 'past-json'])
+def test_inference_options_nested_deep_are_refused_never_a_crash(
+    monkeypatch: pytest.MonkeyPatch, depth: int
+) -> None:
+    # E49's depth probe of the inference options' reader (T1.28a): nested
+    # past the core's reader, the core refuses them by name; past what
+    # Python's encoder writes, the host does, as its transport refuses a
+    # value it cannot send; neither a crash nor a RecursionError.
+    nested: Any = 1
+    for _ in range(depth):
+        nested = [nested]
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(inference_config={'num_estimators': nested})
+    assert refused.value.code == 'INVALID_REQUEST'
+    if depth == 500:
+        assert refused.value.details['field'] == 'inference_config'
+        assert refused.value.details['category'] == 'depth'
 
 
 #: Tables named otherwise than the source names them (T1.24): the query
@@ -759,18 +791,16 @@ def test_a_numpy_context_size_reaches_the_core(
     monkeypatch: pytest.MonkeyPatch, count: Any
 ) -> None:
     # T1.24 fix 1 (review P2-1): the client takes a NumPy integer as a whole
-    # number, and the codec writes it as the integer it is, so the core
-    # refuses the context size by name, as it refuses a built-in int; the
-    # old route takes it.
+    # number, and the codec writes it as the integer it is; from T1.28a the
+    # core takes it, narrowing the context to it as the old route does.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with pytest.raises(StructuredDataError) as refused:
-        _materialize(num_context_samples=count)
-    assert type(refused.value).__name__ == 'UnsupportedRequestError'
-    assert refused.value.details['rule'] == 'num_context_samples'
+    core = _materialize(num_context_samples=count)
+    assert core._payloads[0]['metadata']['num_context_examples'] == 4
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
-    assert _materialize(num_context_samples=count)._payloads
+    old = _materialize(num_context_samples=count)
+    assert core._payloads == old._payloads
 
 
 @pytest.mark.parametrize(
@@ -1532,10 +1562,114 @@ def test_a_decimal_sum_s_total_alone_is_checked(
         rows = request._payloads[0]['context']['instance_table']['rows']
         assert json.loads(json.dumps(rows)) == _decimal_sum_rows(label)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    # On the core the sum is labelled, never the caller's error (its labels
-    # are held in tests_test_ops); the request then needs the decimal
-    # feature's wire dtype, T1.28a's, refused by name (P1B-3).
-    with pytest.raises(StructuredDataError) as refused:
-        _decimal_sum(dtype, prices)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['rule'] == 'wire_dtype'
+    # On the core the sum is labelled, never the caller's error, and from
+    # T1.28a the request sends the decimal feature as the reference does
+    # (its wire dtype): the context is the reference's.
+    request = _decimal_sum(dtype, prices)
+    rows = request._payloads[0]['context']['instance_table']['rows']
+    assert rows == _decimal_sum_rows(label)
+
+
+def _notices(*setup: str, text: str | None = None) -> list[str]:
+    r"""The client's notices (``SDMWarning``) a materialize of ``QUERY``
+    over the shop base and ``setup`` gives, each without the core's code;
+    ``text`` names a column of ``users`` typed text."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        connection = _connection(*setup)
+        schema = Schema.from_source(DuckDBSource(connection))
+        if text is not None:
+            schema['users'][text].stype = 'text'
+        PredictiveQuery(QUERY, schema).materialize(
+            indices=[0, 1], anchor_time=ANCHOR
+        )
+    return sorted(
+        re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
+        for w in caught
+        if type(w.message).__name__ == 'SDMWarning'
+    )
+
+
+@pytest.mark.parametrize(
+    'setup',
+    [
+        # A table no relationship connects, and one linked and reached by
+        # no row; a text feature of a table the request sends.
+        (
+            'CREATE TABLE notes (note_id BIGINT PRIMARY KEY, body VARCHAR)',
+            "INSERT INTO notes VALUES (1, 'a')",
+        ),
+        (
+            'CREATE TABLE tags AS SELECT i::BIGINT AS tag_id, (100 + i)::BIGINT '
+            "AS user_id, 'x' AS tag FROM range(3) t(i)",
+        ),
+        (
+            'CREATE TABLE notes (note_id BIGINT PRIMARY KEY, body VARCHAR)',
+            "INSERT INTO notes VALUES (1, 'a')",
+            'CREATE TABLE more AS SELECT 1::BIGINT AS more_id, 2.0 AS x',
+            "CREATE OR REPLACE TABLE users AS SELECT *, repeat('a long piece "
+            "of free text that says something different each time ', 4) || "
+            'user_id AS bio FROM users',
+        ),
+    ],
+    ids=['unlinked', 'unreached', 'several-and-text'],
+)
+def test_the_notices_of_what_the_request_leaves_out_are_the_old_route_s(
+    monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...]
+) -> None:
+    # T1.28a: the core gives the client's notices of the tables the request
+    # does not carry and the columns the model does not read, as codes and
+    # fields this host words; their words are the old route's.
+    text = 'bio' if any(' AS bio ' in s for s in setup) else None
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _notices(*setup, text=text)
+    assert core, 'a notice was given'
+    if text is not None:
+        assert any('users.bio is typed text' in n for n in core), core
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    assert core == _notices(*setup, text=text)
+
+
+def test_the_default_mode_s_cap_is_noticed_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.28a: a context the default run mode capped at its examples is said,
+    # by the core's code, in the old route's words; a size asked for is not.
+    statements = [
+        'CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 50)'
+        '::INTEGER AS age FROM range(1001) t(i)',
+        'CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1001)'
+        '::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, '
+        "TIMESTAMP '2023-06-01' + to_days((i % 270)::INTEGER) AS ts "
+        'FROM range(900) t(i)',
+    ]
+
+    def notices(**options: Any) -> list[str]:
+        connection = duckdb.connect()
+        for statement in statements:
+            connection.execute(statement)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            schema = Schema.from_source(DuckDBSource(connection))
+            PredictiveQuery(QUERY, schema).materialize(
+                indices=[0, 1], anchor_time=ANCHOR, **options
+            )
+        return [
+            re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
+            for w in caught
+            if type(w.message).__name__ == 'SDMWarning'
+        ]
+
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = notices()
+    assert any('context examples were gathered' in n for n in core), core
+    assert not any(
+        'context examples were gathered' in n
+        for n in notices(num_context_samples=1_000)
+    )
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    assert core == notices()

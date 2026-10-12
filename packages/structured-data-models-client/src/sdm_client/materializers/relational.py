@@ -1,11 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: on the core route, the host-held rules around _gather (design,
-# "Host-held semantics"): the empty and reserved-name refusals, the statistic,
-# the context that answers the question and the notices, deleted in Phase 1
-# by T1.28a, and the missing-index flag (:110), by T1.26; the old route's own
-# goes with the old engine in Phase 5.
+# Bridge code: the old route's rules, which the core route no longer runs
+# (T1.28a moved them into the core: design, "Host-held semantics"), go with
+# the old engine in Phase 5.
 
 r"""Gather and encode relational requests with the relational engine."""
 
@@ -133,6 +131,16 @@ class RelationalMaterializer:
                 'the client derives what the endpoint needs',
                 code='INVALID_REQUEST',
             )
+        # Over a DuckDB source on the core route (T1.11c), the core gathers
+        # and lays out the request, its rules the core's (T1.28a).
+        from sdm_client import _routing
+
+        if _routing.materializes_on_the_core(self.schema):
+            from sdm_client._rust import materialize as on_the_core
+
+            return on_the_core.materialize(
+                self, query, indices, num_context_samples, options
+            )
 
         if len(indices) == 0:
             raise StructuredDataError(
@@ -189,20 +197,9 @@ class RelationalMaterializer:
         num_context_samples: int | None,
         options: dict[str, Any],
     ) -> tuple[tuple[dict[str, Any], ...], dict[str, Any] | None]:
-        r"""Sample and encode using the engine's own materializer, or, over
-        a DuckDB source on the core route (T1.11c), the core's: the
-        payloads, and on the core route the request state's version, which
-        the request keeps for predict on the core (T1.11d)."""
-        source = self.schema.source
-        if getattr(source, 'backend', None) == 'duckdb':
-            from sdm_client import _routing
-
-            if _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core':
-                from sdm_client._rust import materialize as on_the_core
-
-                return on_the_core.gather(
-                    self, query, indices, num_context_samples, options
-                )
+        r"""Sample and encode using the engine's own materializer: the
+        payloads, and no request state (the core route's, from T1.11d, is
+        its own, :func:`sdm_client._rust.materialize.materialize`)."""
         run_mode = self._run_mode_for(num_context_samples)
         self._check_entity_count(indices)
         self._check_shape(options, RELATIONAL_LIMITS)

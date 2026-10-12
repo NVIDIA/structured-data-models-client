@@ -24,6 +24,7 @@ imports ``sdm_client._native``, and only on a core route.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 #: The environment variable that forces paths onto the core, for tests.
 ENVIRONMENT = 'SDM_CORE_ROUTES'
@@ -364,3 +365,14 @@ def route(paths: tuple[str, ...]) -> str:
             f'not the others; one call runs them on one route'
         )
     return taken.pop()
+
+
+def materializes_on_the_core(schema: Any) -> bool:
+    r"""Whether a relational ``materialize`` over ``schema`` runs on the
+    core: over a DuckDB source, with its paths forced there
+    (:data:`MATERIALIZE_DUCKDB`), where the core holds the request's rules
+    (T1.28a)."""
+    source = getattr(schema, 'source', None)
+    if getattr(source, 'backend', None) != 'duckdb':
+        return False
+    return route(MATERIALIZE_DUCKDB) == 'core'

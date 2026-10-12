@@ -169,6 +169,8 @@ class PredictiveQuery:
                 'rows you want',
                 code='INVALID_REQUEST',
             )
+        from sdm_client import _routing
+
         self._validate_materialize_args(
             relational=relational,
             model_id=spec.model_id if spec is not None else None,
@@ -178,6 +180,9 @@ class PredictiveQuery:
             predict=predict,
             num_context_samples=num_context_samples,
             options=options,
+            # The core bounds the context size on its route (T1.28a).
+            bounded_by_the_core=relational
+            and _routing.materializes_on_the_core(self.schema),
         )
 
         # Resolved once, and against the profile this request is for, because
@@ -250,6 +255,7 @@ class PredictiveQuery:
         predict: pd.DataFrame | None,
         num_context_samples: int | None,
         options: dict[str, Any] | None,
+        bounded_by_the_core: bool = False,
     ) -> None:
         r"""Refuse a call that cannot be gathered, in an order that advises.
 
@@ -371,7 +377,7 @@ class PredictiveQuery:
                     f'{num_context_samples!r}',
                     code='INVALID_REQUEST',
                 )
-            if num_context_samples < 1:
+            if num_context_samples < 1 and not bounded_by_the_core:
                 raise StructuredDataError(
                     'num_context_samples must be at least 1; a model predicts '
                     f'from labelled examples, and {num_context_samples} '

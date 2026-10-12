@@ -164,7 +164,8 @@ _NOT_THE_KEY = (
 #: the ``variant`` field, which says which of the reference's sentences
 #: the core meant. A template is ``str.format``'s, over the warning's
 #: fields decoded, with ``!l`` for a list of names as the reference's
-#: ``_and_list`` writes them, ``!t`` for a date or timestamp as pandas
+#: ``_and_list`` writes them, ``!j`` for one joined by commas, each as its
+#: ``repr``, and ``!c`` each as it is, ``!t`` for a date or timestamp as pandas
 #: writes one (text a time column holds as the reference names it), and
 #: ``!T`` for a list of times of day, or of text, as Python writes it.
 #: A code this table does not hold is shown with the core's own sentence.
@@ -291,6 +292,82 @@ SAID: dict[str, dict[str | None, str]] = {
             'again in this run.'
         )
     },
+    # The client's notices of what a request leaves out, which the core
+    # gives from T1.28a, in the client's words (SDMWarning, as the client
+    # shows them).
+    'CONTEXT_CAPPED': {
+        None: (
+            '{cap:,} context examples were gathered, which is all this route '
+            'takes by default; pass num_context_samples to ask for up to '
+            '{most:,}.'
+        )
+    },
+    'TABLES_UNLINKED': {
+        many: (
+            '{tables!j} '
+            + ('are' if many == 'several' else 'is')
+            + ' in the schema and not in this request: no relationship '
+            'connects '
+            + them
+            + ' to {entity_table!r}, so the model answers without '
+            + them
+            + '. Say how '
+            + ('they join' if many == 'several' else 'it joins')
+            + ': schema.relationships.append(Relationship({tables[0]!r}, '
+            '<foreign key>, <parent table>, <its primary key>)), or leave '
+            + them
+            + ' out of the schema to say '
+            + ('they are' if many == 'several' else 'it is')
+            + ' not wanted.'
+        )
+        for many, them in (('one', 'it'), ('several', 'them'))
+    },
+    'TABLES_UNREACHED': {
+        many: (
+            '{tables!j} '
+            + ('are' if many == 'several' else 'is')
+            + ' linked into the schema and not in this request: the sampler '
+            'reached no row of '
+            + them
+            + ' from the entities being scored, so the model answers without '
+            + them
+            + '. Raise num_hops if '
+            + ('they lie' if many == 'several' else 'it lies')
+            + ' further out than the hops sampled, and check the foreign key '
+            'holds values the parent key actually has if '
+            + ('they do' if many == 'several' else 'it does')
+            + ' not.'
+        )
+        for many, them in (('one', 'it'), ('several', 'them'))
+    },
+    'COLUMNS_UNREAD': {
+        many: (
+            '{columns!c} '
+            + ('are' if many == 'several' else 'is')
+            + ' typed text, which this model does not read, so the request '
+            'is answered without '
+            + them
+            + ' and '
+            + ('they contribute' if many == 'several' else 'it contributes')
+            + ' nothing to the prediction. Type a column categorical if its '
+            'values are labels rather than prose, or leave it out to say so.'
+        )
+        for many, them in (('one', 'it'), ('several', 'them'))
+    },
+    'CONTEXT_ANSWERS': {
+        variant: (
+            '{examples} of the rows sampled as context are the rows being '
+            'scored, '
+            + when
+            + ', carrying the value being asked for. Rows that carry the '
+            'answer to the question being asked are not sent as context, so '
+            'these do not go into it.'
+        )
+        for variant, when in (
+            ('windowed', 'at the same moment'),
+            ('static', 'at one moment or another'),
+        )
+    },
     'TWO_WAYS_TO_A_TABLE': {
         None: (
             '{source_table!r} reaches {target_table!r} through {columns!l}, '
@@ -336,6 +413,10 @@ class _Words(string.Formatter):
             if len(quoted) < 3:
                 return ' and '.join(quoted)
             return f'{", ".join(quoted[:-1])} and {quoted[-1]}'
+        if conversion == 'j':
+            return ', '.join(repr(name) for name in value)
+        if conversion == 'c':
+            return ', '.join(str(name) for name in value)
         if conversion == 't':
             if isinstance(value, str):
                 return str(_as_timestamp(value))
