@@ -397,6 +397,7 @@ SEEDED=(
   contract/tests/test_capture.py
   contract/tests/test_result_vectors.py
   contract/tests/test_materialize_route.py
+  contract/tests/test_route_proof_seeds.py
   tests/test_contract_ratchet.py
   tests/test_contract_register.py
   tests/test_contract_coverage.py
