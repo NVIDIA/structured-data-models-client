@@ -7,29 +7,29 @@
     "base.regression",
     "feature.bool"
   ],
-  "reading": "The first refusal of each probe; each case of the baseline family probed as it is. base.regression and feature.bool reach predict's result on both runners; base.binary and base.multiclass are refused at materialize's target, so the classification task's payload and result are masked until T1.27 lifts it.",
+  "reading": "The first refusal of each probe; each case of the baseline family probed as it is. base.regression and feature.bool reach predict's result on both runners; base.binary and base.multiclass have their labels (T1.27) and are refused at the classification task's layout in the payload (T1.28a), which masks their payload and result.",
   "gaps": [],
   "entries": [
     {
-      "id": "materialize/static_target",
+      "id": "materialize/classification_task",
       "operation": "materialize",
-      "rule": "static_target",
-      "owner": "T1.27",
+      "rule": "classification_task",
+      "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:335",
-      "why": "materialize takes a windowed SUM's target only. base.binary's COUNT(orders.*, 0, 30, days) > 0 is refused here, and behind static_target are its condition target, its COUNT(*) (aggregation, materialize.rs:224), its orders.* (target_filter, :226) and its boolean label; base.multiclass's users.country, a static target, is refused before any label. T1.27 computes both labels over fetched Arrow. Masked behind it too, as they surface: for T1.28a, the classification task's layout in the payload (the classes, their order, ['IN', 'DE', 'US'], and the positive class) and the static target's context leakage; for T1.28b, boolean and text predictions in the result",
+      "where": "rust/crates/sdm-core/src/materialize.rs:1587",
+      "why": "From T1.27 the core computes both labels over fetched Arrow (base.binary's condition over a COUNT(*) of a 30-day window, base.multiclass's static text target), held to the reference's exactly on both core hosts by the test-only labels operation (sdm-testkit's tests/labels.rs, the client's tests_test_ops/test_the_labels.py); the classification task's layout in the payload is T1.28a's (the classes, their order, ['IN', 'DE', 'US'], and the positive class; for base.multiclass also the static target's context leakage, its column kept out of what the request sends and the entities predicted for taken out of its context), and masked behind it for T1.28b the boolean and text predictions in the result",
       "observed": {
         "python-core": {
           "stage": "materialize",
           "error": "UnsupportedRequestError",
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
-          "rule": "static_target"
+          "rule": "classification_task"
         },
         "rust-host": {
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
-          "rule": "static_target"
+          "rule": "classification_task"
         }
       }
     }
@@ -72,7 +72,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/static_target"
+        "expect": "materialize/classification_task"
       },
       "rust-host": {
         "derive": {
@@ -121,7 +121,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/static_target"
+        "expect": "materialize/classification_task"
       }
     },
     {
@@ -160,7 +160,7 @@
             ]
           }
         },
-        "expect": "materialize/static_target"
+        "expect": "materialize/classification_task"
       },
       "rust-host": {
         "derive": {
@@ -204,7 +204,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/static_target"
+        "expect": "materialize/classification_task"
       }
     },
     {

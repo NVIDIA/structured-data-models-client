@@ -11,7 +11,9 @@ use sdm_contract::ops::{
     SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceDescription, SourceSpec,
 };
 use sdm_contract::run::StartRun;
-use sdm_contract::{CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HeldState, Scalar};
+use sdm_contract::{
+    CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HeldState, HostFacts, Scalar,
+};
 use sdm_engine::time::Zones;
 
 use crate::attached::{check_attachments, take_json, take_json_if};
@@ -91,6 +93,65 @@ pub fn start(
             let edit: SchemaEdit = take_json(&mut attachments, request.edit)?;
             Run::new(move |asker| crate::edit::run(asker, described, held, edit))
         }
+        operation @ Operation::Materialize(_) => materialize(
+            root,
+            operation,
+            attachments,
+            facts,
+            Arc::clone(&zones),
+            #[cfg(feature = "test-ops")]
+            false,
+        )?,
+        Operation::Predict(request) => {
+            // The state's version first, by name, before anything of the
+            // state is read (decision H23).
+            if request.state.version != REQUEST_STATE_VERSION {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidRequest,
+                    ErrorCode::InvalidRequest,
+                    "the request state is of a version this core does not read",
+                )
+                .with_field("field", Detail::text("state.version"))
+                .with_field(
+                    "version",
+                    Detail::Scalar(Scalar::UInt32(request.state.version)),
+                ));
+            }
+            let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
+            else {
+                return Err(internal("the payload is not the bytes named"));
+            };
+            // The query rides with the state; the checks that name it (an
+            // empty context, a constant target) stay in the host's client
+            // at T1.11d (decision E45), so it is read and not used.
+            let _query: String = take_json(&mut attachments, request.state.query)?;
+            let inputs = crate::predict::Inputs {
+                payload,
+                model: request.model,
+                request_id: request.request_id,
+                outputs: request.outputs,
+            };
+            Run::new(move |asker| crate::predict::run(asker, inputs))
+        }
+        #[cfg(feature = "test-ops")]
+        Operation::Test(operation) => {
+            crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
+        }
+    })
+}
+
+/// A `materialize` run of `request`, with the attachments it names; with
+/// `labels_only`, the test-only `labels` operation's, which finishes with
+/// the context's labels.
+pub(crate) fn materialize(
+    root: &CompositionRoot,
+    operation: Operation,
+    mut attachments: Attachments,
+    facts: HostFacts,
+    zones: Arc<dyn Zones>,
+    #[cfg(feature = "test-ops")] labels_only: bool,
+) -> Result<Run, CoreError> {
+    match operation {
         Operation::Materialize(request) => {
             let described: SourceDescription = take_json(&mut attachments, request.schema)?;
             let held: Option<HeldSchema> = take_json_if(&mut attachments, request.held)?;
@@ -165,43 +226,13 @@ pub fn start(
                 options: request.options,
                 facts,
                 zones: Arc::clone(&zones),
+                #[cfg(feature = "test-ops")]
+                labels_only,
             };
-            Run::with_data(access, move |asker| crate::materialize::run(asker, inputs))
+            Ok(Run::with_data(access, move |asker| {
+                crate::materialize::run(asker, inputs)
+            }))
         }
-        Operation::Predict(request) => {
-            // The state's version first, by name, before anything of the
-            // state is read (decision H23).
-            if request.state.version != REQUEST_STATE_VERSION {
-                return Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
-                    "the request state is of a version this core does not read",
-                )
-                .with_field("field", Detail::text("state.version"))
-                .with_field(
-                    "version",
-                    Detail::Scalar(Scalar::UInt32(request.state.version)),
-                ));
-            }
-            let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
-            else {
-                return Err(internal("the payload is not the bytes named"));
-            };
-            // The query rides with the state; the checks that name it (an
-            // empty context, a constant target) stay in the host's client
-            // at T1.11d (decision E45), so it is read and not used.
-            let _query: String = take_json(&mut attachments, request.state.query)?;
-            let inputs = crate::predict::Inputs {
-                payload,
-                model: request.model,
-                request_id: request.request_id,
-                outputs: request.outputs,
-            };
-            Run::new(move |asker| crate::predict::run(asker, inputs))
-        }
-        #[cfg(feature = "test-ops")]
-        Operation::Test(operation) => {
-            crate::test_ops::run(root, operation, &mut attachments, facts, zones)?
-        }
-    })
+        _ => Err(internal("a materialize run of another operation")),
+    }
 }

@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::data::{AttachmentId, DataRequest, FetchPlan, ProviderChoice};
-use crate::ops::AttachmentKind;
+use crate::ops::{AttachmentKind, Materialize, Operation};
 use crate::scalar::Scalar;
 
 /// A test-only operation.
@@ -52,6 +52,15 @@ pub enum TestOperation {
     /// offset at `at`, a `ts` scalar, in `TestResult::offset_seconds`; an
     /// unknown zone fails the run.
     Zone { zone: String, at: Scalar },
+    /// Runs `materialize` as its operation does, to the context's labels
+    /// (T1.27), and finishes with them: `TestResult::data` is an Arrow
+    /// batch of one row per context example, its entity's key (`entity`),
+    /// its anchor (`anchor`, zone-less nanoseconds) and its label
+    /// (`target`), `rows` their count. A host runs it in place of the
+    /// `materialize` it would start, so its labels can be held to the
+    /// reference's, which the payload carries only once the task's layout
+    /// is the core's.
+    Labels { materialize: Box<Materialize> },
 }
 
 /// Where a test-only operation panics.
@@ -82,6 +91,9 @@ impl TestOperation {
             | TestOperation::Log { .. }
             | TestOperation::Abort
             | TestOperation::Zone { .. } => vec![],
+            TestOperation::Labels { materialize } => {
+                Operation::Materialize((**materialize).clone()).attachments()
+            }
         }
     }
 }

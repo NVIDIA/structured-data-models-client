@@ -4,9 +4,8 @@
 
 //! The reference's sampler, as far as `materialize` reaches it at T1.11c:
 //! the examples' entities and anchor times (`sample_target`'s temporal
-//! walk), their labels (a windowed `SUM`, as the reference's pandas
-//! executor computes it), the seeds a `neighbors` or `lookup` request
-//! carries, the order `_by_fkey` keeps neighbors in, and, from T1.26b, the
+//! walk; their labels are [`crate::labels`]'s from T1.27), the seeds a
+//! `neighbors` or `lookup` request carries, the order `_by_fkey` keeps neighbors in, and, from T1.26b, the
 //! sampler's three reads as typed requests ([`by_pkey`], [`by_fkey`],
 //! [`by_time`]). It holds no SQL: what it asks for is typed requests,
 //! which `sdm-data` plans.
@@ -18,13 +17,10 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit as ArrowUnit};
 use sdm_contract::data::{
     DataRequest, KeySet, NullOrder, SEED_BATCH, SEED_KEY, SeedBound, TieBreak, TieTerm,
 };
-use sdm_contract::pql::TimeUnit;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
 use crate::graph::Table;
 use crate::random::Pcg64;
-
-const NANOS_PER_SECOND: i128 = 1_000_000_000;
 
 /// The seed time columns the sampler's requests carry: each seed's anchor
 /// (`_by_fkey`'s `__kumo_time__`), and the start and end of its window
@@ -32,21 +28,6 @@ const NANOS_PER_SECOND: i128 = 1_000_000_000;
 pub const SEED_TIME: &str = "time";
 pub const SEED_START: &str = "start";
 pub const SEED_END: &str = "end";
-
-/// `count` units as a fixed span in nanoseconds, as `pd.DateOffset` adds it
-/// to a time with no zone; `None` for months, which are calendar
-/// arithmetic, not ported yet.
-pub fn span_ns(count: i32, unit: TimeUnit) -> Option<i128> {
-    let seconds = match unit {
-        TimeUnit::Seconds => 1,
-        TimeUnit::Minutes => 60,
-        TimeUnit::Hours => 3_600,
-        TimeUnit::Days => 86_400,
-        TimeUnit::Weeks => 7 * 86_400,
-        TimeUnit::Months => return None,
-    };
-    Some(i128::from(count) * seconds * NANOS_PER_SECOND)
-}
 
 /// A time past what a nanosecond count since the epoch holds, which the
 /// reference's pandas times cannot hold either.
@@ -116,79 +97,28 @@ pub fn temporal_examples(
     Ok(Examples { index, anchors })
 }
 
-/// A label's values: a float column, read at float32 as the reference's
-/// executor reads one, or an integer column.
-#[derive(Debug, Clone)]
-pub enum Values {
-    Float(Vec<Option<f32>>),
-    Int(Vec<Option<i64>>),
-}
-
-/// The window a label sums over, from each example's anchor: times after
-/// `anchor + start` (none: no lower bound) and not after `anchor + end`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Window {
-    pub start: Option<i128>,
-    pub end: i128,
-}
-
-/// A windowed `SUM` per example, as the reference's pandas executor gives
-/// it: of each row whose value is present (not null, and for a float not
-/// NaN, which pandas' sum skips) and whose time falls in its
-/// example's window, summed in row order, a float column at float32 with
-/// Kahan's compensation (register entry PK-2) and an integer column in
-/// int64; then read at float32, an example with no row giving 0.
-pub fn sum_labels(
-    examples: usize,
-    batch: &[usize],
-    values: &Values,
-    times: &[Option<i64>],
-    anchors: &[i64],
-    window: Window,
-) -> Vec<f32> {
-    let within = |row: usize| -> bool {
-        let Some(time) = times[row] else {
-            return false;
-        };
-        let anchor = i128::from(anchors[batch[row]]);
-        let time = i128::from(time);
-        time <= anchor + window.end && window.start.is_none_or(|start| time > anchor + start)
+/// `sample_target`'s examples for a static query, which shares its
+/// examples between context and prediction: the entities valid at `anchor`
+/// (all of them, or those whose time is not after it), shuffled by `rng`,
+/// each at `anchor`.
+pub fn static_examples(
+    rng: &mut Pcg64,
+    entities: usize,
+    entity_time: Option<&[Option<i64>]>,
+    anchor: i64,
+) -> Examples {
+    let mut index: Vec<usize> = match entity_time {
+        None => (0..entities).collect(),
+        Some(times) => times
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.is_some_and(|t| t <= anchor))
+            .map(|(i, _)| i)
+            .collect(),
     };
-    match values {
-        Values::Float(values) => {
-            let mut sum = vec![0_f32; examples];
-            let mut compensation = vec![0_f32; examples];
-            for row in 0..batch.len() {
-                let Some(value) = values[row].filter(|v| !v.is_nan()) else {
-                    continue;
-                };
-                if !within(row) {
-                    continue;
-                }
-                let at = batch[row];
-                let y = value - compensation[at];
-                let t = sum[at] + y;
-                compensation[at] = (t - sum[at]) - y;
-                if compensation[at].is_nan() {
-                    compensation[at] = 0.0;
-                }
-                sum[at] = t;
-            }
-            sum
-        }
-        Values::Int(values) => {
-            let mut sum = vec![0_i64; examples];
-            for row in 0..batch.len() {
-                let Some(value) = values[row] else { continue };
-                if within(row) {
-                    sum[batch[row]] = sum[batch[row]].wrapping_add(value);
-                }
-            }
-            // The reference reads the int64 sum at float32, rounding to
-            // nearest, as `as` does.
-            sum.into_iter().map(|s| s as f32).collect()
-        }
-    }
+    rng.shuffle(&mut index);
+    let anchors = vec![anchor; index.len()];
+    Examples { index, anchors }
 }
 
 /// The seeds of a `neighbors` or `lookup` request: each seed's key
@@ -346,34 +276,4 @@ pub fn by_pkey(
         columns,
         seeds,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Values, Window, sum_labels};
-
-    #[test]
-    fn a_nan_is_skipped_as_pandas_skips_it() {
-        // Example 0 holds only NaN, example 1 NaN and finite values, example
-        // 2 a null: each sums what is present, an example with none 0.
-        let values = Values::Float(vec![
-            Some(f32::NAN),
-            Some(1.5),
-            Some(f32::NAN),
-            Some(2.0),
-            None,
-        ]);
-        let labels = sum_labels(
-            3,
-            &[0, 1, 1, 1, 2],
-            &values,
-            &[Some(5); 5],
-            &[0, 0, 0],
-            Window {
-                start: Some(0),
-                end: 10,
-            },
-        );
-        assert_eq!(labels, [0.0, 3.5, 0.0]);
-    }
 }

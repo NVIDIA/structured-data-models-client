@@ -23,6 +23,7 @@
 
 pub mod graph;
 pub mod keys;
+pub mod labels;
 pub mod random;
 pub mod sample;
 pub mod time;

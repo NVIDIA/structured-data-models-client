@@ -30,6 +30,12 @@ sha2.workspace = true
 # The test-only fetch, which echoes what the core admitted, for the
 # provider's tests.
 sdm-host = { path = "../sdm-host", features = ["test-ops"] }
+# The labels' test reads the test-only labels operation's Arrow batch and
+# writes its anchors as the payload writes a time.
+arrow-array.workspace = true
+arrow-schema.workspace = true
+arrow-select.workspace = true
+sdm-request = { path = "../sdm-request" }
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the
 # Arrow FFI sites can allow it locally.

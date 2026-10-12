@@ -11,16 +11,19 @@
 //! statement it runs (design, T1.11a row): the source's indexes, for the
 //! sampler's "Missing N indices" warning, when a key or foreign key is not
 //! one the source enforces and the provider declares index advice
-//! (T1.26a); the time bounds of the aggregated table; the
-//! reservoir sample of the entity table (`sample_entities`); the windowed
-//! rows each example's label sums (`neighbors` with a window, `_by_time`);
+//! (T1.26a); the time bounds of the aggregated table, or of every table
+//! with a time column for a static query; the reservoir sample of the
+//! entity table (`sample_entities`), with the entity table's columns the
+//! query reads; the windowed rows each example's label aggregates
+//! (`neighbors` with a window, `_by_time`);
 //! the entity rows of every example (`lookup`); and then the subgraph,
 //! walked hop by hop as the reference walks it ([`crate::subgraph`]: the
 //! keys each table's rows refer to looked up, the latest rows referring to
 //! them read, `_by_fkey`, nulls placed as the provider declares its source
 //! places them). The examples' order is numpy's (`sdm_engine::random`), the
-//! labels the reference executor's (`sdm_engine::sample`), the payload the
-//! engine's layout (`sdm_request::payload`).
+//! labels the reference executor's (`sdm_engine::labels`, over the fetched
+//! Arrow, decision E19; a window's months by `sdm_engine::time::offset`),
+//! the payload the engine's layout (`sdm_request::payload`).
 //!
 //! What the reference's sampler reads once and keeps, the index check and
 //! the time bounds, a run reads only where the memo its host hands back
@@ -30,9 +33,14 @@
 //! in a process, is given on every run that meets it, and once in a process
 //! by the host ([`ONCE_PER_PROCESS`]).
 //!
-//! It materializes a regression over a windowed `SUM` for each entity of a
-//! table that refers to no other, with the reference's defaults (a fast
-//! run, two hops of 32 neighbors, the default seed or the one given), and
+//! It labels, for each entity of a table that refers to no other, a
+//! windowed `SUM`, `COUNT`, `AVG`, `MIN` or `MAX` of a table referring to
+//! it, a comparison of one with a number or `NULL` (binary), or a column
+//! of the entity's own row (static: multiclass or regression), from T1.27;
+//! it materializes the windowed regression's request, with the
+//! reference's defaults (a fast run, two hops of 32 neighbors, the default
+//! seed or the one given), the classification and static tasks' layout
+//! being T1.28a's (`classification_task`, `target_leakage`); and it
 //! refuses with `UNSUPPORTED_REQUEST` naming the rule
 //! ([`sdm_engine::not_yet`]) every input whose request takes a rule it does
 //! not port yet (register entry P1B-3), and the requests and policies it
@@ -43,8 +51,8 @@ use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
-    Date32Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type,
-    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+    Date32Type, Decimal128Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
+    Int64Type, TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
     TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
 use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32Array};
@@ -54,21 +62,24 @@ use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, IndexAdvice, KeySet,
     MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, TableColumn, TextTimes,
 };
+use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
     ColumnRef, Materialized, MemoBounds, OperationResult, ProfileName, ProfileSpec, QueryColumn,
     QuerySchema, QueryTable, RequestState, SamplerMemo, Seed, SourceDescription,
 };
-use sdm_contract::pql::{Aggregation, NodeKind, PqlNode, ValidatedQuery};
+use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
     ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Field, HostFacts, Scalar,
     Unit,
 };
-use sdm_engine::graph::{Graph, Table};
+use sdm_engine::graph::{Edge, Graph, Table};
 use sdm_engine::keys;
+use sdm_engine::labels;
 use sdm_engine::not_yet;
 use sdm_engine::random::{Entropy, default_rng};
-use sdm_engine::sample::{self, SEED_END, SEED_START, Values};
+use sdm_engine::sample::{self, SEED_END, SEED_START};
 use sdm_engine::time::Instant;
+use sdm_engine::time::offset::{Offset, timeframe};
 use sdm_engine::time::text::{Reader, Unread};
 use sdm_request::payload::{self, Sampled};
 
@@ -151,6 +162,10 @@ pub(crate) struct Inputs {
     pub memo: Option<SamplerMemo>,
     /// The fingerprint of this provider and description ([`fingerprint`]).
     pub source: String,
+    /// The test-only `labels` operation's run: it finishes with the
+    /// context's labels, before anything of the task's layout is read.
+    #[cfg(feature = "test-ops")]
+    pub labels_only: bool,
 }
 
 /// The fingerprint a sampler memo is made under: FNV-1a, as sixteen hex
@@ -284,16 +299,69 @@ fn query_schema(description: &SourceDescription) -> QuerySchema {
     }
 }
 
+/// The task a query's target makes (`_get_task_type`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Task {
+    Regression,
+    Binary,
+    Multiclass,
+}
+
+/// A windowed aggregation of a table referring to the entity's.
+#[derive(Debug, Clone)]
+struct Windowed {
+    aggregation: labels::Aggregation,
+    /// The aggregated table, and its column; none for the table's `*`.
+    table: String,
+    column: Option<String>,
+    /// The window's ends, as offsets from each example's anchor.
+    start: Offset,
+    end: Offset,
+}
+
+/// What a query predicts, in the shapes this build labels.
+#[derive(Debug, Clone)]
+enum Shape {
+    /// A column of the entity's own row: a static target.
+    Column(String),
+    Aggregated(Windowed),
+    /// `target op constant`; no constant is `NULL`.
+    Condition {
+        target: Box<Shape>,
+        op: labels::RelOp,
+        constant: Option<labels::Constant>,
+    },
+}
+
+impl Shape {
+    /// The aggregation the target takes, if it takes one: a query with one
+    /// is temporal (`QueryType.TEMPORAL`), one without static.
+    fn windowed(&self) -> Option<&Windowed> {
+        match self {
+            Shape::Column(_) => None,
+            Shape::Aggregated(windowed) => Some(windowed),
+            Shape::Condition { target, .. } => target.windowed(),
+        }
+    }
+
+    /// The entity table's columns the target reads.
+    fn entity_columns(&self, into: &mut BTreeSet<String>) {
+        match self {
+            Shape::Column(column) => {
+                into.insert(column.clone());
+            }
+            Shape::Aggregated(_) => {}
+            Shape::Condition { target, .. } => target.entity_columns(into),
+        }
+    }
+}
+
 /// The parts of a validated query this build materializes.
 struct Asked {
     entity_table: String,
     entity_column: String,
-    /// The aggregated table and column.
-    table: String,
-    column: String,
-    /// The window, from the anchor, in nanoseconds.
-    start: i128,
-    end: i128,
+    target: Shape,
+    task: Task,
 }
 
 fn column_of(node: &PqlNode) -> Option<&ColumnRef> {
@@ -321,34 +389,110 @@ fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
         return Err(not_yet("entity_ids"));
     }
     let entity = column_of(&query.entity).ok_or_else(|| not_yet("entity_filter"))?;
-    let mut target = &query.target;
-    if let NodeKind::Join { target: inner, .. } = &target.kind {
-        target = inner;
-    }
-    let NodeKind::Aggregation {
-        aggregation,
-        target: aggregated,
-        window,
-        ..
-    } = &target.kind
-    else {
-        return Err(not_yet("static_target"));
+    let target = shape(&query.target, &entity.table)?;
+    let task = match &target {
+        Shape::Condition { .. } => Task::Binary,
+        Shape::Aggregated(_) => Task::Regression,
+        Shape::Column(_) => match query.target.stype {
+            Some(Stype::Id | Stype::Categorical) => Task::Multiclass,
+            Some(Stype::Numerical) => Task::Regression,
+            // The reference raises `NotImplementedError` here.
+            _ => return Err(not_yet("target_stype")),
+        },
     };
-    if *aggregation != Aggregation::Sum {
-        return Err(not_yet("aggregation"));
-    }
-    let column = column_of(aggregated).ok_or_else(|| not_yet("target_filter"))?;
-    let window = window.ok_or_else(|| not_yet("open_window"))?;
-    let start = window.start.ok_or_else(|| not_yet("open_window"))?;
-    let span = |n: i32| sample::span_ns(n, window.unit).ok_or_else(|| not_yet("month_window"));
     Ok(Asked {
         entity_table: entity.table.clone(),
         entity_column: entity.column.clone(),
-        table: column.table.clone(),
-        column: column.column.clone(),
-        start: span(start)?,
-        end: span(window.end)?,
+        target,
+        task,
     })
+}
+
+/// The target `node` as a [`Shape`], or the rule it takes that this build
+/// does not port: an aggregation other than `SUM`, `COUNT`, `AVG`, `MIN`
+/// and `MAX` (`aggregation`), of anything but a column (`target_filter`),
+/// or without a start (`open_window`); a static column of another table
+/// than the entity's (`static_target`); a condition other than a
+/// comparison with a number or `NULL` of a column or an aggregation
+/// (`condition`); `AND`, `OR` and `NOT` (`logical_target`).
+fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
+    match &node.kind {
+        // A join holds an aggregation (`execute_join`).
+        NodeKind::Join { target, .. } => match &target.kind {
+            NodeKind::Aggregation { .. } => shape(target, entity_table),
+            _ => Err(not_yet("static_target")),
+        },
+        NodeKind::Column { column } => {
+            if column.table == entity_table && column.column != "*" {
+                Ok(Shape::Column(column.column.clone()))
+            } else {
+                Err(not_yet("static_target"))
+            }
+        }
+        NodeKind::Aggregation {
+            aggregation,
+            target,
+            window,
+            ..
+        } => {
+            let aggregation = match aggregation {
+                Aggregation::Sum => labels::Aggregation::Sum,
+                Aggregation::Count => labels::Aggregation::Count,
+                Aggregation::Avg => labels::Aggregation::Avg,
+                Aggregation::Min => labels::Aggregation::Min,
+                Aggregation::Max => labels::Aggregation::Max,
+                _ => return Err(not_yet("aggregation")),
+            };
+            let column = column_of(target).ok_or_else(|| not_yet("target_filter"))?;
+            let window = window.ok_or_else(|| not_yet("open_window"))?;
+            let start = window.start.ok_or_else(|| not_yet("open_window"))?;
+            Ok(Shape::Aggregated(Windowed {
+                aggregation,
+                table: column.table.clone(),
+                column: (column.column != "*").then(|| column.column.clone()),
+                start: Offset::of(start, window.unit),
+                end: Offset::of(window.end, window.unit),
+            }))
+        }
+        NodeKind::Condition {
+            target, op, value, ..
+        } => {
+            let op = match op {
+                ConditionOp::Eq => labels::RelOp::Eq,
+                ConditionOp::Ne => labels::RelOp::Ne,
+                ConditionOp::Lt => labels::RelOp::Lt,
+                ConditionOp::Le => labels::RelOp::Le,
+                ConditionOp::Gt => labels::RelOp::Gt,
+                ConditionOp::Ge => labels::RelOp::Ge,
+                _ => return Err(not_yet("condition")),
+            };
+            let NodeKind::Constant { literal } = &value.kind else {
+                return Err(not_yet("condition"));
+            };
+            let constant = match literal {
+                PqlLiteral::Null => None,
+                PqlLiteral::Int { value } => Some(labels::Constant::Int(
+                    value.parse().map_err(|_| not_yet("condition_value"))?,
+                )),
+                PqlLiteral::Float { text } => Some(labels::Constant::Float(
+                    text.parse().map_err(|_| not_yet("condition_value"))?,
+                )),
+                _ => return Err(not_yet("condition")),
+            };
+            let target = shape(target, entity_table)?;
+            if matches!(target, Shape::Condition { .. }) {
+                return Err(not_yet("condition"));
+            }
+            Ok(Shape::Condition {
+                target: Box::new(target),
+                op,
+                constant,
+            })
+        }
+        NodeKind::Logical { .. } => Err(not_yet("logical_target")),
+        NodeKind::Filter { .. } => Err(not_yet("target_filter")),
+        NodeKind::Constant { .. } => Err(not_yet("static_target")),
+    }
 }
 
 /// One batch of a fetch's answer, all its rows.
@@ -576,9 +720,11 @@ pub(crate) fn batches(batch: &RecordBatch, seeds: usize) -> Result<Vec<usize>, C
         .collect()
 }
 
-/// A label column's values: a float read at float32, as the reference's
-/// executor reads it, or an integer.
-fn label_values(array: &ArrayRef) -> Result<Values, CoreError> {
+/// An aggregated column's values, as the reference's executor reads them
+/// (`execute_column`): a float at float32, an integer at int64, a decimal
+/// exactly; any other type is refused by name (`target_type`).
+fn label_values(array: &ArrayRef) -> Result<labels::Values, CoreError> {
+    use labels::Values;
     macro_rules! ints {
         ($t:ty) => {
             Values::Int(
@@ -606,11 +752,85 @@ fn label_values(array: &ArrayRef) -> Result<Values, CoreError> {
         DataType::UInt8 => ints!(UInt8Type),
         DataType::UInt16 => ints!(UInt16Type),
         DataType::UInt32 => ints!(UInt32Type),
-        DataType::UInt64 => Values::Int(
+        DataType::UInt64 => Values::Int(unsigned(array)?),
+        DataType::Decimal128(_, scale) => Values::Decimal {
+            values: array.as_primitive::<Decimal128Type>().iter().collect(),
+            scale: *scale,
+        },
+        _ => return Err(not_yet("target_type")),
+    })
+}
+
+/// A `UInt64` column at int64, as pandas' `astype('int64')` takes it: a
+/// value past int64, which that cast refuses, is refused by name
+/// (`target_type`).
+fn unsigned(array: &ArrayRef) -> Result<Vec<Option<i64>>, CoreError> {
+    array
+        .as_primitive::<UInt64Type>()
+        .iter()
+        .map(|v| {
+            v.map(|v| i64::try_from(v).map_err(|_| not_yet("target_type")))
+                .transpose()
+        })
+        .collect()
+}
+
+/// A static target's values at `rows` of `array`, the entity rows sampled,
+/// as the executor reads them: a float at float32, an integer at int64,
+/// a boolean, text; a decimal, a time or any other type is refused by name
+/// (`target_type`): the reference's task table takes none of them.
+fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
+    use labels::Column;
+    let taken = take(array, rows)?;
+    let array = &taken;
+    macro_rules! ints {
+        ($t:ty) => {
+            Column::Int(
+                array
+                    .as_primitive::<$t>()
+                    .iter()
+                    .map(|v| v.map(i64::from))
+                    .collect(),
+            )
+        };
+    }
+    Ok(match array.data_type() {
+        DataType::Float64 => Column::Float(
             array
-                .as_primitive::<UInt64Type>()
+                .as_primitive::<Float64Type>()
                 .iter()
-                .map(|v| v.map(|v| v as i64))
+                .map(|v| v.map(|v| v as f32))
+                .collect(),
+        ),
+        DataType::Float32 => Column::Float(array.as_primitive::<Float32Type>().iter().collect()),
+        DataType::Int8 => ints!(Int8Type),
+        DataType::Int16 => ints!(Int16Type),
+        DataType::Int32 => ints!(Int32Type),
+        DataType::Int64 => ints!(Int64Type),
+        DataType::UInt8 => ints!(UInt8Type),
+        DataType::UInt16 => ints!(UInt16Type),
+        DataType::UInt32 => ints!(UInt32Type),
+        DataType::UInt64 => Column::Int(unsigned(array)?),
+        DataType::Boolean => Column::Bool(array.as_boolean().iter().collect()),
+        DataType::Utf8 => Column::Text(
+            array
+                .as_string::<i32>()
+                .iter()
+                .map(|v| v.map(str::to_owned))
+                .collect(),
+        ),
+        DataType::LargeUtf8 => Column::Text(
+            array
+                .as_string::<i64>()
+                .iter()
+                .map(|v| v.map(str::to_owned))
+                .collect(),
+        ),
+        DataType::Utf8View => Column::Text(
+            array
+                .as_string_view()
+                .iter()
+                .map(|v| v.map(str::to_owned))
                 .collect(),
         ),
         _ => return Err(not_yet("target_type")),
@@ -675,68 +895,112 @@ impl Memo<'_> {
     }
 }
 
-/// `table`'s time bounds: as the memo holds them, read by a run of this
-/// materializer before, as the reference's sampler reads them once and
-/// keeps them (`get_min_time`, `get_max_time`); else read, and kept.
-async fn time_bounds(memo: &mut Memo<'_>, table: &Table) -> Result<Bounds, CoreError> {
-    let column = table
-        .time_column
-        .clone()
-        .ok_or_else(|| internal("the aggregated table has no time column"))?;
-    let kept = memo
-        .memo
-        .bounds
-        .iter()
-        .find(|b| b.table == table.name && b.column == column);
-    let (min, max) = match kept {
-        Some(kept) => (kept.min, kept.max),
-        None => {
-            let (min, max) = read_bounds(memo.asker, table, &column).await?;
+/// The time bounds of `tables` together, the smallest of their smallest
+/// times and the largest of their largest (`get_min_time` and
+/// `get_max_time` over those tables, a table whose time column holds no
+/// time counting as `pd.Timestamp.max` and `min`): each as the memo holds
+/// it, read by a run of this materializer before, as the reference's
+/// sampler reads them once and keeps them; the others read, in one
+/// request, and kept.
+async fn time_bounds(memo: &mut Memo<'_>, tables: &[&Table]) -> Result<Bounds, CoreError> {
+    let mut unknown: Vec<(&Table, String)> = Vec::new();
+    for table in tables {
+        let column = table
+            .time_column
+            .clone()
+            .ok_or_else(|| internal("a table bounded in time has no time column"))?;
+        let kept = memo
+            .memo
+            .bounds
+            .iter()
+            .any(|b| b.table == table.name && b.column == column);
+        if !kept {
+            unknown.push((table, column));
+        }
+    }
+    if !unknown.is_empty() {
+        let read = read_bounds(memo.asker, &unknown).await?;
+        for ((table, column), (min, max)) in unknown.into_iter().zip(read) {
             memo.memo.bounds.push(MemoBounds {
                 table: table.name.clone(),
                 column,
                 min,
                 max,
             });
-            memo.keep();
-            (min, max)
         }
+        memo.keep();
+    }
+    let mut bounds = Bounds {
+        min: TIME_MAX,
+        max: TIME_MIN,
     };
-    Ok(Bounds {
-        min: min.unwrap_or(TIME_MAX),
-        max: max.unwrap_or(TIME_MIN),
-    })
+    for table in tables {
+        let column = table.time_column.as_deref();
+        let Some(kept) = memo
+            .memo
+            .bounds
+            .iter()
+            .find(|b| b.table == table.name && Some(b.column.as_str()) == column)
+        else {
+            return Err(internal("a table's time bounds were not kept"));
+        };
+        bounds.min = bounds.min.min(kept.min.unwrap_or(TIME_MAX));
+        bounds.max = bounds.max.max(kept.max.unwrap_or(TIME_MIN));
+    }
+    Ok(bounds)
 }
 
+/// The smallest and largest time of each table's time column, in the
+/// order asked, one request for them all.
 async fn read_bounds(
     asker: &Asker,
-    table: &Table,
-    column: &str,
-) -> Result<(Option<i64>, Option<i64>), CoreError> {
-    let column = column.to_owned();
+    tables: &[(&Table, String)],
+) -> Result<Vec<(Option<i64>, Option<i64>)>, CoreError> {
     let answer = ask(
         asker,
         DataRequest::TimeBounds {
-            columns: vec![TableColumn {
-                table: table.source.clone(),
-                column,
-            }],
+            columns: tables
+                .iter()
+                .map(|(table, column)| TableColumn {
+                    table: table.source.clone(),
+                    column: column.clone(),
+                })
+                .collect(),
         },
     )
     .await?;
     let batch = one_batch(&answer)?;
-    if batch.num_rows() != 1 {
+    if batch.num_rows() != tables.len() {
         return Err(crate::run::schema_mismatch(
             "expected",
             None,
             "the time bounds do not hold one row per column",
         ));
     }
-    let read = |name: &str| -> Result<Option<i64>, CoreError> {
-        Ok(times_ns(named(&batch, name)?, name)?[0])
-    };
-    use sdm_contract::data::results::{BOUNDS_MAX, BOUNDS_MIN};
-    Ok((read(BOUNDS_MIN)?, read(BOUNDS_MAX)?))
+    use sdm_contract::data::results::{BOUNDS_MAX, BOUNDS_MIN, BOUNDS_POSITION};
+    let positions = named(&batch, BOUNDS_POSITION)?
+        .as_primitive_opt::<Int32Type>()
+        .ok_or_else(|| crate::run::schema_mismatch("expected", Some(BOUNDS_POSITION), "not int32"))?
+        .clone();
+    let mins = times_ns(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN)?;
+    let maxs = times_ns(named(&batch, BOUNDS_MAX)?, BOUNDS_MAX)?;
+    let mut out = vec![None; tables.len()];
+    for row in 0..batch.num_rows() {
+        let at = positions
+            .is_valid(row)
+            .then(|| usize::try_from(positions.value(row)).ok())
+            .flatten()
+            .filter(|at| *at < tables.len() && out[*at].is_none())
+            .ok_or_else(|| {
+                crate::run::schema_mismatch(
+                    "expected",
+                    Some(BOUNDS_POSITION),
+                    "a row names no column asked for",
+                )
+            })?;
+        out[at] = Some((mins[row], maxs[row]));
+    }
+    Ok(out.into_iter().map(|b| b.unwrap_or((None, None))).collect())
 }
 
 /// The requests and policies the sampler needs of its provider, each
@@ -975,6 +1239,8 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     };
     memo.keep();
     options_taken(&inputs)?;
+    #[cfg(feature = "test-ops")]
+    let labels_only = inputs.labels_only;
     let Inputs {
         mut description,
         query,
@@ -1069,23 +1335,29 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .clone()
         .filter(|k| *k == asked.entity_column)
         .ok_or_else(|| not_yet("entity_key"))?;
-    let aggregated = graph
-        .table(&asked.table)
-        .ok_or_else(|| internal("the aggregated table is not in the graph"))?;
-    let edge = {
-        let found: Vec<_> = graph
-            .edges
-            .iter()
-            .filter(|e| e.src == asked.table && e.dst == asked.entity_table)
-            .collect();
-        match found.as_slice() {
-            [one] => (*one).clone(),
-            _ => {
-                return Err(invalid(
-                    "no unique foreign key leads from the aggregated table to the entity table",
-                    "query",
-                ));
-            }
+    // A temporal query's aggregated table, and the foreign key by which it
+    // refers to the entity table (`_get_query_time_offset_dict`).
+    let aggregated = match asked.target.windowed() {
+        None => None,
+        Some(windowed) => {
+            let table = graph
+                .table(&windowed.table)
+                .ok_or_else(|| internal("the aggregated table is not in the graph"))?;
+            let found: Vec<_> = graph
+                .edges
+                .iter()
+                .filter(|e| e.src == windowed.table && e.dst == asked.entity_table)
+                .collect();
+            let edge = match found.as_slice() {
+                [one] => (*one).clone(),
+                _ => {
+                    return Err(invalid(
+                        "no unique foreign key leads from the aggregated table to the entity table",
+                        "query",
+                    ));
+                }
+            };
+            Some((windowed, table, edge))
         }
     };
     // The subgraph is walked as the reference walks it from the entity
@@ -1102,11 +1374,26 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         text: asker.capabilities()?.text_times,
     };
 
+    // The tables whose times bound the anchor: a temporal query's
+    // aggregated table; for a static query, every table with a time column
+    // (`get_min_time()`, `get_max_time()`), none of which leaves the anchor
+    // unchecked (`_validate_time` returns) and, by default, no anchor at
+    // all (`pd.Timestamp.min`).
+    let bounded: Vec<&Table> = match &aggregated {
+        Some((_, table, _)) => vec![*table],
+        None => graph
+            .tables
+            .iter()
+            .filter(|t| t.time_column.is_some())
+            .collect(),
+    };
+
     // The anchor, and the times it is checked against.
     let mut bounds: Option<Bounds> = None;
     let anchor = match anchor_time {
+        None if bounded.is_empty() => TIME_MIN,
         None => {
-            let read = time_bounds(&mut memo, aggregated).await?;
+            let read = time_bounds(&mut memo, &bounded).await?;
             let max = read.max;
             bounds = Some(read);
             max
@@ -1124,45 +1411,59 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             return Err(invalid("an anchor time is a ts scalar", "anchor_time"));
         }
     };
-    let context_anchor = sample::shift(anchor, -asked.end, "anchor_time")?;
-    let bounds = match bounds {
-        Some(bounds) => bounds,
-        None => time_bounds(&mut memo, aggregated).await?,
+    // The context's anchor: a window's end before the anchor, by the
+    // calendar for months; a static query's is the anchor itself.
+    let context_anchor = match &aggregated {
+        Some((windowed, ..)) => windowed.end.negated().add_to(anchor, "anchor_time")?,
+        None => anchor,
     };
-    if anchor < bounds.min {
-        return Err(invalid(
-            "the anchor time is before the earliest time in the data",
-            "anchor_time",
-        ));
-    }
-    if context_anchor < bounds.min {
-        return Err(invalid(
-            "the context's anchor time is before the earliest time in the data",
-            "anchor_time",
-        ));
-    }
-    if i128::from(context_anchor) - asked.end < i128::from(bounds.min) {
-        warn(
-            &asker,
-            CONTEXT_BEFORE_DATA,
-            "the context reaches back before the data",
-        );
-    }
-    if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
-        warn(
-            &asker,
-            ANCHOR_AFTER_DATA,
-            "the anchor time is after the data",
-        );
+    let bounds = match bounds {
+        Some(bounds) => Some(bounds),
+        None if bounded.is_empty() => None,
+        None => Some(time_bounds(&mut memo, &bounded).await?),
+    };
+    if let Some(bounds) = &bounds {
+        if anchor < bounds.min {
+            return Err(invalid(
+                "the anchor time is before the earliest time in the data",
+                "anchor_time",
+            ));
+        }
+        if context_anchor < bounds.min {
+            return Err(invalid(
+                "the context's anchor time is before the earliest time in the data",
+                "anchor_time",
+            ));
+        }
+        // A static query's window is empty: its context reaches back no
+        // further than its anchor, which was checked above.
+        if let Some((windowed, ..)) = &aggregated
+            && reaches(windowed.end.negated(), context_anchor)? < i128::from(bounds.min)
+        {
+            warn(
+                &asker,
+                CONTEXT_BEFORE_DATA,
+                "the context reaches back before the data",
+            );
+        }
+        if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
+            warn(
+                &asker,
+                ANCHOR_AFTER_DATA,
+                "the anchor time is after the data",
+            );
+        }
     }
 
     // The examples: a reservoir sample of the entity table, kept one row
-    // per entity, walked back from the context's anchor by the window.
+    // per entity, with the entity table's columns the query reads; for a
+    // temporal query, walked back from the context's anchor by the window.
     let trials = ITERATIONS * CONTEXT_EXAMPLES;
     let mut entity_columns = BTreeSet::from([key.clone()]);
     if let Some(time) = &entity.time_column {
         entity_columns.insert(time.clone());
     }
+    asked.target.entity_columns(&mut entity_columns);
     let mut filters = Vec::new();
     if entity.column(&key).is_none_or(|c| c.nullable) {
         filters.push(Filter::NotNull {
@@ -1214,63 +1515,40 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         return Err(not_yet("indices_type"));
     }
     let mut rng = default_rng(&entropy);
-    let examples = sample::temporal_examples(
-        &mut rng,
-        kept.len(),
-        entity_time.as_deref(),
-        context_anchor,
-        asked.end - asked.start,
-        bounds.min,
-        trials,
-    )?;
-
-    // Their labels: the windowed rows of the aggregated table.
-    let example_keys = take(&entity_key, &examples.index)?;
-    let ends = examples
-        .anchors
-        .iter()
-        .map(|a| sample::shift(*a, asked.end, "anchor_time"))
-        .collect::<Result<Vec<_>, _>>()?;
-    let starts = examples
-        .anchors
-        .iter()
-        .map(|a| sample::shift(*a, asked.start, "anchor_time"))
-        .collect::<Result<Vec<_>, _>>()?;
-    let time_column = aggregated
-        .time_column
-        .clone()
-        .ok_or_else(|| internal("the aggregated table has no time column"))?;
-    let label_columns = BTreeSet::from([asked.column.clone(), time_column.clone()]);
-    let seeds = sample::seeds(example_keys, vec![(SEED_END, ends), (SEED_START, starts)])?;
-    let labelled = read_times.read(
-        &asker,
-        aggregated,
-        one_batch(
-            &ask(
-                &asker,
-                sample::by_time(
-                    aggregated,
-                    &edge.fkey,
-                    aggregated.ordered(&label_columns),
-                    key_set(&asker, seeds)?,
-                    true,
-                )?,
-            )
-            .await?,
+    let examples = match &aggregated {
+        Some((windowed, ..)) => sample::temporal_examples(
+            &mut rng,
+            kept.len(),
+            entity_time.as_deref(),
+            context_anchor,
+            timeframe(windowed.start, windowed.end, "anchor_time")?,
+            bounds.as_ref().map_or(TIME_MAX, |b| b.min),
+            trials,
         )?,
-    )?;
-    let labels = sample::sum_labels(
-        examples.index.len(),
-        &batches(&labelled, examples.index.len())?,
-        &label_values(named(&labelled, &asked.column)?)?,
-        &times_ns(named(&labelled, &time_column)?, &time_column)?,
-        &examples.anchors,
-        sample::Window {
-            start: Some(asked.start),
-            end: asked.end,
-        },
-    );
-    let num_train = examples.index.len().min(CONTEXT_EXAMPLES);
+        None => {
+            sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), context_anchor)
+        }
+    };
+
+    // Their labels, as the reference's executor computes them over the
+    // rows read for them (decision E19).
+    let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
+    let target = Labelling {
+        asker: &asker,
+        times: &read_times,
+        sampled: &sampled,
+        entity_rows: &entity_rows,
+        entity_key: &entity_key,
+        examples: &examples,
+    }
+    .target(&asked.target, aggregated.as_ref())
+    .await?;
+    let labelled = labels::label(&target)?;
+    // The examples with a label, in order, the first a context holds.
+    let labelled_rows: Vec<usize> = (0..labelled.mask.len())
+        .filter(|&row| labelled.mask[row])
+        .collect();
+    let num_train = labelled_rows.len().min(CONTEXT_EXAMPLES);
     if num_train == 0 {
         return Err(invalid("no context example was collected", "anchor_time"));
     }
@@ -1288,9 +1566,32 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             .into(),
         });
     }
-    let train_rows: Vec<usize> = (0..num_train).collect();
-    let train_keys = take(&take(&entity_key, &examples.index)?, &train_rows)?;
-    let targets = labels[..num_train].to_vec();
+    let train_rows: Vec<usize> = labelled_rows[..num_train]
+        .iter()
+        .map(|&row| examples.index[row])
+        .collect();
+    let train_keys = take(&entity_key, &train_rows)?;
+    let mut anchors: Vec<i64> = labelled_rows[..num_train]
+        .iter()
+        .map(|&row| examples.anchors[row])
+        .collect();
+    let labels = labelled.labels.truncated(num_train);
+    #[cfg(feature = "test-ops")]
+    if labels_only {
+        return labels_result(&asker, &train_keys, &anchors, &labels);
+    }
+    // The task's layout in the payload is T1.28a's: a classification's
+    // classes, their order and its positive class, and a static target's
+    // column kept out of what the request sends (`get_exclude_cols_dict`).
+    if asked.task != Task::Regression {
+        return Err(not_yet("classification_task"));
+    }
+    if aggregated.is_none() {
+        return Err(not_yet("target_leakage"));
+    }
+    let labels::Labels::Float(targets) = labels else {
+        return Err(internal("a windowed aggregation's labels are not float32"));
+    };
     let num_test = indices.len();
     let examples_total = num_train + num_test;
     if num_train > TABLE_ROWS {
@@ -1301,7 +1602,6 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     }
     let all_keys = arrow_select::concat::concat(&[train_keys.as_ref(), indices.as_ref()])
         .map_err(|_| internal("the examples' keys do not concatenate"))?;
-    let mut anchors = examples.anchors[..num_train].to_vec();
     anchors.extend(std::iter::repeat_n(anchor, num_test));
 
     // The subgraph: each example's entity row.
@@ -1403,6 +1703,183 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             payload,
             query,
         },
+    }))
+}
+
+/// `at + offset` in nanoseconds: a fixed span added without bound, as the
+/// reference compares such times; a calendar one as pandas adds it.
+fn reaches(offset: Offset, at: i64) -> Result<i128, CoreError> {
+    match offset.fixed_nanos() {
+        Some(span) => Ok(i128::from(at) + span),
+        None => offset.add_to(at, "anchor_time").map(i128::from),
+    }
+}
+
+/// What a run's labels are read from: the entity rows sampled and, for a
+/// windowed aggregation, the rows of the aggregated table its window holds
+/// for each example (`_sample_query_data`).
+struct Labelling<'a> {
+    asker: &'a Asker,
+    times: &'a Times,
+    /// The entity sample, and each example's row of it.
+    sampled: &'a RecordBatch,
+    entity_rows: &'a [usize],
+    /// Each kept entity's key, which the examples index.
+    entity_key: &'a ArrayRef,
+    examples: &'a sample::Examples,
+}
+
+impl Labelling<'_> {
+    /// The target `shape` names, over the examples.
+    async fn target(
+        &self,
+        shape: &Shape,
+        aggregated: Option<&(&Windowed, &Table, Edge)>,
+    ) -> Result<labels::Target, CoreError> {
+        match shape {
+            Shape::Condition {
+                target,
+                op,
+                constant,
+            } => Ok(labels::Target::Condition {
+                target: Box::new(self.leaf(target, aggregated).await?),
+                op: *op,
+                constant: *constant,
+            }),
+            leaf => self.leaf(leaf, aggregated).await,
+        }
+    }
+
+    async fn leaf(
+        &self,
+        shape: &Shape,
+        aggregated: Option<&(&Windowed, &Table, Edge)>,
+    ) -> Result<labels::Target, CoreError> {
+        match shape {
+            Shape::Column(column) => Ok(labels::Target::Column(static_column(
+                named(self.sampled, column)?,
+                self.entity_rows,
+            )?)),
+            Shape::Aggregated(_) => {
+                let (windowed, table, edge) =
+                    aggregated.ok_or_else(|| internal("an aggregation without its table"))?;
+                self.aggregate(windowed, table, edge)
+                    .await
+                    .map(labels::Target::Aggregated)
+            }
+            Shape::Condition { .. } => Err(internal("a condition nested in a condition")),
+        }
+    }
+
+    /// `windowed` over each example's rows of `aggregated`: those whose
+    /// foreign key `edge` names the example's entity, after the window's
+    /// start and not after its end from the example's anchor (`_by_time`).
+    async fn aggregate(
+        &self,
+        windowed: &Windowed,
+        aggregated: &Table,
+        edge: &Edge,
+    ) -> Result<labels::Aggregated, CoreError> {
+        let examples = self.examples.index.len();
+        let example_keys = take(self.entity_key, &self.examples.index)?;
+        let shifted = |offset: Offset| -> Result<Vec<i64>, CoreError> {
+            self.examples
+                .anchors
+                .iter()
+                .map(|a| offset.add_to(*a, "anchor_time"))
+                .collect()
+        };
+        let ends = shifted(windowed.end)?;
+        let starts = shifted(windowed.start)?;
+        let time_column = aggregated
+            .time_column
+            .clone()
+            .ok_or_else(|| internal("the aggregated table has no time column"))?;
+        let mut label_columns = BTreeSet::from([time_column.clone()]);
+        if let Some(column) = &windowed.column {
+            label_columns.insert(column.clone());
+        }
+        let seeds = sample::seeds(
+            example_keys,
+            vec![(SEED_END, ends.clone()), (SEED_START, starts.clone())],
+        )?;
+        let rows = self.times.read(
+            self.asker,
+            aggregated,
+            one_batch(
+                &ask(
+                    self.asker,
+                    sample::by_time(
+                        aggregated,
+                        &edge.fkey,
+                        aggregated.ordered(&label_columns),
+                        key_set(self.asker, seeds)?,
+                        true,
+                    )?,
+                )
+                .await?,
+            )?,
+        )?;
+        let values = match &windowed.column {
+            Some(column) => label_values(named(&rows, column)?)?,
+            None => labels::Values::Ones(rows.num_rows()),
+        };
+        labels::aggregate(
+            windowed.aggregation,
+            examples,
+            &batches(&rows, examples)?,
+            &values,
+            &times_ns(named(&rows, &time_column)?, &time_column)?,
+            labels::Bounds {
+                starts: Some(&starts),
+                ends: &ends,
+            },
+        )
+    }
+}
+
+/// The test-only `labels` operation's result: the context's examples, each
+/// its entity's key (`entity`), its anchor (`anchor`, zone-less
+/// nanoseconds) and its label (`target`, at the type the executor gives
+/// it), attached as one Arrow batch.
+#[cfg(feature = "test-ops")]
+fn labels_result(
+    asker: &Asker,
+    keys: &ArrayRef,
+    anchors: &[i64],
+    labels: &labels::Labels,
+) -> Result<OperationResult, CoreError> {
+    use arrow_array::{BooleanArray, Float32Array, Int64Array, StringArray};
+    let target: ArrayRef = match labels {
+        labels::Labels::Float(v) => Arc::new(Float32Array::from(v.clone())),
+        labels::Labels::Int(v) => Arc::new(Int64Array::from(v.clone())),
+        labels::Labels::Bool(v) => Arc::new(BooleanArray::from(v.clone())),
+        labels::Labels::Text(v) => Arc::new(StringArray::from(v.clone())),
+    };
+    let schema = Arc::new(arrow_schema::Schema::new(vec![
+        arrow_schema::Field::new("entity", keys.data_type().clone(), true),
+        arrow_schema::Field::new(
+            "anchor",
+            DataType::Timestamp(ArrowUnit::Nanosecond, None),
+            false,
+        ),
+        arrow_schema::Field::new("target", target.data_type().clone(), false),
+    ]));
+    let batch = RecordBatch::try_new(
+        Arc::clone(&schema),
+        vec![
+            Arc::clone(keys),
+            Arc::new(TimestampNanosecondArray::from(anchors.to_vec())),
+            target,
+        ],
+    )
+    .map_err(|_| internal("the labels do not make one batch"))?;
+    let rows = batch.num_rows() as u64;
+    let data = asker.attach(Attachment::Arrow(ArrowData::new(schema, vec![batch])))?;
+    Ok(OperationResult::Test(sdm_contract::test_ops::TestResult {
+        rows,
+        data: Some(data),
+        offset_seconds: None,
     }))
 }
 

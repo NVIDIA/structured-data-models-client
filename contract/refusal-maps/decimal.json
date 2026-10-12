@@ -10,45 +10,22 @@
   "gaps": [],
   "entries": [
     {
-      "id": "materialize/static_target",
-      "operation": "materialize",
-      "rule": "static_target",
-      "owner": "T1.27",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:335",
-      "why": "decimal.class-target-38-18 asks for users.tier, a static target, refused before its DECIMAL(38, 18) type is read, which the reference fails INTERNAL_ERROR on (P1B-1)",
-      "observed": {
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "static_target"
-        },
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "materialize",
-          "rule": "static_target"
-        }
-      }
-    },
-    {
       "id": "materialize/wire_dtype",
       "operation": "materialize",
       "rule": "wire_dtype",
       "owner": "T1.28a",
       "register": "P1B-3",
-      "where": "rust/crates/sdm-request/src/payload.rs:150",
+      "where": "rust/crates/sdm-request/src/payload.rs:144",
       "why": "A DECIMAL(38, 0) feature past float64's and int64's precision has no wire dtype in the payload yet; the reference sends it. The probe without it reaches predict's result on both runners",
       "observed": {
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "wire_dtype"
         },
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
+        "rust-host": {
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "wire_dtype"
@@ -59,19 +36,19 @@
       "id": "materialize/target_type",
       "operation": "materialize",
       "rule": "target_type",
-      "owner": "T1.27",
-      "register": "P1B-3",
-      "where": "rust/crates/sdm-core/src/materialize.rs:616",
-      "why": "A SUM over a DECIMAL(38, 18) column is a label type materialize does not compute yet; the reference sums it as float64",
+      "owner": "T1.32b",
+      "register": "P1B-18",
+      "where": "rust/crates/sdm-core/src/materialize.rs:836",
+      "why": "decimal.class-target-38-18 asks for users.tier, a static DECIMAL(38, 18) target: the core refuses a decimal static target by name when it reads the labels, where the reference computes them and then fails INTERNAL_ERROR building its task table (an unsupported data type for TARGET; P1B-1, P1B-18). decimal.target-38-18's sum over a DECIMAL(38, 18) column is computed from T1.27, held to the reference's labels exactly on both core hosts, and its probe now reaches the payload's wire_dtype of the decimal feature (T1.28a)",
       "observed": {
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "target_type"
         },
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
+        "rust-host": {
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "target_type"
@@ -119,7 +96,7 @@
             ]
           }
         },
-        "expect": "materialize/static_target"
+        "expect": "materialize/target_type"
       },
       "rust-host": {
         "derive": {
@@ -165,7 +142,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/static_target"
+        "expect": "materialize/target_type"
       }
     },
     {
@@ -407,7 +384,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "materialize/target_type"
+        "expect": "materialize/wire_dtype"
       },
       "rust-host": {
         "derive": {
@@ -458,7 +435,7 @@
           }
         },
         "until": "predict",
-        "expect": "materialize/target_type"
+        "expect": "materialize/wire_dtype"
       }
     }
   ]

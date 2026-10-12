@@ -23,7 +23,10 @@
 //!   date in text by, and [`text`] reads text by the core's fixed list of
 //!   formats within them (`date-rules.md`, "The core's text formats";
 //!   T1.25b), refusing by name any other text it is asked to read.
+//! - [`offset`] is a query window's `pd.DateOffset`, months by `jiff`'s
+//!   calendar arithmetic, clamped to the month's end (T1.27).
 
+pub mod offset;
 pub mod text;
 pub mod text_shapes;
 

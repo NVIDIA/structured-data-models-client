@@ -1551,9 +1551,13 @@ name = "sdm-testkit"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "arrow-array",
+ "arrow-schema",
+ "arrow-select",
  "duckdb",
  "sdm-contract",
  "sdm-host",
+ "sdm-request",
  "serde",
  "serde_json",
  "sha2",

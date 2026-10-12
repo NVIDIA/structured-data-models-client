@@ -91,6 +91,14 @@ pub(crate) fn run(
                 None => Run::new(make),
             }
         }
+        TestOperation::Labels { materialize } => crate::dispatch::materialize(
+            root,
+            sdm_contract::ops::Operation::Materialize(*materialize),
+            std::mem::take(attachments),
+            facts,
+            Arc::clone(&zones),
+            true,
+        )?,
         TestOperation::Finish { result } => {
             let result: OperationResult = take_json(attachments, result)?;
             Run::new(move |_| async move { Ok(result) })

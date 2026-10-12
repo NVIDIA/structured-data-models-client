@@ -540,16 +540,17 @@ fn rule(err: &CoreError) -> String {
 fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     for (query, wanted) in [
         (
-            "PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id",
-            "aggregation",
+            "PREDICT SUM(orders.price, 0, 30, days) > 1 AND COUNT(orders.*, 0, 30, days) > 2 \
+             FOR EACH users.user_id",
+            "logical_target",
         ),
         (
-            "PREDICT SUM(orders.price, 0, 2, months) FOR EACH users.user_id",
-            "month_window",
+            "PREDICT COUNT(orders.* WHERE orders.price > 10, 0, 30, days) FOR EACH users.user_id",
+            "target_filter",
         ),
         (
-            "PREDICT users.country FOR EACH users.user_id",
-            "static_target",
+            "PREDICT users.country = 'US' FOR EACH users.user_id",
+            "condition",
         ),
         (
             "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'",

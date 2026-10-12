@@ -664,6 +664,68 @@ fn materialize(
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
 ) -> Result<Option<HeldState>> {
+    let Some((handle, driven)) = start_materialize(
+        case,
+        spec,
+        schema,
+        connection,
+        observed,
+        log,
+        sampler,
+        &Operation::Materialize,
+    )?
+    else {
+        return Ok(None);
+    };
+    match driven {
+        Err(answer) => {
+            observed.answer = answer;
+            Ok(None)
+        }
+        Ok(OperationResult::Materialize(materialized)) => {
+            let state = materialized.state;
+            let bytes = |id| -> Result<Vec<u8>> {
+                match handle.take_attachment(id) {
+                    Ok(Some(Attachment::Bytes(bytes))) => Ok(bytes),
+                    _ => bail!("{}: the request state is not attached", case.id),
+                }
+            };
+            let held = HeldState {
+                version: state.version,
+                payload: bytes(state.payload)?,
+                query: bytes(state.query)?,
+            };
+            let recorded = json!({
+                "version": held.version,
+                "query": serde_json::from_slice::<Value>(&held.query)?,
+                "payload": numbers_as_text(serde_json::from_slice(&held.payload)?),
+            });
+            observed.materialized = Some(recorded.clone());
+            observed.answer = Answer::Materialized(recorded);
+            Ok(Some(held))
+        }
+        Ok(_) => bail!("{}: materialize answered another operation", case.id),
+    }
+}
+
+/// What a driven run ended with: the handle, and its result or the core's
+/// error.
+type Driven = (HostRun, std::result::Result<OperationResult, Answer>);
+
+/// Starts the operation `as_op` makes of `case`'s `materialize` over
+/// `schema` and drives it to its end: the run and how it ended, or none
+/// when the start was refused (the refusal the case's answer).
+#[allow(clippy::too_many_arguments)]
+fn start_materialize(
+    case: &Case,
+    spec: &MaterializeInput,
+    schema: &SourceDescription,
+    connection: &duckdb::Connection,
+    observed: &mut Observed,
+    log: &mut DriverLog,
+    sampler: Option<&mut Option<HeldSampler>>,
+    as_op: &dyn Fn(Materialize) -> Operation,
+) -> Result<Option<Driven>> {
     log.stage = "materialize";
     let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
         anyhow!(
@@ -708,7 +770,7 @@ fn materialize(
     let start = ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: facts()?,
-        operation: Operation::Materialize(Materialize {
+        operation: as_op(Materialize {
             provider,
             schema: AttachmentId(1),
             held: Some(AttachmentId(5)),
@@ -760,35 +822,52 @@ fn materialize(
     if let Some(held) = sampler {
         keep_sampler(&handle, held)?;
     }
-    match driven {
-        Err(answer) => {
-            observed.answer = answer;
-            Ok(None)
-        }
-        Ok(OperationResult::Materialize(materialized)) => {
-            let state = materialized.state;
-            let bytes = |id| -> Result<Vec<u8>> {
-                match handle.take_attachment(id) {
-                    Ok(Some(Attachment::Bytes(bytes))) => Ok(bytes),
-                    _ => bail!("{}: the request state is not attached", case.id),
-                }
-            };
-            let held = HeldState {
-                version: state.version,
-                payload: bytes(state.payload)?,
-                query: bytes(state.query)?,
-            };
-            let recorded = json!({
-                "version": held.version,
-                "query": serde_json::from_slice::<Value>(&held.query)?,
-                "payload": numbers_as_text(serde_json::from_slice(&held.payload)?),
-            });
-            observed.materialized = Some(recorded.clone());
-            observed.answer = Answer::Materialized(recorded);
-            Ok(Some(held))
-        }
-        Ok(_) => bail!("{}: materialize answered another operation", case.id),
+    Ok(Some((handle, driven)))
+}
+
+/// `case`'s `describe_source`, then the operation `as_op` makes of its
+/// `materialize` in its place, over one DuckDB base, for a case without
+/// edits: what the host observed, and the run and how it ended, or none
+/// when the case was answered before (T1.27: the test-only `labels`
+/// operation, whose result `as_op`'s caller reads).
+pub fn materialize_as(
+    case: &Case,
+    bases: &Bases,
+    as_op: &dyn Fn(Materialize) -> Operation,
+) -> Result<(Observed, Option<Driven>)> {
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        bail!("{}: names no describe_source", case.id);
+    };
+    let Some(materialize_spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
+        bail!("{}: names no materialize", case.id);
+    };
+    if case.input.edits.as_ref().is_some_and(|e| !e.is_empty()) {
+        bail!("{}: materialize_as takes a case without edits", case.id);
     }
+    let mut described_only = case.clone();
+    if let Some(core) = described_only.core.as_mut() {
+        core.materialize = None;
+        core.predict = None;
+    }
+    let connection = database(case, bases)?;
+    let mut log = DriverLog::default();
+    let mut observed = describe_on(&described_only, spec, &connection, &mut log, &[])?;
+    let Answer::Described(described) = &observed.answer else {
+        return Ok((observed, None));
+    };
+    let schema: SourceDescription = serde_json::from_value(described.clone())
+        .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
+    let driven = start_materialize(
+        case,
+        materialize_spec,
+        &schema,
+        &connection,
+        &mut observed,
+        &mut log,
+        None,
+        as_op,
+    )?;
+    Ok((observed, driven))
 }
 
 /// Puts the sampler state `handle`'s run left in `held`, as it was taken.

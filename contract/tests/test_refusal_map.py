@@ -1190,7 +1190,9 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     written, report = refusal_map.write(
         document, _of(document), observe, lifted['rust-host']
     )
-    assert report == ['materialize/static_target: no probe hits it; dropped']
+    assert report == [
+        'materialize/classification_task: no probe hits it; dropped'
+    ]
     assert written['entries'] == [] and written['probes']
     path = tmp_path / 'baseline.json'
     path.write_text(json.dumps(written))
