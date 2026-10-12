@@ -1087,21 +1087,24 @@ entries:
     at describe.
   cases: [T1.25b]
   refs: [DT-7, DT-11, DT-14]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
   notes: >-
-    For the owner, never self-approved: the owner's T1.25b answer requires
-    separate approval for a value inside the documented formats read
-    differently from the reference, before affected cases are admitted. No
-    contract case is affected (the gate passes with no transition; the
-    family maps and the AdventureWorks journey are unchanged), so none waits
-    for admission. Recommendation: approve as a class. Each kind is the
-    client's documented rule (the order over the column, two-digit years,
-    per-row reading) or a pandas artefact the core drops (the format guessed
-    from the first value, month first by default, nanosecond overflow);
-    b.order_open could instead read month first by default, which is the
-    engine's reading, if the owner prefers it to the refusal.
+    Approved by the owner on 2026-10-11, relayed by the orchestrator during
+    T1.25b's fix round 1 ("approve both", as recommended), including the
+    refusal of a lone ambiguous date (text_time_order) rather than reading
+    it month first by default; the approval takes in the open orders fix
+    round 1 moved here from DT-15 (text_time_order in inference and the
+    time column's choice, 41 inference decisions over T1.25's columns).
+    Recorded in E68. Before the answer it was proposed, never
+    self-approved: the owner's T1.25b answer required separate approval
+    for a value inside the documented formats read differently from the
+    reference. No contract case was affected (the gate passes with no
+    transition). Each kind is the client's documented rule (the order over
+    the column, two-digit years, per-row reading) or a pandas artefact the
+    core drops (the format guessed from the first value, month first by
+    default, nanosecond overflow).
 
 - id: DT-17
   title: Inference counts text outside the client's shapes as no time under a name that does not say time
@@ -1127,12 +1130,14 @@ entries:
     fix round 1). None of T1.25b's 60 generated sources.
   cases: [T1.25b]
   refs: [DT-15, P1B-2]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
   notes: >-
-    For the owner: not a named refusal, so outside the T1.25b answer's
-    approval. Recommendation: approve. It is the client's own inference rule
+    Approved by the owner on 2026-10-11, relayed by the orchestrator during
+    T1.25b's fix round 1 ("approve both", as recommended); recorded in E68.
+    Not a named refusal, so it was outside the T1.25b answer's approval and
+    proposed until then. It is the client's own inference rule
     (client/core/dates.py: inference does not read loose text as dates,
     which would read part codes as dates); refusing instead would need a
     reader of dateutil's words to tell a date from a code, or would refuse
