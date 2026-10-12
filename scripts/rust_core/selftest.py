@@ -438,9 +438,7 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
     with_crate(
         'the parser named outside the adapter',
         'sdm-core',
-        lambda d: append(
-            d / 'src/dispatch.rs', '\nuse sdm_pql::parser;\n'
-        ),
+        lambda d: append(d / 'src/dispatch.rs', '\nuse sdm_pql::parser;\n'),
         'sdm-core/src/dispatch.rs: names sdm_pql',
     )
 
@@ -458,9 +456,7 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
     with_crate(
         "the parser named in sdm-core's tests",
         'sdm-core',
-        lambda d: (d / 'tests/parser.rs').write_text(
-            'use sdm_pql::parse;\n'
-        ),
+        lambda d: (d / 'tests/parser.rs').write_text('use sdm_pql::parse;\n'),
         'sdm-core/tests/parser.rs: names sdm_pql',
     )
     with_crate(

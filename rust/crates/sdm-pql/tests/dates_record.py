@@ -126,7 +126,9 @@ def packed_candidates() -> list[str]:
         return ''.join(rng.choice('0123456789') for _ in range(n))
 
     def packed(n: int) -> str:
-        y = rng.choice([rng.randint(1, 9999), 0, 9999, 2024, 1, rng.randint(0, 99)])
+        y = rng.choice(
+            [rng.randint(1, 9999), 0, 9999, 2024, 1, rng.randint(0, 99)]
+        )
         m = rng.choice([rng.randint(1, 12), 0, 13, 2])
         d = rng.choice([rng.randint(1, 31), 0, 29, 30, 31, 32])
         h = rng.choice([rng.randint(0, 23), 24])
@@ -158,7 +160,13 @@ def packed_candidates() -> list[str]:
 
     def long_value(n: int) -> str:
         return rng.choice(
-            [small(n, 31), small(n, 12), small(n, 9999), small(n, 99999), digits(n)]
+            [
+                small(n, 31),
+                small(n, 12),
+                small(n, 9999),
+                small(n, 99999),
+                digits(n),
+            ]
         )
 
     found = set()
@@ -171,14 +179,21 @@ def packed_candidates() -> list[str]:
             parts = [first, *rest]
         else:
             lengths = [rng.choice([1, 2, 3, 4]) for _ in range(3)]
-            lengths[rng.randrange(3)] = rng.choice([5, 6, 7, 8, 9, 10, 12, 14, 16, 18])
+            lengths[rng.randrange(3)] = rng.choice(
+                [5, 6, 7, 8, 9, 10, 12, 14, 16, 18]
+            )
             parts = [
-                long_value(n) if n >= 5 else small(n, rng.choice([12, 31, 99, 9999]))
+                long_value(n)
+                if n >= 5
+                else small(n, rng.choice([12, 31, 99, 9999]))
                 for n in lengths
             ]
         literal = sep.join(parts)
         if rng.random() < 0.35:
-            h = small(rng.choice([1, 2, 2, 3, 4, 5, 6, 7, 8]), rng.choice([23, 24, 99]))
+            h = small(
+                rng.choice([1, 2, 2, 3, 4, 5, 6, 7, 8]),
+                rng.choice([23, 24, 99]),
+            )
             m = small(rng.choice([1, 2, 2, 3, 5, 6]), rng.choice([59, 60, 99]))
             s = small(rng.choice([1, 2, 2, 3, 5, 6]), rng.choice([59, 60]))
             literal += f' {h}:{m}:{s}'
@@ -189,10 +204,35 @@ def packed_candidates() -> list[str]:
 def plain_candidates() -> list[str]:
     days = ['13', '31', '29', '013', '0013', '1', '01', '30', '32']
     months = ['1', '01', '12', '2', '02', '001', '13']
-    years = ['2024', '0999', '999', '24', '0024', '1', '0001', '9999', '0000',
-             '00', '0100', '100', '2000', '75', '76']
-    times = ['', ' 1:2:3', ' 01:02:03', ' 001:02:03', ' 23:59:59', ' 24:00:00',
-             ' 0001:00:00', ' 12:60:00', ' 1:002:03', ' 01:02:0003']
+    years = [
+        '2024',
+        '0999',
+        '999',
+        '24',
+        '0024',
+        '1',
+        '0001',
+        '9999',
+        '0000',
+        '00',
+        '0100',
+        '100',
+        '2000',
+        '75',
+        '76',
+    ]
+    times = [
+        '',
+        ' 1:2:3',
+        ' 01:02:03',
+        ' 001:02:03',
+        ' 23:59:59',
+        ' 24:00:00',
+        ' 0001:00:00',
+        ' 12:60:00',
+        ' 1:002:03',
+        ' 01:02:0003',
+    ]
     found = set()
     for sep in '/-.':
         for d in days:
@@ -220,8 +260,10 @@ def main(reference: Path) -> int:
     plain = []
     for literal in plain_candidates():
         row = read(literal)
-        if row[3] is not None or literal.startswith('0000') or _kept(
-            literal, PLAIN_EVERY
+        if (
+            row[3] is not None
+            or literal.startswith('0000')
+            or _kept(literal, PLAIN_EVERY)
         ):
             plain.append(row)
 
@@ -231,15 +273,28 @@ def main(reference: Path) -> int:
             for middle in ('0001', '0002', '0009', '0010', '0012', '0013'):
                 for last in ('1', '2', '9', '10', '12', '01', '0001'):
                     for t in ('', ' 1:2:3', ' 10:00:00'):
-                        guessed.append(read(f'{day}{sep}{middle}{sep}{last}{t}'))
+                        guessed.append(
+                            read(f'{day}{sep}{middle}{sep}{last}{t}')
+                        )
 
     instant = datetime.datetime(2027, 1, 1, 4, 30, tzinfo=datetime.UTC)
     zone = 'America/New_York'
     local = instant.astimezone(zoneinfo.ZoneInfo(zone)).year
-    two_digit = ['1/2/76', '1/2/77', '1/2/75', '13/1/26', '1/2/26', '1/2/27',
-                 '760101-01-01', '1.2.3']
+    two_digit = [
+        '1/2/76',
+        '1/2/77',
+        '1/2/75',
+        '13/1/26',
+        '1/2/26',
+        '1/2/27',
+        '760101-01-01',
+        '1.2.3',
+    ]
     saved = (DEFAULTPARSER.info._year, DEFAULTPARSER.info._century)
-    DEFAULTPARSER.info._year, DEFAULTPARSER.info._century = local, local // 100 * 100
+    DEFAULTPARSER.info._year, DEFAULTPARSER.info._century = (
+        local,
+        local // 100 * 100,
+    )
     try:
         at_local = [read(literal) for literal in two_digit]
     finally:

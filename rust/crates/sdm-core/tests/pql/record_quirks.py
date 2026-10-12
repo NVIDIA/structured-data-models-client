@@ -142,7 +142,9 @@ def _date(literal: str) -> dict[str, Any]:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         try:
-            stamp = Constant(value=literal, dtype_maybe=Dtype.time).typed_value()
+            stamp = Constant(
+                value=literal, dtype_maybe=Dtype.time
+            ).typed_value()
         except Exception:  # noqa: BLE001 - every failure is a refusal
             stamp = None
     if stamp is None:
@@ -277,7 +279,9 @@ def main(reference: Path) -> int:
     for row in table['profiles']:
         profile = Profile(
             mode=Mode(row['mode']),
-            capabilities=capabilities(table['capabilities'][row['capabilities']]),
+            capabilities=capabilities(
+                table['capabilities'][row['capabilities']]
+            ),
         )
         answer = _answer(
             lambda q, s, p=profile: predictive_query.validate(q, s, p),
@@ -355,7 +359,7 @@ def main(reference: Path) -> int:
         encoding='utf-8',
     )
     guard.require_isolation()
-    print(f'{differ} answers differ from the first attempt\'s')
+    print(f"{differ} answers differ from the first attempt's")
     return 0
 
 
