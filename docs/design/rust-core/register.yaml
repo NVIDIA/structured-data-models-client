@@ -1467,8 +1467,9 @@ entries:
     static target of another meaning than ID, categorical or numerical,
     where the reference raises NotImplementedError), every other
     aggregation (aggregation) and target_type for a label of another type
-    (a time, a decimal's average, a decimal sum past 38 digits, a static
-    decimal target, P1B-18).
+    (a time, a decimal's average, a static decimal target, P1B-18); a
+    decimal sum past 38 digits is INVALID_REQUEST, as the reference's
+    grouped sum fails it (T1.27's fix round 1).
     The entities are cast to the key's type as the
     reference casts them (pandas, to the key's Arrow dtype), so none the
     reference takes is refused. A schema not described on the core has no core route
@@ -2147,6 +2148,39 @@ entries:
     self-approved. Whether a decimal class target should be taken (its
     classes the decimals' text, or the values read at float64) is
     T1.32b's question.
+
+- id: P1B-19
+  title: A decimal feature past float64's precision is refused UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST
+  kind: change
+  old_behavior: >-
+    The reference's payload sends a decimal feature as float64 and refuses
+    one whose values float64 cannot hold exactly ("cannot be sent as
+    float64"), which its client reports as INVALID_REQUEST at materialize.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    sdm-request's payload has no wire dtype for a decimal yet and refuses
+    every decimal feature by name, UNSUPPORTED_REQUEST with operation
+    materialize and rule wire_dtype (P1B-3), so a request the reference
+    refuses as the caller's error the core refuses as one it does not take
+    yet. Reached on more questions from T1.27, which labels COUNT, MIN and
+    MAX windows over sources holding such a feature. The default route is
+    unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route whose sampled tables hold a decimal feature whose
+    values float64 does not hold exactly.
+  cases: [T1.27, T1.28a]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.27's review (subagent P3-3) with the differential, which
+    classifies it here (contract/tools/differential.py's CODE_CHANGES). The
+    reference's answer is a named INVALID_REQUEST, so E66(b)'s class does
+    not apply: a code difference for the owner, never self-approved.
+    T1.28a, which gives a decimal feature its wire dtype, settles the code
+    (the reference's INVALID_REQUEST where float64 cannot hold the
+    values).
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
