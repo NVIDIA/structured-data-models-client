@@ -20,7 +20,6 @@
     "client.predict/ranking/duckdb",
     "client.predict/forecast/duckdb"
   ],
-  "seam": "refusal",
   "cells": [],
   "input": {
     "base": "shop",

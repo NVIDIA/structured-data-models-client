@@ -8,7 +8,6 @@
     "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb"
   ],
-  "seam": "refusal",
   "cells": [],
   "input": {
     "base": "shop",

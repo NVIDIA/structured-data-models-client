@@ -28,7 +28,7 @@
       "rule": "key_type",
       "owner": "T1.32a",
       "register": "P1B-3",
-      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:161",
+      "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:197",
       "holds": "raise _not_taken('key_type')",
       "why": "The bridge's cast of the entities knows no Arrow type for a decimal key (HUGEINT as decimal128(38, 0), DECIMAL(18, 0), DECIMAL(38, 10)), which Schema.from_source described on the core; the reference fails INTERNAL_ERROR there (P1B-1). T1.32a admits the decimal keys; the cast's placement is checkpoint 4's reassignment (T1.12b), owner to confirm",
       "observed": {

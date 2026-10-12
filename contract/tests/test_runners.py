@@ -168,6 +168,14 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
         # probes force it and the case is unchanged, so its reference line
         # stands) runs on the old route throughout.
         wanted = operations[case['slice']] if case['routes'] else []
+        edits = case['input'].get('edits', [])
+        if case['routes'] and edits:
+            # From T1.24b each edit is the core's edit_schema, after the
+            # description (E67); a refused one ends the call there.
+            wanted = ['describe_source', *['edit_schema'] * len(edits)]
+            if case['expect']['stage'] != 'from_source':
+                stages = ['materialize', 'predict']
+                wanted += stages[: stages.index(case['until']) + 1]
         assert observation['identity']['operations'] == wanted, case['id']
         assert observation['identity']['native'] is not None
     for observation in _observations(old):
