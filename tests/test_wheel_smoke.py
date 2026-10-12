@@ -10,10 +10,13 @@ The smoke itself runs in CI's ``wheel-smoke`` job, against the wheels."""
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import json
 import pathlib
 import sys
 import zipfile
+from typing import Any
 
 import pytest
 import yaml
@@ -203,3 +206,153 @@ def test_a_wheel_with_no_native_library_is_no_control(
     )
     with pytest.raises(smoke.SmokeFailed):
         smoke.without_native(wheel, tmp_path / 'control')
+
+
+COUNTS = {'test_binding.py': {'passed': 12}}
+ITEMS = [
+    f'rust/bindings/sdm-py/tests/test_binding.py::{name}'
+    for name in smoke.EXPECTED['test_binding.py']
+]
+
+
+def _origins(home: pathlib.Path) -> dict[str, str]:
+    site = home / 'lib/python3.10/site-packages/sdm_client'
+    return {
+        'sdm_client': str(site / '__init__.py'),
+        'sdm_client._native': str(site / '_native.abi3.so'),
+    }
+
+
+def _collection(tmp_path: pathlib.Path, record: Any) -> pathlib.Path:
+    path = tmp_path / 'collection.json'
+    path.write_text(record if isinstance(record, str) else json.dumps(record))
+    return path
+
+
+def _record(home: pathlib.Path, **changes: Any) -> dict[str, Any]:
+    return {'items': ITEMS, 'deselected': [], 'origins': _origins(home)} | (
+        changes
+    )
+
+
+def test_a_collection_of_every_expected_test_passed_is_taken(
+    tmp_path: pathlib.Path,
+) -> None:
+    home = tmp_path / 'env'
+    smoke.collection_verdict(_collection(tmp_path, _record(home)), COUNTS, home)
+
+
+def _faults(home: pathlib.Path) -> list[tuple[Any, str]]:
+    checkout = smoke.REPO / 'packages/structured-data-models-client/src'
+    return [
+        (_record(home, items=ITEMS[1:], deselected=ITEMS[:1]), 'deselected'),
+        (
+            _record(home, items=[*ITEMS[1:], ITEMS[1] + '[again]']),
+            'an expected test dropped silently, the count kept',
+        ),
+        (_record(home, items=ITEMS[1:]), 'fewer collected than passed'),
+        (_record(home, items=[*ITEMS, ITEMS[0] + 'x']), 'more than passed'),
+        (_record(home, items=[]), 'nothing collected'),
+        (_record(home, items='x'), 'items retyped'),
+        ({'items': ITEMS, 'origins': _origins(home)}, 'no deselections'),
+        ({'items': ITEMS, 'deselected': []}, 'no origins'),
+        (_record(home, origins=[]), 'origins retyped'),
+        (_record(home, origins={}), 'no module recorded'),
+        (
+            _record(
+                home,
+                origins=_origins(home)
+                | {'sdm_client._native': str(checkout / 'sdm_client/x.so')},
+            ),
+            'the native module from the checkout',
+        ),
+        (
+            _record(
+                home,
+                origins=_origins(home)
+                | {'sdm_client': str(checkout / 'sdm_client/__init__.py')},
+            ),
+            'the client from the checkout',
+        ),
+        (
+            _record(home, origins=_origins(home.parent / 'elsewhere')),
+            'another environment',
+        ),
+        ([ITEMS], 'not a record'),
+        ('', 'empty'),
+        ('[' * 100_000, 'nested past any reader'),
+    ]
+
+
+@pytest.mark.parametrize('case', range(16))
+def test_a_collection_is_refused_on(tmp_path: pathlib.Path, case: int) -> None:
+    home = tmp_path / 'env'
+    faults = _faults(home)
+    assert len(faults) == 16
+    record, fault = faults[case]
+    with pytest.raises(smoke.SmokeFailed):
+        smoke.collection_verdict(_collection(tmp_path, record), COUNTS, home)
+
+
+def test_a_missing_collection_is_refused(tmp_path: pathlib.Path) -> None:
+    with pytest.raises(smoke.SmokeFailed):
+        smoke.collection_verdict(tmp_path / 'absent.json', COUNTS, tmp_path)
+
+
+def test_a_file_with_no_record_of_its_tests_is_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    home = tmp_path / 'env'
+    items = ['t/test_new.py::test_one']
+    record = _record(home, items=items)
+    with pytest.raises(smoke.SmokeFailed):
+        smoke.collection_verdict(
+            _collection(tmp_path, record),
+            {'test_new.py': {'passed': 1}},
+            home,
+        )
+
+
+def test_the_expected_tests_are_the_files_own() -> None:
+    """Every test file of the binding is recorded, with each test function
+    it defines; a parametrized one under each of its parameters."""
+    tests = smoke.REPO / smoke.TESTS
+    assert sorted(smoke.EXPECTED) == sorted(
+        p.name for p in tests.glob('test_*.py')
+    )
+    for name, recorded in smoke.EXPECTED.items():
+        tree = ast.parse((tests / name).read_text())
+        defined = {
+            node.name
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name.startswith('test_')
+        }
+        assert {test.split('[', 1)[0] for test in recorded} == defined, name
+        assert len(set(recorded)) == len(recorded), name
+
+
+def test_the_tests_run_with_nothing_of_the_caller_s_pytest(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def run(command: list[str], **kwargs: Any) -> None:
+        seen.update(command=command, **kwargs)
+
+    monkeypatch.setattr(smoke, '_run', run)
+    monkeypatch.setenv('PYTEST_ADDOPTS', '-k "not sharing"')
+    monkeypatch.setenv('PYTEST_PLUGINS', 'other')
+    smoke._pytest(
+        'python', tmp_path, ('test_binding.py',), 'production',
+        tmp_path / 'r.xml', tmp_path / 'c.json',
+    )  # fmt: skip
+    env, command = seen['env'], seen['command']
+    assert 'PYTEST_ADDOPTS' not in env and 'PYTEST_PLUGINS' not in env
+    assert env['PYTEST_DISABLE_PLUGIN_AUTOLOAD'] == '1'
+    assert env['SDM_SMOKE_COLLECTION'] == str(tmp_path / 'c.json')
+    at = command.index('-c', 5)
+    assert command[at + 1] == str(tmp_path / 'guard' / 'pytest.ini')
+    assert (tmp_path / 'guard' / 'pytest.ini').read_text() == '[pytest]\n'
+    assert command[command.index('-p') + 1] == 'smoke_guard'
+    assert (tmp_path / 'guard' / 'smoke_guard.py').read_text() == smoke._GUARD

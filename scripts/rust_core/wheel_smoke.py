@@ -42,7 +42,13 @@ wheel of their own (a macOS build, in a local Python 3.10, say). Either way:
    exactly, admitted types, outputs after collection, error and
    destruction, busy and cancel); each file must report a passed test and
    nothing failed, errored or skipped, and a missing or unreadable report
-   fails;
+   fails; pytest runs with no ``PYTEST_*`` variable, plugin autoload or
+   configuration of the caller's, and a plugin of the smoke's records
+   what was collected and deselected and where the test process imported
+   ``sdm_client`` and its native module from: any deselection fails, as
+   do a test of ``EXPECTED`` not collected, a report whose passed tests are
+   not every test collected, and an import from anywhere but the
+   environment;
 5. last, the missing-library control: the shipped environment's client
    reinstalled from a copy of the wheel without its native library must
    fail the probe, with an import error naming ``sdm_client._native``,
@@ -78,12 +84,62 @@ from typing import Any
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 TESTS = 'rust/bindings/sdm-py/tests'
+#: Every test of the binding's test files, by its name in the file (with
+#: its parameters): a run must collect and pass each one, so a test removed
+#: by any selection, an option, a configuration or a conftest hook, fails
+#: the lane. ``tests/test_wheel_smoke.py`` holds this to the files' own test
+#: functions, so a test added there is added here.
+EXPECTED: dict[str, tuple[str, ...]] = {
+    'test_arrow_lifetimes.py': (
+        'test_the_canonical_set_is_every_type_of_the_closed_set',
+        'test_canonical_inputs_cross_sharing_their_buffers',
+        'test_the_run_holds_the_producer_s_memory_and_releases_it_exactly',
+        'test_an_output_stays_valid_after_its_input_its_run_s_error_and_its_run',
+        'test_admitted_types_match_the_expected_canonical_schema',
+        'test_a_cancel_releases_what_the_run_held_and_refuses_what_follows',
+        'test_a_cancel_drops_an_output_the_run_still_held',
+        'test_a_cancel_while_another_call_is_in_the_run_is_busy',
+    ),
+    'test_binding.py': (
+        'test_the_build_is_the_one_named',
+        'test_the_stub_describes_the_module',
+        'test_the_contract_version_is_the_contract_crate_s',
+        'test_the_error_codes_are_the_contract_s_in_its_order',
+        'test_a_query_is_validated_through_a_run',
+        'test_an_error_the_run_returns_is_raised_as_core_error',
+        'test_a_refused_start_quotes_nothing_it_was_given',
+        'test_an_attachment_is_bytes_or_arrow',
+        'test_an_object_with_only_pyarrow_s_private_export_is_refused',
+        'test_a_start_with_an_unnamed_failing_stream_is_an_invalid_message',
+        'test_only_the_test_ops_build_takes_a_test_operation',
+        'test_importing_the_module_changes_nothing_in_the_process',
+    ),
+    'test_test_ops.py': (
+        'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
+        'test_a_second_call_while_one_is_in_the_run_is_refused_as_busy',
+        'test_a_handler_that_raises_is_reported_and_the_answer_delivered',
+        'test_an_interrupt_in_a_handler_is_raised_and_the_step_is_gone[KeyboardInterrupt]',
+        'test_an_interrupt_in_a_handler_is_raised_and_the_step_is_gone[SystemExit]',
+        'test_a_handler_that_calls_into_its_own_run_is_refused_as_busy',
+        'test_a_forced_abort_is_reported_and_never_recovered',
+        'test_a_panic_is_contained_and_quotes_nothing',
+        'test_an_error_past_the_cap_is_raised_whole_from_its_attachment',
+        'test_data_that_does_not_match_its_request_is_refused_by_check_b',
+        'test_a_stream_that_breaks_its_own_schema_fails_check_a',
+        'test_a_producer_that_fails_is_the_provider_s_error',
+        'test_an_unreadable_reply_s_attachments_are_checked_before_the_run_changes',
+        'test_the_data_asked_for_is_taken_and_comes_back_out',
+        'test_a_stream_is_exported_only_in_its_own_schema',
+    ),
+}
 #: The binding's test files each build runs: the file any build passes on
 #: the shipped wheel, and every file on the test-ops one.
 FILES = {
     'production': ('test_binding.py',),
-    'test-ops': tuple(sorted(p.name for p in (REPO / TESTS).glob('test_*.py'))),
+    'test-ops': tuple(sorted(EXPECTED)),
 }
+#: The modules whose origin the guard records inside the test process.
+ORIGINS = ('sdm_client', 'sdm_client._native')
 #: The sibling distributions the client pins, installed from the checkout.
 SIBLINGS = ('structured-data-models-api', 'structured-data-models-pql')
 
@@ -288,14 +344,10 @@ def _environment(
     files = FILES['production' if build == 'production' else 'test-ops']
     report = out / f'junit-{build}.xml'
     report.unlink(missing_ok=True)
-    tests = _run(
-        [py, '-I', '-B', '-m', 'pytest',
-         *(str(REPO / TESTS / name) for name in files),
-         '--rootdir', str(REPO), '-p', 'no:cacheprovider', '-q', '-rfEs',
-         '--native-build', build, f'--junitxml={report}'],
-        cwd=work,
-    )  # fmt: skip
+    collection = out / f'collection-{build}.json'
+    tests = _pytest(py, work, files, build, report, collection)
     counts = junit_verdict(report, files)
+    collection_verdict(collection, counts, env_dir)
     if tests.returncode != 0:
         raise SmokeFailed(f'{build}: pytest exited {tests.returncode}')
     return {
@@ -303,9 +355,143 @@ def _environment(
         'probe': probe,
         'freeze': f'freeze-{build}.txt',
         'report': report.name,
+        'collection': collection.name,
         'tests': counts,
         'third_party': third_party(freeze),
     }
+
+
+#: The pytest plugin every run of the binding's tests loads: it writes
+#: each test collected and each test deselected to the file
+#: ``SDM_SMOKE_COLLECTION`` names, so a test dropped by any selection, from
+#: an option, a configuration or a plugin, is seen (JUnit names none).
+_GUARD = """
+import json, os
+
+_items, _deselected = [], []
+
+
+def pytest_deselected(items):
+    _deselected.extend(item.nodeid for item in items)
+
+
+def pytest_collection_finish(session):
+    _items[:] = [item.nodeid for item in session.items]
+
+
+def pytest_sessionfinish(session):
+    import sys
+    origins = {
+        name: getattr(sys.modules.get(name), '__file__', None)
+        for name in ('sdm_client', 'sdm_client._native')
+    }
+    with open(os.environ['SDM_SMOKE_COLLECTION'], 'w') as out:
+        json.dump(
+            {'items': _items, 'deselected': _deselected, 'origins': origins},
+            out,
+        )
+"""
+
+#: Runs pytest with the guard's directory first on the path, under -I.
+_PYTEST = (
+    'import sys; sys.path.insert(0, sys.argv.pop(1)); import pytest; '
+    'sys.exit(pytest.main(sys.argv[1:]))'
+)
+
+
+def _pytest(
+    py: str,
+    work: pathlib.Path,
+    files: tuple[str, ...],
+    build: str,
+    report: pathlib.Path,
+    collection: pathlib.Path,
+    **kwargs: Any,
+) -> subprocess.CompletedProcess[str]:
+    """The binding's tests in `files`, with nothing the caller's
+    environment or a configuration file could add: every ``PYTEST_*``
+    variable dropped (``PYTEST_ADDOPTS`` among them), plugins loaded only
+    by name, an empty configuration file of the smoke's own, and conftest
+    files read only from the tests' own directory; the guard plugin
+    records what was collected and deselected in `collection`."""
+    guard = work / 'guard'
+    guard.mkdir(exist_ok=True)
+    (guard / 'smoke_guard.py').write_text(_GUARD)
+    (guard / 'pytest.ini').write_text('[pytest]\n')
+    report.unlink(missing_ok=True)
+    collection.unlink(missing_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith('PYTEST_')}
+    env['PYTEST_DISABLE_PLUGIN_AUTOLOAD'] = '1'
+    env['SDM_SMOKE_COLLECTION'] = str(collection)
+    return _run(
+        [py, '-I', '-B', '-c', _PYTEST, str(guard),
+         *(str(REPO / TESTS / name) for name in files),
+         '-c', str(guard / 'pytest.ini'), '--rootdir', str(REPO),
+         '--confcutdir', str(REPO / TESTS),
+         '-p', 'smoke_guard', '-p', 'no:cacheprovider', '-q', '-rfEs',
+         '--native-build', build, f'--junitxml={report}'],
+        cwd=work,
+        env=env,
+        **kwargs,
+    )  # fmt: skip
+
+
+def collection_verdict(
+    collection: pathlib.Path,
+    counts: dict[str, dict[str, int]],
+    environment: pathlib.Path,
+) -> None:
+    """Refuses a run that deselected any test, that collected none of a
+    test `EXPECTED` names for a file it ran, or whose report's passed tests
+    are not, file by file, every test collected: so no test is dropped
+    unseen, whatever selected it. Refuses too a run whose test process
+    imported ``sdm_client`` or its native module from anywhere but
+    `environment` (the checkout included), and a record missing or
+    unreadable."""
+    try:
+        record = json.loads(collection.read_text())
+        items, deselected = record['items'], record['deselected']
+        origins = record['origins']
+    except (OSError, ValueError, RecursionError, KeyError, TypeError) as error:
+        raise SmokeFailed(
+            f'{collection.name}: no readable record ({error})'
+        ) from error
+    if not isinstance(items, list) or not isinstance(deselected, list):
+        raise SmokeFailed(f'{collection.name}: not a record of tests')
+    if deselected:
+        raise SmokeFailed(f'{collection.name}: deselected {deselected}')
+    collected: dict[str, int] = {}
+    for nodeid in items:
+        name = str(nodeid).split('::', 1)[0].rsplit('/', 1)[-1]
+        collected[name] = collected.get(name, 0) + 1
+    passed = {name: count['passed'] for name, count in counts.items()}
+    if not items or collected != passed:
+        raise SmokeFailed(
+            f'{collection.name}: collected {collected}, passed {passed}'
+        )
+    names = {str(nodeid).rsplit('/', 1)[-1] for nodeid in items}
+    missing = sorted(
+        f'{name}::{test}'
+        for name in counts
+        for test in EXPECTED.get(name, ('(no record of its tests)',))
+        if f'{name}::{test}' not in names
+    )
+    if missing:
+        raise SmokeFailed(f'{collection.name}: not run: {missing}')
+    if not isinstance(origins, dict):
+        raise SmokeFailed(f'{collection.name}: no record of origins')
+    home = environment.resolve()
+    for module in ORIGINS:
+        path = origins.get(module)
+        where = pathlib.Path(str(path)).resolve() if path else None
+        if (
+            where is None
+            or home not in where.parents
+            or where.is_relative_to(REPO)
+        ):
+            raise SmokeFailed(
+                f'{collection.name}: the tests imported {module} from {path}'
+            )
 
 
 def without_native(wheel: pathlib.Path, into: pathlib.Path) -> pathlib.Path:
@@ -350,13 +536,9 @@ def missing_library_control(
     report = out / 'junit-control.xml'
     report.unlink(missing_ok=True)
     files = FILES['production']
-    tests = _run(
-        [py, '-I', '-B', '-m', 'pytest',
-         *(str(REPO / TESTS / name) for name in files),
-         '--rootdir', str(REPO), '-p', 'no:cacheprovider', '-q',
-         '--native-build', 'production', f'--junitxml={report}'],
-        cwd=work,
-        capture_output=True,
+    tests = _pytest(
+        py, work, files, 'production', report,
+        out / 'collection-control.json', capture_output=True,
     )  # fmt: skip
     try:
         junit_verdict(report, files)
