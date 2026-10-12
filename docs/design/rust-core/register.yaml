@@ -1048,7 +1048,10 @@ entries:
     the request, differ from run to run on both routes (measured at
     T1.26b's review: three runs, three payloads, on each route); a
     differential compares such sources only where times or keys are
-    unique.
+    unique. Null keys tie too: rows whose key is null in a table without a
+    time column come back in no fixed order, on the core and on the
+    reference with its null handling corrected (measured at T1.26b's
+    review round 2).
   affected_inputs: Relational requests whose neighbor tables have NULL or tied times.
   cases: [T1.26, T1.26b]
   status: proposed
