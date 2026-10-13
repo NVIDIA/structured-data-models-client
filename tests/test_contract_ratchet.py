@@ -626,6 +626,11 @@ def test_a_changed_case_input_fails_without_an_entry(repo: Path) -> None:
 def test_a_base_changes_only_under_an_entry_and_may_be_added(
     repo: Path,
 ) -> None:
+    r"""A base added passes; a base changed passes only under an approved
+    entry the change itself adds (or changes) naming a case built on it.
+    From T1.29 the checkpoint's register holds an approved entry naming
+    cases built on ``shop`` (P1B-26, the baseline cases' admission): it
+    authorized its own change only, so the change below still fails."""
     landed = checkpoint_of(repo)
 
     def grow(r: Path) -> None:
@@ -648,6 +653,29 @@ def test_a_base_changes_only_under_an_entry_and_may_be_added(
     assert any(
         'base shop: changed or removed' in p for p in check(repo, landed)
     )
+    # The same change with its own entry, naming a case built on the base.
+    git(repo, 'reset', '-q', '--hard', landed)
+
+    def change_and_entry(r: Path) -> None:
+        change(r)
+        append_entry(
+            r,
+            {
+                'id': 'SEED-1',
+                'cases': [ACCEPTED],
+                'case_outcomes': [
+                    outcome(
+                        ACCEPTED,
+                        'python-old',
+                        'success at materialize',
+                        'success at materialize',
+                    )
+                ],
+            },
+        )
+
+    commit(repo, edit=change_and_entry)
+    assert 'cases' not in rules(check(repo, landed))
 
 
 # --- rules and protected paths -------------------------------------------------
