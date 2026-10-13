@@ -31,6 +31,9 @@ runners' real observations.
 - Evidence inside the candidate's worktree is refused; a run of the other
   half adds its half and keeps the first; the default directory is under
   the repository's common git directory.
+- Check 3 gives the checkpoint's ``wheel_smoke.py`` the candidate's
+  worktree as its contract inputs and the candidate's HEAD as the wheels'
+  commit (T1.20).
 - The post-landing state: this tree's harness, judging a candidate equal to
   its own landing, passes ``--only coverage`` and the default gate.
 """
@@ -703,6 +706,41 @@ def test_locked_1a_passes_on_stubs_and_writes_the_evidence(
         )
     assert logged(stubs, 'selftest.py'), 'the L0 self-tests did not run'
     assert '--no-clippy' in logged(stubs, 'selftest.py')[0]['argv']
+
+
+def _option(argv: list[str], name: str) -> str:
+    r"""The value of `name` in `argv`, given as ``NAME VALUE`` or
+    ``NAME=VALUE``; exactly once."""
+    found = [
+        argv[i + 1] for i, word in enumerate(argv[:-1]) if word == name
+    ] + [word.split('=', 1)[1] for word in argv if word.startswith(name + '=')]
+    assert len(found) == 1, (name, argv)
+    return found[0]
+
+
+def test_locked_1a_gives_the_smoke_the_candidate_s_inputs_and_commit(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+) -> None:
+    r"""T1.20: check 3 runs the checkpoint's ``wheel_smoke.py`` with the
+    candidate's worktree as its contract inputs (``--inputs``) and the
+    candidate's HEAD as the wheels' commit (``--commit``), in both lanes."""
+    commit(stubbed)
+    done = locked(stubbed, stubs, '1a', *files(observed, tmp_path, CHECKED))
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert table(done, '1a')['3'] == 'ok', done.stdout
+    head = git(stubbed, 'rev-parse', 'HEAD')
+    assert len(head) == 40
+    candidate = Path(git(stubbed, 'rev-parse', '--show-toplevel')).resolve()
+    smoke = logged(stubs, 'wheel_smoke.py')
+    lanes = [_option(x['argv'], '--lane') for x in smoke]
+    assert lanes == ['floor', 'newest']
+    for each in smoke:
+        argv = each['argv']
+        assert Path(_option(argv, '--inputs')).resolve() == candidate, argv
+        assert _option(argv, '--commit') == head, argv
 
 
 def _l1_defect(r: Path) -> None:
