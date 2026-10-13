@@ -102,9 +102,12 @@ needs a public URL, so creating it in an earlier ungated job would make it
 public before anyone approved the upload.
 
 **There is a stored credential.** `KITMAKER_API_TOKEN` is a long-lived bearer
-token in this repository's secrets, held only by the `release` job behind the
-protected `pypi` environment. The previous Trusted Publishing setup avoided a
-stored token; this is the cost of publishing through Kitmaker.
+token, read only by the `release` job behind the protected `pypi` environment.
+It must be an **environment** secret on `pypi`, not a repository secret:
+approval gates environment secrets, so a repository secret is readable by a
+workflow on any branch and the approval protects nothing. The previous Trusted
+Publishing setup avoided a stored token; this is the cost of publishing through
+Kitmaker.
 
 **This workflow no longer signs what it ships.** PEP 740 attestations go to
 whoever uploads, and that is Kitmaker, so nothing here produces one naming this
@@ -154,6 +157,14 @@ version. A project fully published with the artifact's bytes is skipped, and one
 that is part-published is reduced to the files still missing, since PyPI takes
 files into a version one at a time. A re-run after a partial publish therefore
 finishes what did not land.
+
+**If the build artifact has expired**, every later run for this tag stops at
+"not attached to the release", and "Re-run failed jobs" cannot bring it back
+because the artifact is what it would reuse. That happens after "Re-run all
+jobs", after the artifact's retention runs out, and after any change to the
+workflow that needs a fresh run. Recovery depends on the index: if nothing for
+this version is on PyPI, delete the release assets and run again; if anything
+is, the version is spent, so release a patch.
 
 Two states it refuses to guess at, both needing a hand:
 

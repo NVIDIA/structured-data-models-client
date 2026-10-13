@@ -29,6 +29,8 @@ of the others.
   `examples/databricks/kumo_relational_quickstart.ipynb`, which deploys the
   model to a serving endpoint, loads the AdventureWorks sample tables into
   your schema, and checks each prediction against what actually happened.
+- A Databricks metric view name may hold a part SQL reads only quoted, such as
+  the catalog in `my-catalog.sales.metrics`, without backticks.
 - Wheels for the relational engine on CPython 3.10 to 3.13, manylinux_2_28,
   x86-64 and aarch64.
 - A stated compatibility and deprecation contract, in

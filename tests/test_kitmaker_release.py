@@ -52,8 +52,13 @@ def kitmaker():
 
 
 @pytest.fixture(scope='module')
-def release_job():
-    return yaml.safe_load(WORKFLOW.read_text())['jobs']['release']
+def workflow():
+    return yaml.safe_load(WORKFLOW.read_text())
+
+
+@pytest.fixture(scope='module')
+def release_job(workflow):
+    return workflow['jobs']['release']
 
 
 def test_the_job_that_publishes_checks_out_the_script_it_runs(release_job):
@@ -147,24 +152,56 @@ def test_a_built_file_names_its_distribution_and_version(
     assert kitmaker.version_of(filename) == version
 
 
-def test_an_unrecognised_status_fails_instead_of_waiting(kitmaker, monkeypatch):
-    """Polling an unexpected state to exhaustion reports a timeout, which
-    describes the wrong problem and spends half an hour doing it."""
+def test_the_states_are_the_ones_portal_documents(kitmaker):
+    """Guessed state names were the original defect here. Portal documents
+    exactly these five, and nothing is invented alongside them."""
+    assert kitmaker.PENDING == {'pending', 'processing', 'in_progress'}
+    assert kitmaker.TERMINAL_OK == {'completed'}
+    assert kitmaker.TERMINAL_BAD == {'failed'}
+
+
+def test_an_unrecognised_status_keeps_waiting_and_is_reported(
+    kitmaker, monkeypatch, capsys
+):
+    """Portal's docs say to continue bounded polling on a state the client does
+    not know, record it, and never read an unfamiliar nonterminal value as
+    success. Failing fast on it would stop a release that was still running."""
     monkeypatch.setattr(
-        kitmaker, 'call', lambda *a, **k: {'status': 'rejected-by-policy'}
+        kitmaker, 'call', lambda *a, **k: {'status': 'awaiting_approval'}
     )
     monkeypatch.setattr(kitmaker.time, 'sleep', lambda _: None)
-    with pytest.raises(SystemExit, match='unrecognised status'):
+    monkeypatch.setattr(kitmaker, 'POLL_ATTEMPTS', 3)
+    with pytest.raises(SystemExit, match='never reached a terminal state'):
+        kitmaker.wait_for('some-uuid', 'publish api')
+    out = capsys.readouterr().out
+    assert "unrecognised status 'awaiting_approval'" in out
+    assert out.count('unrecognised status') == 1, 'reported once, not per poll'
+
+
+def test_a_documented_failure_is_reported_as_itself(kitmaker, monkeypatch):
+    monkeypatch.setattr(kitmaker, 'call', lambda *a, **k: {'status': 'failed'})
+    monkeypatch.setattr(kitmaker.time, 'sleep', lambda _: None)
+    with pytest.raises(SystemExit, match='finished as failed'):
         kitmaker.wait_for('some-uuid', 'publish api')
 
 
-def test_a_known_failure_is_reported_as_itself(kitmaker, monkeypatch):
-    monkeypatch.setattr(
-        kitmaker, 'call', lambda *a, **k: {'status': 'rejected'}
-    )
-    monkeypatch.setattr(kitmaker.time, 'sleep', lambda _: None)
-    with pytest.raises(SystemExit, match='finished as rejected'):
-        kitmaker.wait_for('some-uuid', 'publish api')
+def test_an_sdist_goes_as_a_wheel_release_job_with_an_explicit_strategy(
+    kitmaker, monkeypatch
+):
+    """`wheel-release-job` is the only job type Portal supports and it takes
+    sdists. The strategy is sent explicitly because omitting it chooses by
+    size, and the `wheel-stub` picked at or above 1 GiB cannot process one."""
+    sent = {}
+
+    def record(method, path, body=None):
+        sent.update(body or {})
+        return {'release_uuid': 'u'}
+
+    monkeypatch.setattr(kitmaker, 'call', record)
+    kitmaker.submit(1, 'a', ['https://example.invalid/a-1.0.0.tar.gz'], True)
+    entry = sent['payload'][0]
+    assert entry['job_type'] == 'wheel-release-job'
+    assert entry['mirroring_strategy'] == 'upload-both'
 
 
 EXPECTED = {'a-1.0.0-py3-none-any.whl': 'aaa', 'a-1.0.0.tar.gz': 'bbb'}
@@ -337,7 +374,10 @@ def test_a_failure_in_pass_one_still_records_what_happened(
         return {'name': kitmaker.PROJECTS[project_id]}
 
     monkeypatch.setattr(kitmaker, 'call', mismatched)
-    with pytest.raises(SystemExit, match='not'):
+    # Pinned to this failure: `match='not'` also matched `not attached to the
+    # release` and `dist/ holds no distributions`, so the test passed whatever
+    # went wrong first.
+    with pytest.raises(SystemExit, match="is 'something-else', not"):
         kitmaker.main()
 
     assert states(summary, kitmaker) == {name: 'not reached' for name in names}
@@ -611,3 +651,52 @@ def test_kitmaker_is_given_a_url_that_serves_the_file(release_job):
     assert 'assets.tsv' in commands
     assert '.browser_download_url' in commands
     assert '\\(.url)' not in commands
+
+
+def test_the_release_is_not_latest_until_it_has_published(release_job):
+    """Kitmaker needs public asset URLs, so the release cannot be a draft and
+    has to exist before the dry runs. A dry run that then failed would leave it
+    standing as the current release for a version with nothing on PyPI."""
+    steps = release_job['steps']
+    create = next(
+        i
+        for i, s in enumerate(steps)
+        if 'gh release create' in s.get('run', '')
+    )
+    promote = next(
+        i
+        for i, s in enumerate(steps)
+        if '--latest' in s.get('run', '')
+        and 'gh release edit' in s.get('run', '')
+    )
+    publish = next(
+        i
+        for i, s in enumerate(steps)
+        if 'kitmaker_release.py' in s.get('run', '')
+    )
+    assert '--latest=false' in steps[create]['run']
+    assert create < publish < promote, 'Latest must be set after publishing'
+
+
+def test_the_credentials_are_checked_before_anything_is_created(release_job):
+    """A missing secret should stop this where nothing is public yet."""
+    steps = release_job['steps']
+    checked = next(
+        i
+        for i, s in enumerate(steps)
+        if 'KITMAKER_API_TOKEN is not set' in s.get('run', '')
+    )
+    created = next(
+        i
+        for i, s in enumerate(steps)
+        if 'gh release create' in s.get('run', '')
+    )
+    assert checked < created
+
+
+def test_two_runs_for_one_tag_cannot_race(release_job, workflow):
+    """They would upload assets from two different builds to one release, and
+    each would then refuse the other's files as stale."""
+    group = workflow['concurrency']['group']
+    assert 'github.ref' in group
+    assert workflow['concurrency']['cancel-in-progress'] is False

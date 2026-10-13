@@ -24,6 +24,7 @@ know this went wrong.
 """
 
 import hashlib
+import http.client
 import json
 import os
 import pathlib
@@ -49,32 +50,13 @@ PROJECTS = {
 
 # An unrecognised state fails rather than waits: polling an unexpected
 # `rejected` for half an hour reports a timeout, which is the wrong problem.
-PENDING = {
-    'pending',
-    'queued',
-    'running',
-    'processing',
-    'in_progress',
-    'inprogress',
-    'started',
-    'new',
-    'submitted',
-    'created',
-    'accepted',
-}
-TERMINAL_OK = {'completed', 'complete', 'success', 'succeeded', 'done'}
-TERMINAL_BAD = {
-    'failed',
-    'failure',
-    'error',
-    'errored',
-    'cancelled',
-    'canceled',
-    'rejected',
-    'aborted',
-    'timeout',
-    'timed_out',
-}
+# The five states Portal documents, and no more. An unrecognised one is kept
+# waiting rather than failed: the docs say to continue bounded polling, record
+# it and escalate if progress stops, and specifically not to read an
+# unfamiliar nonterminal value as success.
+PENDING = {'pending', 'processing', 'in_progress'}
+TERMINAL_OK = {'completed'}
+TERMINAL_BAD = {'failed'}
 
 POLL_SECONDS = 30
 POLL_ATTEMPTS = 60
@@ -84,6 +66,24 @@ POLL_ATTEMPTS = 60
 # could publish twice.
 READ_RETRIES = 5
 READ_BACKOFF = 4
+
+# Worth another go on a read. 404 only on `/status`, where it is normal for a
+# second or two after a submit, before Portal knows the uuid; on
+# `/projects/{id}` the same code means the project is not there and repeating
+# it just delays the message.
+RETRY_CODES = {408, 429}
+RETRY_404_ON = '/status/'
+
+# A 200 carrying a CDN error page raises `ValueError` from `json.loads`, and a
+# truncated body raises `IncompleteRead`, which is an `HTTPException` and not
+# an `OSError`. Neither is an answer; both are worth retrying.
+TRANSIENT = (
+    urllib.error.URLError,
+    TimeoutError,
+    OSError,
+    ValueError,
+    http.client.HTTPException,
+)
 
 # PyPI's JSON endpoint is CDN-cached and lags a publish by some seconds.
 VERIFY_ATTEMPTS = 20
@@ -139,14 +139,19 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
                 return json.loads(response.read() or b'{}')
         except urllib.error.HTTPError as error:
             detail = error.read().decode(errors='replace')[:400]
-            # 4xx is an answer, not a blip, so it is not worth repeating.
-            if attempt < attempts and error.code >= 500:
+            # Most 4xx is an answer rather than a blip, so it is not repeated.
+            retryable = (
+                error.code >= 500
+                or error.code in RETRY_CODES
+                or (error.code == 404 and path.startswith(RETRY_404_ON))
+            )
+            if attempt < attempts and retryable:
                 time.sleep(READ_BACKOFF * attempt)
                 continue
             raise SystemExit(
                 f'{method} {path} returned {error.code}: {detail}'
             ) from error
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
+        except TRANSIENT as error:
             if attempt < attempts:
                 time.sleep(READ_BACKOFF * attempt)
                 continue
@@ -167,15 +172,18 @@ def on_pypi(name: str, version: str) -> dict[str, str] | None:
                 for entry in body.get('urls', [])
             }
         except urllib.error.HTTPError as error:
+            # 404 is PyPI's answer for a version it does not have, not a fault.
             if error.code == 404:
                 return None
-            if attempt < READ_RETRIES and error.code >= 500:
+            if attempt < READ_RETRIES and (
+                error.code >= 500 or error.code in RETRY_CODES
+            ):
                 time.sleep(READ_BACKOFF * attempt)
                 continue
             raise SystemExit(
                 f'PyPI {name} {version}: HTTP {error.code}'
             ) from error
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
+        except TRANSIENT as error:
             if attempt < READ_RETRIES:
                 time.sleep(READ_BACKOFF * attempt)
                 continue
@@ -186,6 +194,7 @@ def on_pypi(name: str, version: str) -> dict[str, str] | None:
 def wait_for(uuid: str, what: str) -> None:
     r"""Poll to a terminal state. Running out of attempts is a failure, not a
     pass: an unfinished release has told us nothing."""
+    unfamiliar = set()
     for _ in range(POLL_ATTEMPTS):
         status = str(call('GET', f'/status/{uuid}').get('status', '')).lower()
         if status in TERMINAL_OK:
@@ -193,15 +202,14 @@ def wait_for(uuid: str, what: str) -> None:
             return
         if status in TERMINAL_BAD:
             raise SystemExit(f'{what} finished as {status} ({uuid})')
-        if status not in PENDING:
-            raise SystemExit(
-                f'{what} reported an unrecognised status {status!r} ({uuid}). '
-                f'Refusing to keep waiting on a state this script cannot read.'
-            )
+        if status not in PENDING and status not in unfamiliar:
+            unfamiliar.add(status)
+            print(f'  {what}: unrecognised status {status!r}, still waiting')
         time.sleep(POLL_SECONDS)
+    seen = f', saw {sorted(unfamiliar)}' if unfamiliar else ''
     raise SystemExit(
         f'{what} never reached a terminal state after '
-        f'{POLL_ATTEMPTS * POLL_SECONDS}s ({uuid})'
+        f'{POLL_ATTEMPTS * POLL_SECONDS}s ({uuid}{seen})'
     )
 
 
@@ -217,14 +225,21 @@ def submit(project_id: int, name: str, urls: list[str], upload: bool) -> str:
                     'job_type': 'wheel-release-job',
                     'url': url,
                     'upload': upload,
+                    # Omitting this picks a strategy by size: under 1 GiB gives
+                    # `upload-both`, at or above it gives `wheel-stub`, which
+                    # cannot process an sdist. Everything here is far below the
+                    # threshold, so the default would be right, but a size
+                    # cliff between a wheel and its sdist is not something to
+                    # leave implicit in a release path.
+                    'mirroring_strategy': 'upload-both',
                 }
                 for url in urls
             ],
         },
     )
-    uuid = response.get('uuid') or response.get('release_uuid')
+    uuid = response.get('release_uuid')
     if not uuid:
-        raise SystemExit(f'{name} returned no release uuid: {response}')
+        raise SystemExit(f'{name} returned no release_uuid: {response}')
     return str(uuid)
 
 
@@ -343,18 +358,20 @@ def write_summary(
     digests: dict[str, dict[str, str]],
     requested: list[str],
     skipped: list[str],
+    partial: list[str],
 ) -> None:
     r"""What is live and what is not, written whatever happens.
 
     A project whose upload was asked for is described by what PyPI holds now,
-    however that request ended. One nothing asked for is reported from what this
-    run did, since the index has nothing to say about it.
+    however that request ended, and so is one an earlier run left part-way:
+    `not reached` would otherwise hide a version that is already partly live. A
+    project neither of those is reported from what this run did.
     """
     lines = []
     for name in PROJECTS.values():
         if name in skipped:
             state = 'already published before this run'
-        elif name in requested:
+        elif name in requested or name in partial:
             state = pypi_state(name, version, digests.get(name, {}))
         else:
             state = 'not reached'
@@ -372,6 +389,7 @@ def main() -> None:
     by_name: dict[str, dict[str, str]] = {}
     requested: list[str] = []
     skipped: list[str] = []
+    partial: list[str] = []
     try:
         built = {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
@@ -456,6 +474,11 @@ def main() -> None:
                 print(f'already on PyPI, skipping: {name} {version}')
                 skipped.append(name)
                 continue
+            if len(pending) != len(by_name[name]):
+                # An earlier run left this version part-way. Recorded so a
+                # release that stops before reaching it does not describe it
+                # as untouched.
+                partial.append(name)
             todo[project_id] = (
                 name,
                 sorted(
@@ -489,7 +512,7 @@ def main() -> None:
             wait_for(submit(project_id, name, project_urls, True), name)
             verify(name, version, by_name[name])
     finally:
-        write_summary(version, by_name, requested, skipped)
+        write_summary(version, by_name, requested, skipped, partial)
 
 
 if __name__ == '__main__':

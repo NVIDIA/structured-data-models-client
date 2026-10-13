@@ -56,8 +56,10 @@ pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify
 # https://github.com/NVIDIA/structured-data-models-client/releases/tag/v1.0.0
 ```
 
-None of this tells you the release is free of defects or vulnerabilities. It
-establishes origin, and nothing more.
+None of this tells you the release is free of defects or vulnerabilities, and
+it does not establish origin: as above, a match shows two places hold the same
+bytes, not who built them. What stands behind these files is NVIDIA's ownership
+of the projects on PyPI.
 
 ## Supported versions
 
