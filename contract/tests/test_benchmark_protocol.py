@@ -346,3 +346,212 @@ def test_the_offline_dry_run_completes_all_seven_units_and_writes_the_summary(
     for each in units:
         assert each['old'] is not None and each['core'] is not None, each
     assert found['calls'] == 28 and found['predictions'] == 448
+
+
+# --- the run's mechanics --------------------------------------------------------
+
+INVOCATIONS = 'https://example.invalid/serving-endpoints/stub/invocations'
+
+
+@pytest.fixture
+def wire_on_a_stub(monkeypatch: pytest.MonkeyPatch) -> Any:
+    r"""``requests.Session.send`` replaced by a stub that records each
+    request it would send and sends nothing, then a :class:`Wire` of limit 2
+    installed over it; uninstalled, and the stub removed, after the test."""
+    import requests
+
+    sent: list[str] = []
+
+    def stub(session: Any, request: Any, **kwargs: Any) -> Any:
+        sent.append(request.url)
+        return 'answered'
+
+    monkeypatch.setattr(requests.Session, 'send', stub)
+    wire = benchmark.Wire(2)
+    wire.install()
+    try:
+        yield wire, sent, requests
+    finally:
+        wire.uninstall()
+    assert requests.Session.send is stub, 'the wire did not uninstall'
+
+
+def _post(requests: Any, url: str = INVOCATIONS) -> Any:
+    prepared = requests.Request('POST', url, json={}).prepare()
+    return requests.Session().send(prepared)
+
+
+def test_the_wire_sends_one_request_per_prediction(wire_on_a_stub: Any) -> None:
+    r"""The control: an allowed prediction's request is sent and counted;
+    a request to no serving endpoint passes uncounted."""
+    wire, sent, requests = wire_on_a_stub
+    assert wire.allow_one() == 0
+    assert _post(requests) == 'answered'
+    assert wire.sent == 1 and sent == [INVOCATIONS]
+    assert _post(requests, 'https://example.invalid/api/2.0/x') == 'answered'
+    assert wire.sent == 1 and len(sent) == 2
+
+
+def test_the_wire_refuses_a_retry_before_sending_it(
+    wire_on_a_stub: Any,
+) -> None:
+    wire, sent, requests = wire_on_a_stub
+    wire.allow_one()
+    _post(requests)
+    with pytest.raises(benchmark.WireBudget):
+        _post(requests)
+    assert sent == [INVOCATIONS] and wire.sent == 1
+    # Never an OSError, which the SDK's retry loop would retry.
+    assert not issubclass(benchmark.WireBudget, OSError)
+
+
+def test_the_wire_refuses_a_request_without_a_prediction(
+    wire_on_a_stub: Any,
+) -> None:
+    wire, sent, requests = wire_on_a_stub
+    with pytest.raises(benchmark.WireBudget):
+        _post(requests)
+    assert sent == [] and wire.sent == 0
+
+
+def test_the_wire_refuses_any_request_past_the_plan(
+    wire_on_a_stub: Any,
+) -> None:
+    wire, sent, requests = wire_on_a_stub
+    for _ in range(wire.limit):
+        wire.allow_one()
+        _post(requests)
+    assert wire.sent == wire.limit == len(sent)
+    wire.allow_one()
+    with pytest.raises(benchmark.WireBudget):
+        _post(requests)
+    assert wire.sent == wire.limit == len(sent)
+
+
+class _Answered:
+    def __init__(self, frame: Any) -> None:
+        self._frame = frame
+
+    def to_pandas(self) -> Any:
+        return self._frame
+
+
+#: The stub dataset's regression labels, by entity.
+LABELS = {0: 0.0, 1: 1.0, 2: 2.0, 3: 0.0, 4: 3.0, 5: 0.0}
+
+
+def _stub_run(
+    monkeypatch: pytest.MonkeyPatch,
+    seeds: list[int],
+    control: bool,
+    differing: bool,
+) -> tuple[list[dict[str, Any]], list[tuple[str, int]]]:
+    r"""``run()`` over one stub regression dataset: ``build`` recording the
+    route and seed it is asked for, and a client whose request is the seed
+    alone (the routes send one request) or, with ``differing``, the route
+    too; every answer the label itself."""
+    import io
+
+    import pandas as pd
+
+    built: list[tuple[str, int]] = []
+
+    def build(
+        dataset: Any, task: Any, route: str, seed: int, keys: list[Any]
+    ) -> Any:
+        built.append((route, seed))
+        return {'route': route, 'seed': seed, 'keys': list(keys)}
+
+    monkeypatch.setattr(benchmark, 'build', build)
+
+    class Transport:
+        def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+            return {}
+
+    recording = benchmark.Recording(Transport())
+
+    class Client:
+        def predict(self, request: Any, **kwargs: Any) -> Any:
+            sent = {'seed': request['seed'], 'keys': request['keys']}
+            if differing:
+                sent['route'] = request['route']
+            recording.predict(sent)
+            keys = request['keys']
+            return _Answered(
+                pd.DataFrame(
+                    {
+                        'row_index': range(len(keys)),
+                        'id': keys,
+                        'prediction': [LABELS[k] for k in keys],
+                    }
+                )
+            )
+
+    task = benchmark.Task(
+        'regression', 'regression', 'PREDICT stub', None, lambda c: LABELS
+    )
+    dataset = benchmark.Dataset(
+        'stub-control' if control else 'stub',
+        lambda: None,
+        {},
+        [],
+        [task],
+        nulls=not control,
+        control_of='stub' if control else None,
+    )
+    units = benchmark.run(
+        [dataset], seeds, 4, Client(), recording, io.StringIO()
+    )
+    return units, built
+
+
+def test_the_first_route_alternates_by_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, built = _stub_run(monkeypatch, [0, 1, 2, 3], False, False)
+    assert built == [
+        ('old', 0),
+        ('core', 0),
+        ('core', 1),
+        ('old', 1),
+        ('old', 2),
+        ('core', 2),
+        ('core', 3),
+        ('old', 3),
+    ]
+
+
+def test_a_control_whose_routes_send_one_request_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""The control for the seed below: the same run, one request."""
+    units, _ = _stub_run(monkeypatch, [0, 1], True, False)
+    [unit] = units
+    assert unit['control'] and unit['one_request'] == [True, True]
+    assert benchmark.verdict(units) == (True, [])
+
+
+def test_a_control_whose_routes_send_different_requests_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    units, _ = _stub_run(monkeypatch, [0, 1], True, True)
+    [unit] = units
+    assert unit['one_request'] == [False, False]
+    # Its metrics agree exactly: the requests alone fail it.
+    assert unit['worse'] == 0
+    passed, reasons = benchmark.verdict(units)
+    assert passed is False
+    assert reasons == [
+        "stub-control/regression: the control's two routes sent different "
+        'requests'
+    ], reasons
+
+
+def test_a_dataset_with_nulls_may_send_different_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""Only a control is held to one request: on the dataset with nulls
+    the routes are meant to differ."""
+    units, _ = _stub_run(monkeypatch, [0, 1], False, True)
+    assert units[0]['one_request'] == [False, False]
+    assert benchmark.verdict(units) == (True, [])
