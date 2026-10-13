@@ -33,7 +33,9 @@ runners' real observations.
   the repository's common git directory.
 - Check 3 gives the checkpoint's ``wheel_smoke.py`` the candidate's
   worktree as its contract inputs and the candidate's HEAD as the wheels'
-  commit (T1.20).
+  commit (T1.20); with ``--wheel-run ID`` (only with ``--locked``) its
+  evidence records each wheel's name, SHA-256 and identity's commit, and
+  the run.
 - The post-landing state: this tree's harness, judging a candidate equal to
   its own landing, passes ``--only coverage`` and the default gate.
 """
@@ -41,6 +43,7 @@ runners' real observations.
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -741,6 +744,114 @@ def test_locked_1a_gives_the_smoke_the_candidate_s_inputs_and_commit(
         argv = each['argv']
         assert Path(_option(argv, '--inputs')).resolve() == candidate, argv
         assert _option(argv, '--commit') == head, argv
+
+
+#: The commits the fake wheels' identity files name.
+WHEEL_COMMITS = {
+    'shipped': '0123456789abcdef0123456789abcdef01234567',
+    'test-ops': 'fedcba9876543210fedcba9876543210fedcba98',
+}
+
+
+def _identified(stubs: dict[str, Any], which: tuple[str, ...]) -> None:
+    r"""The fake wheels made distinct (so their hashes are), each of
+    `which` with an identity file beside it as ``native_wheel.py`` writes
+    it, naming its commit."""
+    for name, wheel in stubs['wheels'].items():
+        wheel.write_text(f'stub wheel {name}')
+        if name in which:
+            identity = {
+                'wheel': wheel.name,
+                'sha256': hashlib.sha256(wheel.read_bytes()).hexdigest(),
+                'commit': WHEEL_COMMITS[name],
+                'tree_clean': True,
+                'features': ['test-ops'] if name == 'test-ops' else [],
+            }
+            Path(f'{wheel}.json').write_text(json.dumps(identity, indent=2))
+
+
+def _recorded(
+    stubs: dict[str, Any], name: str, commit: str | None
+) -> dict[str, Any]:
+    wheel = stubs['wheels'][name]
+    return {
+        'name': wheel.name,
+        'sha256': hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        'commit': commit,
+    }
+
+
+def test_locked_1a_records_the_wheels_and_their_run_in_check_3(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+) -> None:
+    r"""T1.20: ``--wheel-run ID`` names the CI run the wheels came from;
+    the evidence's check 3 records each wheel's file name, its SHA-256 and
+    the commit its identity file names, and the run."""
+    commit(stubbed)
+    _identified(stubs, ('shipped', 'test-ops'))
+    done = locked(
+        stubbed,
+        stubs,
+        '1a',
+        '--wheel-run',
+        '24680135',
+        *files(observed, tmp_path, CHECKED),
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    check = evidence_of(stubbed, stubs)['halves']['1a']['checks']['3']
+    assert check['result'] == 'ok'
+    assert set(check['steps']) == {'wheel-smoke'}
+    wheels = check['wheels']
+    assert set(wheels) == {'production', 'test-ops', 'run'}, wheels
+    assert wheels['production'] == _recorded(
+        stubs, 'shipped', WHEEL_COMMITS['shipped']
+    )
+    assert wheels['test-ops'] == _recorded(
+        stubs, 'test-ops', WHEEL_COMMITS['test-ops']
+    )
+    assert wheels['production']['sha256'] != wheels['test-ops']['sha256']
+    assert wheels['run'] in ('24680135', 24680135), wheels
+
+
+def test_locked_1a_without_a_wheel_run_records_none(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+) -> None:
+    r"""Without ``--wheel-run`` the run is null; a wheel with no identity
+    file beside it is recorded with a null commit."""
+    commit(stubbed)
+    _identified(stubs, ('shipped',))
+    done = locked(stubbed, stubs, '1a', *files(observed, tmp_path, CHECKED))
+    assert done.returncode == 0, done.stdout + done.stderr
+    check = evidence_of(stubbed, stubs)['halves']['1a']['checks']['3']
+    wheels = check['wheels']
+    assert set(wheels) == {'production', 'test-ops', 'run'}, wheels
+    assert wheels['run'] is None
+    assert wheels['production'] == _recorded(
+        stubs, 'shipped', WHEEL_COMMITS['shipped']
+    )
+    assert wheels['test-ops'] == _recorded(stubs, 'test-ops', None)
+
+
+def test_a_wheel_run_without_locked_is_a_usage_error(repo: Path) -> None:
+    landed = git(repo, 'rev-parse', 'HEAD')
+    commit(repo)
+    for arguments in (
+        ['--wheel-run', '24680135'],
+        ['--only', 'coverage', '--wheel-run', '24680135'],
+        ['--locked', '1a', '--wheel-run'],
+    ):
+        done = gate(repo, '--no-l0', '--base', landed, *arguments)
+        assert done.returncode == 2, (arguments, done.stdout + done.stderr)
+        assert 'gate: passed' not in done.stdout, arguments
+        # Refused as --locked's, not as an argument the gate does not know.
+        if arguments[-1] != '--wheel-run':
+            assert '--locked' in done.stderr, (arguments, done.stderr)
 
 
 def _l1_defect(r: Path) -> None:
