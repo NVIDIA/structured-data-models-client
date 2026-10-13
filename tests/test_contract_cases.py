@@ -303,14 +303,22 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     assert '\\ud83d\\ude00' in pql('escape-surrogate-pair')
     lone = pql('escape-lone-surrogate')
     assert '\\ud83d' in lone and '\\ude' not in lone
-    # Every other diagnostic S0 case names a proposed register entry.
+    # Every other diagnostic S0 case names a register entry that waits for
+    # approval, or one the owner approved whose admission of the case is a
+    # later change's (PQL-1 and PQL-2, approved on 2026-10-13, E93).
     register = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
-    status = {entry['id']: entry['status'] for entry in register['entries']}
+    status = {
+        entry['id']: (entry['status'], entry['approved_by'])
+        for entry in register['entries']
+    }
     for case in cases.values():
         if case['id'] in packed:
             assert case.get('register', 'none') in status, case['id']
         elif case['status'] == 'diagnostic':
-            assert status[case['register']] == 'proposed', case['id']
+            assert status[case['register']] in (
+                ('proposed', None),
+                ('approved', 'owner'),
+            ), case['id']
     assert {
         case['id'] for case in cases.values() if case.get('register') == 'PQL-2'
     } == {'s0.boundary.depth-999'}

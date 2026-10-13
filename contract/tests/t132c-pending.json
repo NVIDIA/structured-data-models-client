@@ -1,52 +1,8 @@
 {
  "about": "T1.32c's acceptance tests that failed when the independent test author wrote them, before the implementation, at 1efd5882, re-measured when the register rule became approved entries and declared transitions (contract/tests/test_t132c_nested_types.py, test_t132c_nested_family.py, tests/test_t132c_cell_claims.py, packages/structured-data-models-client/tests_test_ops/test_t132c_canary.py, sdm-testkit's tests/t132c_nested_types.rs and t132c_nested_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
-  "python-core": [
-   "array.array",
-   "array.bigint-2",
-   "array.boolean-2",
-   "array.double-2",
-   "array.integer-3",
-   "array.list",
-   "array.null",
-   "array.varchar-2",
-   "list.boolean",
-   "list.date",
-   "list.integer-view",
-   "list.interval",
-   "list.list-empty",
-   "list.list-integer",
-   "list.list-varchar",
-   "list.map",
-   "list.struct",
-   "list.time",
-   "list.timestamp",
-   "list.timestamptz",
-   "orders.array-integer-2"
-  ],
-  "rust-host": [
-   "array.array",
-   "array.bigint-2",
-   "array.boolean-2",
-   "array.double-2",
-   "array.integer-3",
-   "array.list",
-   "array.null",
-   "array.varchar-2",
-   "list.boolean",
-   "list.date",
-   "list.integer-view",
-   "list.interval",
-   "list.list-empty",
-   "list.list-integer",
-   "list.list-varchar",
-   "list.map",
-   "list.struct",
-   "list.time",
-   "list.timestamp",
-   "list.timestamptz",
-   "orders.array-integer-2"
-  ],
+  "python-core": [],
+  "rust-host": [],
   "exits": [
    "py:test_a_contradicted_cell_claim_fails[map-as-struct]",
    "py:test_a_contradicted_cell_claim_fails[role]",
@@ -55,11 +11,7 @@
    "py:test_each_nested_case_is_admitted[nested.list-int]",
    "py:test_each_nested_case_is_admitted[nested.map]",
    "py:test_each_nested_case_is_admitted[nested.struct]",
-   "py:test_each_nested_case_is_admitted[nested.union]",
-   "py:test_python_core_answers_each_nested_case_as_python_ref[nested.fixed-array]",
-   "py:test_statement_counts_equal_the_reference_s_or_are_registered[nested.fixed-array]",
-   "rust:rust_host_answers_each_nested_case_as_python_ref",
-   "rust:statement_counts_equal_the_reference_s_or_are_registered"
+   "py:test_each_nested_case_is_admitted[nested.union]"
   ]
  },
  "authored": {

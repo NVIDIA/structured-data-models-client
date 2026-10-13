@@ -116,11 +116,17 @@ FAULTS: dict[str, tuple[Callable[[dict[str, Any]], None], str]] = {
         "decision_ref fails 'oneOf'",
     ),
     'approved by nobody': (
-        lambda d: _entry(d, 'PQL-2').update(status='approved'),
+        # Each field set, so the seed does not lean on PQL-2's own status
+        # (approved by the owner on 2026-10-13, E93).
+        lambda d: _entry(d, 'PQL-2').update(
+            status='approved', approved_by=None
+        ),
         "fails 'enum'",
     ),
     'proposed and approved by someone': (
-        lambda d: _entry(d, 'PQL-2').update(approved_by='reviewer'),
+        lambda d: _entry(d, 'PQL-2').update(
+            status='proposed', approved_by='reviewer'
+        ),
         "fails 'const'",
     ),
     'an outcome in no form ratchet.py writes': (
