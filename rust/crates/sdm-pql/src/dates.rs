@@ -16,7 +16,7 @@
 //!   D7 and D9 ([`Reader::plain`]); a day-first reading warns by D4.
 //! - A literal with a run of five digits or more (D8) is not read: it is
 //!   [`Reading::Packed`], refused by name before any field is read, by the
-//!   owner's decision of 2026-10-12 (decision E78, register DT-5). The
+//!   owner's decision of 2026-10-12 (decision E79, register DT-5). The
 //!   reference reads such a literal through `dateutil` (a packed date, a
 //!   long zero-padded field) or refuses it; the core reads neither.
 //!
@@ -66,7 +66,7 @@ impl fmt::Display for DateTime {
 
 /// What a literal stands for: a wall date and time, and the UTC offset in
 /// seconds when the literal gives one. Only D8's packed dates gave one, and
-/// since T1.6c they are refused (decision E78), so the reader gives none;
+/// since T1.6c they are refused (decision E79), so the reader gives none;
 /// the field stays because the validated query's format carries it
 /// (`PqlLiteral::Time`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -117,7 +117,7 @@ pub enum Reading {
     /// Not a date (D9): the reference refuses it too.
     Refused,
     /// A run of five digits or more (D8), refused by name before it is
-    /// read, needing no current year (decision E78): the reference reads it
+    /// read, needing no current year (decision E79): the reference reads it
     /// through `dateutil`, or refuses it.
     Packed,
     /// A two-digit year the reader cannot place: the reader was given no
@@ -194,7 +194,7 @@ impl Reader {
                 None => return Reading::Refused,
             },
         };
-        // D8: refused by name, before any field is read (E78).
+        // D8: refused by name, before any field is read (E79).
         if date
             .iter()
             .chain(time.iter().flatten())
@@ -386,7 +386,7 @@ mod tests {
         }
     }
 
-    /// D8 (E78): every literal with a run of five digits or more is
+    /// D8 (E79): every literal with a run of five digits or more is
     /// refused by name, those the reference read through `dateutil` and
     /// those it refused alike, with or without a current year; a run of
     /// four digits still reads.

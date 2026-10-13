@@ -268,7 +268,7 @@ pub enum BuildError {
     /// it (`Reading::Unplaced`): no diagnostic, and never the literal.
     Unplaced,
     /// A date literal with a run of five digits or more (D8,
-    /// `Reading::Packed`), refused by name where it is (decision E78): no
+    /// `Reading::Packed`), refused by name where it is (decision E79): no
     /// diagnostic, and never the literal.
     Packed(Option<Location>),
 }

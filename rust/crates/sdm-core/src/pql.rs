@@ -200,7 +200,7 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 }
 
 /// The refusal of a date literal with a run of five digits or more (D8),
-/// by name and where it is, never its text (decision E78): the reference
+/// by name and where it is, never its text (decision E79): the reference
 /// reads such a literal through `dateutil`, or refuses it.
 fn packed(location: Option<ast::Location>) -> CoreError {
     let mut error = CoreError::new(

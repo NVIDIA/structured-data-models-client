@@ -65,7 +65,7 @@ pub enum Unparsed {
     Unplaced,
     /// A date literal with a run of five digits or more (D8), refused by
     /// name, and where it is: never a diagnostic, never its text
-    /// (decision E78).
+    /// (decision E79).
     Packed(Option<ast::Location>),
 }
 

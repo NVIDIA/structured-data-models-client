@@ -45,7 +45,7 @@ impl ParseFailure {
 
 /// Why text is not a parsed query: a diagnostic, a two-digit year with no
 /// current year to place it, or a D8 date literal, refused by name where it
-/// is (decision E78).
+/// is (decision E79).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseError {
     Failure(ParseFailure),

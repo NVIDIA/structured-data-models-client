@@ -129,11 +129,11 @@ entries:
   cases: [T0.6, T1.6c]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E79}
   notes: >-
     Kept in full by the owner with the plan's section 5 (Phase 0 decisions
     row 29); D8 changed by the owner's decision of 2026-10-12, relayed by
-    the orchestrator (Phase 1 decision E78), reversing Phase 0's keep of D8.
+    the orchestrator (Phase 1 decision E79), reversing Phase 0's keep of D8.
     The change, its cases and its transitions are DT-5's.
 
 - id: PK-6
@@ -716,11 +716,11 @@ entries:
   refs: [M2, DT-9]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E79}
   notes: >-
     Kept at Phase 0 (decision 6) and read from T1.6b (E69); the owner's
     decision of 2026-10-12, relayed by the orchestrator, refuses them by
-    name (E78). Held by sdm-pql's tests/dates.rs (dates.json's 7,749 D8
+    name (E79). Held by sdm-pql's tests/dates.rs (dates.json's 7,749 D8
     literals, the reference's readings kept as the evidence of the old
     behaviour, and T0.6's four), pql_quirks.rs, pql_adapter.rs, dispatch.rs,
     s0_cases.rs and test_the_routing_seam.py. T1.6b's two acceptance twins
@@ -862,7 +862,7 @@ entries:
     entry naming it and this one is rejected; each has an acceptance twin
     of the same input from T1.6b (s0.accept.date-packed,
     s0.accept.date-long-field), baselined on all three runners. From T1.6c
-    the core refuses those literals by name (DT-5, E78) and the twins are
+    the core refuses those literals by name (DT-5, E79) and the twins are
     removed.
 
 - id: DT-10
