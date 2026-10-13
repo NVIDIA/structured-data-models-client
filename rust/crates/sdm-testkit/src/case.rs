@@ -314,15 +314,6 @@ fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     Option::<T>::deserialize(deserializer)
 }
 
-/// `core.materialize.indices`: at least one entity (`minItems`).
-fn some_indices<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<Value>, D::Error> {
-    let indices = Vec::<Value>::deserialize(deserializer)?;
-    if indices.is_empty() {
-        return Err(D::Error::custom("core.materialize.indices is empty"));
-    }
-    Ok(indices)
-}
-
 /// `input.edits`, when given, holds at least one edit, as the case schema's
 /// `minItems` says.
 fn some_edits<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Vec<Edit>>, D::Error> {
@@ -444,7 +435,8 @@ pub struct PredictInput {
 #[serde(deny_unknown_fields)]
 pub struct MaterializeInput {
     pub provider: Value,
-    #[serde(deserialize_with = "some_indices")]
+    /// None at all is a call the core refuses, as the reference does
+    /// (`empty.indices`, from T1.32d), which this host carries.
     pub indices: Vec<Value>,
     pub anchor_time: Value,
     /// Required, and null for the default.

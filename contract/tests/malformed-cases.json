@@ -453,22 +453,6 @@
       }
     },
     {
-      "why": "core.materialize with no entities (minItems)",
-      "path": [
-        "core",
-        "materialize"
-      ],
-      "value": {
-        "provider": {
-          "provider": "sql",
-          "dialect": "duckdb"
-        },
-        "indices": [],
-        "anchor_time": null,
-        "seed": null
-      }
-    },
-    {
       "why": "core.materialize naming the schema it samples, which each host builds from its own description and the case's edits (the rust-host journey guard, T1.21d)",
       "path": [
         "core",
@@ -986,6 +970,22 @@
       "value": {
         "op": "set_relationships",
         "relationships": []
+      }
+    },
+    {
+      "why": "core.materialize with no entities, a call the core refuses as the reference does (empty.indices, T1.32d)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [],
+        "anchor_time": null,
+        "seed": null
       }
     }
   ],

@@ -41,7 +41,7 @@ use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, r
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
-use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput};
+use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput, ValidateQueryInput};
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
 use crate::{duck, endpoint};
@@ -215,6 +215,23 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
             case.id
         );
     };
+    let (input, answer) = validate(case, spec)?;
+    Ok(Observed {
+        operations: vec!["validate_query".into()],
+        inputs: vec![input],
+        fetches: vec![],
+        described: None,
+        materialized: None,
+        answer,
+        warnings: vec![],
+        driver: None,
+        edits: vec![],
+    })
+}
+
+/// S0's `validate_query` with the case's query, schema and profile: what
+/// this host sent, as it recorded it, and the core's answer.
+fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
     let profile: ProfileSpec = serde_json::from_value(spec.profile.clone()).map_err(|_| {
         anyhow!(
             "{}: core.validate_query.profile is not a ProfileSpec",
@@ -262,17 +279,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
             },
         },
     };
-    Ok(Observed {
-        operations: vec!["validate_query".into()],
-        inputs: vec![input],
-        fetches: vec![],
-        described: None,
-        materialized: None,
-        answer,
-        warnings: vec![],
-        driver: None,
-        edits: vec![],
-    })
+    Ok((input, answer))
 }
 
 /// The case's DuckDB base, built on a fresh connection.
@@ -500,6 +507,18 @@ fn describe_on(
         }
     }
     let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
+        // A query the client refuses before the core's materialize: the
+        // client validates it first, on S0's route by the core's
+        // validate_query (design, "Routing seam"), as the reference refuses
+        // it before any data is read; so a case that names validate_query
+        // beside describe_source runs it after the description, with the
+        // schema and profile the case gives (refuse.unknown-column, T1.32d).
+        if let Some(spec) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
+            let (input, answer) = validate(case, spec)?;
+            observed.operations.push("validate_query".into());
+            observed.inputs.push(input);
+            observed.answer = answer;
+        }
         return Ok(observed);
     };
     // The schema materialize samples is this host's own description, with
@@ -574,7 +593,9 @@ fn edit_schema(
 /// One Arrow column of contract scalars, all of one type, nulls among
 /// them; a column of nulls alone is Arrow's null type. This host hands the
 /// core the entities as the case types them, each scalar's type its own
-/// (T1.32a: the core casts them to the key's type).
+/// (T1.32a: the core casts them to the key's type). None at all is a
+/// column of the null type and no rows, which the core refuses as naming
+/// no entity (`empty.indices`, T1.32d).
 fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
     use duckdb::arrow::array::NullArray;
     use duckdb::arrow::array::builder::{
