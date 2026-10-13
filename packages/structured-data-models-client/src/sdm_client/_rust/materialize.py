@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Bridge code: from T1.32a it holds no rule of the request; the entities'
 # cast to the key's type, its last host-held rule (design, "Host-held
-# semantics"), is the core's.
+# semantics"), is the core's. It passes the call's values and the source
+# to the core, and is deleted in Phase 5 with the old route.
 # Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request (T1.11c, T1.28a).
