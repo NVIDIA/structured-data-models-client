@@ -26,6 +26,7 @@ import pytest
 from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client import (
+    MissingExtraError,
     PredictiveQuery,
     Request,
     Schema,
@@ -384,10 +385,33 @@ def test_a_packed_date_in_an_array_is_refused_by_name_on_the_core(
     _assert_refused_as_packed(refused.value, '20240101-01-01')
 
 
-def test_the_old_route_still_reads_a_packed_date_literal() -> None:
+def test_the_old_route_still_reads_a_packed_date_literal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # T1.6c: python-old is unchanged. Its validator reads every D8 literal
     # the reference reads and refuses the others as a query, never by the
-    # core's rule; two of them it materializes.
+    # core's rule; two of them it materializes. Gathering them takes the
+    # relational engine, an extra the test and installed-wheel jobs lack:
+    # there, materialize must get past validation and reach the gathering,
+    # which then names the missing extra; with the engine (the engine job)
+    # it must return the request.
+    from sdm_client.materializers.relational import RelationalMaterializer
+
+    gathered: list[str] = []
+    real = RelationalMaterializer._gather
+
+    def spy(self: Any, query: Any, *args: Any) -> Any:
+        gathered.append(query.to_string())
+        return real(self, query, *args)
+
+    monkeypatch.setattr(RelationalMaterializer, '_gather', spy)
+    try:
+        # The client's own test for the extra (_get_model): an import.
+        import sdm_relational_engine.rfm  # noqa: F401
+    except ImportError:
+        engine = False
+    else:
+        engine = True
     schema = _orders_schema()
     for literal in PACKED_READ:
         PredictiveQuery(_filtered(f'orders.ts > {literal}'), schema)._resolve(
@@ -400,13 +424,20 @@ def test_the_old_route_still_reads_a_packed_date_literal() -> None:
             )._resolve(RELATIONAL)
         assert refused.value.code == 'INVALID_REQUEST'
         assert 'rule' not in refused.value.details
+    materialized = ('20240101/00/123456', '2024-01-01 00000:00:00')
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        for literal in ('20240101/00/123456', '2024-01-01 00000:00:00'):
-            request = PredictiveQuery(
-                _filtered(f'orders.ts > {literal}'), schema
-            ).materialize(indices=[1])
-            assert type(request) is Request
+        for literal in materialized:
+            query = PredictiveQuery(_filtered(f'orders.ts > {literal}'), schema)
+            if engine:
+                assert type(query.materialize(indices=[1])) is Request
+            else:
+                with pytest.raises(MissingExtraError) as missing:
+                    query.materialize(indices=[1])
+                assert missing.value.details['extra'] == 'relational'
+    assert len(gathered) == len(materialized)
+    for literal, text in zip(materialized, gathered, strict=True):
+        assert literal in text, text
 
 
 @pytest.mark.parametrize(
