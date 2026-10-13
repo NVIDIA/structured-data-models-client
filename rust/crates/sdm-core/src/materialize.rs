@@ -1447,8 +1447,12 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     };
     memo.keep();
     // The call's option values, each of the type the client takes; then
-    // the context size's bound and the run mode it selects, first, as the
-    // client bounds it before anything else of the call (T1.28a).
+    // the context size's bounds and the run mode it selects (T1.28a). The
+    // client checks these in another order (the context size's lower
+    // bound, the indices, the statistic, the reserved names, then its
+    // upper bound, the entity count and the shapes); a call with several
+    // faults may be refused here for another of them than the client
+    // names, which the core does not claim to match (decision E41(k)(iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
     let mode = options::run_mode(asked_values.num_context_samples)?;
     // The hops the sampling options ask, bounded as the client bounds them,
@@ -1537,7 +1541,8 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     }
     // The statistic the caller chose, one the endpoint reports, and no
     // column named as the wire names its own (the client's checks before
-    // it gathers, in its order).
+    // it gathers; their order among the checks above is not the client's,
+    // decision E41(k)(iii)).
     let statistic = options::statistic(prediction_statistic.as_deref())?;
     reserved(&description)?;
 

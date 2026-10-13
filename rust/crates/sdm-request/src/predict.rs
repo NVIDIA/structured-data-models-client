@@ -273,6 +273,33 @@ pub fn body(
     Ok(envelope)
 }
 
+/// The bytes of the call `body` writes, as the host sends them, unchanged:
+/// refused past the endpoint's limit (`PAYLOAD_BYTES`), counted on these
+/// bytes, the envelope included, which are the bytes sent (register PD-2,
+/// T1.28a's fix round 1), before the model is called.
+pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
+    let bytes = call.to_bytes();
+    if bytes.len() > crate::payload::PAYLOAD_BYTES {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "the call is larger than the endpoint takes",
+        )
+        .with_field("field", Detail::text("call"))
+        .with_field(
+            "bytes",
+            Detail::Scalar(sdm_contract::Scalar::UInt64(bytes.len() as u64)),
+        )
+        .with_field(
+            "limit",
+            Detail::Scalar(sdm_contract::Scalar::UInt64(
+                crate::payload::PAYLOAD_BYTES as u64,
+            )),
+        ));
+    }
+    Ok(bytes)
+}
+
 /// The entity a row is about, as the result gives it.
 enum Entity {
     Integer(i64),

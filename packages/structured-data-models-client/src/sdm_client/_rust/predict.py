@@ -223,7 +223,8 @@ def predict(
         transport_failed = False
         refused: NimRequestError | None = None
         try:
-            answer = client._send(adapter, json.loads(body))
+            # The core's call, its bytes as written (register PD-2, T1.28a).
+            answer = client._send_body(adapter, body)
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:

@@ -79,6 +79,7 @@ import importlib.util
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import warnings
@@ -871,6 +872,41 @@ def _edit_problems(
     return found
 
 
+#: A column a source's setup writes as a time of day: ``make_time(...)`` or
+#: a cast to ``TIME``, with the name it is written as.
+_TIME_OF_DAY = re.compile(
+    r'(?:make_time\(.*?\)|::TIME\b)\s+AS\s+(\w+)', re.IGNORECASE
+)
+
+
+def time_of_day_is_a_time_column(source: dict[str, Any]) -> bool:
+    r"""Whether the source's spec makes a time-of-day column a table's time
+    column, which the source then casts to ``TIMESTAMP`` when it samples
+    (DT-18): its setup writes the column as a ``TIME`` (``CREATE TABLE``
+    over ``make_time(...)`` or ``::TIME``), and the table's time column, as
+    ``Schema.from_source`` is told it and the edits leave it, is that
+    column."""
+    times: dict[str, set[str]] = {}
+    for statement in source.get('setup', []):
+        table = re.match(r'\s*CREATE\s+TABLE\s+(\w+)', statement, re.I)
+        if table is not None:
+            times.setdefault(table.group(1), set()).update(
+                _TIME_OF_DAY.findall(statement)
+            )
+    chosen = dict(source.get('from_source', {}).get('time_columns', {}))
+    for edit in source.get('edits', []):
+        op = edit.get('op')
+        if op == 'time':
+            chosen[edit['table']] = edit.get('value')
+        elif op == 'set_time_column':
+            chosen[edit['table']] = edit.get('column')
+        elif op == 'clear_time_column':
+            chosen[edit['table']] = None
+    return any(
+        column in times.get(table, ()) for table, column in chosen.items()
+    )
+
+
 def classify(
     old: dict[str, Any],
     core: dict[str, Any],
@@ -878,10 +914,12 @@ def classify(
     register: dict[str, dict[str, Any]],
     edits: int | None = None,
     query: str | None = None,
+    time_of_day: bool = False,
 ) -> tuple[str, str]:
     r"""``(class, why)``: ``agree``, ``approved:<entry>``,
     ``proposed:<entry>`` or ``UNCLASSIFIED``; ``edits`` is how many edits
-    the source's spec makes."""
+    the source's spec makes; ``time_of_day`` whether it makes a time of
+    day a table's time column (:func:`time_of_day_is_a_time_column`)."""
 
     def under(entry: str | None, rule: str | None, why: str) -> tuple[str, str]:
         if entry is None:
@@ -1000,10 +1038,16 @@ def classify(
                 rule,
                 f'E66(b): the reference {om}, the core {cm}',
             )
-    if om[1] in (None, 'INTERNAL_ERROR') and cm[1] == 'PROVIDER_ERROR':
+    if (
+        om[1] in (None, 'INTERNAL_ERROR')
+        and cm[1] == 'PROVIDER_ERROR'
+        and time_of_day
+    ):
         # The source's own failure, which the reference reports internally
-        # and the core as the provider's (a time column the source's CAST
-        # cannot read: DT-12's text, DT-18's time of day).
+        # and the core as the provider's: a time of day made a time column,
+        # which the source's CAST to TIMESTAMP cannot read (DT-18). Only
+        # with that evidence in the spec; any other pair stays UNCLASSIFIED
+        # (fix round 1, Codex P2-4).
         return under(
             'DT-18',
             None,
@@ -1057,7 +1101,14 @@ def compare(
         edits = len(spec[name].get('edits', [])) if name in spec else None
         query = spec[name].get('pql') if name in spec else None
         kind, why = classify(
-            old[name], core[name], indices, register, edits, query
+            old[name],
+            core[name],
+            indices,
+            register,
+            edits,
+            query,
+            time_of_day=name in spec
+            and time_of_day_is_a_time_column(spec[name]),
         )
         counts[kind] = counts.get(kind, 0) + 1
         if kind != 'agree':

@@ -50,6 +50,7 @@ from sdm_client.errors import MissingExtraError
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
+BINARY = 'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id'
 ANCHOR = pd.Timestamp('2024-03-01')
 
 
@@ -195,6 +196,9 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
     ('options', 'rule'),
     [
         ({'num_neighbors': [8, 8]}, 'num_neighbors'),
+        # A sequence JSON does not know, written as its items (fix round 1,
+        # the subagent's P2-1), so refused by name as a list is.
+        ({'num_neighbors': range(2)}, 'num_neighbors'),
         ({'context_anchor_time': ANCHOR}, 'context_anchor_time'),
         ({'anchor_time': 'entity'}, 'anchor_entity'),
         # A seed given as None, which the reference reads as unseeded.
@@ -1763,3 +1767,37 @@ def test_a_time_of_day_as_the_time_column_is_the_source_s_failure_register_dt_18
     if _old_route_needs_the_engine():
         return
     assert refused().code == 'INTERNAL_ERROR'
+
+
+@pytest.mark.parametrize(
+    ('query', 'config'),
+    [
+        (QUERY, {'num_estimators': np.float32(2)}),
+        (
+            QUERY,
+            {'num_estimators': np.int64(3), 'column_shuffle': np.bool_(True)},
+        ),
+        (
+            QUERY,
+            {
+                'hop_shuffle': np.bool_(False),
+                'category_shuffle': np.float64(1.0),
+            },
+        ),
+        (BINARY, {'class_shuffle': np.bool_(False)}),
+    ],
+    ids=['float32', 'int64-bool', 'bool-float64', 'binary-class-shuffle'],
+)
+def test_numpy_inference_options_are_read_as_on_the_old_route(
+    monkeypatch: pytest.MonkeyPatch, query: str, config: dict[str, Any]
+) -> None:
+    # Fix round 1 (Codex P2-2, the subagent's P2-1): the call's values carry
+    # a NumPy scalar as the Python value it holds, its type kept, so the
+    # core reads the options as the engine's validation reads them.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _materialize(query=query, inference_config=config)
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if _old_route_needs_the_engine():
+        return
+    old = _materialize(query=query, inference_config=config)
+    assert core._payloads[0]['inference'] == old._payloads[0]['inference']

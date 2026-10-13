@@ -2453,14 +2453,18 @@
               "type": "boolean"
             },
             "inference_config": {
-              "description": "The engine's inference options, a regression's or a classification's:\nthe schema of [`InferenceConfig`] and [`ClassificationConfig`], for the\nschema only.",
+              "description": "The engine's inference options, a regression's or a classification's,\neach its own type, told apart by its kind: the schema of both, for the\nschema only.",
               "anyOf": [
                 {
                   "description": "A regression's inference options, as the engine writes them\n(`_inference_config_to_json`).",
                   "type": "object",
                   "properties": {
                     "kind": {
-                      "type": "string"
+                      "description": "`regression`, the schema holds.",
+                      "type": "string",
+                      "enum": [
+                        "regression"
+                      ]
                     },
                     "num_estimators": {
                       "type": "integer",
@@ -2502,11 +2506,15 @@
                   ]
                 },
                 {
-                  "description": "A classification's inference options, its class shuffle the reader's\nto leave out: the schema of [`ClassificationConfig`], for the schema\nonly.",
+                  "description": "A classification's inference options, as the engine writes them.",
                   "type": "object",
                   "properties": {
                     "kind": {
-                      "type": "string"
+                      "description": "`classification`, the schema holds.",
+                      "type": "string",
+                      "enum": [
+                        "classification"
+                      ]
                     },
                     "num_estimators": {
                       "type": "integer",
@@ -2523,6 +2531,7 @@
                       "type": "boolean"
                     },
                     "class_shuffle": {
+                      "description": "Always written; a reader may meet a state without it.",
                       "type": "boolean"
                     }
                   },

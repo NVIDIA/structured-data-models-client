@@ -337,6 +337,33 @@ fn a_field_added_to_or_retyped_in_the_payload_fails() {
         },
         "metadata is missing",
     );
+    // A regression's options losing both members a classification's lack
+    // (fix round 1, Codex P2-3): the options are told apart by their kind,
+    // so neither shape takes them.
+    refused(
+        |p| {
+            let config = p["inference"]["inference_config"].as_object_mut().unwrap();
+            config.remove("target_transforms");
+            config.remove("output_type");
+        },
+        "$.inference.inference_config: none of",
+    );
+    // A classification's options named a regression's.
+    let binary = built(&classified(
+        Kind::Binary,
+        Labels::Bool(vec![true, false, true]),
+    ));
+    assert_eq!(check("StatePayload", &binary), Ok(()));
+    let mut renamed = binary.clone();
+    renamed["inference"]["inference_config"]["kind"] = json!("regression");
+    assert!(check("StatePayload", &renamed).is_err());
+    // A class shuffle left out is the reader's to take.
+    let mut unshuffled = binary.clone();
+    unshuffled["inference"]["inference_config"]
+        .as_object_mut()
+        .unwrap()
+        .remove("class_shuffle");
+    assert_eq!(check("StatePayload", &unshuffled), Ok(()));
 }
 
 /// The definitions the locked schema gives at `path` (`.`-separated; `*`

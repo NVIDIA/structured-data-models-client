@@ -22,6 +22,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import dataclasses
+import json
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from types import TracebackType
@@ -596,6 +597,25 @@ class SDMClient:
                 # An adapter that had nothing to add returns the same object,
                 # and `raise error from error` makes it its own cause, which
                 # is a cycle for anything that walks the chain.
+                raise
+            raise explained from error
+
+    def _send_body(self, adapter: Any, body: bytes) -> dict[str, Any]:
+        r"""Post one call already written (the core's, on its route), its
+        bytes unchanged where the transport sends bytes as they are, as the
+        HTTP transport does, so the bytes the core's size limit counted are
+        the bytes sent (register PD-2, T1.28a); a transport that writes its
+        own body (a Databricks serving endpoint's envelope) is handed the
+        call decoded. A refusal the adapter explains as :meth:`_send`
+        does."""
+        send = getattr(self._transport, 'predict_body', None)
+        try:
+            if send is not None:
+                return send(body)
+            return self._transport.predict(json.loads(body))
+        except StructuredDataError as error:
+            explained = adapter.explain_error(error, json.loads(body))
+            if explained is error:
                 raise
             raise explained from error
 

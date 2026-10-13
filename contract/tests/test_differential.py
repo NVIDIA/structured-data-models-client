@@ -448,6 +448,8 @@ def test_an_empty_table_refused_by_name_is_e66b_s_entry() -> None:
 
 
 def test_the_source_s_failure_under_the_provider_s_code_is_dt_18_s() -> None:
+    # Fix round 1 (Codex P2-4): DT-18 only where the spec makes a time of
+    # day a table's time column, which the source casts to TIMESTAMP.
     old = {
         **_old(),
         'materialize': ['StructuredDataError', 'INTERNAL_ERROR', None],
@@ -456,17 +458,109 @@ def test_the_source_s_failure_under_the_provider_s_code_is_dt_18_s() -> None:
         **_core(),
         'materialize': ['StructuredDataError', 'PROVIDER_ERROR', None],
     }
+    assert differential.classify(old, core, [0, 1], T128A, 2, time_of_day=True)[
+        0
+    ] == ('proposed:DT-18')
+    # Without the evidence, the same pair is unclassified.
     assert differential.classify(old, core, [0, 1], T128A, 2)[0] == (
-        'proposed:DT-18'
+        'UNCLASSIFIED'
     )
     named = {
         **old,
         'materialize': ['StructuredDataError', 'INVALID_REQUEST', None],
     }
-    assert differential.classify(named, core, [0, 1], T128A, 2)[0] == (
-        'UNCLASSIFIED'
-    )
+    assert differential.classify(
+        named, core, [0, 1], T128A, 2, time_of_day=True
+    )[0] == ('UNCLASSIFIED')
     missing = {k: v for k, v in T128A.items() if k != 'DT-18'}
-    assert differential.classify(old, core, [0, 1], missing, 2)[0] == (
-        'UNCLASSIFIED'
+    assert differential.classify(
+        old, core, [0, 1], missing, 2, time_of_day=True
+    )[0] == ('UNCLASSIFIED')
+
+
+def _tod_source(
+    *edits: dict[str, Any], times: dict[str, str] | None = None
+) -> dict[str, Any]:
+    return {
+        'id': 'g00',
+        'setup': [
+            'CREATE TABLE e AS SELECT i::BIGINT AS id, '
+            'make_time((i % 24)::BIGINT, 30, 0) AS tod, '
+            "'12:00'::TIME AS noon, "
+            "TIMESTAMP '2024-01-01' AS born FROM range(4) t(i)",
+            "CREATE TABLE a AS SELECT i::BIGINT AS aid, 'x' AS tod "
+            'FROM range(4) t(i)',
+        ],
+        'from_source': {
+            'primary_keys': {'e': 'id', 'a': 'aid'},
+            'time_columns': {} if times is None else times,
+        },
+        'edits': list(edits),
+    }
+
+
+def test_the_time_of_day_evidence_is_a_time_column_of_type_time() -> None:
+    evidence = differential.time_of_day_is_a_time_column
+    # Positive: the time of day made the time column, by a setter or as
+    # Schema.from_source is told it; a cast to TIME as make_time.
+    assert evidence(_tod_source({'op': 'time', 'table': 'e', 'value': 'tod'}))
+    assert evidence(
+        _tod_source({'op': 'set_time_column', 'table': 'e', 'column': 'noon'})
     )
+    assert evidence(_tod_source(times={'e': 'tod'}))
+    # Negative: no time column set, a timestamp, a name the table lacks, a
+    # time of day's name on a table where it is text, the time column
+    # cleared after it was set.
+    assert not evidence(_tod_source())
+    assert not evidence(_tod_source(times={'e': 'born'}))
+    assert not evidence(
+        _tod_source({'op': 'time', 'table': 'e', 'value': 'nope'})
+    )
+    assert not evidence(
+        _tod_source({'op': 'time', 'table': 'a', 'value': 'tod'})
+    )
+    assert not evidence(
+        _tod_source(
+            {'op': 'time', 'table': 'e', 'value': 'tod'},
+            {'op': 'time', 'table': 'e', 'value': None},
+        )
+    )
+    assert not evidence(
+        _tod_source(
+            {'op': 'set_time_column', 'table': 'e', 'column': 'tod'},
+            {'op': 'clear_time_column', 'table': 'e'},
+        )
+    )
+
+
+def test_compare_names_dt_18_only_with_the_evidence(tmp_path: Path) -> None:
+    old = {
+        **_old(),
+        'id': 'g00',
+        'materialize': ['StructuredDataError', 'INTERNAL_ERROR', None],
+    }
+    core = {
+        **_core(),
+        'id': 'g00',
+        'materialize': ['StructuredDataError', 'PROVIDER_ERROR', None],
+    }
+    register = tmp_path / 'register.yaml'
+    register.write_text(json.dumps({'entries': list(T128A.values())}))
+    paths = {n: tmp_path / f'{n}.json' for n in ('old', 'core', 'spec')}
+    paths['old'].write_text(json.dumps([old]))
+    paths['core'].write_text(json.dumps([core]))
+    # Two edits each, as the records hold: the last time column set is the
+    # one read.
+    born = {'op': 'time', 'table': 'e', 'value': 'born'}
+    tod = {'op': 'time', 'table': 'e', 'value': 'tod'}
+    for source, code in (
+        (_tod_source(born, tod), 0),
+        (_tod_source(tod, born), 1),
+    ):
+        paths['spec'].write_text(json.dumps({'sources': [source]}))
+        assert (
+            differential.compare(
+                paths['old'], paths['core'], paths['spec'], register
+            )
+            == code
+        )

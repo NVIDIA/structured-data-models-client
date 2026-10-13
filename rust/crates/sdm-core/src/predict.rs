@@ -23,7 +23,7 @@
 use sdm_contract::ops::{OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
-use sdm_request::predict::{bad_response, body, check_outputs, layout, refused};
+use sdm_request::predict::{bad_response, body, call_bytes, check_outputs, layout, refused};
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
 
@@ -74,7 +74,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .call_model(
             Endpoint::Predict,
             "application/json".to_owned(),
-            call.to_bytes(),
+            call_bytes(&call)?,
         )
         .await;
     let answer = match reply {

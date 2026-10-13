@@ -594,34 +594,22 @@ def test_an_endpoint_echoing_our_credential_is_shown_as_on_the_old_route(
     assert core.__cause__ is None and core.__context__ is None
 
 
-def test_the_host_sends_the_call_re_encoded_register_host_4(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Register HOST-4 (proposed): the core writes the payload, which its
-    # byte limit counts (PD-2), as UTF-8; the Python host's transport
-    # decodes the core's call and encodes it again as json.dumps does, so
-    # a character past ASCII is sent as its escape, not as the bytes the
-    # core wrote. The JSON is the same.
-    from sdm_client._rust import run as rust_run
-
-    taken: list[bytes] = []
-    take = rust_run.Finished.take
-
-    def recording(self: Any, attachment: int) -> Any:
-        got = take(self, attachment)
-        state = (
-            self.result.get('state') if isinstance(self.result, dict) else None
-        )
-        if isinstance(state, dict) and attachment == state.get('payload'):
-            taken.append(bytes(got))
-        return got
-
-    monkeypatch.setattr(rust_run.Finished, 'take', recording)
+def _emoji_request(
+    monkeypatch: pytest.MonkeyPatch, emoji: int, ascii: int = 0
+) -> Request:
+    r"""base.regression's request on the core, one user holding a note of
+    ``emoji`` four-byte characters and one order a note of ``ascii``
+    one-byte ones."""
     monkeypatch.setenv(_routing.ENVIRONMENT, MATERIALIZE)
     connection = duckdb.connect()
     for statement in [
         *_shop(),
-        "UPDATE users SET country = 'Zürich' WHERE user_id = 0",
+        'CREATE OR REPLACE TABLE users AS SELECT *, CASE user_id WHEN 5 '
+        f"THEN repeat('\U0001f600', {emoji}) ELSE '' END AS note FROM users",
+        # Order 57 (user 1's, 2024-02-03) is read by the asked entity alone,
+        # after every context's anchor: its note is sent once.
+        'CREATE OR REPLACE TABLE orders AS SELECT *, CASE order_id WHEN 57 '
+        f"THEN repeat('a', {ascii}) ELSE '' END AS note FROM orders",
     ]:
         connection.execute(statement)
     with warnings.catch_warnings():
@@ -630,12 +618,67 @@ def test_the_host_sends_the_call_re_encoded_register_host_4(
         request = PredictiveQuery(QUERY, schema).materialize(
             indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01')
         )
-    [written] = taken
-    assert 'Zürich'.encode() in written and b'\\u00fc' not in written
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    return request
+
+
+def _sent(
+    monkeypatch: pytest.MonkeyPatch, request: Request
+) -> tuple[list[bytes], list[bytes], Any]:
+    r"""The calls the core wrote, the bodies the endpoint received, and the
+    refusal raised (the endpoint refuses every call)."""
+    written: list[bytes] = []
+    send = SDMClient._send_body
+
+    def recording(self: Any, adapter: Any, body: bytes) -> Any:
+        written.append(bytes(body))
+        return send(self, adapter, body)
+
+    monkeypatch.setattr(SDMClient, '_send_body', recording)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with _answering(400, b'{"code": "RECORDED"}') as (url, received):
-        with pytest.raises(StructuredDataError):
+        with pytest.raises(StructuredDataError) as refused:
             _predict(url, request)
-    [sent] = received
-    assert b'\\u00fc' in sent and 'Zürich'.encode() not in sent
-    assert json.loads(sent)['context'] == json.loads(written)['context']
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    return written, received, refused.value
+
+
+def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register PD-2 (fix round 1, Codex P2-1): the HTTP transport sends the
+    # core's call as the core wrote it, so the bytes the endpoint receives
+    # are the bytes the core counted against the limit, characters past
+    # ASCII as their own bytes, never json.dumps' escapes. At the limit's
+    # edge the call is sent, at most the limit; one character past it, the
+    # payload still within the limit (materialize takes it), the call is
+    # refused before anything is sent.
+    limit = 30 * 1024 * 1024
+    lengths = []
+    for emoji, ascii in ((0, 0), (1, 0), (0, 1)):
+        written, received, _ = _sent(
+            monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
+        )
+        assert written == received
+        lengths.append(len(received[0]))
+    base, wide, narrow = (
+        lengths[0],
+        lengths[1] - lengths[0],
+        lengths[2] - lengths[0],
+    )
+    assert wide % 4 == 0 and narrow == 1
+    emoji = (limit - base) // wide
+    ascii = (limit - base - emoji * wide) // narrow
+    written, received, refused = _sent(
+        monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
+    )
+    assert refused.code == 'RECORDED'
+    assert written == received
+    assert len(received[0]) == base + emoji * wide + ascii * narrow <= limit
+    assert b'\\ud83d' not in received[0]
+    assert '\U0001f600'.encode() in received[0]
+    written, received, past = _sent(
+        monkeypatch, _emoji_request(monkeypatch, emoji, ascii + 1)
+    )
+    assert past.code == 'INVALID_REQUEST'
+    assert written == [] and received == []

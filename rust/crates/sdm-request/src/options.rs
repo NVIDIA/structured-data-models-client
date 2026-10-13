@@ -484,7 +484,7 @@ impl Options {
             column_shuffle: self.column_shuffle,
             category_shuffle: self.category_shuffle,
             hop_shuffle: self.hop_shuffle,
-            class_shuffle: self.class_shuffle,
+            class_shuffle: Some(self.class_shuffle),
         }
     }
 }

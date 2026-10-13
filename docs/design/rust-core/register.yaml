@@ -1183,8 +1183,11 @@ entries:
     owner approved on 2026-10-11 (E66(b): where the reference gives an
     internal error, a clearer code is approved), as DT-12 did: for the
     reviewer to approve under the class, never self-approved. The tool
-    classifies every PROVIDER_ERROR where the reference fails internally
-    here.
+    classifies a PROVIDER_ERROR where the reference fails internally here
+    only when the source's spec makes a time of day (make_time or a cast
+    to TIME in its setup) a table's time column, as Schema.from_source is
+    told it and the edits leave it; any other such pair stays UNCLASSIFIED
+    (T1.28a fix round 1).
 
 - id: ORD-1
   title: Tie order of the shared train set by entity time
@@ -2498,41 +2501,6 @@ entries:
     T1.17 round 1), whose own run of the CI artifacts showed the warning
     before the client's import in the floor lane alone; reviewer-owned
     (checkpoint 7), not the owner's.
-
-- id: HOST-4
-  title: python-core sends the call re-encoded by its transport, not the bytes the core counted
-  kind: change
-  old_behavior: >-
-    The reference counts a request's size as json.dumps' compact text of
-    its payload (payload_size_bytes) and sends the call as its transport
-    encodes it (json.dumps with its default separators and ASCII escapes).
-  new_behavior: >-
-    The core counts the payload limit on the bytes it writes the payload
-    as, UTF-8 (register PD-2, T1.28a: sdm_request::payload::build, held at
-    the limit with ASCII and with two- to four-byte characters by
-    sdm-request's tests/payload_bytes.rs). The Python host sends the call
-    through the client's transport, which decodes the core's call and
-    encodes it again as json.dumps does (spaced separators, each character
-    past ASCII as an escape), so the bytes it sends are not the bytes the
-    core counted, nor those the core wrote; a host sending the core's call
-    bytes as they are, which the contract's CallModel step gives it, sends
-    the bytes counted. The default route is unchanged.
-  affected_inputs: >-
-    SDMClient.predict on the core route of a request near the payload
-    limit, or holding characters past ASCII.
-  cases: [T1.28a]
-  refs: [PD-2]
-  status: proposed
-  approved_by: null
-  decision_ref: null
-  notes: >-
-    The orchestrator's reading of PD-2 at T1.28a: the count is the core's
-    serialized payload bytes, exactly as the core writes them, and hosts
-    send those bytes unchanged; python-core's transport re-encodes them,
-    so a host deviation, registered rather than changed in T1.28a (the
-    transport is shared with the old route and with the Databricks
-    serving transport, which wraps the call in its own envelope). For the
-    reviewer or the owner.
 
 # --- PQL validation (T1.12) ---------------------------------------------------
 

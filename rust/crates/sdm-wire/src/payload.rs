@@ -270,6 +270,8 @@ pub struct Inference<C = InferenceConfig> {
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct InferenceConfig {
+    /// `regression`, the schema holds.
+    #[schemars(with = "RegressionConfigKind")]
     pub kind: String,
     pub num_estimators: u64,
     pub column_shuffle: bool,
@@ -287,12 +289,17 @@ pub struct InferenceConfig {
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ClassificationConfig {
+    /// `classification`, the schema holds.
+    #[schemars(with = "ClassificationConfigKind")]
     pub kind: String,
     pub num_estimators: u64,
     pub column_shuffle: bool,
     pub category_shuffle: bool,
     pub hop_shuffle: bool,
-    pub class_shuffle: bool,
+    /// Always written; a reader may meet a state without it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "bool")]
+    pub class_shuffle: Option<bool>,
 }
 
 /// What the request was made from.
@@ -331,6 +338,12 @@ macro_rules! kind_name {
 
 kind_name!(RegressionKind, "RegressionKind", ["regression"]);
 kind_name!(BinaryKind, "BinaryKind", ["binary_classification"]);
+kind_name!(RegressionConfigKind, "RegressionConfigKind", ["regression"]);
+kind_name!(
+    ClassificationConfigKind,
+    "ClassificationConfigKind",
+    ["classification"]
+);
 kind_name!(
     MulticlassKind,
     "MulticlassKind",
@@ -407,31 +420,15 @@ pub enum AnyTask {
     Multiclass(MulticlassTask),
 }
 
-/// A classification's inference options, its class shuffle the reader's
-/// to leave out: the schema of [`ClassificationConfig`], for the schema
-/// only.
-#[derive(JsonSchema)]
-#[schemars(deny_unknown_fields, rename = "ClassificationConfig")]
-pub struct ClassificationConfigSchema {
-    pub kind: String,
-    pub num_estimators: u64,
-    pub column_shuffle: bool,
-    pub category_shuffle: bool,
-    pub hop_shuffle: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "bool")]
-    pub class_shuffle: Option<bool>,
-}
-
-/// The engine's inference options, a regression's or a classification's:
-/// the schema of [`InferenceConfig`] and [`ClassificationConfig`], for the
+/// The engine's inference options, a regression's or a classification's,
+/// each its own type, told apart by its kind: the schema of both, for the
 /// schema only.
 #[derive(JsonSchema)]
 #[serde(untagged)]
 #[schemars(rename = "InferenceOptions")]
 pub enum AnyConfig {
     Regression(InferenceConfig),
-    Classification(ClassificationConfigSchema),
+    Classification(ClassificationConfig),
 }
 
 impl<K: Serialize, C: Serialize> StatePayload<K, C> {

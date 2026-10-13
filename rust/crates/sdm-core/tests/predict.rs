@@ -640,3 +640,42 @@ fn outputs_other_than_the_default_are_refused_by_name() {
     let mut run = predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-relational").unwrap();
     let _ = call(&mut run);
 }
+
+/// The call's size: the core writes the call's bytes, which the host sends
+/// unchanged, and refuses a call past the endpoint's limit before the model
+/// is called (register PD-2, T1.28a's fix round 1); counted to the byte,
+/// with characters past ASCII counted as the bytes written.
+#[test]
+fn a_call_past_the_limit_is_refused_before_it_is_sent() {
+    // The payload with the query padded by `padding`, and the call's length.
+    let padded = |padding: &str| {
+        payload_text().replace(
+            "\"source_query\":\"PREDICT",
+            &format!("\"source_query\":\"{padding}PREDICT"),
+        )
+    };
+    let called = |payload: String| -> Result<usize, CoreError> {
+        let mut run = predict_run(REQUEST_STATE_VERSION, payload, "kumo-relational").unwrap();
+        match run.next()? {
+            Step::CallModel(call) => match run.take_attachment(call.body) {
+                Some(Attachment::Bytes(body)) => Ok(body.len()),
+                _ => panic!("the body is attached"),
+            },
+            other => panic!("not a call: {other:?}"),
+        }
+    };
+    let limit = sdm_request::payload::PAYLOAD_BYTES;
+    let base = called(padded("")).unwrap();
+    // ASCII to the limit, exactly: taken; one byte more: refused.
+    assert_eq!(called(padded(&"a".repeat(limit - base))).unwrap(), limit);
+    let past = called(padded(&"a".repeat(limit - base + 1))).unwrap_err();
+    assert_eq!(past.code, ErrorCode::InvalidRequest);
+    assert_eq!(past.fields["field"], text("call"));
+    // Three-byte characters, each counted as its three bytes written.
+    let euros = (limit - base) / 3;
+    let rest = limit - base - 3 * euros;
+    let at = format!("{}{}", "\u{20ac}".repeat(euros), "a".repeat(rest));
+    assert_eq!(called(padded(&at)).unwrap(), limit);
+    let over = format!("{}{}", "\u{20ac}".repeat(euros + 1), "a".repeat(rest));
+    assert!(called(padded(&over)).is_err());
+}

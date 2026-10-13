@@ -169,14 +169,14 @@
         ]
       },
       "predict": {
-        "fingerprint": "d3fddb6d51163a30f017f0347e62e21f4599b08052122a879c8d24e4c5e63fb2",
+        "fingerprint": "5a3809db8d93cc50ca1ec6bc940cb9ec1d5f4a604eebdd6c56d6d2bf8a32acf2",
         "raise": 4,
         "warn": 0,
         "branch": 8,
         "calls": [
           "._payloads",
           "._preflight",
-          "._send",
+          "._send_body",
           ".append",
           ".get",
           ".take",
@@ -192,7 +192,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
       "<module>": {
-        "fingerprint": "54f9b4aa3044bea055a6ed20009f18aac0a32e0796b96d30a6f102d7f86e8052",
+        "fingerprint": "301277152498f22ea483543e16973cf9914d393a771a6aeb77395916eb6ccc01",
         "raise": 0,
         "warn": 0,
         "branch": 0,

@@ -51,7 +51,7 @@
       "moved": "T1.24 (E61): the outputs refusal moved into the core, its only caller"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T1.28a (E76): the refusal of an inference option the caller set that the model does not read moved into the core's predict; the host passes the keys the caller set"
+      "moved": "T1.28a (E76): the refusal of an inference option the caller set that the model does not read moved into the core's predict; the host passes the keys the caller set; the core's call bytes, counted against the limit there (PD-2), sent as the core wrote them (SDMClient._send_body)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
       "moved": "T1.24 (E61): the option refusals moved into the core; from_source takes the call's tables named, which pass through to describe_source with its other arguments"
@@ -88,6 +88,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._gather": {
       "moved": "T1.28a (E76): the core route's branch moved to RelationalMaterializer.materialize, which leaves for the core's bridge; the old route's own gathering is unchanged"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
+      "moved": "T1.28a (E76): the request's size limit counted by the core on the call bytes it writes (PD-2); SDMClient._send_body sends those bytes unchanged through the transport, the old route's sending unchanged"
     }
   }
 }

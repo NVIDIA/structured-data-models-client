@@ -30,6 +30,7 @@ import math
 import numbers
 import re
 import struct
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -271,6 +272,25 @@ def _integral(value: Any) -> int:
     )
 
 
+def _scalar(value: Any) -> Any:
+    r"""A host scalar the JSON encoder does not know, written as the Python
+    value it holds, losslessly: an integer (:func:`_integral`), and from
+    T1.28a a NumPy boolean or float, its type kept (a float32 is exactly the
+    double it widens to), so the core reads the call's option values as the
+    caller gave them; a sequence the encoder does not know (a ``range``) as
+    its items, as the client reads a sequence of hop counts; any other value
+    refused, as the encoder refuses it."""
+    import numpy as np
+
+    if isinstance(value, (np.bool_, np.floating)):
+        return value.item()
+    if isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
+        return list(value)
+    return _integral(value)
+
+
 def encode(message: dict[str, Any]) -> bytes:
     r"""A control message the host sends, within the control cap.
 
@@ -296,7 +316,7 @@ def attachment(value: Any) -> bytes:
     call's option values travel here as the caller gave them."""
     try:
         return json.dumps(
-            value, ensure_ascii=False, allow_nan=False, default=_integral
+            value, ensure_ascii=False, allow_nan=False, default=_scalar
         ).encode()
     except (TypeError, ValueError, RecursionError):
         from sdm_client.errors import StructuredDataError
