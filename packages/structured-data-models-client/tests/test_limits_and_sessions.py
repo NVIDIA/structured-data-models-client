@@ -83,18 +83,20 @@ def test_an_explanation_covering_more_than_one_entity_is_refused():
     assert 'one at a time' in str(error.value)
 
 
-def test_an_explanation_over_the_smaller_context_budget_is_refused():
-    """Explaining forces the smaller budget, which caps context at 1,000."""
+def test_explains_large_context():
+    """An explanation over a 5,000-row context is sent.
+
+    Assumptions:
+    - The payload scores one entity.
+    - The SDM NIM has no 1,000-row explanation limit.
+    """
     request = _Gathered(payload(predict_rows=1, context_rows=5_000))
-    with pytest.raises(UnsupportedRequestError) as error:
-        list(
-            RelationalAdapter().prediction_plan(
-                request, ('prediction', 'explanation')
-            )
+    plans = list(
+        RelationalAdapter().prediction_plan(
+            request, ('prediction', 'explanation')
         )
-    message = str(error.value)
-    assert 'num_context_samples' in message
-    assert '1,000' in message
+    )
+    assert plans[0]['output']['fields'] == ['prediction', 'explanation']
 
 
 def test_an_explanation_within_both_limits_is_allowed():

@@ -177,14 +177,20 @@ def test_a_task_kind_the_model_does_not_serve_is_refused():
     check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
 
 
-def test_an_output_field_the_model_cannot_produce_is_refused_by_name():
+def test_unserved_output_named():
+    """An output the model cannot produce is refused, naming it and the
+    outputs the model does serve.
+
+    Assumptions:
+    - kumo-tabular does not serve rankings.
+    """
     request = simple_request()
     with pytest.raises(UnsupportedRequestError) as error:
         check_request_against_model(
-            request, KUMO_TABULAR, ('prediction', 'explanation')
+            request, KUMO_TABULAR, ('prediction', 'rankings')
         )
     message = str(error.value)
-    assert 'explanation' in message
+    assert 'rankings' in message
     assert 'probabilities' in message
 
 

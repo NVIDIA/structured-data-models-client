@@ -77,6 +77,7 @@ SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
 # large context to be told the limit at the far end.
 TABULAR_LIMITS = {
     'context_rows_max': 10_000,
+    'explanation_predict_rows': 1,
 }
 
 KUMO_TABULAR = ModelSpec(
@@ -86,7 +87,9 @@ KUMO_TABULAR = ModelSpec(
         # The endpoint takes the coarse kind only and decides binary versus
         # multiclass itself, so this client never narrows it here.
         tasks=frozenset({'classification', 'regression'}),
-        outputs=frozenset({'prediction', 'probabilities', 'quantiles'}),
+        outputs=frozenset(
+            {'prediction', 'probabilities', 'quantiles', 'explanation'}
+        ),
         limits=TABULAR_LIMITS,
     ),
 )

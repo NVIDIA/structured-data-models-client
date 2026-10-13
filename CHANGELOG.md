@@ -7,7 +7,17 @@ these packages. All five distributions share one version and one entry.
 
 ## Unreleased
 
+### Added
+
+- `kumo-tabular` accepts `explanation` in `outputs`, over one scored row at a
+  time, and returns it on `result.explanation`. Asking for one over more rows
+  is refused before sending.
+
 ### Changed
+
+- A `kumo-relational` explanation is no longer refused above the 1,000-row
+  context budget. That limit belonged to an earlier deployment; the Kumo
+  Relational SDM NIM explains under either budget.
 
 - The Databricks example notebook is now a get-started notebook,
   `examples/databricks/kumo_relational_quickstart.ipynb`, in place of
