@@ -19,8 +19,12 @@ price), so a message quoting the data it read holds one:
 
 - describe: an empty fact table, an empty entity table and an empty third
   table (the reference fails each unnamed, ``Table '...' is empty``; the
-  core refuses by name, rule ``empty_table``, P1B-11); a null key (the
-  core refuses it by name, rule ``key_missing``);
+  core refuses by name, rule ``empty_table``, P1B-11); a null key named
+  in ``primary_keys`` (refused INVALID_REQUEST by the core, as by the
+  reference: from T1.32e the core counts keys by the reference's rules),
+  and the same null key inferred, which, below 99% distinct, leaves
+  ``users`` keyless, so the host's query resolution refuses ``FOR EACH
+  users.user_id`` (not a primary key) as the reference does;
 - describe and materialize: an all-null feature, null foreign keys, null
   times, an all-null target (the reference warns that every context row
   has the same answer, naming no value), and an entity with no facts whose
@@ -103,8 +107,9 @@ PLANTED = [
 ]
 
 
-#: Each scenario: its setup (after the planted sentinels), question,
-#: entities, and whether it goes on to ``predict``.
+#: Each scenario: its setup (after the planted sentinels), the keyword
+#: arguments of ``Schema.from_source``, question, entities, and whether it
+#: goes on to ``predict``.
 SCENARIOS: dict[str, dict[str, Any]] = {
     'describe: an empty fact table': {'setup': ['DELETE FROM orders']},
     'describe: an empty entity table': {
@@ -113,7 +118,14 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     'describe: an empty third table': {
         'setup': ['CREATE TABLE extra (extra_id BIGINT, v INTEGER)'],
     },
+    # T1.32e: a null in an inferred key no longer reaches a core refusal
+    # (the key is declined below 99% distinct, as the reference declines
+    # it), so the core's error path is reached by naming the key.
     'describe: a null key': {
+        'setup': ['UPDATE users SET user_id = NULL WHERE user_id = 3'],
+        'from_source': {'primary_keys': {'users': 'user_id'}},
+    },
+    'describe: a null key, inferred': {
         'setup': ['UPDATE users SET user_id = NULL WHERE user_id = 3'],
     },
     'materialize: an all-null feature': {
@@ -159,9 +171,11 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 #: The paths the host refuses on the core route, as the reference does:
 #: the query's validation (``contract/refusal-maps/refusal.json``'s entry
 #: ``materialize/unknown_column``: python-core validates the query in the
-#: host) and the context the host judges before it sends. Every other
+#: host; and, from T1.32e, an entity column left without a key by a null
+#: in it) and the context the host judges before it sends. Every other
 #: refusal must be the core's.
 HOST_MAY_REFUSE = {
+    'describe: a null key, inferred',
     'materialize: a column the schema does not hold',
     'predict: one class in the context',
 }
@@ -177,7 +191,8 @@ def _connection(setup: list[str]) -> Any:
 def _call(scenario: dict[str, Any]) -> Callable[[], Any]:
     def call() -> Any:
         schema = Schema.from_source(
-            DuckDBSource(_connection(scenario.get('setup', [])))
+            DuckDBSource(_connection(scenario.get('setup', []))),
+            **scenario.get('from_source', {}),
         )
         request = PredictiveQuery(
             scenario.get('query', QUERY), schema
