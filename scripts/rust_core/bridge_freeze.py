@@ -344,7 +344,28 @@ KINDS = ('raise', 'warn', 'branch')
 MODULE = '<module>'
 _WARN = frozenset({'warnings.warn', 'warnings.warn_explicit'})
 _SUPPRESS = frozenset({'contextlib.suppress'})
-_OWNER_APPROVED = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}')
+#: An owner's approval, as a decisions row's status (its last column) reads
+#: it, the rule ``ratchet.owner_approved`` holds (T1.15, a bug fix under
+#: E56(a)): these words at its start and a date, followed by nothing, a
+#: parenthesis, or a note after "; " or ", ", no note withdrawing it. Kept
+#: here, not imported, so the guard stays one file;
+#: ``tests/test_contract_ratchet_approval.py`` holds the two patterns equal.
+_OWNER_APPROVED = re.compile(
+    r'approved by owner \d{4}-\d{2}-\d{2}(?:(?: \(|[;,] ).*)?'
+)
+_WITHDRAWN = re.compile(
+    r'not approved|unapproved|reject|revoke|withdraw|supersede|to confirm',
+    re.IGNORECASE,
+)
+
+
+def _owner_approved(status: str) -> bool:
+    status = status.strip()
+    return bool(_OWNER_APPROVED.fullmatch(status)) and not _WITHDRAWN.search(
+        status
+    )
+
+
 _FINGERPRINT = re.compile(r'[0-9a-f]{64}')
 
 
@@ -1023,7 +1044,7 @@ def allowance_problems(
             )
             continue
         text, status = rows[decision]
-        if not _OWNER_APPROVED.search(status):
+        if not _owner_approved(status):
             problems.append(f'{where}: the row is not approved by the owner')
             continue
         if not isinstance(granted, Mapping) or not granted:

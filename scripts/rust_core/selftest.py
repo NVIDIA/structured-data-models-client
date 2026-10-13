@@ -1805,6 +1805,36 @@ def freeze_cases(results: list[Result]) -> None:
         rewrite=True,
         declare=by_allowance,
     )
+    # The row's status read from its start, never a substring (T1.15 fix 1).
+    for status in (
+        'not approved by owner 2026-10-10',
+        'rejected; not approved by owner 2026-10-10',
+        'approved by owner 2026-10-10; rejected by owner 2026-10-11',
+        'approved by owner 2026-10-10, owner to confirm',
+    ):
+        case(
+            f'an allowance under a row whose status reads {status!r}',
+            added_raise,
+            'ALLOWANCES[E99]: the row is not approved by the owner',
+            on=based(row(status)),
+            allowances={'E99': {key: grown}},
+            rewrite=True,
+            declare=by_allowance,
+        )
+    case(
+        "control: an allowance under an approval with E66's annotation",
+        added_raise,
+        None,
+        on=based(
+            row(
+                'approved by owner 2026-10-11 (relayed by the orchestrator; '
+                "recorded at T1.26b, never the implementer's approval)"
+            )
+        ),
+        allowances={'E99': {key: grown}},
+        rewrite=True,
+        declare=by_allowance,
+    )
     case(
         'an allowance under a row naming the function only by its bare name',
         added_raise,
