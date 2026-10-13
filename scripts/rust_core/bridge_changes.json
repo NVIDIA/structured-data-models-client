@@ -16,6 +16,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
       "moved": "T1.32a: the entities are passed to the core without the schema or the entity's name, which only the bridge's cast read"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
+      "moved": "T1.32a: the host's half of the moved cast: a value written as its text where pyarrow infers no one type, a boolean as Arrow writes one (true, false), so the host's text and the core's boolean-to-text rule agree"
     }
   }
 }

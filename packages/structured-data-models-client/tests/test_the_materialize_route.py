@@ -691,7 +691,7 @@ def test_entities_that_do_not_cast_are_the_caller_s_error_on_the_core(
     # Past the key's width, or of no castable type: the engine's own
     # handling lets these escape, and the old route reports INTERNAL_ERROR;
     # the core's cast (T1.32a) refuses them as the caller's error,
-    # INVALID_REQUEST, naming the entity's position (register P1B-27).
+    # INVALID_REQUEST, naming the entity's position (register P1B-32).
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(StructuredDataError) as refused:
         _materialize(indices=indices)

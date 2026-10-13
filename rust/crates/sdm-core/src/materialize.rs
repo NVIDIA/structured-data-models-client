@@ -1580,7 +1580,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
     missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
-    if indices.null_count() > 0 {
+    if keys::missing(&indices) {
         return Err(invalid("an entity to predict for is missing", "indices"));
     }
     let seed_value = seed_scalar(&seed)?;

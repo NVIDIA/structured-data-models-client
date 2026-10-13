@@ -719,7 +719,7 @@ def _scalars(table: Any) -> list[dict[str, Any]]:
                 't': 'd128' if pa.types.is_decimal128(kind) else 'd256',
                 'p': kind.precision,
                 's': kind.scale,
-                'v': str(int(value.scaleb(kind.scale))),
+                'v': str(_unscaled(value, kind.scale)),
             }
         if pa.types.is_date32(kind):
             return {
@@ -743,6 +743,24 @@ def _scalars(table: Any) -> list[dict[str, Any]]:
             for v in counts
         ]
     return [one(v) for v in values]
+
+
+def _unscaled(value: Any, scale: int) -> int:
+    r"""A decimal's unscaled integer at ``scale``, from its own digits and
+    exponent: no decimal context, whose precision would round a value of
+    more digits than it holds (T1.32a fix round 1)."""
+    sign, digits, exponent = value.as_tuple()
+    number = int(''.join(map(str, digits)) or '0')
+    shift = exponent + scale
+    if shift >= 0:
+        number *= 10**shift
+    else:
+        number, rest = divmod(number, 10 ** (-shift))
+        if rest:
+            raise RunnerFailure(
+                'a decimal the host sent has more places than its type'
+            )
+    return -number if sign else number
 
 
 def _float_text(value: float) -> str:

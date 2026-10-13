@@ -15,16 +15,19 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "ae38b0c9eafe39c1ec608807927f1bf63fec50d61b6745546c9794f0bdac720f"
+        "fingerprint": "8645d20bcd2c15890707772d60bdc2d6974b86139a3658ec9f23c569efda88cd"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
       },
       "_indices": {
-        "fingerprint": "a988da663164bb77ab747cacaff119e293c1ad20161fd7a7a44989fc0f4e02e4"
+        "fingerprint": "5f823fd5a856df6d4b3f2ca28d0ee23fa11662360a6ea7bf1ca74ea76374fece"
       },
       "_missing": {
         "fingerprint": "466127ee6c502f180f36fbe6b1e4750b86ffbce40dad1d2a16b53b2d79c117a0"
+      },
+      "_text": {
+        "fingerprint": "3164b4e33672e8a131afd64504a5803294231e44301d4e0c3f3150c6951c2c45"
       },
       "description": {
         "fingerprint": "46970a104391a3525c759f021bd8dc29df124cca4f834dca9c191ac386f06281"

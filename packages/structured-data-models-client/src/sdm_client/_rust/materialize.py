@@ -176,11 +176,13 @@ def _indices(indices: Sequence[Any]) -> Any:
     r"""The entities to predict for as one Arrow column, of the type
     pyarrow infers from the values themselves (``pa.array``); where it
     infers none, as when numbers and text are mixed or an integer is past
-    int64, each value as its text (``str``), a missing one (``None``,
-    ``pd.NA``, ``pd.NaT`` or a float NaN) null, and missing values alone
-    a column of Arrow's null type. The core casts the column to the key's
-    type under its own rule table, and refuses an entity that does not
-    cast (T1.32a); this host decides nothing of it."""
+    int64, each value as its text (``str``; a boolean as ``true`` or
+    ``false``, as Arrow writes one), a missing one (``None``, ``pd.NA``,
+    ``pd.NaT`` or a float NaN) null, and missing values alone a column of
+    Arrow's null type. A float NaN pyarrow infers stays a NaN, which the
+    core reads as missing, as it reads this null. The core casts the
+    column to the key's type under its own rule table, and refuses an
+    entity that does not cast (T1.32a); this host decides nothing of it."""
     import pyarrow as pa
 
     values = list(indices)
@@ -191,10 +193,19 @@ def _indices(indices: Sequence[Any]) -> Any:
             column = pa.nulls(len(values))
         else:
             column = pa.array(
-                [None if _missing(value) else str(value) for value in values],
+                [None if _missing(value) else _text(value) for value in values],
                 pa.string(),
             )
     return pa.table({'indices': column})
+
+
+def _text(value: Any) -> str:
+    r"""A value as its text, a boolean as Arrow writes one."""
+    import numpy as np
+
+    if isinstance(value, (bool, np.bool_)):
+        return 'true' if value else 'false'
+    return str(value)
 
 
 def _missing(value: Any) -> bool:

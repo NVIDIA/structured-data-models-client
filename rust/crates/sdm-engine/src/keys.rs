@@ -298,8 +298,9 @@ fn ten_to(n: u32) -> Option<i128> {
 }
 
 /// `value` ten-to-the-`from`ths at the scale `to`, exactly: `Inexact` when
-/// that drops a digit other than zero, `OutOfRange` when it overflows.
-fn rescale(value: i128, from: i32, to: i32) -> Result<i128, Uncast> {
+/// that drops a digit other than zero, `OutOfRange` when it overflows. The
+/// scales are wide enough that no exponent text can overflow them.
+fn rescale(value: i128, from: i64, to: i64) -> Result<i128, Uncast> {
     if to >= from {
         let factor = u32::try_from(to - from)
             .ok()
@@ -338,11 +339,24 @@ fn read_integer(text: &str) -> Result<i128, Uncast> {
     text.parse::<i128>().map_err(|_| Uncast::OutOfRange)
 }
 
+/// The magnitude past which an exponent is read as this bound: far past
+/// every decimal's 38 places and every float's range, and far within
+/// `i64`, so no arithmetic on a scale overflows (T1.32a fix round 1).
+const EXPONENT_BOUND: i64 = 1 << 40;
+
+/// A decimal number as written: its sign, its significant digits (no
+/// leading or trailing zeros; empty for zero) and the scale they stand at.
+struct Written {
+    negative: bool,
+    digits: String,
+    scale: i64,
+}
+
 /// Text written as a decimal number: an optional sign, ASCII digits with
 /// an optional point and fraction (at least one digit in all), and an
-/// optional exponent (`e` or `E`, an optional sign, digits), as its value
-/// ten-to-the-`scale`ths, exactly.
-fn read_decimal(text: &str, scale: i8) -> Result<i128, Uncast> {
+/// optional exponent (`e` or `E`, an optional sign, digits); `NotANumber`
+/// for any other text.
+fn written(text: &str) -> Result<Written, Uncast> {
     let (mantissa, exponent) = match text.find(['e', 'E']) {
         Some(at) => (&text[..at], Some(&text[at + 1..])),
         None => (text, None),
@@ -360,49 +374,58 @@ fn read_decimal(text: &str, scale: i8) -> Result<i128, Uncast> {
     if whole.len() + fraction.len() == 0 || !ascii(whole) || !ascii(fraction) {
         return Err(Uncast::NotANumber);
     }
-    let exponent: i32 = match exponent {
+    let exponent: i64 = match exponent {
         None => 0,
         Some(written) => {
-            let digits = written.strip_prefix(['+', '-']).unwrap_or(written);
+            let (sign, digits) = match written.as_bytes().first() {
+                Some(b'-') => (-1, &written[1..]),
+                Some(b'+') => (1, &written[1..]),
+                _ => (1, written),
+            };
             if digits.is_empty() || !ascii(digits) {
                 return Err(Uncast::NotANumber);
             }
-            // An exponent past any decimal's reach still reads: it decides
-            // only whether the value is zero, out of range or inexact.
-            written
-                .parse::<i32>()
-                .unwrap_or(if written.starts_with('-') {
-                    i32::MIN / 2
-                } else {
-                    i32::MAX / 2
-                })
+            // An exponent past any decimal's or float's reach still reads:
+            // it decides only whether the value is out of range or inexact.
+            let magnitude = digits.trim_start_matches('0');
+            let magnitude = if magnitude.len() > 13 {
+                EXPONENT_BOUND
+            } else {
+                magnitude.parse::<i64>().unwrap_or(0).min(EXPONENT_BOUND)
+            };
+            sign * magnitude
         }
     };
-    // The digits as one integer, leading zeros dropped, and the scale they
-    // are written at.
+    // The digits as one run, leading zeros dropped, then trailing zeros,
+    // which carry no value, each moving the scale by one. Lengths are of
+    // text, far within i64.
     let all = format!("{whole}{fraction}");
     let significant = all.trim_start_matches('0');
-    let written_scale = i32::try_from(fraction.len())
-        .ok()
-        .and_then(|n| n.checked_sub(exponent))
-        .ok_or(Uncast::OutOfRange)?;
-    if significant.is_empty() {
+    let digits = significant.trim_end_matches('0');
+    let length = |part: &str| i64::try_from(part.len()).unwrap_or(EXPONENT_BOUND);
+    let dropped = length(significant) - length(digits);
+    Ok(Written {
+        negative,
+        digits: digits.to_owned(),
+        scale: length(fraction) - dropped - exponent,
+    })
+}
+
+/// Text written as a decimal number ([`written`]) as its value
+/// ten-to-the-`scale`ths, exactly.
+fn read_decimal(text: &str, scale: i8) -> Result<i128, Uncast> {
+    let written = written(text)?;
+    if written.digits.is_empty() {
         return Ok(0);
     }
-    // Trailing zeros carry no value: drop them from the digits before they
-    // are read, so a long run of them is no overflow. What is left ends in
-    // a digit other than zero, so a place past the key's scale is a digit
-    // lost, whatever the value's size.
-    let trimmed = significant.trim_end_matches('0');
-    let dropped =
-        i32::try_from(significant.len() - trimmed.len()).map_err(|_| Uncast::OutOfRange)?;
-    let at = written_scale - dropped;
-    if at > i32::from(scale) {
+    // The digits end in one other than zero, so a place past the key's
+    // scale is a digit lost, whatever the value's size.
+    if written.scale > i64::from(scale) {
         return Err(Uncast::Inexact);
     }
-    let value: i128 = trimmed.parse().map_err(|_| Uncast::OutOfRange)?;
-    let value = rescale(value, at, i32::from(scale))?;
-    Ok(if negative { -value } else { value })
+    let value: i128 = written.digits.parse().map_err(|_| Uncast::OutOfRange)?;
+    let value = rescale(value, written.scale, i64::from(scale))?;
+    Ok(if written.negative { -value } else { value })
 }
 
 /// One cast value of the key's type.
@@ -425,12 +448,14 @@ enum Cast {
 /// | decimal | whole, in range | its digits at its own scale | exact at scale s, in p digits |
 /// | any other type | refused (`type`) | refused | refused |
 ///
-/// A float key (32 or 64 bits) takes any number, text read as the decimal
-/// syntax above, and a boolean as 1 or 0, each as the nearest float of the
-/// key's width, as a float is by its type; one past the width's range is
-/// refused (`out_of_range`). Otherwise nothing is rounded or truncated: a
-/// value the key's type does not hold exactly is refused, naming why
-/// ([`Uncast`]).
+/// A float key (32 or 64 bits) takes an integer or a boolean only where
+/// the width holds it exactly (`inexact` otherwise), and a float, text in
+/// the decimal syntax above or a decimal as the nearest float of its
+/// width, rounded once, as a float is by its type; one past the width's
+/// range is refused (`out_of_range`). Otherwise nothing is rounded or
+/// truncated: a value the key's type does not hold exactly is refused,
+/// naming why ([`Uncast`]). A float NaN is a missing entity, as a null is
+/// ([`missing`]), refused before the cast.
 fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
     match (entity, target) {
         (Entity::Null, _) => Ok(Cast::Null),
@@ -452,7 +477,7 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
         (Entity::Text(text), Target::Int { min, max }) => in_range(read_integer(text)?, min, max),
         (Entity::Decimal { value, scale, .. }, Target::Int { min, max }) => {
             let value = value.ok_or(Uncast::OutOfRange)?;
-            in_range(rescale(value, i32::from(scale), 0)?, min, max)
+            in_range(rescale(value, i64::from(scale), 0)?, min, max)
         }
 
         (Entity::Int(value), Target::Text) => Ok(Cast::Text(value.to_string())),
@@ -464,13 +489,13 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
         }
 
         (Entity::Int(value), Target::Decimal { precision, scale }) => {
-            within(rescale(value, 0, i32::from(scale))?, precision)
+            within(rescale(value, 0, i64::from(scale))?, precision)
         }
         (Entity::Float(_, text), Target::Decimal { precision, scale }) => {
             within(read_decimal(&text, scale)?, precision)
         }
         (Entity::Bool(value), Target::Decimal { precision, scale }) => {
-            within(rescale(i128::from(value), 0, i32::from(scale))?, precision)
+            within(rescale(i128::from(value), 0, i64::from(scale))?, precision)
         }
         (Entity::Text(text), Target::Decimal { precision, scale }) => {
             within(read_decimal(text, scale)?, precision)
@@ -483,47 +508,64 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
         ) => {
             let value = value.ok_or(Uncast::OutOfRange)?;
             within(
-                rescale(value, i32::from(from), i32::from(scale))?,
+                rescale(value, i64::from(from), i64::from(scale))?,
                 precision,
             )
         }
 
-        (Entity::Int(value), Target::Float { single }) => nearest(value as f64, single),
-        (Entity::Float(value, _), Target::Float { single }) => nearest(value, single),
-        (Entity::Bool(value), Target::Float { single }) => {
-            nearest(f64::from(u8::from(value)), single)
-        }
-        (Entity::Text(text), Target::Float { single }) => nearest(read_float(text)?, single),
+        (Entity::Int(value), Target::Float { single }) => whole_float(value, single),
+        (Entity::Float(value, _), Target::Float { single }) => finite(if single {
+            f64::from(value as f32)
+        } else {
+            value
+        }),
+        (Entity::Bool(value), Target::Float { single }) => whole_float(i128::from(value), single),
+        (Entity::Text(text), Target::Float { single }) => read_float(text, single),
         (Entity::Decimal { scale, digits, .. }, Target::Float { single }) => {
-            nearest(read_float(&decimal_text(&digits, scale))?, single)
+            read_float(&decimal_text(&digits, scale), single)
         }
     }
 }
 
-/// `value` as the nearest float of the key's width: `OutOfRange` where
-/// that is infinite.
-fn nearest(value: f64, single: bool) -> Result<Cast, Uncast> {
-    let value = if single {
+/// An integer as a float of the key's width, only where that float is the
+/// integer exactly (within 2**24 of zero for 32 bits, 2**53 for 64, and
+/// past them only the integers the width holds): any other would be a
+/// neighbouring entity, so it is `Inexact` (T1.32a fix round 1, the
+/// orchestrator's decision, as the reference refuses it).
+fn whole_float(value: i128, single: bool) -> Result<Cast, Uncast> {
+    let float = if single {
         f64::from(value as f32)
     } else {
-        value
+        value as f64
     };
+    if !float.is_finite() || float.abs() >= 2f64.powi(127) || float as i128 != value {
+        return Err(Uncast::Inexact);
+    }
+    Ok(Cast::Float(float))
+}
+
+/// A float of the key's width, held as a double: `OutOfRange` where the
+/// nearest one is infinite.
+fn finite(value: f64) -> Result<Cast, Uncast> {
     if !value.is_finite() {
         return Err(Uncast::OutOfRange);
     }
     Ok(Cast::Float(value))
 }
 
-/// Text in the decimal syntax of [`read_decimal`] as the nearest double;
-/// `NotANumber` for any other text (`inf`, `nan` and hexadecimal among
-/// it).
-fn read_float(text: &str) -> Result<f64, Uncast> {
-    // The syntax is the decimal one, checked at a scale no text reaches,
-    // so only its form is judged here.
-    match read_decimal(text, i8::MAX) {
-        Err(Uncast::NotANumber) => Err(Uncast::NotANumber),
-        _ => text.parse::<f64>().map_err(|_| Uncast::NotANumber),
-    }
+/// Text in the decimal syntax of [`written`] as the nearest float of the
+/// key's width, rounded once, at that width (an integer, a double or a
+/// decimal's text each go to a 32-bit key directly, never through a
+/// double); `NotANumber` for any other text (`inf`, `nan` and hexadecimal
+/// among it).
+fn read_float(text: &str, single: bool) -> Result<Cast, Uncast> {
+    written(text)?;
+    let value = if single {
+        text.parse::<f32>().map(f64::from)
+    } else {
+        text.parse::<f64>()
+    };
+    finite(value.map_err(|_| Uncast::NotANumber)?)
 }
 
 fn in_range(value: i128, min: i128, max: i128) -> Result<Cast, Uncast> {
@@ -558,6 +600,29 @@ fn decimal_text(digits: &str, scale: i8) -> String {
     let padded = format!("{digits:0>width$}", width = scale + 1);
     let (whole, fraction) = padded.split_at(padded.len() - scale);
     format!("{sign}{whole}.{fraction}")
+}
+
+/// Whether `entities` holds a missing entity: a null, or a float NaN,
+/// which every host's values may write for a missing one (pandas' NaN, a
+/// Python host's float NaN), so the core reads it as one whatever the
+/// host's conversion kept.
+pub fn missing(entities: &ArrayRef) -> bool {
+    if entities.null_count() > 0 || matches!(entities.data_type(), DataType::Null) {
+        return true;
+    }
+    match entities.data_type() {
+        DataType::Float32 => entities
+            .as_primitive::<Float32Type>()
+            .values()
+            .iter()
+            .any(|v| v.is_nan()),
+        DataType::Float64 => entities
+            .as_primitive::<Float64Type>()
+            .values()
+            .iter()
+            .any(|v| v.is_nan()),
+        _ => false,
+    }
 }
 
 /// The refusal of the entity at `position`, which does not cast to `key`.
@@ -817,13 +882,15 @@ mod tests {
     }
 
     #[test]
-    fn a_float_key_takes_the_nearest_float_and_other_types_are_refused() {
-        let ints: ArrayRef = Arc::new(Int64Array::from(vec![(1 << 53) + 1]));
-        let cast = cast_to(ints, &DataType::Float64).unwrap();
+    fn a_float_key_takes_exact_integers_and_other_types_are_refused() {
+        // An integer a float key holds only by rounding is another entity.
+        let ints: ArrayRef = Arc::new(Int64Array::from(vec![1 << 53, (1 << 53) + 1]));
         assert_eq!(
-            cast.as_primitive::<Float64Type>().value(0),
-            (1u64 << 53) as f64
+            cast_to(ints, &DataType::Float64).unwrap_err(),
+            ("inexact".into(), 1)
         );
+        let ints: ArrayRef = Arc::new(Int64Array::from(vec![1 << 60]));
+        assert!(cast_to(ints, &DataType::Float32).is_ok());
         assert_eq!(
             cast_to(texts(&["1e39"]), &DataType::Float32).unwrap_err().0,
             "out_of_range"
@@ -837,6 +904,79 @@ mod tests {
         let nulls: ArrayRef = Arc::new(NullArray::new(2));
         let cast = cast_to(nulls, &DataType::Int64).unwrap();
         assert_eq!(cast.null_count(), 2);
+    }
+
+    #[test]
+    fn a_32_bit_float_key_rounds_once_at_its_width() {
+        // Just past the midpoint between 1 and the next float32: a double
+        // first would round it to 1 (T1.32a fix round 1).
+        let text = "1.000000059604644775390625000001";
+        let cast = cast_to(texts(&[text, &format!("-{text}")]), &DataType::Float32).unwrap();
+        let cast = cast.as_primitive::<Float32Type>();
+        assert_eq!(cast.value(0), 1.000_000_1_f32);
+        assert_eq!(cast.value(1), -1.000_000_1_f32);
+        let decimal: ArrayRef = Arc::new(
+            Decimal128Array::from(vec![1_000_000_059_604_644_775_390_625_000_001_i128])
+                .with_precision_and_scale(31, 30)
+                .unwrap(),
+        );
+        let cast = cast_to(decimal, &DataType::Float32).unwrap();
+        assert_eq!(cast.as_primitive::<Float32Type>().value(0), 1.000_000_1_f32);
+        let ints: ArrayRef = Arc::new(Int64Array::from(vec![1 << 24, (1 << 24) + 1]));
+        assert_eq!(
+            cast_to(ints, &DataType::Float32).unwrap_err(),
+            ("inexact".into(), 1)
+        );
+        let ints: ArrayRef = Arc::new(Int64Array::from(vec![i64::MAX]));
+        assert_eq!(cast_to(ints, &DataType::Float32).unwrap_err().0, "inexact");
+        let nan: ArrayRef = Arc::new(Float64Array::from(vec![1.0, f64::NAN]));
+        assert!(missing(&nan));
+        assert!(!missing(&texts(&["NaN"])));
+        assert_eq!(
+            cast_to(texts(&["3.4028236e38"]), &DataType::Float32)
+                .unwrap_err()
+                .0,
+            "out_of_range"
+        );
+        assert!(cast_to(texts(&["3.4028235e38"]), &DataType::Float32).is_ok());
+    }
+
+    #[test]
+    fn exponents_at_any_extreme_are_named_never_a_panic() {
+        for (text, key, why) in [
+            (
+                "100e2147483647",
+                DataType::Decimal128(18, 0),
+                "out_of_range",
+            ),
+            ("100e-2147483648", DataType::Decimal128(18, 0), "inexact"),
+            (
+                "1e99999999999999999999999",
+                DataType::Decimal128(38, 10),
+                "out_of_range",
+            ),
+            (
+                "1e-99999999999999999999999",
+                DataType::Decimal128(38, 10),
+                "inexact",
+            ),
+            (
+                "1e99999999999999999999999",
+                DataType::Float64,
+                "out_of_range",
+            ),
+        ] {
+            assert_eq!(cast_to(texts(&[text]), &key).unwrap_err().0, why, "{text}");
+        }
+        for text in ["0e99999999999999999999999", "000.000e-2147483648"] {
+            assert!(
+                cast_to(texts(&[text]), &DataType::Decimal128(18, 0)).is_ok(),
+                "{text}"
+            );
+        }
+        let long = format!("1{}e-400", "0".repeat(400));
+        let cast = cast_to(texts(&[&long]), &DataType::Decimal128(18, 0)).unwrap();
+        assert_eq!(cast.as_primitive::<Decimal128Type>().value(0), 1);
     }
 
     #[test]
