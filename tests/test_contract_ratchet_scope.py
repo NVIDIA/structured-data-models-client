@@ -228,3 +228,50 @@ def test_no_entry_of_this_tree_s_register_authorizes_a_later_change(
     commit(repo, 'T1.30: the case file changed alone', change)
     found = check(repo, checkpoint)
     assert any(p.startswith(f'cases: {case}:') for p in found), (case, found)
+
+
+# --- a checkpoint without its register ---------------------------------------
+
+
+def _without_the_register(repo: Path) -> tuple[str, str]:
+    r"""A checkpoint holding the ratchet but no register, and a candidate
+    restoring the register with an approved entry naming :data:`CASE`
+    added, and the case changed; with the checkpoint's SHA and the
+    register's text."""
+    saved = (repo / REGISTER).read_text()
+    checkpoint = commit(
+        repo,
+        'T1.28: the register missing',
+        lambda r: (r / REGISTER).unlink(),
+    )
+    assert (repo / 'scripts/rust_core/ratchet.py').is_file()
+
+    def restore(r: Path) -> None:
+        (r / REGISTER).write_text(saved)
+        add_entry(r)
+        change_case(r)
+
+    commit(repo, 'T1.29: the register restored and the case changed', restore)
+    return checkpoint, saved
+
+
+def test_a_checkpoint_missing_its_register_authorizes_nothing(
+    repo: Path,
+) -> None:
+    r"""Codex's review of part 1: outside the bootstrap a missing
+    checkpoint register is no license, so the case's change under the
+    entry the candidate adds is refused (the register rule may refuse the
+    missing predecessor too)."""
+    checkpoint, _ = _without_the_register(repo)
+    found = helpers.ratchet.check(repo, checkpoint, [], None, False).problems
+    assert found, 'the change passed with no checkpoint register'
+    assert any(p.startswith(f'cases: {CASE}:') for p in found), found
+
+
+def test_the_real_bootstrap_without_a_register_passes(repo: Path) -> None:
+    r"""The control: the same history judged in explicit bootstrap mode,
+    where no register precedes the candidate and every approved entry of
+    its own counts."""
+    checkpoint, _ = _without_the_register(repo)
+    found = helpers.ratchet.check(repo, checkpoint, [], None, True).problems
+    assert not {'cases', 'register'} & rules(found), found

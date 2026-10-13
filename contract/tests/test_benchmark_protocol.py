@@ -23,8 +23,11 @@ No test here makes a network call or reads a Databricks configuration.
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
+import os
 import socket
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -290,3 +293,56 @@ def test_a_live_run_with_a_profile_asks_for_its_client(
     monkeypatch.setenv(benchmark.PROFILE_VARIABLE, 'ANOTHER')
     assert benchmark.main(live['arguments']) == 1
     assert live['asked'][1][1] == 'ANOTHER'
+
+
+# --- the whole dry run --------------------------------------------------------
+
+#: The default run's units, by dataset and task, in the order it runs them.
+SEVEN = [(dataset, task) for dataset, task, _, _ in UNITS]
+
+
+def test_the_offline_dry_run_completes_all_seven_units_and_writes_the_summary(
+    tmp_path: Path,
+) -> None:
+    r"""Codex's review of part 1: the whole ``--dry-run``, as run by hand,
+    builds every request on both routes and answers it in process; it must
+    reach AdventureWorks too, whatever the case files' status (part 1 keeps
+    ``base.adventureworks`` diagnostic), and write its summary. Run as a
+    separate process with no endpoint, profile or Databricks variable; the
+    script's dry run opens no socket."""
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith(('DATABRICKS_', 'SDM_BENCHMARK_', 'SDM_SMOKE_'))
+        and name != 'SDM_CORE_ROUTES'
+    }
+    env['DATABRICKS_CONFIG_FILE'] = str(tmp_path / 'absent.cfg')
+    summary = tmp_path / 'summary.json'
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / 'scripts/live/null_link_benchmark.py'),
+            '--dry-run',
+            '--summary',
+            str(summary),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=tmp_path,
+        timeout=900,
+    )
+    output = done.stdout + done.stderr
+    assert done.returncode == 0, output[-4000:]
+    assert 'benchmark failed' not in output, output[-4000:]
+    assert summary.is_file(), output[-4000:]
+    found = json.loads(summary.read_text(encoding='utf-8'))
+    assert found['dry_run'] is True
+    assert found['passed'] is None
+    units = found['units']
+    assert len(units) == 7, [(u['dataset'], u['task']) for u in units]
+    assert [(u['dataset'], u['task']) for u in units] == SEVEN
+    for each in units:
+        assert each['old'] is not None and each['core'] is not None, each
+    assert found['calls'] == 28 and found['predictions'] == 448
