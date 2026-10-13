@@ -5,8 +5,9 @@
 
 The codec reads every contract scalar exactly and a message the core sent
 whole as an attachment (decisions E4, H7, E23). The host facts name the
-zone lookup roots in ``zoneinfo``'s order with their versions, and the
-platform's year padding (E23). Every code the core has maps to one
+zone lookup roots in ``zoneinfo``'s order with their versions, the
+platform's year padding (E23), and, where pandas bounds it, the range a
+date literal can be held in (T1.20). Every code the core has maps to one
 ``StructuredDataError`` class, keyed on the code alone and reading no
 message text (H6, E22); warnings keep their order and their class.
 """
@@ -285,6 +286,65 @@ def test_the_platform_s_year_padding_is_read_from_strftime() -> None:
     assert platform['os'] in ('linux', 'darwin', 'windows')
     now = facts.host_facts(_native.is_posix_zone)['now']
     assert (now['t'], now['unit'], now['zone']) == ('ts', 'us', 'UTC')
+
+
+def _pandas_holds_year_1() -> bool:
+    import pandas
+
+    try:
+        pandas.to_datetime('0001-01-01')
+    except pandas.errors.OutOfBoundsDatetime:
+        return False
+    return True
+
+
+def test_the_date_literal_range_is_pandas_own_where_pandas_bounds_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.20 fix 1: pandas 2 holds a date only from Timestamp.min to
+    # Timestamp.max, so the host declares that range, in nanoseconds, and
+    # the core refuses a literal outside it as the old validator does;
+    # pandas 3 holds year 1, and the host declares none.
+    import pandas
+
+    built = facts.host_facts(_native.is_posix_zone)
+    declared = built.get('date_literal_range')
+    if _pandas_holds_year_1():
+        assert declared is None, declared
+    else:
+        assert declared == {
+            'min_ns': pandas.Timestamp.min.value,
+            'max_ns': pandas.Timestamp.max.value,
+        }
+        assert declared == {
+            'min_ns': -9_223_372_036_854_775_807,
+            'max_ns': 9_223_372_036_854_775_807,
+        }
+        assert all(type(v) is int for v in declared.values()), declared
+    # A run's start carries the same, and the core takes it.
+    sent: list[Any] = []
+    real = facts.host_facts
+
+    def spy(is_posix: Any) -> dict[str, Any]:
+        started = real(is_posix)
+        sent.append(started.get('date_literal_range'))
+        return started
+
+    monkeypatch.setattr(facts, 'host_facts', spy)
+    finished = run(
+        {
+            'op': 'validate_query',
+            'query': 1,
+            'schema': 2,
+            'profile': {'name': 'RELATIONAL', 'model': None},
+        },
+        {
+            1: codec.attachment('PREDICT t.c FOR EACH t.id'),
+            2: codec.attachment({'tables': [], 'links': []}),
+        },
+    )
+    assert finished.result['op'] == 'validate_query'
+    assert sent == [declared]
 
 
 # --- errors ------------------------------------------------------------------
