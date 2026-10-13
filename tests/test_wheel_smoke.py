@@ -18,7 +18,9 @@ import ast
 import importlib.util
 import json
 import pathlib
+import re
 import sys
+import types
 import zipfile
 from typing import Any
 
@@ -446,15 +448,17 @@ def test_the_tests_run_with_nothing_of_the_caller_s_pytest(
 
 BINDING_TESTS = 'rust/bindings/sdm-py/tests'
 #: The contract inputs ``suite()`` takes from the inputs tree, at their
-#: repository paths.
+#: repository paths: the contract's sources and the native module's stub.
+#: The message builder is not one: it decodes what the tests judge.
 INPUTS = (
-    f'{BINDING_TESTS}/messages.py',
     'rust/crates/sdm-contract/src/lib.rs',
     'rust/crates/sdm-contract/src/error.rs',
     'packages/structured-data-models-client/src/sdm_client/_native.pyi',
 )
-#: The binding's test files ``suite()`` takes from its own checkout: every
-#: file of the tests directory but ``messages.py``.
+#: The binding's test files ``suite()`` takes from its own checkout as they
+#: are: every file of the tests directory but ``messages.py``, which it
+#: takes from its own checkout too, its ``CONTRACT`` line set to the
+#: inputs' version.
 JUDGES = (
     'test_binding.py',
     'test_arrow_lifetimes.py',
@@ -462,16 +466,37 @@ JUDGES = (
     'conftest.py',
     'getenv_shim.c',
 )
+#: The one line of ``messages.py`` the suite sets.
+CONTRACT_LINE = re.compile(r'^CONTRACT = \d+$', re.M)
+
+
+def _builder(label: str, version: int) -> str:
+    """A tree's ``messages.py``: its version line among lines of its own."""
+    return (
+        f'# the builder of {label}\n'
+        'import json\n'
+        f'CONTRACT = {version}\n'
+        'def read(control):\n'
+        '    return json.loads(control)\n'
+    )
+
+
+def _at(text: str, version: int) -> str:
+    """`text`, a ``messages.py``, with its one ``CONTRACT`` line set to
+    `version` and nothing else changed."""
+    assert len(CONTRACT_LINE.findall(text)) == 1
+    return CONTRACT_LINE.sub(f'CONTRACT = {version}', text)
 
 
 def _tree(root: pathlib.Path, version: int) -> pathlib.Path:
     """A fake checkout at contract version `version`: the contract inputs,
-    the binding's test files (each naming the tree it is of), and the two
-    sibling distributions."""
+    the binding's test files and message builder (each naming the tree it
+    is of), and the two sibling distributions."""
     label = root.name
     files = {
-        f'{BINDING_TESTS}/messages.py': f'CONTRACT = {version}\n',
+        f'{BINDING_TESTS}/messages.py': _builder(label, version),
         'rust/crates/sdm-contract/src/lib.rs': (
+            f'//! bumps [`CONTRACT_VERSION`] on any change\n'
             f'pub const CONTRACT_VERSION: u32 = {version};\n'
         ),
         'rust/crates/sdm-contract/src/error.rs': (
@@ -505,13 +530,27 @@ def _scratch(tmp_path: pathlib.Path) -> pathlib.Path:
     return into
 
 
+#: A message builder's ``read()`` that turns a numeric ``accepted`` into a
+#: bool: what a candidate could write to pass an assertion it fails.
+NORMALIZING = """
+plain_read = read
+
+
+def read(control):
+    value = plain_read(control)
+    if 'result' in value and 'accepted' in value['result']:
+        value['result']['accepted'] = bool(value['result']['accepted'])
+    return value
+"""
+
+
 def test_the_suite_is_the_inputs_contract_and_its_own_tests(
     tmp_path: pathlib.Path,
 ) -> None:
-    """The inputs' four contract files at their repository paths, the own
-    tree's test files, conftest and shim beside them, and nothing of the
-    inputs' tests: an extra test in the inputs' ``test_binding.py`` and a
-    test file only the inputs hold stay out."""
+    """The inputs' three contract files at their repository paths, the own
+    tree's test files, conftest, shim and message builder beside them, and
+    nothing of the inputs' tests: an extra test in the inputs'
+    ``test_binding.py`` and a test file only the inputs hold stay out."""
     own = _tree(tmp_path / 'own', 19)
     inputs = _tree(tmp_path / 'inputs', 20)
     binding = inputs / BINDING_TESTS / 'test_binding.py'
@@ -527,34 +566,38 @@ def test_the_suite_is_the_inputs_contract_and_its_own_tests(
     assert tests.resolve().is_relative_to(into.resolve())
     root = tests.parents[3]
     assert tests == root / BINDING_TESTS
+    assert tuple(smoke.INPUTS) == INPUTS
     for path in INPUTS:
         assert (root / path).read_text() == (inputs / path).read_text(), path
     for name in JUDGES:
         assert (tests / name).read_text() == (
             own / BINDING_TESTS / name
         ).read_text(), name
+    assert (tests / 'messages.py').read_text() == _builder('own', 20)
     assert {p.name for p in tests.iterdir() if p.is_file()} == {
         *JUDGES,
         'messages.py',
     }
 
 
-def test_the_own_tree_s_messages_py_is_replaced_by_the_inputs(
+def test_the_own_tree_s_messages_py_is_kept_at_the_inputs_version(
     tmp_path: pathlib.Path,
 ) -> None:
+    """The suite's message builder is the own tree's, byte for byte but for
+    its ``CONTRACT`` line, which says the inputs' ``CONTRACT_VERSION``; the
+    own tree is left as it was."""
     own = _tree(tmp_path / 'own', 19)
     inputs = _tree(tmp_path / 'inputs', 20)
     (inputs / BINDING_TESTS / 'messages.py').write_text(
         "CONTRACT = 20\n# the inputs' builder\n"
     )
     tests = smoke.suite(own, inputs, _scratch(tmp_path))
-    assert (tests / 'messages.py').read_text() == (
-        "CONTRACT = 20\n# the inputs' builder\n"
+    staged = (tests / 'messages.py').read_bytes()
+    assert staged == _builder('own', 20).encode()
+    assert b"the inputs' builder" not in staged
+    assert (own / BINDING_TESTS / 'messages.py').read_text() == _builder(
+        'own', 19
     )
-    # The own tree is left as it was.
-    assert (
-        own / BINDING_TESTS / 'messages.py'
-    ).read_text() == 'CONTRACT = 19\n'
 
 
 @pytest.mark.parametrize('missing', INPUTS)
@@ -572,7 +615,8 @@ def test_an_input_missing_from_the_inputs_is_refused_by_name(
 def test_a_suite_at_n_judges_inputs_at_n_plus_1(tmp_path: pathlib.Path) -> None:
     """The control: the own tree at contract version N, the inputs at N+1.
     Where the binding's test reads the repository (``parents[4]`` of its
-    own file), the suite says N+1, and the test is the own tree's."""
+    own file), the suite says N+1; the test is the own tree's, and so is
+    its message builder, at ``CONTRACT = N+1``."""
     own = _tree(tmp_path / 'own', 19)
     inputs = _tree(tmp_path / 'inputs', 20)
     tests = smoke.suite(own, inputs, _scratch(tmp_path))
@@ -581,7 +625,10 @@ def test_a_suite_at_n_judges_inputs_at_n_plus_1(tmp_path: pathlib.Path) -> None:
     assert repo not in (own.resolve(), inputs.resolve())
     lib = (repo / 'rust/crates/sdm-contract/src/lib.rs').read_text()
     assert 'pub const CONTRACT_VERSION: u32 = 20;' in lib
-    assert (tests / 'messages.py').read_text() == 'CONTRACT = 20\n'
+    builder = (tests / 'messages.py').read_text()
+    assert builder == _builder('own', 20)
+    assert CONTRACT_LINE.findall(builder) == ['CONTRACT = 20']
+    assert '# the builder of own' in builder
     assert (
         test.read_text()
         == (own / BINDING_TESTS / 'test_binding.py').read_text()
@@ -592,8 +639,9 @@ def test_a_suite_at_n_judges_inputs_at_n_plus_1(tmp_path: pathlib.Path) -> None:
 def test_the_checkout_s_own_tests_judge_another_tree_s_inputs(
     tmp_path: pathlib.Path,
 ) -> None:
-    """The smoke's own checkout as the judge: its binding tests, byte for
-    byte, beside a fake tree's contract inputs."""
+    """The smoke's own checkout as the judge: its binding tests byte for
+    byte, and its message builder but for the ``CONTRACT`` line, beside a
+    fake tree's contract inputs."""
     inputs = _tree(tmp_path / 'inputs', 20)
     tests = smoke.suite(smoke.REPO, inputs, _scratch(tmp_path))
     own = smoke.REPO / BINDING_TESTS
@@ -607,9 +655,203 @@ def test_the_checkout_s_own_tests_judge_another_tree_s_inputs(
     assert set(JUDGES) <= set(judges)
     for name in judges:
         assert (tests / name).read_bytes() == (own / name).read_bytes(), name
+    assert (tests / 'messages.py').read_text() == _at(
+        (own / 'messages.py').read_text(), 20
+    )
     root = tests.parents[3]
     for path in INPUTS:
         assert (root / path).read_text() == (inputs / path).read_text(), path
+
+
+def test_a_normalizing_messages_py_in_the_inputs_changes_nothing(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Codex's seed: the inputs' message builder reads a numeric
+    ``accepted`` as a bool, and says another version than the inputs'
+    contract. The suite's builder is still the own tree's, but for its
+    ``CONTRACT`` line, set from the inputs' ``lib.rs``; and with no builder
+    in the inputs at all, the suite is the same."""
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    candidate = inputs / BINDING_TESTS / 'messages.py'
+    candidate.write_text(_builder('inputs', 21) + NORMALIZING)
+    into = tmp_path / 'first'
+    into.mkdir()
+    tests = smoke.suite(own, inputs, into)
+    staged = (tests / 'messages.py').read_text()
+    assert staged == _builder('own', 20)
+    assert 'bool(' not in staged and 'plain_read' not in staged
+    candidate.unlink()
+    again = tmp_path / 'second'
+    again.mkdir()
+    tests = smoke.suite(own, inputs, again)
+    assert (tests / 'messages.py').read_text() == _builder('own', 20)
+
+
+def _load(
+    monkeypatch: pytest.MonkeyPatch, name: str, path: pathlib.Path
+) -> Any:
+    """The module at `path`, imported as `name`; `sys.modules` restored by
+    `monkeypatch`."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _fake_native(
+    monkeypatch: pytest.MonkeyPatch, numeric: bool, seen: list[int]
+) -> None:
+    """``sdm_client._native`` as a stand-in whose ``Run`` validates a query
+    as the binding does, answering ``accepted`` as 0/1 when `numeric`, as
+    a bool otherwise; each start's contract version recorded in `seen`."""
+
+    class Run:
+        accepted: object
+
+        @classmethod
+        def start(cls, control: bytes, attachments: dict[int, bytes]) -> Run:
+            seen.append(json.loads(control)['contract'])
+            run = cls()
+            good = json.loads(attachments[1]) == (
+                'PREDICT users.age FOR EACH users.id'
+            )
+            run.accepted = int(good) if numeric else good
+            return run
+
+        def next(self) -> tuple[bytes, dict[int, bytes]]:
+            step = {
+                'message': 'step',
+                'step': 'done',
+                'result': {'op': 'validate_query', 'accepted': self.accepted},
+            }
+            return json.dumps(step).encode(), {}
+
+    native = types.ModuleType('sdm_client._native')
+    native.Run = Run  # type: ignore[attr-defined]
+    client = types.ModuleType('sdm_client')
+    client._native = native  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, 'sdm_client', client)
+    monkeypatch.setitem(sys.modules, 'sdm_client._native', native)
+
+
+def _normalizing_inputs(root: pathlib.Path, version: int) -> pathlib.Path:
+    """A copy of this checkout's contract inputs at `root`, its
+    ``CONTRACT_VERSION`` set to `version`, beside a message builder that
+    normalizes ``accepted``."""
+    for path in INPUTS:
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_bytes((smoke.REPO / path).read_bytes())
+    lib = root / 'rust/crates/sdm-contract/src/lib.rs'
+    text, count = re.subn(
+        r'pub const CONTRACT_VERSION: u32 = \d+;',
+        f'pub const CONTRACT_VERSION: u32 = {version};',
+        lib.read_text(),
+    )
+    assert count == 1
+    lib.write_text(text)
+    builder = root / BINDING_TESTS / 'messages.py'
+    builder.parent.mkdir(parents=True, exist_ok=True)
+    builder.write_text(
+        (smoke.REPO / BINDING_TESTS / 'messages.py').read_text() + NORMALIZING
+    )
+    return root
+
+
+def _checkpoint_validates(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, numeric: bool
+) -> tuple[Any, list[int], int]:
+    """This checkout's ``test_a_query_is_validated_through_a_run`` as the
+    suite stages it, over inputs whose builder normalizes, with a fake
+    native module; with the contract version the inputs say."""
+    source = (smoke.REPO / 'rust/crates/sdm-contract/src/lib.rs').read_text()
+    found = re.search(r'pub const CONTRACT_VERSION: u32 = (\d+);', source)
+    assert found
+    version = int(found.group(1)) + 1
+    inputs = _normalizing_inputs(tmp_path / 'inputs', version)
+    tests = smoke.suite(smoke.REPO, inputs, _scratch(tmp_path))
+    seen: list[int] = []
+    _fake_native(monkeypatch, numeric, seen)
+    _load(monkeypatch, 'messages', tests / 'messages.py')
+    binding = _load(
+        monkeypatch, 'wheel_smoke_seeded_binding', tests / 'test_binding.py'
+    )
+    return binding.test_a_query_is_validated_through_a_run, seen, version
+
+
+def test_the_checkpoint_refuses_a_numeric_accepted_whatever_the_inputs_say(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex's seed, executed: a binding answering ``accepted`` as 0/1
+    fails the checkpoint's own, unchanged assertion, though the inputs'
+    message builder would read it as a bool."""
+    check, seen, version = _checkpoint_validates(tmp_path, monkeypatch, True)
+    with pytest.raises(AssertionError):
+        check()
+    assert seen and set(seen) == {version}
+
+
+def test_the_checkpoint_takes_a_bool_accepted_from_the_same_suite(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seed's control: the same suite and fake, answering a bool,
+    passes, so the refusal above is the numeric ``accepted``'s; and the
+    checkpoint's builder writes the inputs' version into each start."""
+    check, seen, version = _checkpoint_validates(tmp_path, monkeypatch, False)
+    check()
+    assert seen == [version, version]
+
+
+#: Each ``lib.rs`` refused: none or more than one ``CONTRACT_VERSION``.
+LIB_FAULTS = {
+    'no version': '//! bumps [`CONTRACT_VERSION`] on any change\n',
+    'two versions': (
+        'pub const CONTRACT_VERSION: u32 = 20;\n'
+        'pub const CONTRACT_VERSION: u32 = 21;\n'
+    ),
+    'the version twice': (
+        'pub const CONTRACT_VERSION: u32 = 20;\n'
+        'pub const CONTRACT_VERSION: u32 = 20;\n'
+    ),
+}
+
+
+@pytest.mark.parametrize('fault', list(LIB_FAULTS))
+def test_the_inputs_lib_rs_without_one_version_is_refused_by_name(
+    tmp_path: pathlib.Path, fault: str
+) -> None:
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    (inputs / 'rust/crates/sdm-contract/src/lib.rs').write_text(
+        LIB_FAULTS[fault]
+    )
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.suite(own, inputs, _scratch(tmp_path))
+    assert 'lib.rs' in str(refused.value)
+
+
+#: Each own ``messages.py`` refused: none or more than one line
+#: ``CONTRACT = <digits>``.
+BUILDER_FAULTS = {
+    'no contract line': '# the builder of own\nimport json\n',
+    'an annotated one only': 'CONTRACT: int = 19\n',
+    'two contract lines': 'CONTRACT = 19\nimport json\nCONTRACT = 18\n',
+    'the line twice': 'CONTRACT = 19\nCONTRACT = 19\n',
+}
+
+
+@pytest.mark.parametrize('fault', list(BUILDER_FAULTS))
+def test_the_own_messages_py_without_one_contract_line_is_refused_by_name(
+    tmp_path: pathlib.Path, fault: str
+) -> None:
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    (own / BINDING_TESTS / 'messages.py').write_text(BUILDER_FAULTS[fault])
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.suite(own, inputs, _scratch(tmp_path))
+    assert 'messages.py' in str(refused.value)
 
 
 SHA = '0123456789abcdef0123456789abcdef01234567'
