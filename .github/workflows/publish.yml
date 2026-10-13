@@ -241,7 +241,7 @@ jobs:
   # Together, declining means nothing was created at all. A publish that is
   # approved and then fails does leave the release standing, which is
   # deliberate: Kitmaker may already have fetched some of those assets, and
-  # `kitmaker-summary.txt` says what is live. The cost is the Kitmaker token
+  # `kitmaker-summary.txt` records what PyPI holds for each project. The cost is the Kitmaker token
   # sharing a job with `contents: write`.
   release:
     needs: build
@@ -322,6 +322,9 @@ jobs:
           test -s assets.tsv
           python3 .github/workflows/kitmaker_release.py
 
-      - name: The release notes name what was published
+      # Into the job log, so a failed release says where it got to without
+      # anyone opening an artifact. The GitHub Release body is the changelog
+      # entry and is not touched.
+      - name: Print what each project ended up with
         if: always()
         run: cat kitmaker-summary.txt 2>/dev/null || true

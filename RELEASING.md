@@ -121,21 +121,23 @@ GitHub Release does not match. "Re-run failed jobs" reuses the original
 `distributions` artifact, which is what you want.
 
 `kitmaker-summary.txt`, printed at the end of the job, is the record to read
-before doing anything else. It names each of the five projects and says what
-**PyPI** holds for this version, not what Portal reported: Portal's batches are
-not atomic, so a failure can follow files that already published, and a refusal
-is not proof that nothing did. Only the index knows.
+before doing anything else. It names each of the five projects. For any whose upload was requested it says
+what **PyPI** holds for this version, not what Portal reported: Portal's batches
+are not atomic, so a failure can follow files that already published, and a
+refusal is not proof that nothing did. Only the index knows. The other states
+describe what this run did, since the index has nothing to say about a project
+it was never offered.
 
 | The summary says | What it means |
 | --- | --- |
 | `published` | Every file is on PyPI with the bytes this run built. Nothing to do. |
 | `already published before this run` | It was there before this run started. |
-| `not reached` | Nothing was submitted for it. |
+| `not reached` | No upload was requested for it. A dry run may still have run. |
 | `not on PyPI` | The index reports nothing for this version. Usually means nothing landed, but see the caveat below. |
 | `PARTLY on PyPI, missing [...]` | Some files landed. A re-run finishes the rest. |
 | `on PyPI with UNEXPECTED bytes for [...]` | Needs a person. |
 | `on PyPI with files this run did not build` | Needs a person. |
-| `UNKNOWN, could not ask PyPI` | The summary could not reach the index. Look by hand. |
+| `UNKNOWN, could not ask PyPI` | The index could not be reached, or did not answer sensibly. Look by hand. |
 
 A re-run is safe for the first five states and needs a person for the last
 three. **The caveat: PyPI's JSON endpoint is cached**, so a project published

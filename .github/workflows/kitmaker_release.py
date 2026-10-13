@@ -309,14 +309,16 @@ def pypi_state(name: str, version: str, expected: dict[str, str]) -> str:
     is not proof that nothing did. Only the index knows, so the summary asks it
     rather than repeating what Portal said.
 
-    Every failure is caught, including a malformed response. This runs from a
-    ``finally`` while an exception is already on its way out, so raising here
+    Every failure is caught, a malformed answer and a `SystemExit` from the
+    retry loop included: `SystemExit` is a `BaseException`, so catching
+    `Exception` alone would miss the one this module raises most. This runs from
+    a ``finally`` while an exception is already on its way out, and raising here
     would replace the reason the release stopped with the reason the summary
     could not be written, and leave no summary either.
     """
     try:
         held = on_pypi(name, version)
-    except Exception as error:  # noqa: BLE001 - see the docstring
+    except (Exception, SystemExit) as error:  # noqa: BLE001 - see docstring
         return f'UNKNOWN, could not ask PyPI ({error})'
     if held is None:
         return 'not on PyPI'
@@ -358,12 +360,11 @@ def write_summary(
             state = 'not reached'
         lines.append(f'{name}: {state}')
     text = '\n'.join(lines) + '\n'
-    print(text, end='')
     try:
         pathlib.Path('kitmaker-summary.txt').write_text(text)
-    except OSError as error:
-        # Printed above either way, and the job log is the fallback record.
+    except (Exception, SystemExit) as error:  # noqa: BLE001 - see docstring
         print(f'could not write kitmaker-summary.txt: {error}')
+    print(text, end='')
 
 
 def main() -> None:

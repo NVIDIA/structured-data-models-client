@@ -12,10 +12,12 @@ properties of the workflow job that a reviewer had to notice by eye.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import os
 import pathlib
+import re
 import sys
 
 import pytest
@@ -444,8 +446,18 @@ def test_distributions_that_disagree_on_the_version_are_refused(
         kitmaker.main()
 
 
-def test_the_summary_survives_pypi_answering_with_nonsense(
-    kitmaker, release, monkeypatch
+@pytest.mark.parametrize(
+    'failure',
+    [
+        ValueError('Expecting value: line 1 column 1 (char 0)'),
+        # `SystemExit` is a `BaseException`, so `except Exception` misses it,
+        # and it is what every read in this module raises when it gives up.
+        SystemExit('PyPI structured-data-models-api 1.0.0: timed out'),
+    ],
+    ids=['malformed answer', 'read gave up'],
+)
+def test_the_summary_survives_pypi_failing(
+    kitmaker, release, monkeypatch, failure
 ):
     """It runs from a finally while an exception is already on its way out, so
     raising here would replace the reason the release stopped and leave no
@@ -454,7 +466,7 @@ def test_the_summary_survives_pypi_answering_with_nonsense(
     summary = release()
 
     def rubbish(name, version):
-        raise ValueError('Expecting value: line 1 column 1 (char 0)')
+        raise failure
 
     def stop(uuid, what):
         # Only the publish, so pass one completes and the project is one the
@@ -474,21 +486,79 @@ def test_the_summary_survives_pypi_answering_with_nonsense(
     )
 
 
-def test_every_state_the_summary_can_print_is_documented(kitmaker):
+def emitted_states():
+    """Every state the summary can print, read off the source rather than
+    listed here, so a new one cannot be added without this noticing."""
+    tree = ast.parse(SCRIPT.read_text())
+    functions = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+    }
+
+    def literal(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.JoinedStr):
+            head = node.values[0]
+            if isinstance(head, ast.Constant):
+                return head.value
+        return None
+
+    states = set()
+    for node in ast.walk(functions['pypi_state']):
+        if isinstance(node, ast.Return) and node.value is not None:
+            phrase = literal(node.value)
+            assert phrase, (
+                f'pypi_state returns something unreadable: {node.lineno}'
+            )
+            states.add(phrase)
+    for node in ast.walk(functions['write_summary']):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == 'state' for t in node.targets
+        ):
+            phrase = literal(node.value)
+            if phrase:
+                states.add(phrase)
+    return states
+
+
+def documented_states():
+    """The first column of the state table in RELEASING.md."""
+    rows = re.findall(
+        r'^\| `([^`]+)` \|', (ROOT / 'RELEASING.md').read_text(), re.MULTILINE
+    )
+    return set(rows)
+
+
+def test_every_state_the_summary_can_print_is_documented():
     """RELEASING.md tells a releaser what to do per state, which only works if
-    it lists them all."""
-    releasing = (ROOT / 'RELEASING.md').read_text()
-    source = SCRIPT.read_text()
-    phrases = [
-        'published',
-        'already published before this run',
-        'not reached',
-        'not on PyPI',
-        'PARTLY on PyPI, missing ',
-        'on PyPI with UNEXPECTED bytes for ',
-        'on PyPI with files this run did not build',
-        'UNKNOWN, could not ask PyPI',
-    ]
-    for phrase in phrases:
-        assert phrase in source, f'{phrase!r} is not a state the script emits'
-        assert phrase.rstrip() in releasing, f'{phrase!r} is undocumented'
+    it lists them all, and misleads if it lists one that cannot happen."""
+    emitted = emitted_states()
+    documented = documented_states()
+    assert len(emitted) >= 8, f'only found {emitted}: the reader is broken'
+
+    def normalise(phrase):
+        """The fixed part of a state, with whatever punctuation introduces its
+        variable tail removed."""
+        return (
+            phrase.rstrip().rstrip(':(,').rstrip().removesuffix(' for').rstrip()
+        )
+
+    undocumented = {
+        state
+        for state in emitted
+        if not any(normalise(state) in row for row in documented)
+    }
+    assert not undocumented, (
+        f'states RELEASING.md does not explain: {undocumented}'
+    )
+
+    unreachable = {
+        row
+        for row in documented
+        if not any(normalise(state) in row for state in emitted)
+    }
+    assert not unreachable, (
+        f'RELEASING.md documents states that cannot happen: {unreachable}'
+    )
