@@ -17,6 +17,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from decimal import Decimal
@@ -211,6 +212,34 @@ def test_every_committed_case_validates_with_a_unique_id() -> None:
     assert {case['expect']['outcome'] for case in s0} == {'success', 'refusal'}
 
 
+def _holds_packed_date(query: str) -> bool:
+    r"""Whether ``query`` holds a date literal with a run of five digits or
+    more (D8): a ``DATE`` token, three runs of digits joined by one of
+    ``/``, ``-`` or ``.``, with such a run, or followed by a ``TIME`` token,
+    three runs joined by ``:``, with one."""
+    words = re.split(r'[\s(),]', query)
+
+    def runs(word: str, separators: str) -> list[int] | None:
+        sep = next((c for c in word if c in separators), None)
+        if sep is None:
+            return None
+        parts = word.split(sep)
+        if len(parts) != 3 or not all(
+            part.isascii() and part.isdigit() for part in parts
+        ):
+            return None
+        return [len(part) for part in parts]
+
+    for i, word in enumerate(words):
+        date = runs(word, '/-.')
+        if date is None:
+            continue
+        time = runs(words[i + 1], ':') if i + 1 < len(words) else None
+        if any(n >= 5 for n in date + (time or [])):
+            return True
+    return False
+
+
 def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     # T1.12's boundary cases, held to the shapes their `why` states.
     cases = {
@@ -231,19 +260,27 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     # 461 in the runner on Python 3.12) and the core's MAX_DEPTH (999).
     deepest = pql('deepest')
     assert deepest.count('(' * 400) == 1 and '(' * 401 not in deepest
-    # The two date cases DT-9 held back stay diagnostic (a changed case
-    # file needs an approved entry), and from T1.6b each has an acceptance
-    # twin of the same input: D8's packed date and DT-9's long field.
-    dated = [case for case in cases.values() if case.get('register') == 'DT-9']
-    assert len(dated) == 2
-    assert {case['status'] for case in dated} == {'diagnostic'}
-    for case in dated:
-        name = case['id'].removeprefix('s0.boundary.')
-        twin = cases[f's0.accept.{name}']
-        assert twin['status'] == 'acceptance' and 'register' not in twin
-        assert twin['input'] == case['input'], name
-        assert twin['core'] == case['core'], name
-        assert twin['expect'] == {'outcome': 'success', 'stage': 'materialize'}
+    # The two date cases with a run of five digits or more (D8's packed
+    # date and DT-9's long field) stay diagnostic (a changed case file
+    # needs an approved entry). From T1.6c the core refuses such a literal
+    # by name where the reference reads it, so no acceptance case may
+    # expect it to succeed: each S0 case holding one is diagnostic, under a
+    # register entry, or expects the refusal.
+    packed = {
+        case['id']: case
+        for case in cases.values()
+        if _holds_packed_date(case['input']['pql'])
+    }
+    assert {
+        's0.boundary.date-packed',
+        's0.boundary.date-long-field',
+    } <= set(packed)
+    for case in packed.values():
+        if case['status'] == 'diagnostic':
+            assert case.get('register'), case['id']
+        else:
+            assert case['expect']['outcome'] == 'refusal', case['id']
+            assert case['expect'].get('code') == 'INVALID_REQUEST', case['id']
     # Escapes as written in the query text, a backslash and its letters: a
     # \\u escape and no surrogate in the accepted case; an escaped pair and
     # a lone escaped surrogate in the two cases register PQL-1 holds.
@@ -257,7 +294,9 @@ def test_the_s0_boundary_cases_sit_on_their_boundaries() -> None:
     register = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
     status = {entry['id']: entry['status'] for entry in register['entries']}
     for case in cases.values():
-        if case['status'] == 'diagnostic' and case.get('register') != 'DT-9':
+        if case['id'] in packed:
+            assert case.get('register', 'none') in status, case['id']
+        elif case['status'] == 'diagnostic':
             assert status[case['register']] == 'proposed', case['id']
     assert {
         case['id'] for case in cases.values() if case.get('register') == 'PQL-2'

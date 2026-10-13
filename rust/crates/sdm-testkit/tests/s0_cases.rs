@@ -6,11 +6,52 @@
 //! runs through `HostRun` and meets its expected outcome and code. CI's
 //! `rust-test` job also runs `sdm-contract-run` over them and compares its
 //! observations with the reference's (`scripts/rust_core/compare.py`).
+//!
+//! From T1.6c a query with a date literal with a run of five digits or more
+//! (D8) ends `validate_query` with the core's refusal by name,
+//! `INVALID_REQUEST` naming `operation` `validate_query` and `rule`
+//! `date_literal_packed`, where the reference reads the literal.
 
 use std::path::PathBuf;
 
 use sdm_testkit::case::{self, Status, Until};
 use sdm_testkit::host::{self, Answer};
+
+/// Whether `query` holds a date literal with a run of five digits or more
+/// (D8): a `DATE` token, three runs of digits joined by one of `/`, `-` or
+/// `.`, with such a run, or followed by a `TIME` token, three runs joined
+/// by `:`, with one.
+fn holds_packed_date(query: &str) -> bool {
+    let words: Vec<&str> = query
+        .split(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | ','))
+        .collect();
+    let runs = |word: &str, separators: &[char]| -> Option<Vec<usize>> {
+        let sep = word.chars().find(|c| separators.contains(c))?;
+        let parts: Vec<&str> = word.split(sep).collect();
+        let digits = |p: &&str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+        (parts.len() == 3 && parts.iter().all(digits))
+            .then(|| parts.iter().map(|p| p.len()).collect())
+    };
+    words.iter().enumerate().any(|(i, word)| {
+        let Some(date) = runs(word, &['/', '-', '.']) else {
+            return false;
+        };
+        let time = words.get(i + 1).and_then(|next| runs(next, &[':']));
+        date.iter().chain(time.iter().flatten()).any(|n| *n >= 5)
+    })
+}
+
+/// Whether `answer` is the core's refusal by name of a D8 literal (T1.6c).
+fn is_packed_refusal(answer: &Answer) -> bool {
+    matches!(
+        answer,
+        Answer::Error { kind, code, fields }
+            if kind == "invalid_request"
+                && code == "INVALID_REQUEST"
+                && fields.get("operation").map(String::as_str) == Some("validate_query")
+                && fields.get("rule").map(String::as_str) == Some("date_literal_packed")
+    )
+}
 
 fn cases_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/cases")
@@ -29,20 +70,34 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
         .collect();
     assert!(s0.len() >= 2, "the accepted and the refused S0 case");
     let mut answers = Vec::new();
+    let mut packed = 0;
     for each in s0 {
         let case = &each.case;
         assert_eq!(case.until, Until::Materialize);
         let observed = host::run(case, &bases()).unwrap();
         assert_eq!(observed.operations, ["validate_query"]);
-        if case.status == Status::Diagnostic {
+        // T1.6c: a case whose query holds a D8 literal is refused by name,
+        // whatever its status or register entry; an acceptance case's own
+        // expectation must then be that refusal too.
+        if holds_packed_date(&case.input.pql) {
+            packed += 1;
+            assert!(
+                is_packed_refusal(&observed.answer),
+                "{}: {:?}",
+                case.id,
+                observed.answer
+            );
+            if case.status == Status::Diagnostic {
+                continue;
+            }
+        } else if case.status == Status::Diagnostic {
             // Gating nothing against the reference, but held to the core's
-            // answer its register entry records, so a drift fails here: the
-            // D8 and DT-9 cases, which the core reads from T1.6b (DT-9
-            // rejected; each has an acceptance twin), escaped surrogates
-            // (PQL-1) and the core's deepest query (PQL-2), which the core
-            // accepts where the reference refuses or raises.
+            // answer its register entry records, so a drift fails here:
+            // escaped surrogates (PQL-1) and the core's deepest query
+            // (PQL-2), which the core accepts where the reference refuses or
+            // raises.
             let today = match case.register.as_deref() {
-                Some("DT-9" | "PQL-1" | "PQL-2") => ("success", None),
+                Some("PQL-1" | "PQL-2") => ("success", None),
                 other => panic!("{}: a diagnostic S0 case under {other:?}", case.id),
             };
             assert_eq!(observed.answer.outcome(), today, "{}", case.id);
@@ -55,6 +110,79 @@ fn the_s0_cases_meet_their_expectation_on_the_pure_rust_host() {
     }
     assert!(answers.contains(&Answer::Validated(true)));
     assert!(answers.contains(&Answer::Validated(false)));
+    // The D8 cases of T1.12's corpus (`s0.boundary.date-packed` and
+    // `s0.boundary.date-long-field`) are still there to be refused.
+    assert!(packed >= 2, "{packed} S0 cases with a packed date");
+}
+
+/// The S0 case `s0.refuse.date-impossible`, over the shop base, with `pql`
+/// in place of its query.
+fn with_query(pql: &str) -> case::Case {
+    let mut loaded = case::load(&[cases_dir()]).unwrap();
+    let at = loaded
+        .iter()
+        .position(|each| each.case.id == "s0.refuse.date-impossible")
+        .unwrap();
+    let mut case = loaded.remove(at).case;
+    case.input.pql = pql.to_owned();
+    case
+}
+
+/// T1.6c brief, Tests: "a D8 literal is refused by name on ... rust-host,
+/// while D1 to D7 and D9 literals still read as before". `validate_query`
+/// through `HostRun` ends with the core's error for each D8 shape (packed
+/// first fields of six, eight, twelve and fourteen digits, a long field in
+/// the time, a long zero-padded field, ones the reference refuses, one in
+/// an array); a plain date, a time of day, a two-digit year, the year 0
+/// and a day-first literal are accepted, and D9's refused with the
+/// diagnostic (`Validated(false)`), not the named rule.
+#[test]
+fn a_packed_date_literal_is_refused_by_name_on_the_pure_rust_host() {
+    let filtered = |condition: &str| {
+        format!("PREDICT COUNT(orders.* WHERE {condition}, 0, 30, days) FOR EACH users.user_id")
+    };
+    for literal in [
+        "230203-06-09",
+        "20240101-01-01",
+        "202401011230-1-1",
+        "20240101123456-1-1",
+        "20240101/00/123456",
+        "2024-01-01 00000:00:00",
+        "00001/1/2",
+        "10000-01-01",
+        "12345-1-1",
+    ] {
+        let query = filtered(&format!("orders.ts > {literal}"));
+        assert!(holds_packed_date(&query), "{literal}");
+        let observed = host::run(&with_query(&query), &bases()).unwrap();
+        assert!(
+            is_packed_refusal(&observed.answer),
+            "{literal}: {:?}",
+            observed.answer
+        );
+        assert_eq!(
+            observed.answer.outcome(),
+            ("refusal", Some("INVALID_REQUEST".to_owned()))
+        );
+    }
+    let in_array = filtered("orders.ts IN (2024-01-01, 20240101-01-01)");
+    let observed = host::run(&with_query(&in_array), &bases()).unwrap();
+    assert!(is_packed_refusal(&observed.answer), "{:?}", observed.answer);
+    for (literal, accepted) in [
+        ("2024-01-31", true),
+        ("2024-01-31 23:59:59", true),
+        ("1/2/24", true),
+        ("0000-01-01", true),
+        ("13/01/2024", true),
+        ("2024-01-01 0000:00:00", true),
+        ("2023-02-29", false),
+        ("123-4-567", false),
+    ] {
+        let query = filtered(&format!("orders.ts > {literal}"));
+        assert!(!holds_packed_date(&query), "{literal}");
+        let observed = host::run(&with_query(&query), &bases()).unwrap();
+        assert_eq!(observed.answer, Answer::Validated(accepted), "{literal}");
+    }
 }
 
 /// The accepted S0 case as JSON, for a test to change.

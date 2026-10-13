@@ -314,17 +314,181 @@ def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
     assert raised.value.__suppress_context__
 
 
-def test_a_date_dt9_held_back_is_accepted_on_the_core(core: list[str]) -> None:
-    # Register DT-9 (rejected at T1.6b): a packed date and a long field the
-    # interim reader answered with UNSUPPORTED_REQUEST are read by D8, and
-    # the old validator, the shadow check, agrees.
-    for literal in ('20240101-01-01', '2024-01-01 00000:00:00'):
-        text = (
-            f'PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, '
-            'days) FOR EACH users.user_id'
+#: Date literals with a run of five digits or more (D8), which the
+#: reference reads through dateutil or refuses: a packed first field of
+#: six, eight, twelve and fourteen digits, a long field in the time of day
+#: (register DT-9's two queries are the second and the sixth), a long
+#: zero-padded field, and two the reference refuses.
+PACKED_READ = (
+    '230203-06-09',
+    '20240101-01-01',
+    '202401011230-1-1',
+    '20240101123456-1-1',
+    '20240101/00/123456',
+    '2024-01-01 00000:00:00',
+    '00001/1/2',
+)
+PACKED_REFUSED = ('10000-01-01', '12345-1-1')
+
+
+def _filtered(condition: str) -> str:
+    return (
+        f'PREDICT COUNT(orders.* WHERE {condition}, 0, 30, days) '
+        'FOR EACH users.user_id'
+    )
+
+
+def _assert_refused_as_packed(
+    refused: StructuredDataError, literal: str
+) -> None:
+    r"""T1.6c's refusal by name: ``INVALID_REQUEST`` naming ``operation``
+    ``validate_query`` and ``rule`` ``date_literal_packed``, with the
+    literal's place, and never its text."""
+    assert type(refused) is StructuredDataError
+    assert refused.code == 'INVALID_REQUEST'
+    assert refused.details['rule'] == 'date_literal_packed', refused.details
+    assert refused.details['operation'] == 'validate_query'
+    for name in ('start_row', 'start_col', 'end_row', 'end_col'):
+        assert isinstance(refused.details[name], int), (name, refused.details)
+    assert literal not in str(refused)
+    assert literal not in repr(refused.details)
+
+
+@pytest.mark.parametrize('literal', PACKED_READ + PACKED_REFUSED)
+def test_a_packed_date_literal_is_refused_by_name_on_the_core(
+    core: list[str], literal: str
+) -> None:
+    # T1.6c brief, Tests: a D8 literal is refused by name on python-core,
+    # through materialize and the validation it runs (register DT-9's two
+    # queries included: no longer read, as T1.6b read them), where the
+    # reference reads it or refuses it as a query.
+    text = _filtered(f'orders.ts > {literal}')
+    schema = _orders_schema()
+    with pytest.raises(StructuredDataError) as validated:
+        PredictiveQuery(text, schema)._resolve(RELATIONAL)
+    _assert_refused_as_packed(validated.value, literal)
+    assert validated.value.details['start_row'] == 1
+    assert validated.value.details['start_col'] == 41
+    with pytest.raises(StructuredDataError) as materialized:
+        PredictiveQuery(text, schema).materialize(indices=[1])
+    _assert_refused_as_packed(materialized.value, literal)
+    assert core == [text, text]
+
+
+def test_a_packed_date_in_an_array_is_refused_by_name_on_the_core(
+    core: list[str],
+) -> None:
+    text = _filtered('orders.ts IN (2024-01-01, 20240101-01-01)')
+    with pytest.raises(StructuredDataError) as refused:
+        PredictiveQuery(text, _orders_schema()).materialize(indices=[1])
+    _assert_refused_as_packed(refused.value, '20240101-01-01')
+
+
+def test_the_old_route_still_reads_a_packed_date_literal() -> None:
+    # T1.6c: python-old is unchanged. Its validator reads every D8 literal
+    # the reference reads and refuses the others as a query, never by the
+    # core's rule; two of them it materializes.
+    schema = _orders_schema()
+    for literal in PACKED_READ:
+        PredictiveQuery(_filtered(f'orders.ts > {literal}'), schema)._resolve(
+            RELATIONAL
         )
-        PredictiveQuery(text, _orders_schema())._resolve(RELATIONAL)
-        assert core[-1] == text
+    for literal in PACKED_REFUSED:
+        with pytest.raises(StructuredDataError) as refused:
+            PredictiveQuery(
+                _filtered(f'orders.ts > {literal}'), schema
+            )._resolve(RELATIONAL)
+        assert refused.value.code == 'INVALID_REQUEST'
+        assert 'rule' not in refused.value.details
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        for literal in ('20240101/00/123456', '2024-01-01 00000:00:00'):
+            request = PredictiveQuery(
+                _filtered(f'orders.ts > {literal}'), schema
+            ).materialize(indices=[1])
+            assert type(request) is Request
+
+
+@pytest.mark.parametrize(
+    ('literal', 'accepted'),
+    [
+        ('2024-01-31', True),
+        ('2024-01-31 23:59:59', True),
+        ('1/2/24', True),
+        ('0000-01-01', True),
+        ('0001/1/2', True),
+        ('2024-01-01 0000:00:00', True),
+        ('13/01/2024', True),
+        ('2023-02-29', False),
+        ('123-4-567', False),
+    ],
+)
+def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
+    core: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    literal: str,
+    accepted: bool,
+) -> None:
+    # T1.6c brief: D1 to D7 and D9 unchanged. Each answers on the core as
+    # on the old route: read and accepted, or (D9) refused as a query,
+    # INVALID_REQUEST with no rule named.
+    text = _filtered(f'orders.ts > {literal}')
+    schema = _orders_schema()
+    answers = []
+    for route in ('core', 'old'):
+        if route == 'old':
+            monkeypatch.delenv(_routing.ENVIRONMENT)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            try:
+                PredictiveQuery(text, schema)._resolve(RELATIONAL)
+                answers.append(None)
+            except StructuredDataError as refused:
+                assert 'rule' not in refused.details, refused.details
+                answers.append(refused.code)
+    assert core == [text]
+    want = [None, None] if accepted else ['INVALID_REQUEST', 'INVALID_REQUEST']
+    assert answers == want
+
+
+def test_an_earlier_refusal_wins_over_a_packed_date_on_the_core(
+    core: list[str],
+) -> None:
+    # T1.6c: node order decides. A D9 literal built first refuses the query
+    # as on the old route; a D8 literal built first ends the parse, by name.
+    schema = _orders_schema()
+    with pytest.raises(StructuredDataError) as refused:
+        PredictiveQuery(
+            _filtered('orders.ts > 2023-02-29 AND orders.ts < 20240101-01-01'),
+            schema,
+        )._resolve(RELATIONAL)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'rule' not in refused.value.details
+    with pytest.raises(StructuredDataError) as packed:
+        PredictiveQuery(
+            _filtered('orders.ts > 20240101-01-01 AND orders.ts < 2023-02-29'),
+            schema,
+        )._resolve(RELATIONAL)
+    _assert_refused_as_packed(packed.value, '20240101-01-01')
+
+
+def test_a_packed_date_needs_no_local_zone_on_the_core(
+    core: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T1.6c: a D8 literal is refused before it is read, so a local zone the
+    # run cannot read is never asked for, even for a six-digit packed date,
+    # whose two-digit year the reference places.
+    from sdm_client._rust import facts
+
+    monkeypatch.setattr(
+        facts, 'local_zone', lambda *_: {'iana': 'Mars/Olympus'}
+    )
+    with pytest.raises(StructuredDataError) as refused:
+        PredictiveQuery(
+            _filtered('orders.ts > 760101-01-01'), _orders_schema()
+        )._resolve(RELATIONAL)
+    _assert_refused_as_packed(refused.value, '760101-01-01')
+    assert 'field' not in refused.value.details
 
 
 def _shown(text: str, schema: Any) -> tuple[list[str], str | None]:
