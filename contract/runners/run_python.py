@@ -608,16 +608,28 @@ def _result_rows(stream: Any) -> dict[str, Any]:
     its columns' names and types, and its rows in order, each cell an
     integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
     hex digits, so no text form of a float is compared) or text
-    (``utf8``)."""
+    (``utf8``); from T1.28b a boolean (``bool``) and a class's
+    probabilities (``map``: each class and its probability's bits, in
+    order)."""
     import pyarrow as pa
 
     table = pa.RecordBatchReader._import_from_c_capsule(
         stream.__arrow_c_stream__()
     ).read_all()
-    kinds = {pa.int64(): 'int64', pa.float64(): 'float64', pa.utf8(): 'utf8'}
+    kinds = {
+        pa.int64(): 'int64',
+        pa.float64(): 'float64',
+        pa.utf8(): 'utf8',
+        pa.bool_(): 'bool',
+    }
+
+    def kind_of(field: Any) -> str:
+        if pa.types.is_map(field.type):
+            return 'map'
+        return kinds.get(field.type, 'other')
+
     columns = [
-        {'name': field.name, 'type': kinds.get(field.type, 'other')}
-        for field in table.schema
+        {'name': field.name, 'type': kind_of(field)} for field in table.schema
     ]
 
     def cell(kind: str, value: Any) -> Any:
@@ -629,6 +641,12 @@ def _result_rows(stream: Any) -> dict[str, Any]:
             return {'f64_bits': struct.pack('>d', value).hex()}
         if kind == 'utf8':
             return {'utf8': value}
+        if kind == 'bool':
+            return {'bool': value}
+        if kind == 'map':
+            return {
+                'map': [[key, struct.pack('>d', p).hex()] for key, p in value]
+            }
         raise RunnerFailure(
             'a result column of a type this runner does not record'
         )

@@ -7,44 +7,9 @@
     "base.regression",
     "feature.bool"
   ],
-  "reading": "The first refusal of each probe; each case of the baseline family probed as it is. base.regression and feature.bool reach predict's result on both runners; base.binary and base.multiclass have their labels (T1.27) and, from T1.28a, their payloads, held to the reference's on both core hosts; python-core then sends the classification's call and is refused at the answer's layout, and rust-host, which asks a regression's outputs of every case, at the outputs (both T1.28b's).",
+  "reading": "The first refusal of each probe; each case of the baseline family probed as it is. base.regression and feature.bool reach predict's result on both runners; base.binary and base.multiclass have their labels (T1.27), their payloads (T1.28a) and, from T1.28b, their answers laid out as the reference's (a boolean and a text prediction), reaching predict's result on both runners: rust-host asks the task's default outputs, as the client does when its caller names none.",
   "gaps": [],
-  "entries": [
-    {
-      "id": "predict/problem_type",
-      "operation": "predict",
-      "rule": "problem_type",
-      "owner": "T1.28b",
-      "register": "P1B-4",
-      "where": "rust/crates/sdm-request/src/predict.rs:124",
-      "why": "From T1.28a the core materializes both classification tasks as the reference does (the classes, their order and the positive class; base.multiclass's static target's column left out and the context that answers the question taken out), held to the reference's payload on both core hosts (the client's test_t128a_payload_rules.py, sdm-testkit's tests/t128a_payload_rules.rs), and writes the classification's call; the answer's layout, a classification's boolean and text predictions, is T1.28b's",
-      "observed": {
-        "python-core": {
-          "stage": "predict",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "predict",
-          "rule": "problem_type"
-        }
-      }
-    },
-    {
-      "id": "predict/outputs",
-      "operation": "predict",
-      "rule": "outputs",
-      "owner": "T1.28b",
-      "register": "P1B-4",
-      "where": "rust/crates/sdm-request/src/predict.rs:163",
-      "why": "rust-host asks a regression's default outputs of every case, the case format naming none; a classification's default outputs (prediction and probabilities) are the client's choice (SDMClient._prepare's default outputs, a ledger row of T1.28b's), so the core refuses the regression's for a classification by name where python-core asks the task's own and reaches the answer's layout",
-      "observed": {
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "predict",
-          "rule": "outputs"
-        }
-      }
-    }
-  ],
+  "entries": [],
   "probes": [
     {
       "id": "base.binary",
@@ -83,7 +48,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "predict/problem_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -132,7 +97,7 @@
           }
         },
         "until": "predict",
-        "expect": "predict/outputs"
+        "expect": "success"
       }
     },
     {
@@ -171,7 +136,7 @@
             ]
           }
         },
-        "expect": "predict/problem_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -215,7 +180,7 @@
           }
         },
         "until": "predict",
-        "expect": "predict/outputs"
+        "expect": "success"
       }
     },
     {

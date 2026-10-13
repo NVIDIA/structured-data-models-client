@@ -5,8 +5,8 @@
   "gaps": [
     {
       "input": "materialize's inference_config",
-      "contract": "materialize's input carries the call's option values, inference_config among them, from contract version 19 (Materialize.values, T1.28a), which python-core sends; the case format's core input for materialize carries none, so rust-host has no probe that names it; T1.28b, which completes the call's inference options on predict, owner to confirm",
-      "owner": "T1.28b"
+      "contract": "materialize's input carries the call's option values, inference_config among them, from contract version 19 (Materialize.values, T1.28a), which python-core sends; the case format's core input for materialize carries none, so rust-host has no probe that names it; carrying them is a new case-format key, with its shared accept and refuse vectors, which T1.28b left to T1.32f, the package that commits the AdventureWorks questions as cases (owner to confirm)",
+      "owner": "T1.32f"
     }
   ],
   "entries": [],

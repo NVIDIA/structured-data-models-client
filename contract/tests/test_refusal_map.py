@@ -567,7 +567,8 @@ def test_the_reader_refuses_deep_and_wide_maps_by_name(tmp_path: Path) -> None:
 def test_the_owners_a_map_may_name() -> None:
     # E50 (T1.10e): T1.21c and T1.21d join T1.22 to T1.28; T1.21e adds the
     # inventory's families, T1.32a to T1.32e, and T1.28's halves, which
-    # replace it (T1.12b), and T1.25 T1.26's (E62); their neighbours, a
+    # replace it (T1.12b), T1.25 T1.26's (E62), and T1.28b T1.32f (the
+    # owner's real-dataset package, 2026-10-12); their neighbours, a
     # landed package, a later one and the T1.26 and T1.28 the splits left
     # behind stay refused.
     for task in (
@@ -582,6 +583,7 @@ def test_the_owners_a_map_may_name() -> None:
         'T1.28b',
         'T1.32a',
         'T1.32e',
+        'T1.32f',
     ):
         assert refusal_map.OWNER.fullmatch(task), task
     for task in (
@@ -595,7 +597,7 @@ def test_the_owners_a_map_may_name() -> None:
         'T1.28c',
         'T1.29',
         'T1.32',
-        'T1.32f',
+        'T1.32g',
         'T1.2',
         '',
     ):
@@ -1056,11 +1058,10 @@ def test_supplied_rust_evidence_is_the_whole_of_it() -> None:
     assert (written, report) == (document, [])
     probes = sorted(rust)
     _, report = refusal_map.write(document, _of(document), observe, {})
-    # From T1.28a an entry only rust-host hits (predict/outputs), which no
-    # observation hits, is dropped too.
+    # From T1.28b the baseline family lists no refusal, so nothing else is
+    # reported.
     assert report == [
         *(f'{name}/rust-host: not observed' for name in probes),
-        'predict/outputs: no probe hits it; dropped',
     ]
     short = {name: seen for name, seen in rust.items() if name != probes[0]}
     _, report = refusal_map.write(document, _of(document), observe, short)
@@ -1164,18 +1165,20 @@ def test_the_writer_s_script_refuses_an_owner_no_map_may_name(
     # T1.28b, is refused, the map left as it was and the run's map a draft.
     import subprocess
 
-    document = _family_maps()['baseline']
+    # From T1.28b the baseline family lists no refusal, so the decimal
+    # family's entry is changed.
+    document = _family_maps()['decimal']
     assert document['entries']
     changed = copy.deepcopy(document)
     changed['entries'][0]['owner'] = 'T1.28'
     assert refusal_map.shape(changed) == (
         'entries/0/owner is not a task a map may name'
     )
-    target = tmp_path / 'baseline.json'
+    target = tmp_path / 'decimal.json'
     target.write_text(json.dumps(changed, indent=2) + '\n')
     before = target.read_text()
     evidence = tmp_path / 'observed.json'
-    evidence.write_text(json.dumps({'baseline.json': _rust_run(document)}))
+    evidence.write_text(json.dumps({'decimal.json': _rust_run(document)}))
     run = subprocess.run(
         [
             sys.executable,
@@ -1193,7 +1196,7 @@ def test_the_writer_s_script_refuses_an_owner_no_map_may_name(
     assert run.returncode != 0, run.stdout + run.stderr
     assert 'owner is not a task a map may name' in run.stdout
     assert target.read_text() == before
-    assert (tmp_path / 'baseline.json.draft').exists()
+    assert (tmp_path / 'decimal.json.draft').exists()
     # A gap's owner too.
     gapped = copy.deepcopy(document)
     gapped['gaps'] = [{'input': 'x', 'contract': 'y', 'owner': 'T1.28'}]
@@ -1215,7 +1218,9 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     # Codex P2-2 (fix round 1): every probe succeeding on both hosts, the
     # writer drops every entry; the map it writes loads, holds both runs
     # and is written again unchanged, its probes and coverage kept.
-    document = _family_maps()['baseline']
+    # The decimal family, whose one entry is lifted (from T1.28b the
+    # baseline family lists none).
+    document = _family_maps()['decimal']
     lifted = {
         runner: {
             probe['id']: refusal_map.success(probe[runner]['until'])
@@ -1236,12 +1241,9 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     written, report = refusal_map.write(
         document, _of(document), observe, lifted['rust-host']
     )
-    assert report == [
-        'predict/problem_type: no probe hits it; dropped',
-        'predict/outputs: no probe hits it; dropped',
-    ]
+    assert report == ['materialize/target_type: no probe hits it; dropped']
     assert written['entries'] == [] and written['probes']
-    path = tmp_path / 'baseline.json'
+    path = tmp_path / 'decimal.json'
     path.write_text(json.dumps(written))
     loaded = refusal_map.load(path)
     for runner in refusal_map.RUNNERS:
@@ -1254,7 +1256,7 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     # Still fail-closed: a refusal on the lifted map is one it does not
     # list, and a case left without its probe fails the binding.
     refused = copy.deepcopy(lifted['python-core'])
-    refused['base.binary'] = {
+    refused['decimal.target-38-18'] = {
         'stage': 'materialize',
         'error': 'UnsupportedRequestError',
         'code': 'UNSUPPORTED_REQUEST',
@@ -1262,7 +1264,9 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
         'rule': 'static_target',
     }
     assert any(
-        failure.startswith('base.binary: a refusal the map does not list')
+        failure.startswith(
+            'decimal.target-38-18: a refusal the map does not list'
+        )
         for failure in refusal_map.check(loaded, 'python-core', refused)
     )
     loaded['probes'] = loaded['probes'][1:]
