@@ -141,9 +141,24 @@ PYTHON = ('python-ref', 'python-core', 'python-old')
 READS = ('describe_source', 'materialize', 'predict')
 #: A landing commit's subject, as land.py writes it.
 LANDING = re.compile(r'Land (T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+): ')
-#: An owner's approval, as a decisions row's status reads it.
-OWNER = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}')
+#: An owner's approval, as a decisions row's status (its last column) reads
+#: it: these words at its start and a date, followed by nothing, a
+#: parenthesis, or a note after "; " or ", " (the forms decisions.md uses).
+OWNER = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}(?:(?: \(|[;,] ).*)?')
+#: A note that withdraws or qualifies the approval voids it: fail closed.
+WITHDRAWN = re.compile(
+    r'not approved|unapproved|reject|revoke|withdraw|supersede|to confirm',
+    re.IGNORECASE,
+)
 PANIC = 'INTERNAL_ERROR'
+
+
+def owner_approved(status: str) -> bool:
+    r"""The status is the owner's approval, read from its start, never a
+    substring of another status ("not approved by owner ..."); shared with
+    ``coverage.py``'s rule 8 (T1.15)."""
+    status = status.strip()
+    return bool(OWNER.fullmatch(status)) and not WITHDRAWN.search(status)
 
 
 class Unreadable(Exception):
@@ -942,7 +957,11 @@ def check_relaxations(
             None,
         )
         row = rows.get(decision) if isinstance(decision, str) else None
-        if row is None or not OWNER.search(row[1]) or f'`{name}`' not in row[0]:
+        if (
+            row is None
+            or not owner_approved(row[1])
+            or f'`{name}`' not in row[0]
+        ):
             report.fail(
                 rule,
                 f"{change}: a relaxation, with no row of the checkpoint's "

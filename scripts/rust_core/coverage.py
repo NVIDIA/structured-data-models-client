@@ -37,7 +37,7 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
    (each would take it out of rule 5), unless a row of the checkpoint's
    ``docs/design/rust-core/phase-1/decisions.md``, its status starting
    "approved by owner" and a date with nothing after but a parenthesis or
-   a note, none withdrawing it (``owner_approved``), names the ID in
+   a note, none withdrawing it (``ratchet.owner_approved``), names the ID in
    backticks; a row the candidate writes never authorizes its own change.
 
 Rules 6 and 7 are Phase 2's (``--gate S1``); ``--gate S0`` was cut by the
@@ -78,23 +78,7 @@ ACTIVE = ('python', 'S0')
 #: (a RecursionError through 3.13) or not (3.14 reads 100,000 levels).
 MAX_DEPTH = 64
 CASE_ID = re.compile(r'[a-z0-9][a-z0-9._-]*')
-#: An owner's approval, as a decisions row's status (its last column) reads
-#: it: these words at its start and a date, followed by nothing, a
-#: parenthesis, or a note after "; " or ", " (the forms decisions.md uses).
-OWNER = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}(?:(?: \(|[;,] ).*)?')
-#: A note that withdraws or qualifies the approval voids it: fail closed.
-WITHDRAWN = re.compile(
-    r'not approved|unapproved|reject|revoke|withdraw|supersede|to confirm',
-    re.IGNORECASE,
-)
 ROW = re.compile(r'\| [A-Z][A-Z0-9-]* \|')
-
-
-def owner_approved(status: str) -> bool:
-    r"""The status is the owner's approval, read from its start: never a
-    substring of another status ("not approved by owner ...")."""
-    status = status.strip()
-    return bool(OWNER.fullmatch(status)) and not WITHDRAWN.search(status)
 
 
 class Unreadable(Exception):
@@ -425,7 +409,9 @@ def rule_8(
         line
         for line in decisions.splitlines()
         if ROW.match(line)
-        and owner_approved(line.strip().strip('|').split('|')[-1])
+        and _module('ratchet').owner_approved(
+            line.strip().strip('|').split('|')[-1]
+        )
     ]
 
     def approved(name: str) -> bool:
