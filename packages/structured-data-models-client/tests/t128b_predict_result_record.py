@@ -608,6 +608,8 @@ base_case(
     CONTEXT,
     predict={'outputs': ['prediction']},
     script='mutate:no-prediction',
+    # A missing prediction: .items says None, which the frame shows as NaN.
+    items=True,
 )
 
 # _prepare's and _preflight's checks.
@@ -762,6 +764,8 @@ for name, script, divergence in BOUNDARIES:
         BOUNDARY,
         script=script,
         divergence=divergence,
+        # A null prediction: .items says None, which the frame shows as NaN.
+        items=name == 'evidence.prediction-null',
     )
 
 

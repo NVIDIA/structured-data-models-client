@@ -2252,6 +2252,32 @@
               "f64_bits": "3ffdc40000000000"
             }
           ]
+        ],
+        "items": [
+          {
+            "row_index": {
+              "int": "0"
+            },
+            "id": {
+              "int": "0"
+            },
+            "prediction": null,
+            "prediction_type": "NoneType",
+            "probabilities": null
+          },
+          {
+            "row_index": {
+              "int": "1"
+            },
+            "id": {
+              "int": "1"
+            },
+            "prediction": {
+              "f64_bits": "3ffdc40000000000"
+            },
+            "prediction_type": "float",
+            "probabilities": null
+          }
         ]
       }
     },
