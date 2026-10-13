@@ -148,7 +148,7 @@ In short:
 - A day-first reading warns, with pandas' `UserWarning` about `dayfirst=False`, when pandas can name the format (D4).
 - Two-digit years follow the current year, as above (D5).
 - `0000-01-01` is the year 0 under pandas 3 (D7).
-- Six, eight, twelve and fourteen digit fields are packed dates read by `dateutil` (D8).
+- Six, eight, twelve and fourteen digit fields are packed dates read by `dateutil` (D8); the core refuses every literal with a run of five digits or more by name (T1.6c, below).
 - Impossible dates, a year above 9999 and two long fields are refused (D9).
 
 ### As the core reads them (T1.6b)
@@ -156,7 +156,7 @@ In short:
 The core reads a literal by these rules over its fields, written down from the reference's answers and held to them (`sdm-pql`'s `tests/dates.json`, `dates.rs`; decision E69); no pandas or `dateutil` code is ported.
 
 - A literal whose every run of digits has four digits or fewer: D2's order; a year below 100 placed around the current year where no date field has three digits or more (D5); the year 0 only as a first field of exactly `0000`, a month and a day of one or two digits, and a time of day, if any, of fields of one or two digits (D7); a time of day by value, an hour to 23, a minute and a second to 59 (D6).
-- A literal with a run of five digits or more (D8):
+- A literal with a run of five digits or more (D8) is refused by name from T1.6c, before any field is read: `validate_query` ends with `INVALID_REQUEST` naming the rule `date_literal_packed` and the literal's span, never its text (`Reading::Packed`; Phase 1 decision E78, register DT-5, the owner's decision of 2026-10-12). The reference reads such a literal through `dateutil`, as the core did from T1.6b to T1.6c, by these rules, kept as the record of what is refused:
   - a first field of six digits is a year, month and day of two digits each, in D2's order, the year placed by D5; of eight, a four-digit year, a month and a day; of twelve, then an hour and minutes; of fourteen, then seconds;
   - after such a field, each of the other two date fields, in order: with `-` as the separator once an hour is known, a UTC offset west of Greenwich (`HHMM`, or one or two digits of hours), the later one overriding; otherwise two or four digits are an hour (and minutes) when no hour is known yet, six digits an `HHMMSS` time; anything else is refused;
   - any other first field: the three date fields in D2's order, a field of three digits or more a year as written, two such refused (D9), the year placed by D5 only where no date field has three digits or more (the long run then is in the time of day);
