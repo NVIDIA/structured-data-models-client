@@ -2719,7 +2719,10 @@ entries:
     the core's cast changes are P1B-32 to P1B-37. Approved by both
     reviewers of T1.32a part 1 under H19 (Codex's round 2,
     APPROVE-P1B-31, and the subagent's), for the seven case-input
-    corrections only, not the product changes.
+    corrections only, not the product changes. Its case_outcomes were
+    written by hand at fix round 3, where the design has ratchet.py
+    generate them, since the ratchet prints no item for an input-only
+    change; each states the case's outcome unchanged.
 
 - id: P1B-32
   title: An entity the key's type cannot hold is the caller's error, INVALID_REQUEST, where the reference fails with INTERNAL_ERROR
@@ -2962,13 +2965,14 @@ entries:
   - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
   notes: >-
     Split from P1B-33 at T1.32a's fix round 2 (Codex's round 2): a refusal
     in place of a failure, both refusing (E66(b)'s class), for the
-    reviewers, never self-approved.
+    reviewers, never self-approved. Approved by the subagent's round 3
+    (APPROVE-P1B-37), the split confirmed by Codex's round 3.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
