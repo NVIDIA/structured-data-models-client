@@ -754,6 +754,19 @@ fn start_materialize(
     let schema_bytes = serde_json::to_vec(schema)?;
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
     let query_bytes = serde_json::to_vec(&case.input.pql)?;
+    // The call's option values, as the client passes them (T1.28a's
+    // `Materialize.values`, `_rust/materialize.py`): the context size, none
+    // here, since the case format carries none, and of the options whose
+    // values the core reads, those the case's call gives: its inference
+    // options as written (T1.29, for `base.adventureworks`).
+    let mut values = serde_json::Map::from_iter([("num_context_samples".to_owned(), Value::Null)]);
+    if let Some(options) = &case.input.materialize.inference_config {
+        values.insert(
+            "inference_config".to_owned(),
+            Value::Object(options.clone()),
+        );
+    }
+    let values_bytes = serde_json::to_vec(&Value::Object(values))?;
     observed.operations.push("materialize".into());
     observed.edits.push(json!({
         "op": "materialize",
@@ -781,7 +794,7 @@ fn start_materialize(
             seed,
             unseeded: false,
             anchor_entity: false,
-            values: None,
+            values: Some(AttachmentId(6)),
             options: vec![],
             sampler_state: sampler
                 .as_ref()
@@ -797,6 +810,7 @@ fn start_materialize(
         (AttachmentId(1), Attachment::Bytes(schema_bytes)),
         (AttachmentId(5), Attachment::Bytes(held_bytes)),
         (AttachmentId(2), Attachment::Bytes(query_bytes)),
+        (AttachmentId(6), Attachment::Bytes(values_bytes)),
         (
             AttachmentId(3),
             Attachment::Arrow(ArrowData::new(batch.schema(), vec![batch])),
