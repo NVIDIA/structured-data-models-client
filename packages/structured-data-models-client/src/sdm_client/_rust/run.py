@@ -244,6 +244,11 @@ def _steps(
                 'answer',
                 code='INTERNAL_ERROR',
             )
+        # A provider's failure is named by its driver's class only for the
+        # step that failed: the core may carry on past one (a whole-table
+        # read it falls back from, T1.32e), and a later error is no other
+        # step's.
+        driver_class = None
         for request in step['requests']:
             attached: dict[int, Any] = {}
             try:

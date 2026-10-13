@@ -48,7 +48,13 @@ whether the core answers as well as the old route.
   its end), or a static target's own value: on AdventureWorks the
   quickstart's regression (``SUM(OrderQty)`` over 30 days per product), a
   binary (will a product sell within 90 days) and a multiclass (a
-  product's ``Color``); on H&M a regression (``SUM(price)`` over 30 days
+  product's ``ProductLine``: the live run of 2026-10-13 had the endpoint
+  refuse ``Color``, HTTP 400 ``TASK_SCHEMA_MISMATCH`` on the old route;
+  its request declared a class, ``Grey``, no context row holds, the likely
+  cause though not one this script can confirm offline, and
+  ``ProductLine``'s four classes are all in the context. A temporal
+  multiclass target needs an aggregation such as ``FIRST``, which the
+  core refuses until Phase 2); on H&M a regression (``SUM(price)`` over 30 days
   per customer), a binary (will a customer buy within 30 days) and a
   multiclass (an article's ``index_group_name``).
 - **Comparison**: for each dataset, task and seed, the request built on the
@@ -109,6 +115,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -268,10 +275,11 @@ def aw_tasks() -> list[Any]:
         base.Task(
             'multiclass',
             'multiclass',
-            'PREDICT products.Color FOR EACH products.ProductID',
+            'PREDICT products.ProductLine FOR EACH products.ProductID',
             None,
             lambda c: _classes(
-                c, 'SELECT "ProductID", "Color" FROM adventureworks_products'
+                c,
+                'SELECT "ProductID", "ProductLine" FROM adventureworks_products',
             ),
         ),
     ]
@@ -601,6 +609,87 @@ def interval(
 # --- the run --------------------------------------------------------------
 
 
+def endpoint_refusal(failed: BaseException) -> dict[str, Any]:
+    r"""What the endpoint's refusal of a request is, from an allowlist: its
+    class, its code and its HTTP status, never its text (the endpoint wrote
+    it)."""
+    found: dict[str, Any] = {'error': type(failed).__name__, 'by': 'endpoint'}
+    code = getattr(failed, 'code', None)
+    if isinstance(code, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', code):
+        found['code'] = code
+    for name in ('status_code', 'status'):
+        status = getattr(failed, name, None)
+        if isinstance(status, int) and not isinstance(status, bool):
+            found['status'] = status
+            break
+    return found
+
+
+class Recording(base.Recording):  # type: ignore[misc, name-defined]
+    r"""``null_link_benchmark.Recording``, keeping each request too, so the
+    two routes' requests can be compared (:func:`compare_requests`)."""
+
+    def __init__(self, transport: Any) -> None:
+        super().__init__(transport)
+        self.payloads: list[Any] = []
+
+    def predict(self, payload: Any) -> Any:
+        self.payloads.append(copy.deepcopy(payload))
+        return super().predict(payload)
+
+
+#: How far apart two float32 labels may be and still be ORD-3's rounding:
+#: a few float32 steps, relative.
+ORD3_STEPS = 8 * 2**-23
+
+
+def compare_requests(old: Any, core: Any) -> str:
+    r"""Two request payloads as the client sends them: ``'equal'`` when
+    they are one request, ``metadata.request_id`` aside;
+    ``'equal-within-ORD-3'`` when they differ only in label values (the
+    cells of the column ``task.target.column_name`` names in
+    ``context.instance_table``), each pair numbers within float32 rounding
+    (register ORD-3: float32 label sums over an unordered fetch, on either
+    route); ``'different'`` otherwise."""
+
+    def masked(payload: Any) -> Any:
+        payload = copy.deepcopy(payload)
+        if isinstance(payload, dict) and isinstance(
+            payload.get('metadata'), dict
+        ):
+            payload['metadata'].pop('request_id', None)
+        return payload
+
+    old, core = masked(old), masked(core)
+    if old == core:
+        return 'equal'
+    try:
+        column = old['task']['target']['column_name']
+        if core['task']['target']['column_name'] != column:
+            return 'different'
+        tables = [p['context']['instance_table'] for p in (old, core)]
+        if tables[0]['columns'] != tables[1]['columns']:
+            return 'different'
+        at = tables[0]['columns'].index(column)
+        rows = [t['rows'] for t in tables]
+        if len(rows[0]) != len(rows[1]):
+            return 'different'
+        labels = [[row[at] for row in r] for r in rows]
+        for r in rows:
+            for row in r:
+                row[at] = None
+    except (KeyError, TypeError, ValueError, IndexError, AttributeError):
+        return 'different'
+    if old != core:
+        return 'different'
+    for a, b in zip(labels[0], labels[1], strict=True):
+        if not (base._number(a) and base._number(b)):
+            return 'different'
+        if abs(a - b) > ORD3_STEPS * max(abs(a), abs(b)):
+            return 'different'
+    return 'equal-within-ORD-3'
+
+
 def run(
     sets: list[Any],
     seeds: Sequence[int],
@@ -609,15 +698,23 @@ def run(
     recording: Any,
     raw: Any,
     wire: Any = None,
+    described: list[dict[str, Any]] | None = None,
+    units: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     r"""Each dataset's description on both routes, and every unit's
-    numbers and verdict. Each prediction is one request, counted as
-    ``null_link_benchmark.run`` counts it; a route that refuses to build a
-    request is recorded with its refusal, and its unit is not scored."""
-    from sdm_client import KumoRelational
+    numbers and verdict, added to ``described`` and ``units`` as they are
+    made, so a caller keeps what a run that stops early made. Each
+    prediction is one request, counted as ``null_link_benchmark.run``
+    counts it; a route that refuses to build a request, or whose request
+    the endpoint refuses (an HTTP 4xx or 5xx, the client's
+    ``NimRequestError``), is recorded with its refusal (class, code and
+    HTTP status, never the text an endpoint wrote), and its unit is not
+    scored; the other units still run. The two routes' requests of each
+    seed are compared (:func:`compare_requests`)."""
+    from sdm_client import KumoRelational, NimRequestError
 
-    described = []
-    units = []
+    described = [] if described is None else described
+    units = [] if units is None else units
     for dataset in sets:
         connection = dataset.connect()
         rows = rows_of(connection)
@@ -646,6 +743,7 @@ def run(
             }
             refused: dict[str, dict[str, Any]] = {}
             digests: dict[str, list[str]] = {'old': [], 'core': []}
+            payloads: dict[str, list[Any]] = {'old': [], 'core': []}
             for turn, seed in enumerate(seeds):
                 for route in (
                     ('old', 'core') if turn % 2 == 0 else ('core', 'old')
@@ -659,11 +757,17 @@ def run(
                         continue
                     recorded = len(recording.digests)
                     before = wire.allow_one() if wire is not None else 0
-                    result = client.predict(
-                        request,
-                        model=KumoRelational(),
-                        outputs=base.outputs_of(task),
-                    )
+                    try:
+                        result = client.predict(
+                            request,
+                            model=KumoRelational(),
+                            outputs=base.outputs_of(task),
+                        )
+                    except NimRequestError as failed:
+                        # The endpoint refused this unit's request: its
+                        # unit fails operationally, the run goes on.
+                        refused[route] = endpoint_refusal(failed)
+                        continue
                     if len(recording.digests) != recorded + 1 or (
                         wire is not None and wire.sent != before + 1
                     ):
@@ -678,6 +782,12 @@ def run(
                     ordered = [read[k] for k in keys]
                     answers[route].append(ordered)
                     digests[route].append(recording.digests[-1])
+                    # A recording that keeps no requests is compared by
+                    # its digests alone.
+                    kept = getattr(recording, 'payloads', None)
+                    payloads[route].append(
+                        kept[-1] if kept else {'digest': recording.digests[-1]}
+                    )
                     for key, label, answer in zip(
                         keys, truth, ordered, strict=True
                     ):
@@ -699,12 +809,17 @@ def run(
             units.append(
                 unit(dataset.name, task, keys, truth, answers, refused, digests)
             )
+            units[-1]['requests'] = [
+                compare_requests(o, c)
+                for o, c in zip(payloads['old'], payloads['core'], strict=False)
+            ]
             u = units[-1]
             say(
                 f'{u["dataset"]}/{u["task"]}: {u["metric"]} old '
                 f'{_shown(u["old"])} {u["old_interval"]}, core '
                 f'{_shown(u["core"])} {u["core_interval"]}, difference '
-                f'{u["difference_interval"]}: {u["verdict"]}'
+                f'{u["difference_interval"]}: {u["verdict"]}, requests '
+                f'{u["requests"]}'
                 + (f' (refused: {u["refused"]})' if u['refused'] else '')
             )
     return described, units
@@ -741,7 +856,12 @@ def unit(
     else:
         verdict = judge(kind, truth, old, core)
     errors = [
-        f'the {route} route refused: {why}' for route, why in refused.items()
+        (
+            f"the endpoint refused the {route} route's request: {why}"
+            if why.get('by') == 'endpoint'
+            else f'the {route} route refused: {why}'
+        )
+        for route, why in refused.items()
     ]
     return {
         'dataset': dataset,
@@ -911,6 +1031,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
     wire: Any = None
+    described: list[dict[str, Any]] = []
+    units: list[dict[str, Any]] = []
+    stopped: str | None = None
     try:
         with tempfile.TemporaryDirectory(prefix='sdm-t132e-') as scratch:
             if arguments.dry_run:
@@ -932,7 +1055,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 from sdm_client import SDMClient
 
                 client = SDMClient.__new__(SDMClient)
-                recording = base.Recording(base.DryTransport())
+                recording = Recording(base.DryTransport())
                 client._start(recording)
                 raw = open(os.devnull, 'w', encoding='utf-8')  # noqa: SIM115
             else:
@@ -940,7 +1063,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 client = smoke._client(endpoint, profile, arguments.timeout)
                 wire = Wire(calls)
                 wire.install()
-                recording = base.Recording(client._transport)
+                recording = Recording(client._transport)
                 client._transport = recording
                 arguments.raw_dir.mkdir(parents=True, exist_ok=True)
                 raw = (arguments.raw_dir / 'calls.jsonl').open(
@@ -951,7 +1074,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ('dry run: ' if arguments.dry_run else 'live: ')
                     + 'each request on both routes'
                 )
-                described, units = run(
+                run(
                     sets,
                     seeds,
                     arguments.entities,
@@ -959,15 +1082,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     recording,
                     raw,
                     wire,
+                    described,
+                    units,
                 )
             if not arguments.dry_run:
                 client.close()
     except BaseException as failed:  # noqa: BLE001 - reported, redacted
-        if isinstance(failed, KeyboardInterrupt):
-            say('interrupted', file=sys.stderr)
-            return 1
-        say(f'benchmark failed: {smoke._diagnosis(failed)}', file=sys.stderr)
-        return 1
+        # The summary is still written, with what the run made before it
+        # stopped and the requests it sent.
+        stopped = (
+            'interrupted'
+            if isinstance(failed, KeyboardInterrupt)
+            else f'benchmark failed: {smoke._diagnosis(failed)}'
+        )
+        say(stopped, file=sys.stderr)
     finally:
         if wire is not None:
             wire.uninstall()
@@ -993,6 +1121,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         'calls': calls,
         'predictions': predictions,
         'requests_sent': None if wire is None else wire.sent,
+        'predictions_sent': (
+            None if wire is None else wire.sent * arguments.entities
+        ),
+        'stopped': stopped,
         'datasets': described,
         'units': units,
         'errors': errors,
@@ -1012,11 +1144,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             'dry run done: the scripted answers say nothing of a model; '
             f'verdicts {summary["verdicts"]}'
         )
-        return 1 if errors else 0
+        return 1 if errors or stopped else 0
     for u in failed_units:
         say(f'unit failed: {u["dataset"]}/{u["task"]}', file=sys.stderr)
     say(f'benchmark done: verdicts {summary["verdicts"]}')
-    return 1 if failed_units or errors else 0
+    return 1 if failed_units or errors or stopped else 0
 
 
 if __name__ == '__main__':

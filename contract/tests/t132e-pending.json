@@ -3,10 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_server_refusal_fails_its_unit_and_the_run_goes_on",
-   "py:test_identical_requests_tolerate_ord_3_label_rounding_only"
-  ],
+  "exits": [],
   "key-python-core": [],
   "key-rust-host": [],
   "sampled-python-core": []

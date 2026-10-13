@@ -198,15 +198,18 @@ pub(crate) async fn run(
             // timeout on a large view, most often), and says so of a column
             // it then takes unchecked; so does the core, where the provider
             // fails the request or does not answer it (P1B-38 rejected by
-            // the owner, 2026-10-13). An answer of another shape stays the
-            // core's error.
+            // the owner, 2026-10-13). The reference catches only what its
+            // fetch raises, so only the provider's error, or a refusal of
+            // the request as undeclared, falls back; any other error, and an
+            // answer of another shape, stays the core's.
             match ask(&asker, asking).await {
                 Ok(read) => {
                     check_ranges(&read, &asked, &preview)?;
                     let whole = infer::whole_table(&asked, &read.batches, &reader)?;
                     infer::finish(previewed, Some(&whole))?
                 }
-                Err(_) => infer::finish_unchecked(previewed)?,
+                Err(failed) if falls_back(&failed) => infer::finish_unchecked(previewed)?,
+                Err(failed) => return Err(failed),
             }
         };
         // The engine says what it dropped as it reads each table, and the
@@ -295,6 +298,22 @@ pub(crate) async fn run(
     Ok(OperationResult::DescribeSource(DescribedSource {
         description: id,
     }))
+}
+
+/// Whether the time column's choice falls back to the preview on
+/// `failed`, the error asking `column_ranges` gave: the provider's own
+/// failure (`PROVIDER_ERROR`), as the reference falls back on whatever its
+/// fetch raises, or the request refused as one the provider does not
+/// declare (`UNSUPPORTED_REQUEST` naming it), as a table that cannot ask
+/// its source falls back there. Anything else is the core's error.
+fn falls_back(failed: &CoreError) -> bool {
+    match failed.code {
+        ErrorCode::ProviderError => true,
+        ErrorCode::UnsupportedRequest => {
+            failed.fields.get("request") == Some(&Detail::text("column_ranges"))
+        }
+        _ => false,
+    }
 }
 
 /// Holds the answer to a `column_ranges` request over `asked` to its
@@ -711,7 +730,7 @@ mod tests {
     use arrow_schema::{DataType, Field, Schema, TimeUnit};
     use sdm_contract::ErrorCode;
 
-    use super::{ArrowData, check_ranges};
+    use super::{ArrowData, check_ranges, falls_back};
 
     fn stamp() -> DataType {
         DataType::Timestamp(TimeUnit::Microsecond, None)
@@ -782,5 +801,38 @@ mod tests {
         let mut text = good.to_vec();
         text[1] = ("lo", DataType::Utf8);
         assert!(mismatch(&data(&text, 1, false)));
+    }
+
+    #[test]
+    fn only_a_provider_s_failure_or_an_undeclared_request_falls_back() {
+        use sdm_contract::{CoreError, Detail, ErrorKind};
+        let error = |kind, code| CoreError::new(kind, code, "x");
+        assert!(falls_back(&error(
+            ErrorKind::DataSource,
+            ErrorCode::ProviderError
+        )));
+        let undeclared = error(ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+            .with_field("request", Detail::text("column_ranges"));
+        assert!(falls_back(&undeclared));
+        // Another request undeclared, a rule not ported, a plan's refusal,
+        // a mismatch and an internal error stay the core's.
+        let other = error(ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+            .with_field("request", Detail::text("preview"));
+        assert!(!falls_back(&other));
+        let rule = error(ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+            .with_field("rule", Detail::text("column_type"));
+        assert!(!falls_back(&rule));
+        assert!(!falls_back(&error(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest
+        )));
+        assert!(!falls_back(&error(
+            ErrorKind::DataSource,
+            ErrorCode::ProviderSchemaMismatch
+        )));
+        assert!(!falls_back(&error(
+            ErrorKind::Internal,
+            ErrorCode::InternalError
+        )));
     }
 }

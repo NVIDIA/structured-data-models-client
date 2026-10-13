@@ -1351,7 +1351,7 @@ entries:
     0.1676271186440672), and two runs of the same route differ from each
     other as much; the H&M sample and full-size AdventureWorks send one
     request on both routes. A real-data comparison reads these labels as
-    noise. Settling an order belongs with ORD-2 (Phase 4, S3). Approved by the owner on 2026-10-13, relayed by the orchestrator (E85).
+    noise. Settling an order belongs with ORD-2 (Phase 4, S3). Approved by the owner on 2026-10-13, relayed by the orchestrator (E85). From T1.32e's fix round 3 the benchmark compares the two routes' requests allowing exactly this (compare_requests, equal-within-ORD-3: label values only, within 8 float32 steps relative); rerun on the full H&M tables, seed 0's regression is equal-within-ORD-3 and every other request equal.
 
 
 # --- Phase 1b ------------------------------------------------------------------
@@ -2640,7 +2640,7 @@ entries:
   cases: [T1.32e]
   status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E85}
   notes: >-
     Rejected by the owner on 2026-10-13, relayed by the orchestrator
     (E85): match the reference. From then the core falls back to the
