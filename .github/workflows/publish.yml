@@ -236,9 +236,13 @@ jobs:
   # assets, so this cannot publish while the repository is internal.
   #
   # Creating the release and publishing it are one gated job because the
-  # release cannot be a draft. Split, a rejected publish would leave a public
-  # release marked Latest for a version that never reached PyPI. The cost is
-  # the Kitmaker token sharing a job with `contents: write`.
+  # release cannot be a draft. Split, declining the approval still left a
+  # public release marked Latest, created by the ungated job that ran first.
+  # Together, declining means nothing was created at all. A publish that is
+  # approved and then fails does leave the release standing, which is
+  # deliberate: Kitmaker may already have fetched some of those assets, and
+  # `kitmaker-summary.txt` says what is live. The cost is the Kitmaker token
+  # sharing a job with `contents: write`.
   release:
     needs: build
     runs-on: ubuntu-latest

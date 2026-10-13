@@ -308,10 +308,15 @@ def pypi_state(name: str, version: str, expected: dict[str, str]) -> str:
     atomic, so a failure can follow files that already landed, and a rejection
     is not proof that nothing did. Only the index knows, so the summary asks it
     rather than repeating what Portal said.
+
+    Every failure is caught, including a malformed response. This runs from a
+    ``finally`` while an exception is already on its way out, so raising here
+    would replace the reason the release stopped with the reason the summary
+    could not be written, and leave no summary either.
     """
     try:
         held = on_pypi(name, version)
-    except SystemExit as error:
+    except Exception as error:  # noqa: BLE001 - see the docstring
         return f'UNKNOWN, could not ask PyPI ({error})'
     if held is None:
         return 'not on PyPI'
@@ -348,12 +353,17 @@ def write_summary(
         if name in skipped:
             state = 'already published before this run'
         elif name in requested:
-            state = pypi_state(name, version, digests[name])
+            state = pypi_state(name, version, digests.get(name, {}))
         else:
             state = 'not reached'
         lines.append(f'{name}: {state}')
-    pathlib.Path('kitmaker-summary.txt').write_text('\n'.join(lines) + '\n')
-    print('\n'.join(lines))
+    text = '\n'.join(lines) + '\n'
+    print(text, end='')
+    try:
+        pathlib.Path('kitmaker-summary.txt').write_text(text)
+    except OSError as error:
+        # Printed above either way, and the job log is the fallback record.
+        print(f'could not write kitmaker-summary.txt: {error}')
 
 
 def main() -> None:

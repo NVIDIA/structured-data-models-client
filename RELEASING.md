@@ -131,17 +131,19 @@ is not proof that nothing did. Only the index knows.
 | `published` | Every file is on PyPI with the bytes this run built. Nothing to do. |
 | `already published before this run` | It was there before this run started. |
 | `not reached` | Nothing was submitted for it. |
-| `not on PyPI` | The upload was asked for and nothing landed. |
+| `not on PyPI` | The index reports nothing for this version. Usually means nothing landed, but see the caveat below. |
 | `PARTLY on PyPI, missing [...]` | Some files landed. A re-run finishes the rest. |
-| `on PyPI with UNEXPECTED bytes` | Needs a person. |
-| `UNKNOWN, could not ask PyPI` | The summary could not reach PyPI. Look by hand. |
+| `on PyPI with UNEXPECTED bytes for [...]` | Needs a person. |
+| `on PyPI with files this run did not build` | Needs a person. |
+| `UNKNOWN, could not ask PyPI` | The summary could not reach the index. Look by hand. |
 
-A re-run is safe for every state except the last two, and PyPI's JSON endpoint
-is cached, so a project published in the last few minutes can still read as
-`not on PyPI`. **If the summary surprises you, check the project page on
-pypi.org before re-running**, or you may submit the same files twice. Confirm
-every expected file, not just that the version exists: a batch that stopped
-halfway leaves some of them.
+A re-run is safe for the first five states and needs a person for the last
+three. **The caveat: PyPI's JSON endpoint is cached**, so a project published
+in the last few minutes can still read as `not on PyPI`. That state is what the
+index said, not proof that nothing landed. If the summary surprises you, check
+the project page on pypi.org before re-running, or you may submit the same
+files twice. Confirm every expected file, not just that the version exists: a
+batch that stopped halfway leaves only some of them.
 
 Before each project is submitted, PyPI is asked what it already holds at that
 version. A project fully published with the artifact's bytes is skipped, and one

@@ -442,3 +442,53 @@ def test_distributions_that_disagree_on_the_version_are_refused(
     )
     with pytest.raises(SystemExit, match='disagree on the version'):
         kitmaker.main()
+
+
+def test_the_summary_survives_pypi_answering_with_nonsense(
+    kitmaker, release, monkeypatch
+):
+    """It runs from a finally while an exception is already on its way out, so
+    raising here would replace the reason the release stopped and leave no
+    summary either."""
+    names = list(kitmaker.PROJECTS.values())
+    summary = release()
+
+    def rubbish(name, version):
+        raise ValueError('Expecting value: line 1 column 1 (char 0)')
+
+    def stop(uuid, what):
+        # Only the publish, so pass one completes and the project is one the
+        # summary has to describe rather than one nothing reached.
+        if not what.startswith('dry run'):
+            raise SystemExit('Portal fell over')
+
+    monkeypatch.setattr(kitmaker, 'outstanding', lambda n, v, e: dict(e))
+    monkeypatch.setattr(kitmaker, 'wait_for', stop)
+    monkeypatch.setattr(kitmaker, 'on_pypi', rubbish)
+
+    with pytest.raises(SystemExit, match='Portal fell over'):
+        kitmaker.main()
+
+    assert states(summary, kitmaker)[names[0]].startswith(
+        'UNKNOWN, could not ask PyPI'
+    )
+
+
+def test_every_state_the_summary_can_print_is_documented(kitmaker):
+    """RELEASING.md tells a releaser what to do per state, which only works if
+    it lists them all."""
+    releasing = (ROOT / 'RELEASING.md').read_text()
+    source = SCRIPT.read_text()
+    phrases = [
+        'published',
+        'already published before this run',
+        'not reached',
+        'not on PyPI',
+        'PARTLY on PyPI, missing ',
+        'on PyPI with UNEXPECTED bytes for ',
+        'on PyPI with files this run did not build',
+        'UNKNOWN, could not ask PyPI',
+    ]
+    for phrase in phrases:
+        assert phrase in source, f'{phrase!r} is not a state the script emits'
+        assert phrase.rstrip() in releasing, f'{phrase!r} is undocumented'
