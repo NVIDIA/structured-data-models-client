@@ -50,8 +50,8 @@ features, every target platform) and checks:
   undeclared changes to the core route's Python bridge: each frozen
   function's fingerprint against the merge base with the base branch
   (``--base``, else ``SDM_FREEZE_BASE``, else ``origin/rust-core-phase-1``)
-  changes only as ``bridge_changes.json`` declares, and its rule counts
-  rise only under an owner-approved allowance.
+  changes only as ``bridge_changes.json`` declares (from T1.28b the whole
+  check: E56(d) retired its counts and allowances).
 
 ``selftest.py`` holds each rule to a seeded fixture it must fail on.
 

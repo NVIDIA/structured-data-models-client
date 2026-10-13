@@ -31,16 +31,16 @@ early returns, module code, ledgered bodies, a class attribute moved to
 module scope, new dunders, the bridges' package rebinding a method, a
 file leaving the freeze) fails as an undeclared change; a source-encoding
 cookie hiding code (one behind a lone CR included) and a package shadowing
-a frozen module are refused; a moved rule's drop cannot pay for a
-refactor's rise, while two moved entries net; an entry let out but still
-defined, or in a let-out file that cannot be opened, read or parsed,
-pays for no rise and no call;
-a declared refactor, a rename declared, a rule moved out declared, a
-widened coverage declared, a frozen file added or removed, and an approved
-allowance pass, and a spent one of an unchanged entry; a declared refactor
-raising a count, a stale or spent declaration, the allowances' faults, and
-missing, empty, retyped, too deep or too wide evidence fail; and the merge base is read through git on a
-temporary repository.
+a frozen module are refused; a declared refactor, a rename declared, a
+rule moved out declared, a widened coverage declared, a frozen file added
+or removed, and a spent declaration of an unchanged entry pass, as does
+the tree as landed judged against itself; a stale or spent declaration,
+a retired ``allowance`` reason, and missing, empty, retyped, too deep or
+too wide evidence fail; both baseline formats are read (format 2's
+counts ignored, format 3 written); and the merge base is read through git
+on a temporary repository. From T1.28b (E56(d)) the counts, allowances
+and netting are retired: a declared change that adds a rule passes, a
+control here, and review judges it.
 
 The parser crate's name is the checked tree's own copy of each L0 guard's
 (T1.28w): a tree whose crates and guard data rename the parser passes, as
@@ -650,53 +650,14 @@ def freeze_cases(results: list[Result]) -> None:
             'changes': {},
         }
     )
-    decisions = (REPO_ROOT / bridge_freeze.DECISIONS).read_text()
-    script = (REPO_ROOT / bridge_freeze.SCRIPT).read_text()
 
-    def source(rel: Path) -> str | None:
-        path = REPO_ROOT / rel
-        return path.read_bytes() if path.is_file() else None
-
-    def allowances_as(value: str) -> str:
-        r"""The script with its whole ALLOWANCES assignment, whatever it
-        holds (empty until T1.24b's E66 entries), assigning ``value``."""
-        node = next(
-            each
-            for each in ast.parse(script).body
-            if isinstance(each, ast.AnnAssign)
-            and isinstance(each.target, ast.Name)
-            and each.target.id == 'ALLOWANCES'
-        )
-        assigned = ast.get_source_segment(script, node)
-        assert assigned is not None
-        return script.replace(
-            assigned,
-            f'ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {value}',
-        )
-
-    def based(
-        rows: str = '',
-        *,
-        held: str | None = None,
-        spent: dict[str, Any] | None = None,
-    ) -> bridge_freeze.Base:
-        text = script
-        if held is not None:
-            text = allowances_as(held)
-            assert text != script
+    def based(*, spent: dict[str, Any] | None = None) -> bridge_freeze.Base:
         declared = changes
         if spent is not None:
             data = json.loads(changes)
             data['changes'] = spent
             declared = json.dumps(data)
-        return bridge_freeze.Base(
-            'the fixture base',
-            committed,
-            decisions + rows,
-            text,
-            declared,
-            source,
-        )
+        return bridge_freeze.Base('the fixture base', committed, declared)
 
     base = based()
     client = Path('packages/structured-data-models-client/src/sdm_client')
@@ -724,7 +685,6 @@ def freeze_cases(results: list[Result]) -> None:
         fails_with: str | None,
         *,
         on: bridge_freeze.Base | str = base,
-        allowances: bridge_freeze.Allowances | None = None,
         rewrite: bool = False,
         declare: dict[str, dict[str, str]] | None = None,
     ) -> None:
@@ -742,9 +702,7 @@ def freeze_cases(results: list[Result]) -> None:
                 data = json.loads(path.read_text())
                 data['changes'] = declare
                 path.write_text(json.dumps(data))
-            problems = refused + bridge_freeze.check(
-                root, on, allowances={} if allowances is None else allowances
-            )
+            problems = refused + bridge_freeze.check(root, on)
             expect(
                 results,
                 f'bridge_freeze: {name}',
@@ -1241,14 +1199,24 @@ def freeze_cases(results: list[Result]) -> None:
         '_rust/predict.py::_extra: covered code the baseline does not hold',
     )
     case(
-        'a stale (too high) baseline',
+        'a stale baseline',
         lambda r: baseline(
             r,
             lambda d: d['files'][key_of['schema']]['from_source'].update(
-                {'raise': 9}
+                {'fingerprint': '0' * 64}
             ),
         ),
         'from_source: differs from the baseline',
+    )
+    case(
+        "control: a format 2 baseline's retired counts changed",
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']]['from_source'].update(
+                {'raise': 9, 'calls': []}
+            ),
+        ),
+        None,
     )
 
     # Declarations.
@@ -1312,10 +1280,12 @@ def freeze_cases(results: list[Result]) -> None:
             rewrite=True,
             declare={declared_key: {'refactor': name}},
         )
+    # E56(d): the counts are retired, so a declared change that adds a
+    # rule passes; review judges the reason's direction.
     case(
-        'a declared refactor that raises a count',
+        'control: a declared refactor that adds a raise (the counts retired)',
         added_raise,
-        'from_source: the baseline raises raise from',
+        None,
         rewrite=True,
         declare={from_source: {'refactor': 'a check added'}},
     )
@@ -1348,11 +1318,8 @@ def freeze_cases(results: list[Result]) -> None:
         rewrite=True,
         declare={from_source: {'refactor': 'the local renamed again'}},
     )
-    # Round 3: counts per entry; only entries declared moved net.
-    # A rule of _anchor's to move, a raise among it, so a refactor's rise
-    # of raises could be paid by its drop only if netting were wrong: from
-    # T1.24 the non-Timestamp refusal, the anchor_entity refusal having
-    # moved into the core.
+    # A rule of _anchor's to move: from T1.24 the non-Timestamp refusal,
+    # the anchor_entity refusal having moved into the core.
     anchor_rule = (
         '    if not isinstance(value, pd.Timestamp):\n'
         '        raise StructuredDataError(\n'
@@ -1362,19 +1329,6 @@ def freeze_cases(results: list[Result]) -> None:
         '        )\n'
     )
     big = "    if len(indices) > 5:\n        raise _not_taken('big')\n"
-    case(
-        "a moved rule's drop paying for a refactor's rise",
-        lambda r: (
-            edit(r / materialize, anchor_rule, ''),
-            at_gather(big)(r),
-        ),
-        'gather: the baseline raises raise from',
-        rewrite=True,
-        declare={
-            f'{materialize}::_anchor': {'moved': 'the anchor refusal (T1.24)'},
-            gather: {'refactor': 'tidy'},
-        },
-    )
     case(
         'a moved reason naming no task',
         lambda r: edit(r / materialize, anchor_rule, ''),
@@ -1389,151 +1343,7 @@ def freeze_cases(results: list[Result]) -> None:
         rewrite=True,
         declare={f'{materialize}::_anchor': {'gone': 'out'}},
     )
-    two_ways = '_warn_two_ways_to_reach_one_table'
-
-    def t121d(root: Path) -> None:
-        # The review's fric3: a rule moved out of schema.py, its warning
-        # presented by the _rust/ glue. From T1.21d the glue calls the rule
-        # no longer, so the warning is added where it would present it.
-        edit(
-            root / schema,
-            '    schema._core_description = described\n    return schema\n',
-            '    schema._core_description = described\n'
-            "    for said in described.get('warnings', ()):\n"
-            '        warnings.warn(said, stacklevel=2)\n'
-            '    return schema\n',
-        )
-
-    moved_both = {
-        f'{schema}::build': {'moved': 'two ways to one table (T1.21d)'},
-        f'{schema_py}::{two_ways}': {'moved': 'two ways to one table (T1.21d)'},
-    }
-    with covering(
-        {
-            schema_py: tuple(
-                n for n in bridge_freeze.COVERED[schema_py] if n != two_ways
-            )
-        }
-    ):
-        # Round 4 (P3-1): the rule let out of the freeze is still defined in
-        # schema.py, so it moved nothing, and the glue's warning is new.
-        case(
-            "a rule let out of the freeze but still defined pays for the glue's",
-            t121d,
-            'the entries declared moved raise warn by 1 and drop it by 0',
-            rewrite=True,
-            declare=moved_both,
-        )
-    # The review's mv4: a still-called rule let out, its body still there.
     entity_count = 'RelationalMaterializer._check_entity_count'
-    with covering(
-        {
-            relational: tuple(
-                n
-                for n in bridge_freeze.COVERED[relational]
-                if n != entity_count
-            )
-        }
-    ):
-        for kind in ('moved', 'gone'):
-            case(
-                f'a rule let out of the freeze, declared {kind}, paying for a new one',
-                at_gather(big),
-                'raise',
-                rewrite=True,
-                declare={
-                    gather: {'moved': 'the entity cap (T1.28)'},
-                    f'{relational}::{entity_count}': {
-                        kind: 'the entity cap (T1.28)'
-                    },
-                },
-            )
-    # T1.10e round 5 (Codex P3): a rule let out of the freeze but still
-    # defined leaves its calls where they were, so they fund no new call.
-    mark_keys = 'Schema._mark_key_columns'
-    key_tuple = (
-        '    from sdm_client.schema import _as_key_tuple\n'
-        '    indices = _as_key_tuple(indices)\n'
-    )
-    with covering(
-        {
-            schema_py: tuple(
-                n for n in bridge_freeze.COVERED[schema_py] if n != mark_keys
-            )
-        }
-    ):
-        case(
-            'a rule let out of the freeze but still defined pays for a new call',
-            at_gather(key_tuple),
-            'adds a call of sdm_client.schema._as_key_tuple',
-            rewrite=True,
-            declare={
-                gather: {'moved': 'key tuples (T1.21d)'},
-                f'{schema_py}::{mark_keys}': {'moved': 'key tuples (T1.21d)'},
-            },
-        )
-    # T1.10e round 5 (subagent P3-2): a file let out of the freeze that
-    # cannot be read or parsed is not gone: its entries are still defined,
-    # so they fund nothing.
-    adapter = client / 'adapters/relational.py'
-    adapter_moved = {
-        gather: {'moved': 'the preflight (T1.28)'},
-        f'{adapter}::RelationalAdapter._preflight': {
-            'moved': 'the preflight (T1.28)'
-        },
-        f'{adapter}::<module>': {'moved': 'the preflight (T1.28)'},
-    }
-    with covering({adapter: None}):
-        for name, spoil in (
-            (
-                'a latin-1 cookie',
-                lambda r: (r / adapter).write_bytes(
-                    b'# coding: latin-1\n' + (r / adapter).read_bytes()
-                ),
-            ),
-            (
-                'text that does not parse',
-                lambda r: append(r / adapter, 'def (\n'),
-            ),
-        ):
-            case(
-                f'a file let out of the freeze, with {name}, paying for a new rule',
-                lambda r, s=spoil: (s(r), at_gather(big)(r)),
-                'the entries declared moved raise raise by 1 and drop it by 0',
-                rewrite=True,
-                declare=adapter_moved,
-            )
-
-        # And one the freeze cannot open (OSError): the fixture's copy of
-        # the file raises PermissionError when read, which a chmod alone
-        # would not make it do for root; the repository's own copy, the
-        # base's source, still reads.
-        @contextmanager
-        def unopenable(rel: Path) -> Iterator[None]:
-            real = Path.read_bytes
-
-            def read_bytes(self: Path) -> bytes:
-                if self.as_posix().endswith(rel.as_posix()) and (
-                    REPO_ROOT not in self.resolve().parents
-                ):
-                    raise PermissionError(13, 'Permission denied', str(self))
-                return real(self)
-
-            Path.read_bytes = read_bytes  # type: ignore[method-assign]
-            try:
-                yield
-            finally:
-                Path.read_bytes = real  # type: ignore[method-assign]
-
-        with unopenable(adapter):
-            case(
-                'a file let out of the freeze that cannot be opened, '
-                'paying for a new rule',
-                at_gather(big),
-                'the entries declared moved raise raise by 1 and drop it by 0',
-                rewrite=True,
-                declare=adapter_moved,
-            )
     entity_rule = (
         '        if len(indices) > ceiling:\n'
         '            raise StructuredDataError(\n'
@@ -1552,13 +1362,6 @@ def freeze_cases(results: list[Result]) -> None:
         None,
         rewrite=True,
         declare=moved_cap,
-    )
-    case(
-        'the same move with its glue declared a refactor',
-        lambda r: (edit(r / relational, entity_rule, ''), at_gather(big)(r)),
-        'gather: the baseline raises raise from',
-        rewrite=True,
-        declare={**moved_cap, gather: {'refactor': 'glue'}},
     )
 
     statistic = (
@@ -1661,19 +1464,6 @@ def freeze_cases(results: list[Result]) -> None:
             rewrite=True,
             declare={and_list: {'refactor': 'coverage widened'}},
         )
-        case(
-            'coverage widened over a function given a rule in the same change',
-            lambda r: edit(
-                r / schema_py,
-                'def _and_list(names: Sequence[str]) -> str:\n',
-                'def _and_list(names: Sequence[str]) -> str:\n'
-                '    if len(names) > 10**6:\n'
-                "        raise ValueError('big')\n",
-            ),
-            '_and_list: the baseline raises raise from',
-            rewrite=True,
-            declare={and_list: {'refactor': 'coverage widened'}},
-        )
     dates = client / 'core/dates.py'
     first = next(
         n.name
@@ -1739,287 +1529,37 @@ def freeze_cases(results: list[Result]) -> None:
             rewrite=True,
             declare=adapter_gone,
         )
-    with covering({client / 'decompose.py': None}):
-        case(
-            'a file taken out of the freeze while covered code still calls it',
-            lambda r: None,
-            'adds a call of sdm_client.decompose.parts_of',
-            rewrite=True,
-        )
 
-    # Allowances: the row is read at the merge base, the change declared.
-    key = from_source
-    held_entry = json.loads(committed)['files'][key_of['schema']]['from_source']
-    grown = {
-        'raise': held_entry['raise'] + 1,
-        'warn': held_entry['warn'],
-        'branch': held_entry['branch'] + 1,
-        'calls': held_entry['calls'],
-    }
-    by_allowance = {key: {'allowance': 'E99'}}
+    # E56(d): the allowance reason is retired with the allowances.
+    case(
+        'a retired allowance reason',
+        added_raise,
+        'a declaration holds one reason, moved, refactor, gone',
+        rewrite=True,
+        declare={from_source: {'allowance': 'E66'}},
+    )
 
-    def row(status: str, names: str = f'`{key}`') -> str:
-        return f'| E99 | A fixture: {names} may raise once more | the self-test | {status} |\n'
-
-    approved = row('approved by owner 2026-10-10')
+    # The tree as landed: the phase branch at the landing, judged against
+    # itself, its own declarations the base's (T1.24b's lesson: a
+    # candidate that passes may turn the phase branch red once landed).
+    landed = json.loads((REPO_ROOT / bridge_freeze.CHANGES).read_text())[
+        'changes'
+    ]
     case(
-        'control: growth under an owner-approved allowance, declared',
-        added_raise,
-        None,
-        on=based(approved),
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        'growth under an allowance, declared as a refactor',
-        added_raise,
-        'from_source: the baseline raises raise from',
-        on=based(approved),
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare={key: {'refactor': 'a check added'}},
-    )
-    case(
-        'an allowance declared with no ALLOWANCES entry',
-        added_raise,
-        'which grants it nothing',
-        on=based(approved),
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        'an allowance whose row lands in the same change',
-        lambda r: added_raise(r),
-        "ALLOWANCES[E99]: not a row of the merge base's decisions.md",
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        'an allowance under a row the owner did not approve',
-        added_raise,
-        'ALLOWANCES[E99]: the row is not approved by the owner',
-        on=based(row('orchestrator, owner to confirm')),
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    # The row's status read from its start, never a substring (T1.15 fix 1).
-    for status in (
-        'not approved by owner 2026-10-10',
-        'rejected; not approved by owner 2026-10-10',
-        'approved by owner 2026-10-10; rejected by owner 2026-10-11',
-        'approved by owner 2026-10-10, owner to confirm',
-    ):
-        case(
-            f'an allowance under a row whose status reads {status!r}',
-            added_raise,
-            'ALLOWANCES[E99]: the row is not approved by the owner',
-            on=based(row(status)),
-            allowances={'E99': {key: grown}},
-            rewrite=True,
-            declare=by_allowance,
-        )
-    case(
-        "control: an allowance under an approval with E66's annotation",
-        added_raise,
-        None,
-        on=based(
-            row(
-                'approved by owner 2026-10-11 (relayed by the orchestrator; '
-                "recorded at T1.26b, never the implementer's approval)"
-            )
-        ),
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        'an allowance under a row naming the function only by its bare name',
-        added_raise,
-        f'E99 does not name `{key}`',
-        on=based(row('approved by owner 2026-10-10', names='`from_source`')),
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        'an allowance below the growth',
-        added_raise,
-        'from_source: the baseline raises raise from',
-        on=based(approved),
-        allowances={'E99': {key: {**grown, 'raise': held_entry['raise']}}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        'an allowance the base already holds, reused after a shrink',
-        added_raise,
-        'from_source: the baseline raises raise from',
-        on=based(approved, held=repr({'E99': {key: grown}})),
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    # T1.27 part 1: on the phase head once an allowance has landed, the
-    # base holds the declaration and the ALLOWANCES entry both, and the
-    # entry is unchanged: spent, tolerated as a spent moved one is (T1.24b's
-    # landing runs failed it as granting nothing). It grants nothing new.
-    landed = based(
-        approved, held=repr({'E99': {key: grown}}), spent=by_allowance
-    )
-    case(
-        'control: a spent allowance of an unchanged entry, as on the phase head after its landing',
+        'control: the tree as landed, its own declarations spent, itself as the base',
         lambda r: None,
         None,
-        on=landed,
-        allowances={'E99': {key: grown}},
-        declare=by_allowance,
+        on=based(spent=landed),
+        declare=landed,
     )
     case(
-        'a spent allowance declared over a changed entry',
-        added_raise,
-        'already holds, which is spent',
-        on=landed,
-        allowances={'E99': {key: grown}},
-        rewrite=True,
-        declare=by_allowance,
-    )
-    case(
-        "a spent allowance declaration under an entry the base's ALLOWANCES lacks",
+        'control: the tree as landed, written in format 3, against its format 2 self',
         lambda r: None,
-        'which grants it nothing',
-        on=based(approved, spent=by_allowance),
-        declare=by_allowance,
-    )
-    new_key = f'{materialize}::_brand_new'
-    brand_new = (
-        '\n\ndef _brand_new(indices):\n'
-        '    if len(indices) > 5:\n'
-        '        raise ValueError()\n'
-        '    return indices\n'
-    )
-    new_row = row('approved by owner 2026-10-10', names=f'`{new_key}`')
-    new_declared = {
-        new_key: {'allowance': 'E99'},
-        f'{materialize}::<module>': {'refactor': 'defines _brand_new'},
-    }
-    case(
-        'control: a new function within its allowance',
-        lambda r: append(r / materialize, brand_new),
         None,
-        on=based(new_row),
-        allowances={
-            'E99': {new_key: {'raise': 1, 'warn': 0, 'branch': 1, 'calls': []}}
-        },
+        on=based(spent=landed),
         rewrite=True,
-        declare=new_declared,
+        declare=landed,
     )
-    case(
-        'a new function past its allowance (counts)',
-        lambda r: append(r / materialize, brand_new),
-        '_brand_new: the baseline raises raise from 0',
-        on=based(new_row),
-        allowances={
-            'E99': {new_key: {'raise': 0, 'warn': 0, 'branch': 1, 'calls': []}}
-        },
-        rewrite=True,
-        declare=new_declared,
-    )
-    case(
-        'a new function calling a helper its allowance does not name',
-        lambda r: (
-            (r / rules).write_text(FREEZE_RULES),
-            append(
-                r / materialize,
-                brand_new.replace(
-                    '    return indices\n',
-                    '    from sdm_client import _rules\n\n'
-                    '    return _rules.accept(indices)\n',
-                ),
-            ),
-        ),
-        '_brand_new: the baseline adds a call of sdm_client._rules.accept',
-        on=based(new_row),
-        allowances={
-            'E99': {new_key: {'raise': 1, 'warn': 0, 'branch': 1, 'calls': []}}
-        },
-        rewrite=True,
-        declare=new_declared,
-    )
-    case(
-        "the base's ALLOWANCES not a literal",
-        lambda r: None,
-        'ALLOWANCES is not a literal dict',
-        on=bridge_freeze.Base(
-            'the fixture base',
-            committed,
-            decisions,
-            allowances_as('dict()'),
-            changes,
-            source,
-        ),
-    )
-
-    # T1.24b: the allowances are the tree's own copy's, which a gate reads
-    # when it runs its checkpoint's copy of the script over a candidate.
-    with tempfile.TemporaryDirectory(prefix='sdm-allowances-') as tmp:
-        root = Path(tmp)
-        (root / bridge_freeze.SCRIPT).parent.mkdir(parents=True)
-        mine = {
-            'E99': {
-                'x.py::f': {'raise': 1, 'warn': 0, 'branch': 0, 'calls': []}
-            }
-        }
-        (root / bridge_freeze.SCRIPT).write_text(allowances_as(repr(mine)))
-        read, unreadable = bridge_freeze.tree_allowances(root)
-        expect(
-            results,
-            "bridge_freeze: the tree's allowances, not the running copy's",
-            [] if read == mine and not unreadable else [repr(read)],
-            fails_with=None,
-        )
-        (root / bridge_freeze.SCRIPT).write_text(allowances_as('dict()'))
-        expect(
-            results,
-            "bridge_freeze: the tree's allowances not a literal",
-            bridge_freeze.tree_allowances(root)[1],
-            fails_with='ALLOWANCES is not a literal dict',
-        )
-        # A key no dict can hold is a named refusal, not a TypeError, read
-        # as the tree's copy or as the base's (part 1's review, P3).
-        unhashable = allowances_as('{[1]: {}}')
-        (root / bridge_freeze.SCRIPT).write_text(unhashable)
-        try:
-            read_problems = bridge_freeze.tree_allowances(root)[1]
-        except TypeError as error:
-            read_problems = [f'raised {error!r}']
-        expect(
-            results,
-            "bridge_freeze: the tree's allowances keyed by a list",
-            read_problems,
-            fails_with="the tree's scripts/rust_core/bridge_freeze.py: "
-            'ALLOWANCES is not a literal dict',
-        )
-        try:
-            held_problems = bridge_freeze.held_allowances(unhashable)[1]
-        except TypeError as error:
-            held_problems = [f'raised {error!r}']
-        expect(
-            results,
-            "bridge_freeze: the base's allowances keyed by a list",
-            held_problems,
-            fails_with="the base's scripts/rust_core/bridge_freeze.py: "
-            'ALLOWANCES is not a literal dict',
-        )
-        (root / bridge_freeze.SCRIPT).unlink()
-        expect(
-            results,
-            "bridge_freeze: the tree's script missing",
-            bridge_freeze.tree_allowances(root)[1],
-            fails_with='is missing',
-        )
 
     # Missing, empty and retyped evidence.
     def write_baseline(text: str) -> Callable[[Path], None]:
@@ -2068,14 +1608,41 @@ def freeze_cases(results: list[Result]) -> None:
         'f49999 is not a frozen bridge file',
     )
     case(
-        'a count retyped',
+        'a format 2 entry without its counts',
         lambda r: baseline(
             r,
-            lambda d: d['files'][key_of['schema']]['from_source'].update(
-                {'raise': '2'}
+            lambda d: d['files'][key_of['schema']]['from_source'].pop('raise'),
+        ),
+        'an entry holds exactly branch, calls, fingerprint, raise, warn in '
+        'sdm-bridge-freeze/2',
+    )
+
+    def as_format_3(data: dict[str, Any]) -> None:
+        data['format'] = bridge_freeze.FORMAT
+        for functions in data['files'].values():
+            for name, entry in functions.items():
+                functions[name] = {'fingerprint': entry['fingerprint']}
+
+    case(
+        'control: a format 3 baseline', lambda r: baseline(r, as_format_3), None
+    )
+    case(
+        'a format 3 entry holding the retired counts',
+        lambda r: baseline(
+            r,
+            lambda d: (
+                as_format_3(d),
+                d['files'][key_of['schema']]['from_source'].update(
+                    {'raise': 1}
+                ),
             ),
         ),
-        'raise is not a count',
+        'an entry holds exactly fingerprint in sdm-bridge-freeze/3',
+    )
+    case(
+        'a baseline in a format neither copy writes',
+        lambda r: baseline(r, lambda d: d.update({'format': 'x/1'})),
+        'not a baseline in format sdm-bridge-freeze/3',
     )
     case(
         'a fingerprint retyped',
@@ -2096,16 +1663,6 @@ def freeze_cases(results: list[Result]) -> None:
             ),
         ),
         'an entry holds exactly branch, calls, fingerprint, raise, warn',
-    )
-    case(
-        'calls retyped',
-        lambda r: baseline(
-            r,
-            lambda d: d['files'][key_of['schema']]['from_source'].update(
-                {'calls': 'sdm_client.errors.StructuredDataError'}
-            ),
-        ),
-        'calls is not a sorted list',
     )
     case(
         "a frozen file's entry missing",
@@ -2133,17 +1690,13 @@ def freeze_cases(results: list[Result]) -> None:
         'the base baseline unreadable',
         lambda r: None,
         'at the base (the fixture base): not JSON',
-        on=bridge_freeze.Base(
-            'the fixture base', '{', decisions, script, changes, source
-        ),
+        on=bridge_freeze.Base('the fixture base', '{', changes),
     )
     case(
         'the base declarations unreadable',
         lambda r: None,
         'at the base (the fixture base): not JSON',
-        on=bridge_freeze.Base(
-            'the fixture base', committed, decisions, script, '{', source
-        ),
+        on=bridge_freeze.Base('the fixture base', committed, '{'),
     )
     case(
         'no merge base',
@@ -2155,13 +1708,13 @@ def freeze_cases(results: list[Result]) -> None:
         'control: a base that predates the baseline',
         lambda r: None,
         None,
-        on=bridge_freeze.Base('the fixture base', None, decisions, None),
+        on=bridge_freeze.Base('the fixture base', None),
     )
     case(
         'declarations against a base that predates the baseline',
         lambda r: None,
         'predates the baseline: nothing to declare',
-        on=bridge_freeze.Base('the fixture base', None, decisions, None),
+        on=bridge_freeze.Base('the fixture base', None),
         declare={from_source: refactor},
     )
 
@@ -2226,10 +1779,7 @@ def freeze_cases(results: list[Result]) -> None:
         git('branch', 'old')
         at_base = {
             bridge_freeze.BASELINE: 'at the base\n',
-            bridge_freeze.DECISIONS: 'rows at the base\n',
-            bridge_freeze.SCRIPT: 'script at the base\n',
             bridge_freeze.CHANGES: 'declarations at the base\n',
-            schema: 'source at the base\n',
         }
         for rel, text in at_base.items():
             (repo / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -2243,17 +1793,10 @@ def freeze_cases(results: list[Result]) -> None:
         found = bridge_freeze.base_baseline(repo, 'phase')
         expect(
             results,
-            'bridge_freeze: the baseline, rows, script, declarations and sources read at the merge base',
+            'bridge_freeze: the baseline and declarations read at the merge base',
             []
             if isinstance(found, bridge_freeze.Base)
-            and (
-                found.baseline,
-                found.decisions,
-                found.script,
-                found.changes,
-                (found.source(schema) or b'').decode(),
-            )
-            == tuple(at_base.values())
+            and (found.baseline, found.changes) == tuple(at_base.values())
             else [f'read {found!r}'],
             fails_with=None,
         )
@@ -2264,8 +1807,7 @@ def freeze_cases(results: list[Result]) -> None:
             []
             if isinstance(found, bridge_freeze.Base)
             and found.baseline is None
-            and found.script is None
-            and found.source(schema) is None
+            and found.changes is None
             else [f'read {found!r}'],
             fails_with=None,
         )
@@ -2342,34 +1884,6 @@ def freeze_cases(results: list[Result]) -> None:
             'bridge_freeze: a blank --base refused',
             bridge_freeze.problems(repo, ''),
             fails_with='the base branch is blank',
-        )
-        # Through problems(), as l0_deps.py and a gate run it: the tree's
-        # own allowances are read (part 1's review, P3), so an entry under a
-        # row the base's decisions do not hold is refused by its name. With
-        # problems() reading the running copy's (no allowances= passed),
-        # this seed's E99 is never read and the check fails.
-        (repo / bridge_freeze.SCRIPT).write_text(
-            allowances_as(
-                repr(
-                    {
-                        'E99': {
-                            f'{schema}::f': {
-                                'raise': 1,
-                                'warn': 0,
-                                'branch': 0,
-                                'calls': [],
-                            }
-                        }
-                    }
-                )
-            )
-        )
-        git('commit', '-q', '-am', 'an allowance under no row of the base')
-        expect(
-            results,
-            "bridge_freeze: problems() reads the tree's allowances, a row the base lacks refused",
-            bridge_freeze.problems(repo, 'phase'),
-            fails_with="ALLOWANCES[E99]: not a row of the merge base's decisions.md",
         )
 
 

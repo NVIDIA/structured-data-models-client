@@ -92,25 +92,3 @@ def test_the_post_landing_state_passes(repo: Path) -> None:
     landed = tests.checkpoint_of(repo)
     tests.commit(repo)
     assert tests.check(repo, landed) == []
-
-
-def test_the_freeze_reads_an_approval_by_the_same_rule() -> None:
-    r"""``bridge_freeze.py`` keeps its own copy of the rule, so the guard
-    stays one file: the two are the same patterns, and agree on each status
-    above."""
-    spec = importlib.util.spec_from_file_location(
-        'freeze_for_approval', ROOT / 'scripts/rust_core/bridge_freeze.py'
-    )
-    assert spec is not None and spec.loader is not None
-    freeze = importlib.util.module_from_spec(spec)
-    sys.modules['freeze_for_approval'] = freeze
-    spec.loader.exec_module(freeze)
-    ratchet = tests.ratchet
-    assert freeze._OWNER_APPROVED.pattern == ratchet.OWNER.pattern
-    assert freeze._WITHDRAWN.pattern == ratchet.WITHDRAWN.pattern
-    assert freeze._WITHDRAWN.flags == ratchet.WITHDRAWN.flags
-    for status in APPROVING + NOT_APPROVING:
-        assert freeze._owner_approved(status) == ratchet.owner_approved(
-            status
-        ), status
-        assert ratchet.owner_approved(status) is (status in APPROVING)
