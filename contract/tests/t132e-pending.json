@@ -3,7 +3,10 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [],
+  "exits": [
+   "py:test_a_server_refusal_fails_its_unit_and_the_run_goes_on",
+   "py:test_identical_requests_tolerate_ord_3_label_rounding_only"
+  ],
   "key-python-core": [],
   "key-rust-host": [],
   "sampled-python-core": []
@@ -232,6 +235,7 @@
    "py:test_a_named_time_column_is_honoured_on_a_large_table[three-kinds-named.5000]",
    "py:test_a_plan_over_the_budget_is_refused_before_any_data",
    "py:test_a_retry_is_refused_before_it_is_sent",
+   "py:test_a_server_refusal_fails_its_unit_and_the_run_goes_on",
    "py:test_a_unit_over_the_floor_is_judged[auroc-0.625]",
    "py:test_a_unit_over_the_floor_is_judged[auroc-perfect]",
    "py:test_a_unit_over_the_floor_is_judged[macro-f1-good]",
@@ -259,6 +263,7 @@
    "py:test_a_unit_under_the_floor_is_inconclusive[mae-worse-than-the-mean-core-worst]",
    "py:test_a_unit_with_no_refusal_is_operationally_ok",
    "py:test_an_old_route_refusal_is_inconclusive_and_operational",
+   "py:test_identical_requests_tolerate_ord_3_label_rounding_only",
    "py:test_no_host_appears_in_the_summary",
    "py:test_no_request_passes_the_plan",
    "py:test_option_b_leaves_the_null_key_rows_out_with_one_warning[mixed-null-decimal]",

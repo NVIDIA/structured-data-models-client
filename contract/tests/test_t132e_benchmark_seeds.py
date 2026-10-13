@@ -77,6 +77,31 @@ core refuses), against the interface the benchmark then had:
   refused, ``'OK'`` otherwise. Over the floor a core refusal is never a
   pass.
 
+Added after the live run of 2026-10-13 (a server's HTTP 400 aborted the
+whole run with no summary; the old and core requests differing only in
+float32 label rounding, ORD-3):
+
+- A prediction the endpoint refuses (the client's ``NimRequestError``, an
+  HTTP 4xx) is an operational failure of its unit: ``operational``
+  ``'FAIL'``, the reason in ``operational_errors`` naming the error's
+  code and HTTP status and never its text (an endpoint wrote it); the
+  other units still run; the summary is still written, with
+  ``requests_sent`` and ``predictions_sent`` (the requests counted where
+  they were sent, and those times the entities asked about); and the run
+  exits 1. Driven through ``main`` with the client
+  (``rfm_smoke._client``), the data (``dataset``, ``rows_of``,
+  ``describe``) and the request (``null_link_benchmark.build``) stubbed,
+  and ``requests.Session.send`` answering in process.
+- ``compare_requests(old: dict, core: dict) -> str``: two request payloads
+  as the client sends them, ``'equal'`` when they are one request
+  (``metadata.request_id`` aside), ``'equal-within-ORD-3'`` when they
+  differ only in label values (the cells of the column
+  ``task.target.column_name`` names, in ``context.instance_table``), each
+  pair numbers within float32 rounding (``|a - b| <= 8 * 2**-23 *
+  max(|a|, |b|)``, a few float32 steps), and ``'different'`` otherwise:
+  any other difference, a label beyond that, or a label that is no number
+  on either side.
+
 Brief lines proved, T1.32e part 1 scope 2 ("a real-data parity
 benchmark ... with no generated data. It is a sanity check, not a gate"):
 
@@ -734,5 +759,258 @@ def test_run_keeps_the_floor_when_the_core_refuses(
         assert found['verdict'] == 'INCONCLUSIVE', found['verdict']
         assert found['refused']['core']['code'] == 'INVALID_REQUEST'
         assert found['operational'] == 'FAIL'
+
+    held(request, check)
+
+
+# --- the live run's lessons (2026-10-13) ------------------------------------
+
+#: The driver a child runs: the benchmark's ``main`` on stubs, the
+#: endpoint refusing the core route's requests of the task ``refused``
+#: with an HTTP 400 after they are sent, answering every other in process.
+DRIVER = """
+import importlib.util
+import sys
+import types
+from pathlib import Path
+
+import pandas as pd
+import requests
+
+root, scratch = Path(sys.argv[1]), Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location(
+    'real_data_benchmark', root / 'scripts/live/real_data_benchmark.py'
+)
+module = importlib.util.module_from_spec(spec)
+sys.modules['real_data_benchmark'] = module
+spec.loader.exec_module(module)
+base, smoke = module.base, module.smoke
+from sdm_client import NimRequestError
+
+sent = []
+
+
+def send(session, request, **kwargs):
+    sent.append(request.url)
+    response = requests.Response()
+    response.status_code = 200
+    response._content = b'{}'
+    return response
+
+
+requests.Session.send = send
+INVOCATIONS = 'https://example.invalid/serving-endpoints/stub/invocations'
+
+
+class Transport:
+    def predict(self, payload):
+        requests.Session().send(
+            requests.Request('POST', INVOCATIONS, json={}).prepare()
+        )
+        if payload['task'] == 'refused' and payload['route'] == 'core':
+            raise NimRequestError(
+                400,
+                code='TASK_SCHEMA_MISMATCH',
+                message='the endpoint said secret-detail-7731',
+            )
+        return {}
+
+
+class Client:
+    def __init__(self):
+        self._transport = Transport()
+
+    def predict(self, request, model=None, outputs=None):
+        self._transport.predict(request)
+        frame = pd.DataFrame(
+            {'id': request['keys'], 'prediction': [1.5] * len(request['keys'])}
+        )
+        return types.SimpleNamespace(to_pandas=lambda: frame)
+
+    def close(self):
+        pass
+
+
+labels = {i: (0.0 if i < 4 else float(i)) for i in range(8)}
+
+
+def task(name):
+    return base.Task(
+        name=name,
+        kind='regression',
+        pql='PREDICT stub',
+        anchor=None,
+        labels=lambda connection: labels,
+    )
+
+
+def build(dataset, task, route, seed, keys):
+    return {'task': task.name, 'route': route, 'seed': seed, 'keys': list(keys)}
+
+
+base.build = build
+module.dataset = lambda name, *rest, **named: types.SimpleNamespace(
+    name=name, connect=lambda: None, tasks=[task('refused'), task('answered')]
+)
+module.rows_of = lambda connection: {}
+module.describe = lambda dataset, route: {}
+smoke.know_profile = lambda *rest, **named: None
+smoke._client = lambda *rest, **named: Client()
+code = module.main(
+    [
+        '--endpoint', 'stub-endpoint-t132e',
+        '--profile', 'stub-profile-t132e',
+        '--dataset', 'adventureworks-full',
+        '--data-dir', str(scratch),
+        '--raw-dir', str(scratch / 'raw'),
+        '--summary', str(scratch / 'summary.json'),
+        '--entities', '4',
+        '--seeds', '0,1',
+    ]
+)
+(scratch / 'sent.txt').write_text(str(len(sent)))
+sys.exit(code)
+"""
+
+
+def test_a_server_refusal_fails_its_unit_and_the_run_goes_on(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    r"""An HTTP 400 on one unit's request: that unit is an operational
+    failure with its reason, the other unit runs and is operationally
+    OK, the summary is written with the counts, and the run exits 1."""
+
+    def check() -> None:
+        assert SCRIPT.is_file()
+        driver = tmp_path / 'driver.py'
+        driver.write_text(DRIVER, encoding='utf-8')
+        done = subprocess.run(
+            [sys.executable, '-I', str(driver), str(ROOT), str(tmp_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tmp_path,
+            timeout=600,
+        )
+        output = done.stdout + done.stderr
+        assert done.returncode == 1, output[-3000:]
+        summary = tmp_path / 'summary.json'
+        assert summary.is_file(), output[-3000:]
+        text = summary.read_text(encoding='utf-8')
+        found = json.loads(text)
+        units = {u['task']: u for u in found['units']}
+        assert set(units) == {'refused', 'answered'}, list(units)
+        refused, answered = units['refused'], units['answered']
+        assert refused['operational'] == 'FAIL'
+        reasons = ' '.join(refused['operational_errors'])
+        assert 'TASK_SCHEMA_MISMATCH' in reasons and '400' in reasons, reasons
+        assert answered['operational'] == 'OK', answered['operational_errors']
+        sent = int((tmp_path / 'sent.txt').read_text())
+        assert sent > 0
+        assert found['requests_sent'] == sent
+        assert found['predictions_sent'] == sent * 4
+        for secret in (
+            'secret-detail-7731',
+            'example.invalid',
+            'stub-endpoint-t132e',
+            'stub-profile-t132e',
+        ):
+            assert secret not in text, secret
+            assert secret not in output, secret
+
+    held(request, check)
+
+
+def _payload(labels: list[Any], **changes: Any) -> dict[str, Any]:
+    r"""A regression request as the client sends it: two context rows
+    whose labels are ``labels``, a related table, one row to predict."""
+    payload: dict[str, Any] = {
+        'model': 'kumo-relational',
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+            'entity_table_names': ['customers'],
+        },
+        'context': {
+            'instance_table': {
+                'format': 'arrays',
+                'columns': ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
+                'rows': [[0, 40, labels[0]], [1, 41, labels[1]]],
+            },
+            'related_tables': {
+                'transactions': {
+                    'format': 'arrays',
+                    'columns': ['instance_id', 'price'],
+                    'rows': [[0, 0.16762712597846985], [1, 2.5]],
+                }
+            },
+        },
+        'predict': {
+            'instance_table': {
+                'format': 'arrays',
+                'columns': ['instance_id', '__kumo_entity_ref_0'],
+                'rows': [[0, 3]],
+            }
+        },
+        'metadata': {'request_id': 'sdm-aaaa', 'num_context_examples': 2},
+    }
+    for path, value in changes.items():
+        where: Any = payload
+        *parents, last = path.split('.')
+        for part in parents:
+            where = where[int(part)] if part.isdigit() else where[part]
+        where[int(last) if last.isdigit() else last] = value
+    return payload
+
+
+#: ORD-3's measured pair: one float32 step apart.
+ORD3 = (0.16762712597846985, 0.16762711107730865)
+
+
+def test_identical_requests_tolerate_ord_3_label_rounding_only(
+    request: pytest.FixtureRequest,
+) -> None:
+    def check() -> None:
+        compare = benchmark().compare_requests
+        same = _payload([ORD3[0], 2.5])
+        assert compare(same, _payload([ORD3[0], 2.5])) == 'equal'
+        assert (
+            compare(
+                same, _payload([ORD3[0], 2.5], **{'metadata.request_id': 'x'})
+            )
+            == 'equal'
+        )
+        # Only labels, each within float32 rounding.
+        assert compare(same, _payload([ORD3[1], 2.5])) == 'equal-within-ORD-3'
+        assert (
+            compare(_payload([ORD3[0], 2.5]), _payload([ORD3[1], 2.5000002]))
+            == 'equal-within-ORD-3'
+        )
+        # A label beyond float32 rounding.
+        assert compare(same, _payload([ORD3[0] * (1 + 1e-4), 2.5])) == (
+            'different'
+        )
+        assert compare(same, _payload([ORD3[0], 3.5])) == 'different'
+        # A label that is no number on one side.
+        assert compare(same, _payload([None, 2.5])) == 'different'
+        # The same rounding anywhere but a label.
+        price = 'context.related_tables.transactions.rows.0.1'
+        assert compare(same, _payload([ORD3[0], 2.5], **{price: ORD3[1]})) == (
+            'different'
+        )
+        # Labels within rounding beside any other difference.
+        for path, value in (
+            ('metadata.num_context_examples', 3),
+            ('predict.instance_table.rows.0.1', 4),
+            ('task.target.column_name', 'LABEL'),
+            ('context.instance_table.rows.1.1', 42),
+        ):
+            assert (
+                compare(same, _payload([ORD3[1], 2.5], **{path: value}))
+                == 'different'
+            ), path
+        fewer = _payload([ORD3[1], 2.5])
+        fewer['context']['instance_table']['rows'].pop()
+        assert compare(same, fewer) == 'different'
 
     held(request, check)
