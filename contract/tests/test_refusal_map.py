@@ -324,10 +324,9 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
                     )
             digests[probe['id']] = agreed
         # Where python-core reached the core, it started the operations the
-        # rust-host probe starts, with the same inputs; past them only on
-        # the probe of the case itself, whose core operations the case
-        # names (describe_source alone), the notebook's materialize carrying
-        # what the case format cannot (the gap, inference_config).
+        # rust-host probe starts, with the same inputs. From T1.29 the case
+        # names materialize and predict too, rust-host carrying the call's
+        # inference options as the client does, so no probe goes past them.
         # From T1.24b each edit python-core makes starts an edit_schema,
         # which a rust-host probe makes from its edits, not its core.
         started = {
@@ -335,17 +334,17 @@ def test_the_python_core_run_is_held_to_the_map() -> None:
             for each in capture.inputs
             if each['op'] != 'edit_schema'
         }
-        assert set(started) <= set(rust['core']) or (
-            rust['derive'] == {'from': 'case', 'steps': []}
-            and set(rust['core']) == {'describe_source'}
-        ), probe['id']
+        assert set(started) <= set(rust['core']), probe['id']
         for op, given in started.items():
-            if op not in rust['core']:
-                continue
             wanted = rust['core'][op]
             assert {key: given[key] for key in wanted} == wanted, probe['id']
             if op == 'materialize':
-                assert given['query'] == rust['pql'], probe['id']
+                # A probe derived from the case itself runs the case's
+                # query, which its input does not repeat.
+                query = rust.get(
+                    'pql', _cases()[document['case']]['input']['pql']
+                )
+                assert given['query'] == query, probe['id']
     assert refusal_map.check(document, 'python-core', observed) == []
     # The ladder ends at predict's result.
     assert refusal_map.success('predict') in observed.values()

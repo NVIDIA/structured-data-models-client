@@ -12,7 +12,9 @@
    "materialize_schema": "5fd65c17e84068c90f2b5e50d74bcabd6895fc027fc5a4b4350ecf09c8e728c6"
   },
   "notebook": {
-   "described": "2bc4502b361db202106a821404f45c960d3d9d5b10baa55b2a133802724d3b68"
+   "described": "2bc4502b361db202106a821404f45c960d3d9d5b10baa55b2a133802724d3b68",
+   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
+   "materialize_schema": "a610f81eb5b18d30eb422ec894944000992e31bca9fddbaf1fedcd20f69a31dd"
   },
   "one-hop": {
    "described": "9f78f106cc7fb412f0d5e328dc583566dadc6f8b4709a0dda5e686e5926f73da",
