@@ -14,11 +14,11 @@
 //!
 //! - A literal whose every run has four digits or fewer is read by D2 to
 //!   D7 and D9 ([`Reader::plain`]); a day-first reading warns by D4.
-//! - A literal with a run of five digits or more is read by D8
-//!   ([`Reader::long`]): a first field of six, eight, twelve or fourteen
-//!   digits is a packed date, the two fields after it times of day or, after
-//!   a `-` once an hour is known, a UTC offset; any other long field is a
-//!   value in D2's order, its year as written.
+//! - A literal with a run of five digits or more (D8) is not read: it is
+//!   [`Reading::Packed`], refused by name before any field is read, by the
+//!   owner's decision of 2026-10-12 (decision E78, register DT-5). The
+//!   reference reads such a literal through `dateutil` (a packed date, a
+//!   long zero-padded field) or refuses it; the core reads neither.
 //!
 //! What the reader takes from the host: the current year, which places a
 //! two-digit year (D5), and whether the platform's `strftime` pads a year
@@ -65,7 +65,10 @@ impl fmt::Display for DateTime {
 }
 
 /// What a literal stands for: a wall date and time, and the UTC offset in
-/// seconds when the literal gives one (D8).
+/// seconds when the literal gives one. Only D8's packed dates gave one, and
+/// since T1.6c they are refused (decision E78), so the reader gives none;
+/// the field stays because the validated query's format carries it
+/// (`PqlLiteral::Time`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Stamp {
     pub at: DateTime,
@@ -113,12 +116,17 @@ pub enum Reading {
     },
     /// Not a date (D9): the reference refuses it too.
     Refused,
+    /// A run of five digits or more (D8), refused by name before it is
+    /// read, needing no current year (decision E78): the reference reads it
+    /// through `dateutil`, or refuses it.
+    Packed,
     /// A two-digit year the reader cannot place: the reader was given no
     /// current year (D5).
     Unplaced,
 }
 
-/// A run of this many digits or more is read by D8.
+/// A run of this many digits or more is D8's, refused as
+/// [`Reading::Packed`].
 const LONG_DIGITS: usize = 5;
 /// A field of this many digits or more is a year as written (D2, D5).
 const YEAR_DIGITS: usize = 3;
@@ -164,7 +172,6 @@ struct Fields {
     hour: Option<u64>,
     minute: Option<u64>,
     second: Option<u64>,
-    offset: Option<i64>,
     /// A two-digit year that needed the current year, which was not given.
     unplaced: bool,
 }
@@ -187,15 +194,15 @@ impl Reader {
                 None => return Reading::Refused,
             },
         };
-        let long = date
+        // D8: refused by name, before any field is read (E78).
+        if date
             .iter()
             .chain(time.iter().flatten())
-            .any(|f| f.len() >= LONG_DIGITS);
-        let read = if long {
-            self.long(date, sep, time).map(|f| (f, None))
-        } else {
-            self.plain(date, sep, time)
-        };
+            .any(|f| f.len() >= LONG_DIGITS)
+        {
+            return Reading::Packed;
+        }
+        let read = self.plain(date, sep, time);
         if read.is_some_and(|(fields, _)| fields.unplaced) {
             return Reading::Unplaced;
         }
@@ -277,7 +284,6 @@ impl Reader {
             hour,
             minute,
             second: second_of,
-            offset: None,
             unplaced: false,
         };
         Some((
@@ -288,83 +294,11 @@ impl Reader {
             }),
         ))
     }
-
-    /// D8, for a literal with a run of five digits or more.
-    fn long(&self, date: [&str; 3], sep: char, time: Option<[&str; 3]>) -> Option<Fields> {
-        let [first, second, third] = date;
-        let mut read = Fields::default();
-        if matches!(first.len(), 6 | 8 | 12 | 14) {
-            let at = |from: usize, to: usize| value(&first[from..to]);
-            if first.len() == 6 {
-                // `YYMMDD` in D2's order, its year placed by D5.
-                let (year, month, day) = in_order([at(0, 2), at(2, 4), at(4, 6)], false);
-                (read.year, read.month, read.day) =
-                    (self.century(year, &mut read.unplaced), month, day);
-            } else {
-                // `YYYYMMDD`, then `HHMM`, then `SS`.
-                (read.year, read.month, read.day) = (at(0, 4), at(4, 6), at(6, 8));
-                if first.len() >= 12 {
-                    (read.hour, read.minute) = (Some(at(8, 10)), Some(at(10, 12)));
-                }
-                if first.len() == 14 {
-                    read.second = Some(at(12, 14));
-                }
-            }
-            for field in [second, third] {
-                let at = |from: usize, to: usize| value(&field[from..to]);
-                if sep == '-' && read.hour.is_some() {
-                    // A UTC offset: `HHMM` or `H` or `HH` hours, west.
-                    let (hours, minutes) = match field.len() {
-                        4 => (at(0, 2), at(2, 4)),
-                        1 | 2 => (value(field), 0),
-                        _ => return None,
-                    };
-                    let seconds = i64::try_from(hours * 3600 + minutes * 60).ok()?;
-                    read.offset = Some(-seconds);
-                } else if matches!(field.len(), 2 | 4) && read.hour.is_none() {
-                    // An hour, or an hour and minutes.
-                    read.hour = Some(at(0, 2));
-                    if field.len() == 4 {
-                        read.minute = Some(at(2, 4));
-                    }
-                } else if field.len() == 6 {
-                    // `HHMMSS`.
-                    (read.hour, read.minute, read.second) =
-                        (Some(at(0, 2)), Some(at(2, 4)), Some(at(4, 6)));
-                } else {
-                    return None;
-                }
-            }
-        } else {
-            let long = |f: &str| f.len() >= YEAR_DIGITS;
-            if date.iter().filter(|f| long(f)).count() > 1 {
-                return None;
-            }
-            // In D2's order, the year placed by D5 where no date field has
-            // three digits or more (the long run is then in the time).
-            (read.year, read.month, read.day) = in_order(date.map(value), long(first));
-            if !date.iter().any(|f| long(f)) && read.year < 100 {
-                read.year = self.century(read.year, &mut read.unplaced);
-            }
-        }
-        if let Some([h, m, s]) = time {
-            // An hour of six, eight, twelve or fourteen digits is a packed
-            // field where a time of day must be: refused.
-            if matches!(h.len(), 6 | 8 | 12 | 14) {
-                return None;
-            }
-            (read.hour, read.minute, read.second) =
-                (Some(value(h)), Some(value(m)), Some(value(s)));
-        }
-        // D7: the year 0 is read only from a plain `0000`.
-        (read.year != 0 || read.unplaced).then_some(read)
-    }
 }
 
 /// The stamp `fields` names, if it names one (D6, D9): a month of 1 to 12,
 /// a day the month has, an hour of 0 to 23, a minute and second of 0 to
-/// 59, a year of 0 to 9999 (the year 0 only as D7 lets it through), and an
-/// offset of less than a day.
+/// 59, and a year of 0 to 9999 (the year 0 only as D7 lets it through).
 fn checked(fields: Fields) -> Option<Stamp> {
     let small = |v: Option<u64>, most: u64| -> Option<i8> {
         let v = v.unwrap_or(0);
@@ -382,12 +316,7 @@ fn checked(fields: Fields) -> Option<Stamp> {
         minute: small(fields.minute, 59)?,
         second: small(fields.second, 59)?,
     };
-    let offset = match fields.offset {
-        None => None,
-        Some(o) if o.abs() < 86_400 => Some(i32::try_from(o).ok()?),
-        Some(_) => return None,
-    };
-    Some(Stamp { at, offset })
+    Some(Stamp { at, offset: None })
 }
 
 #[cfg(test)]
@@ -406,6 +335,7 @@ mod tests {
                 None => stamp.to_string(),
             },
             Reading::Refused => "refused".into(),
+            Reading::Packed => "packed".into(),
             Reading::Unplaced => "unplaced".into(),
         }
     }
@@ -442,45 +372,59 @@ mod tests {
             ("2024-01-02 23:59:60", "refused"),
             ("0000-01-01", "0000-01-01T00:00:00"),
             ("0-1-1", "refused"),
-            ("230203-06-09", "2003-02-23T06:00:00-09:00"),
-            ("20240101/00/123456", "2024-01-01T12:34:56"),
-            ("00001/1/2", "0001-01-02T00:00:00"),
+            ("230203-06-09", "packed"),
+            ("20240101/00/123456", "packed"),
+            ("00001/1/2", "packed"),
             ("2023-02-29", "refused"),
             ("2024-04-31", "refused"),
             ("2024-13-01", "refused"),
             ("2024-01-00", "refused"),
-            ("10000-01-01", "refused"),
+            ("10000-01-01", "packed"),
             ("123-4-567", "refused"),
         ] {
             assert_eq!(read(IN_2026, literal), want, "{literal}");
         }
     }
 
+    /// D8 (E78): every literal with a run of five digits or more is
+    /// refused by name, those the reference read through `dateutil` and
+    /// those it refused alike, with or without a current year; a run of
+    /// four digits still reads.
     #[test]
-    fn packed_dates_and_long_fields_read_by_d8() {
+    fn a_run_of_five_digits_or_more_is_refused_by_name() {
+        let none = Reader {
+            year: None,
+            pads_year: true,
+        };
+        for literal in [
+            "2024-01-01 00000:00:00",
+            "20240101-01-01",
+            "202401011230-1-1",
+            "20240101-01-00",
+            "20240101-01-0199",
+            "99991231-23-09",
+            "20240101.0102.030405",
+            "1.00000025.4",
+            "2024-01-01 1:000001:00",
+            "20240101-01-24",
+            "20240101-1234-56",
+            "240101-1-1",
+            "2024-01-01 000001:00:00",
+            "00000101-01-01",
+            "1-1-12345",
+            "00001-1-123",
+            "991231.23.23",
+            "01.5.96 05:000059:000004",
+            "760101-01-01",
+            "1/2/3 00001:0:0",
+        ] {
+            assert_eq!(read(IN_2026, literal), "packed", "{literal}");
+            assert_eq!(read(none, literal), "packed", "{literal}");
+        }
         for (literal, want) in [
-            ("2024-01-01 00000:00:00", "2024-01-01T00:00:00"),
-            ("20240101-01-01", "2024-01-01T01:00:00-01:00"),
-            ("202401011230-1-1", "2024-01-01T12:30:00-01:00"),
-            ("20240101-01-00", "2024-01-01T01:00:00+00:00"),
-            ("20240101-01-0199", "2024-01-01T01:00:00-02:39"),
-            ("99991231-23-09", "9999-12-31T23:00:00-09:00"),
-            ("20240101.0102.030405", "2024-01-01T03:04:05"),
-            ("1.00000025.4", "0004-01-25T00:00:00"),
-            ("2024-01-01 1:000001:00", "2024-01-01T01:01:00"),
-            // Refused: an offset of a day or more, an offset of three
-            // digits, a one-digit field after a packed date, a packed hour,
-            // the year 0, a year past 9999, two long fields.
-            ("20240101-01-24", "refused"),
-            ("20240101-1234-56", "refused"),
-            ("240101-1-1", "refused"),
-            ("2024-01-01 000001:00:00", "refused"),
-            ("00000101-01-01", "refused"),
-            ("1-1-12345", "refused"),
-            ("00001-1-123", "refused"),
-            ("991231.23.23", "refused"),
-            // A long run in the time alone: the year is still placed.
-            ("01.5.96 05:000059:000004", "1996-01-05T05:59:04"),
+            ("2024-01-01 0000:00:00", "2024-01-01T00:00:00"),
+            ("9999-12-31", "9999-12-31T00:00:00"),
+            ("1-1-1234", "1234-01-01T00:00:00"),
         ] {
             assert_eq!(read(IN_2026, literal), want, "{literal}");
         }
@@ -501,7 +445,6 @@ mod tests {
         assert_eq!(year(at(2027), "1/1/76"), 2076);
         assert_eq!(year(at(2080), "1/1/29"), 2129);
         assert_eq!(year(at(2080), "1/1/31"), 2031);
-        assert_eq!(year(at(2026), "760101-01-01"), 1976);
     }
 
     #[test]
@@ -531,14 +474,8 @@ mod tests {
             year: None,
             pads_year: false,
         };
-        // A year to place, in a plain literal and a packed one: unplaced.
-        for literal in [
-            "1/2/76",
-            "13/1/24",
-            "24-01-05",
-            "760101-01-01",
-            "1/2/3 00001:0:0",
-        ] {
+        // A year to place: unplaced.
+        for literal in ["1/2/76", "13/1/24", "24-01-05"] {
             assert_eq!(read(none, literal), "unplaced", "{literal}");
         }
         // Every literal that places no year reads as with a year.
@@ -547,6 +484,7 @@ mod tests {
             "13/01/2024",
             "20240101/00/123456",
             "00001/1/2",
+            "760101-01-01",
             "02/015/75",
             "2024-13-01",
             "0000-01-01",

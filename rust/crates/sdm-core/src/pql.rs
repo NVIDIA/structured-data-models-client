@@ -157,6 +157,7 @@ fn resolve_here(
         Err(parser::Unparsed::Refused(response)) => {
             return Ok(Validation::refused(diagnostics(&response), warnings));
         }
+        Err(parser::Unparsed::Packed(location)) => return Err(packed(location)),
         Err(parser::Unparsed::Unplaced) => {
             return Err(year.err().unwrap_or_else(|| {
                 internal("a two-digit year went unplaced with the current year known")
@@ -196,6 +197,32 @@ fn resolve_here(
 
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {
     diagnostic.severity == Severity::Error
+}
+
+/// The refusal of a date literal with a run of five digits or more (D8),
+/// by name and where it is, never its text (decision E78): the reference
+/// reads such a literal through `dateutil`, or refuses it.
+fn packed(location: Option<ast::Location>) -> CoreError {
+    let mut error = CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "a date literal with a run of five digits or more is refused",
+    )
+    .with_field("operation", Detail::text("validate_query"))
+    .with_field("rule", Detail::text("date_literal_packed"));
+    if let Some(at) = location.and_then(parser::Span::at) {
+        error = error
+            .with_field("start_row", count(at.start_row))
+            .with_field("start_col", count(at.start_col))
+            .with_field("end_row", count(at.end_row))
+            .with_field("end_col", count(at.end_col));
+    }
+    error
+}
+
+/// A count as a detail.
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
 
 fn internal(message: impl Into<String>) -> CoreError {
