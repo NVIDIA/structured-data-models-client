@@ -2754,7 +2754,9 @@ entries:
     18 digits or where every value fits, string past that) and one with a
     scale as string, each value its exact decimal text, never a double,
     which could make two keys one (sdm_request::payload::key_dtype; T1.32a
-    fix round 1), and the entities, of any decimal width, are cast
+    fix round 1), so predict reads such a key's entities back as text, the
+    result's id a utf8 such as "0.5" though the caller passed Decimals; and
+    the entities, of any decimal width, are cast
     under the core's rule table: a request where they cast and the table
     holds them, otherwise INVALID_REQUEST at materialize (P1B-32's fields;
     those refusals in place of the reference's failures are P1B-37's).
@@ -2799,7 +2801,9 @@ entries:
     refused, StructuredDataError, code INVALID_REQUEST, at materialize,
     with field indices, the position and the reason (inexact,
     not_a_number or type). A float key still takes the nearest float of a
-    number. The default route is unchanged.
+    float, a decimal or text, and an integer within 2**24 (32 bits) or 2**53
+    (64) of zero, refusing one past it as the reference does. The default
+    route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route, an entity a float or decimal with a fraction for an
@@ -2860,7 +2864,7 @@ entries:
     as text.
 
 - id: P1B-36
-  title: A decimal or text entity of a float key is rounded once, at the key's width, where the reference rounds it twice
+  title: A decimal entity of a float key is rounded once, at the key's width, where the reference rounds it twice
   kind: change
   old_behavior: >-
     The reference's pandas cast reads a Decimal entity of a FLOAT key
