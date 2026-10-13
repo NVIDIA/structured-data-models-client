@@ -155,9 +155,11 @@ def _host_fields(core: dict[str, Any], old: dict[str, Any]) -> Any:
 def test_codex_s_case_fails_the_warnings_rule_through_host_fields() -> None:
     core, old = HIDDEN["Codex's: one against two"]
     report = _host_fields(core, old)
-    assert any('host.warnings' in failure for failure in report.failures), (
-        report.failures
-    )
+    # Each failure is (rule, text): the warnings rule's, naming the field.
+    assert any(
+        rule == 'warnings' and 'host.warnings: differ' in text
+        for rule, text in report.failures
+    ), report.failures
 
 
 def test_codex_s_converse_passes_through_host_fields() -> None:
