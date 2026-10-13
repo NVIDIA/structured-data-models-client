@@ -1222,7 +1222,7 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
                         Answer::Float(v) => Some(v),
                         #[allow(
                             clippy::cast_precision_loss,
-                            reason = "as pandas reads an integer among floats"
+                            reason = "as the reference's frame reads an integer among floats"
                         )]
                         Answer::Int(n) => Some(n as f64),
                         _ => None,

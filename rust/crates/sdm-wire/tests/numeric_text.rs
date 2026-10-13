@@ -4,7 +4,7 @@
 
 //! A probability written as text is read as Python's `float` reads it, as
 //! the bindings' `_finite` does (T1.28b fix round 1): each text of
-//! `python-float.json`, recorded from the reference's interpreter, read to
+//! `numeric-text.json`, recorded from the reference's interpreter, read to
 //! the same double or refused alike.
 
 #![allow(
@@ -12,11 +12,11 @@
     reason = "test code: reads the recorded texts"
 )]
 
-use sdm_wire::response::python_float;
+use sdm_wire::response::numeric_text;
 
 #[test]
-fn text_is_read_as_python_s_float_reads_it() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/python-float.json");
+fn text_is_read_as_the_reference_s_float_reads_it() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/numeric-text.json");
     let recorded: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let cases = recorded["cases"].as_array().unwrap();
@@ -24,12 +24,12 @@ fn text_is_read_as_python_s_float_reads_it() {
     let (mut read, mut refused) = (0, 0);
     for case in cases {
         let text = case["text"].as_str().unwrap();
-        let got = python_float(text).map(|v| format!("{:016x}", v.to_bits()));
+        let got = numeric_text(text).map(|v| format!("{:016x}", v.to_bits()));
         let want = case["float"].as_str().map(str::to_owned);
         // Python's NaN and this reading's are both NaN; their payloads may
         // differ.
         if want.as_deref() == Some("7ff8000000000000") {
-            assert!(python_float(text).is_some_and(f64::is_nan), "{text:?}");
+            assert!(numeric_text(text).is_some_and(f64::is_nan), "{text:?}");
         } else {
             assert_eq!(got, want, "{text:?}");
         }

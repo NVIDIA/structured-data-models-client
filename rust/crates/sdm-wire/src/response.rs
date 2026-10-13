@@ -183,12 +183,12 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 }
 
 /// A probability as the bindings' `_finite` reads one: a number, or text
-/// Python's `float` reads ([`python_float`]), never a boolean, and finite.
+/// Python's `float` reads ([`numeric_text`]), never a boolean, and finite.
 fn probability(value: &Value) -> Result<f64, Refused> {
     const FIELD: &str = "prediction.probabilities";
     let read = match value {
         Value::Number(token) => token.parse::<f64>().ok(),
-        Value::Text(text) => python_float(text),
+        Value::Text(text) => numeric_text(text),
         _ => None,
     };
     match read {
@@ -225,7 +225,7 @@ const WHITE_SPACE: [u32; 25] = [
 /// optional fraction, or a fraction alone, then an optional exponent), any
 /// Unicode decimal digit read as the digit it stands for and a single
 /// underscore allowed between two digits; `None` for any other text.
-pub fn python_float(text: &str) -> Option<f64> {
+pub fn numeric_text(text: &str) -> Option<f64> {
     let mut ascii = String::with_capacity(text.len());
     for c in text.chars() {
         let code = u32::from(c);

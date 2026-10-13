@@ -1,5 +1,5 @@
 {
- "description": "Python's float() of each text (CPython 3.12.13, the reference environment's, Unicode 15.0), recorded: its IEEE-754 bits, or null where float() raises ValueError. sdm-wire's tests/python_float.rs holds sdm_wire::response::python_float to them (T1.28b).",
+ "description": "Python's float() of each text (CPython 3.12.13, the reference environment's, Unicode 15.0), recorded: its IEEE-754 bits, or null where float() raises ValueError. sdm-wire's tests/numeric_text.rs holds sdm_wire::response::numeric_text to them (T1.28b).",
  "cases": [
   {
    "text": "0.5",
