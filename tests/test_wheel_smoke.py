@@ -17,10 +17,14 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 import types
+import xml.etree.ElementTree as ElementTree
 import zipfile
 from typing import Any
 
@@ -1051,3 +1055,200 @@ def test_the_container_mounts_the_inputs_read_only(
     assert any(m.endswith(':/repo:ro') for m in mounts), mounts
     inside = command[command.index('/repo/scripts/rust_core/wheel_smoke.py') :]
     assert _option(inside, '--inputs') == '/inputs'
+
+
+# --- T1.20: a messages.py that patches pytest's report, in the inputs --------
+
+#: What a candidate's message builder could add to pass a test it fails:
+#: pytest's report of each test rewritten to ``passed``, at import (the
+#: class's constructor of reports patched) or in a hook (the module
+#: registering itself as a plugin from the running configuration).
+REPORT_PATCHES = {
+    'at import': """
+import _pytest.reports as _reports
+
+_made = _reports.TestReport.from_item_and_call.__func__
+
+
+def _passed(cls, item, call):
+    report = _made(cls, item, call)
+    report.outcome, report.longrepr = 'passed', None
+    return report
+
+
+_reports.TestReport.from_item_and_call = classmethod(_passed)
+""",
+    'in a hook': """
+import gc as _gc
+import sys as _sys
+
+import pytest as _pytest
+
+
+@_pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = (yield).get_result()
+    report.outcome, report.longrepr = 'passed', None
+
+
+_config = next(o for o in _gc.get_objects() if isinstance(o, _pytest.Config))
+_config.pluginmanager.register(_sys.modules[__name__])
+""",
+}
+
+
+@pytest.mark.parametrize('patch', list(REPORT_PATCHES))
+def test_a_report_patching_messages_py_in_the_inputs_changes_nothing(
+    tmp_path: pathlib.Path, patch: str
+) -> None:
+    """The subagent's seed: the inputs' message builder rewrites pytest's
+    reports to ``passed``. The suite's builder is the own tree's, but for
+    its ``CONTRACT`` line, and holds nothing of the patch."""
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    (inputs / BINDING_TESTS / 'messages.py').write_text(
+        _builder('inputs', 20) + REPORT_PATCHES[patch]
+    )
+    tests = smoke.suite(own, inputs, _scratch(tmp_path))
+    staged = (tests / 'messages.py').read_text()
+    assert staged == _builder('own', 20)
+    assert '_pytest' not in staged and 'outcome' not in staged
+    for path in tests.rglob('*'):
+        if path.is_file():
+            assert "'passed'" not in path.read_text(errors='replace'), path
+
+
+#: ``sdm_client`` as a stand-in package, imported by an inner pytest from
+#: ``PYTHONPATH``: its ``Run`` validates a query as the binding does,
+#: answering ``accepted`` as 0/1 when ``NUMERIC``, as a bool otherwise.
+FAKE_NATIVE = """
+import json
+
+NUMERIC = {numeric}
+
+
+class Run:
+    @classmethod
+    def start(cls, control, attachments):
+        run = cls()
+        good = json.loads(attachments[1]) == (
+            'PREDICT users.age FOR EACH users.id'
+        )
+        run.accepted = int(good) if NUMERIC else good
+        return run
+
+    def next(self):
+        step = {{
+            'message': 'step',
+            'step': 'done',
+            'result': {{'op': 'validate_query', 'accepted': self.accepted}},
+        }}
+        return json.dumps(step).encode(), {{}}
+"""
+
+
+def _fake_client(where: pathlib.Path, numeric: bool) -> pathlib.Path:
+    package = where / 'sdm_client'
+    package.mkdir(parents=True)
+    (package / '__init__.py').write_text('')
+    (package / '_native.py').write_text(FAKE_NATIVE.format(numeric=numeric))
+    return where
+
+
+def _validate_in_pytest(
+    tests: pathlib.Path, client: pathlib.Path, report: pathlib.Path
+) -> subprocess.CompletedProcess[str]:
+    """The staged ``test_a_query_is_validated_through_a_run`` under a pytest
+    of its own, as the smoke runs it (no ``PYTEST_*`` variable, no plugin
+    autoload, an empty configuration), the fake client on the path; its
+    JUnit report written to `report`."""
+    ini = report.parent / 'pytest.ini'
+    ini.write_text('[pytest]\n')
+    env = {k: v for k, v in os.environ.items() if not k.startswith('PYTEST_')}
+    env.update(
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD='1',
+        PYTHONPATH=str(client),
+        PYTHONDONTWRITEBYTECODE='1',
+    )
+    root = tests.parents[3]
+    return subprocess.run(
+        [sys.executable, '-m', 'pytest',
+         f'{tests / "test_binding.py"}::test_a_query_is_validated_through_a_run',
+         '-c', str(ini), '--rootdir', str(root), '--confcutdir', str(tests),
+         '-p', 'no:cacheprovider', '-q', '--native-build', 'production',
+         f'--junitxml={report}'],
+        cwd=report.parent,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )  # fmt: skip
+
+
+def _patching_inputs(root: pathlib.Path, patch: str) -> pathlib.Path:
+    """A copy of this checkout's contract inputs at `root`, beside this
+    checkout's message builder with `patch` added."""
+    for path in INPUTS:
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_bytes((smoke.REPO / path).read_bytes())
+    builder = root / BINDING_TESTS / 'messages.py'
+    builder.parent.mkdir(parents=True, exist_ok=True)
+    builder.write_text(
+        (smoke.REPO / BINDING_TESTS / 'messages.py').read_text()
+        + REPORT_PATCHES[patch]
+    )
+    return root
+
+
+@pytest.mark.parametrize('patch', list(REPORT_PATCHES))
+def test_a_failing_binding_still_fails_when_the_inputs_patch_pytest_s_report(
+    tmp_path: pathlib.Path, patch: str
+) -> None:
+    """The seed, executed under pytest: a binding answering ``accepted`` as
+    0/1 fails this checkout's test as the suite stages it, the report
+    saying so, though the inputs' message builder rewrites reports to
+    ``passed``. The controls: the same suite passes a binding answering a
+    bool, so the failure is the binding's; and the same suite with the
+    inputs' builder put in its place passes the failing binding, so the
+    patch would have hidden it."""
+    inputs = _patching_inputs(tmp_path / 'inputs', patch)
+    staged = tmp_path / 'staged'
+    staged.mkdir()
+    tests = smoke.suite(smoke.REPO, inputs, staged)
+    numeric = _fake_client(tmp_path / 'numeric', True)
+    boolean = _fake_client(tmp_path / 'boolean', False)
+    files = ('test_binding.py',)
+
+    seeded = tmp_path / 'seeded'
+    seeded.mkdir()
+    done = _validate_in_pytest(tests, numeric, seeded / 'junit.xml')
+    assert done.returncode == 1, done.stdout + done.stderr
+    with pytest.raises(smoke.SmokeFailed):
+        smoke.junit_verdict(seeded / 'junit.xml', files)
+    cases = list(
+        ElementTree.parse(seeded / 'junit.xml').getroot().iter('testcase')
+    )
+    assert [{c.tag for c in case} for case in cases] == [{'failure'}]
+
+    control = tmp_path / 'control'
+    control.mkdir()
+    done = _validate_in_pytest(tests, boolean, control / 'junit.xml')
+    assert done.returncode == 0, done.stdout + done.stderr
+    counts = smoke.junit_verdict(control / 'junit.xml', files)
+    assert counts['test_binding.py']['passed'] == 1
+
+    # The inputs' builder in the suite's place: the patch hides the fault.
+    swapped = tmp_path / 'swapped'
+    shutil.copytree(staged, swapped)
+    swapped_tests = swapped / BINDING_TESTS
+    (swapped_tests / 'messages.py').write_bytes(
+        (inputs / BINDING_TESTS / 'messages.py').read_bytes()
+    )
+    hidden = tmp_path / 'hidden'
+    hidden.mkdir()
+    done = _validate_in_pytest(swapped_tests, numeric, hidden / 'junit.xml')
+    assert done.returncode == 0, done.stdout + done.stderr
+    counts = smoke.junit_verdict(hidden / 'junit.xml', files)
+    assert counts['test_binding.py'] == {
+        'passed': 1, 'failed': 0, 'errors': 0, 'skipped': 0,
+    }  # fmt: skip
