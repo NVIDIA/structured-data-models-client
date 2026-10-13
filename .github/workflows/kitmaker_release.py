@@ -48,11 +48,9 @@ PROJECTS = {
     6898: 'structured-data-models-client',
 }
 
-# An unrecognised state fails rather than waits: polling an unexpected
-# `rejected` for half an hour reports a timeout, which is the wrong problem.
 # The five states Portal documents, and no more. An unrecognised one is kept
-# waiting rather than failed: the docs say to continue bounded polling, record
-# it and escalate if progress stops, and specifically not to read an
+# waiting rather than failed, which is what the docs ask for: continue bounded
+# polling, record the value, escalate if progress stops, and never read an
 # unfamiliar nonterminal value as success.
 PENDING = {'pending', 'processing', 'in_progress'}
 TERMINAL_OK = {'completed'}
@@ -138,7 +136,9 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
             with urllib.request.urlopen(request, timeout=120) as response:
                 return json.loads(response.read() or b'{}')
         except urllib.error.HTTPError as error:
-            detail = error.read().decode(errors='replace')[:400]
+            # Decided before the body is read, because reading it can itself
+            # raise `IncompleteRead` on a truncated response, and that would
+            # escape past the sibling handler below without ever retrying.
             # Most 4xx is an answer rather than a blip, so it is not repeated.
             retryable = (
                 error.code >= 500
@@ -148,6 +148,10 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
             if attempt < attempts and retryable:
                 time.sleep(READ_BACKOFF * attempt)
                 continue
+            try:
+                detail = error.read().decode(errors='replace')[:400]
+            except TRANSIENT:
+                detail = '<body could not be read>'
             raise SystemExit(
                 f'{method} {path} returned {error.code}: {detail}'
             ) from error
@@ -464,9 +468,10 @@ def main() -> None:
             f'across {len(PROJECTS)} projects'
         )
 
-        # Pass one: nothing publishes until every project has validated and
-        # every dry run has finished. A project already on PyPI at this version
-        # is left alone, and a part-published one is reduced to what is missing.
+        # What PyPI already holds, for every project, before anything is sent.
+        # Asking as each dry run came up meant a project an earlier run had
+        # left part-way went unexamined whenever an earlier project failed, and
+        # the summary then called it untouched.
         todo: dict[int, tuple[str, list[str]]] = {}
         for project_id, name in PROJECTS.items():
             pending = outstanding(name, version, by_name[name])
@@ -475,9 +480,6 @@ def main() -> None:
                 skipped.append(name)
                 continue
             if len(pending) != len(by_name[name]):
-                # An earlier run left this version part-way. Recorded so a
-                # release that stops before reaching it does not describe it
-                # as untouched.
                 partial.append(name)
             todo[project_id] = (
                 name,
@@ -487,15 +489,18 @@ def main() -> None:
                     if filename in pending
                 ),
             )
+
+        # Pass one: nothing publishes until every project has validated and
+        # every dry run has finished.
+        for project_id, (name, project_urls) in todo.items():
             actual = call('GET', f'/projects/{project_id}').get('name')
             if actual != name:
                 raise SystemExit(
                     f'Portal project {project_id} is {actual!r}, not {name!r}'
                 )
-            print(f'dry run: {name} ({len(pending)} files)')
+            print(f'dry run: {name} ({len(project_urls)} files)')
             wait_for(
-                submit(project_id, name, todo[project_id][1], False),
-                f'dry run {name}',
+                submit(project_id, name, project_urls, False), f'dry run {name}'
             )
 
         if not todo:

@@ -14,10 +14,12 @@
 # Two consequences worth stating rather than discovering.
 #
 # There is a stored credential now. Kitmaker's Portal authenticates with a
-# long-lived bearer token, so `KITMAKER_API_TOKEN` sits in this repository's
-# secrets, which the previous Trusted Publishing setup deliberately avoided.
-# It is held by one job, behind a protected environment, and it can publish
-# only to the five Portal projects it owns.
+# long-lived bearer token, which the previous Trusted Publishing setup
+# deliberately avoided. `KITMAKER_API_TOKEN` must be an environment secret on
+# `pypi` rather than a repository secret: approval gates environment secrets,
+# so a repository secret would be readable from a workflow on any branch and
+# the approval would protect nothing. It is read by one job, and it can
+# publish only to the five Portal projects it owns.
 #
 # This workflow no longer signs what it ships. PEP 740 attestations are issued
 # to whoever uploads, and that is Kitmaker now, so nothing here produces one

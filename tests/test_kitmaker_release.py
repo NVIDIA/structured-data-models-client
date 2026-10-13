@@ -267,26 +267,47 @@ def release(kitmaker, tmp_path, monkeypatch):
     """A whole release laid out the way the workflow hands it over, with every
     call to Portal and PyPI answered locally."""
 
-    def arrange(*, already_on_pypi=()):
+    def files_of(name):
+        """A wheel and an sdist each, as a real release has: with one file per
+        project a part-published version could not be represented at all."""
+        stem = name.replace('-', '_')
+        return {
+            f'{stem}-1.0.0-py3-none-any.whl': hashlib.sha256(
+                f'{name}-whl'.encode()
+            ).hexdigest(),
+            f'{stem}-1.0.0.tar.gz': hashlib.sha256(
+                f'{name}-sdist'.encode()
+            ).hexdigest(),
+        }
+
+    def arrange(*, already_on_pypi=(), partly_on_pypi=()):
         dist = tmp_path / 'dist'
         dist.mkdir(exist_ok=True)
         lines = []
         for name in kitmaker.PROJECTS.values():
-            filename = f'{name.replace("-", "_")}-1.0.0-py3-none-any.whl'
-            (dist / filename).write_bytes(name.encode())
-            digest = hashlib.sha256(name.encode()).hexdigest()
-            lines.append(
-                f'{filename}\thttps://example.invalid/{filename}\tsha256:{digest}'
-            )
+            for filename, digest in files_of(name).items():
+                (dist / filename).write_bytes(
+                    f'{name}-{"whl" if filename.endswith(".whl") else "sdist"}'.encode()
+                )
+                lines.append(
+                    f'{filename}\thttps://example.invalid/{filename}\tsha256:{digest}'
+                )
         (tmp_path / 'assets.tsv').write_text('\n'.join(lines) + '\n')
 
         live = set(already_on_pypi)
+        half = set(partly_on_pypi)
 
         def on_pypi(name, version):
+            if name in half:
+                # The wheel landed, the sdist did not.
+                return {
+                    f: d
+                    for f, d in files_of(name).items()
+                    if f.endswith('.whl')
+                }
             if name not in live:
                 return None
-            filename = f'{name.replace("-", "_")}-1.0.0-py3-none-any.whl'
-            return {filename: hashlib.sha256(name.encode()).hexdigest()}
+            return files_of(name)
 
         def submit(project_id, name, urls, upload):
             if upload:
@@ -700,3 +721,29 @@ def test_two_runs_for_one_tag_cannot_race(release_job, workflow):
     group = workflow['concurrency']['group']
     assert 'github.ref' in group
     assert workflow['concurrency']['cancel-in-progress'] is False
+
+
+def test_a_partial_project_is_described_even_if_the_run_stops_first(
+    kitmaker, release, monkeypatch
+):
+    """PyPI is asked about every project before any dry run. Asking as each dry
+    run came up meant a project an earlier run had left part-way went
+    unexamined whenever an earlier project failed, and the summary then called
+    it untouched."""
+    names = list(kitmaker.PROJECTS.values())
+    last = names[-1]
+    summary = release(partly_on_pypi={last})
+
+    monkeypatch.setattr(
+        kitmaker,
+        'call',
+        lambda method, path, body=None: {'name': 'something-else'},
+    )
+    with pytest.raises(SystemExit, match="is 'something-else', not"):
+        kitmaker.main()
+
+    reported = states(summary, kitmaker)
+    assert reported[names[0]] == 'not reached'
+    assert reported[last].startswith('PARTLY on PyPI, missing '), (
+        f'a version already partly on PyPI was reported as {reported[last]!r}'
+    )
