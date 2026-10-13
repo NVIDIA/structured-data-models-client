@@ -769,7 +769,7 @@ fn a_whole_table_answer_of_another_shape_is_refused() {
     let one = || vec![(stamps(&[Some(day(0))]), stamps(&[Some(day(1))]), 3)];
     let names = ["ts".to_owned()];
     let good = ranges(3, one());
-    assert!(infer::whole_table(&names, &[good.clone()], &Days).is_ok());
+    assert!(infer::whole_table(&names, std::slice::from_ref(&good), &Days).is_ok());
     // Two rows; no row; another number of columns; a null or negative
     // count: each an internal error.
     let two = RecordBatch::try_new(
