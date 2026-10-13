@@ -309,6 +309,17 @@ def test_a_project_live_but_unverified_is_not_reported_as_unpublished(
     assert f'NOT published: {first}' not in lines
 
 
+def states(summary, kitmaker):
+    """The summary as ``{project: state}``, asserting on the way that it names
+    each project once and names nothing else. A count of lines does not say
+    that: five lines naming one project would satisfy it."""
+    lines = summary.read_text().strip().splitlines()
+    parsed = dict(line.rsplit(': ', 1)[::-1] for line in lines)
+    assert len(parsed) == len(lines), f'a project is named twice: {lines}'
+    assert set(parsed) == set(kitmaker.PROJECTS.values())
+    return parsed
+
+
 def test_a_failure_in_pass_one_still_records_what_happened(
     kitmaker, release, monkeypatch
 ):
@@ -328,12 +339,11 @@ def test_a_failure_in_pass_one_still_records_what_happened(
     with pytest.raises(SystemExit, match='not'):
         kitmaker.main()
 
-    lines = summary.read_text().strip().splitlines()
-    assert len(lines) == len(names)
-    assert f'NOT published: {names[0]}' in lines
-    assert f'NOT published: {names[1]}' in lines
-    for name in names[2:]:
-        assert f'not reached: {name}' in lines
+    assert states(summary, kitmaker) == {
+        names[0]: 'NOT published',
+        names[1]: 'NOT published',
+        **{name: 'not reached' for name in names[2:]},
+    }
 
 
 def test_every_project_is_accounted_for_exactly_once(kitmaker, release):
@@ -341,8 +351,8 @@ def test_every_project_is_accounted_for_exactly_once(kitmaker, release):
     names = list(kitmaker.PROJECTS.values())
     summary = release(already_on_pypi={names[0], names[2]})
     kitmaker.main()
-    lines = summary.read_text().strip().splitlines()
-    assert len(lines) == len(names)
-    assert sum(line.endswith(name) for line in lines for name in names) == len(
-        names
-    )
+    assert states(summary, kitmaker) == {
+        names[0]: 'already published',
+        names[2]: 'already published',
+        **{name: 'published' for name in (names[1], names[3], names[4])},
+    }

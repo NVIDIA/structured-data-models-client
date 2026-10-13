@@ -28,9 +28,9 @@
 # `build` has `contents: read` to check the tree out and `actions: read` to ask
 # whether CI passed, and nothing more, so a compromised build dependency cannot
 # publish anything itself. It can still decide what gets published, because it
-# is what produces the distributions. `release` has `contents: write` to create
-# the GitHub Release, verify the tag and attach the artifacts. `kitmaker`
-# holds the token and needs nothing else.
+# is what produces the distributions. `release` holds `contents: write` and the
+# Kitmaker token together, because the GitHub Release and the PyPI publish have
+# to be one approval; it is the only job behind the protected environment.
 name: publish
 
 on:
