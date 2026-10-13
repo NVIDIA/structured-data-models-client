@@ -27,6 +27,7 @@ chained, and nothing the driver wrote reaches a traceback (decision H17).
 from __future__ import annotations
 
 import builtins
+import contextlib
 import datetime
 import string
 import warnings
@@ -575,10 +576,9 @@ def error_from_core(
         details['driver_class'] = driver_class
     template = WORDED.get((code, str(details.get('field'))))
     if template is not None:
-        try:
+        # Fields its template cannot fill give the code's sentence.
+        with contextlib.suppress(KeyError, IndexError, TypeError, ValueError):
             sentence = template.format(**details)
-        except (KeyError, IndexError, TypeError, ValueError):
-            pass
     return _instance(cls, sentence, code, details)
 
 

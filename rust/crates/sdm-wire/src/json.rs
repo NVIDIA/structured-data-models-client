@@ -269,15 +269,13 @@ fn value(raw: &RawValue) -> Result<Value, serde_json::Error> {
 /// ([`read_answer`]) as that token.
 fn value_with(raw: &RawValue, marker: Option<&str>) -> Result<Value, serde_json::Error> {
     let text = raw.get();
-    if let Some(marker) = marker {
-        if let Some(token) = text
-            .strip_prefix('"')
+    if let Some(token) = marker.and_then(|marker| {
+        text.strip_prefix('"')
             .and_then(|t| t.strip_suffix('"'))
             .and_then(|t| t.strip_prefix(marker))
             .filter(|t| matches!(*t, "NaN" | "Infinity" | "-Infinity"))
-        {
-            return Ok(Value::Number(token.to_owned()));
-        }
+    }) {
+        return Ok(Value::Number(token.to_owned()));
     }
     Ok(match text.as_bytes().first() {
         Some(b'{') => {

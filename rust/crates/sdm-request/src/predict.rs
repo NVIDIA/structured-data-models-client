@@ -38,7 +38,7 @@
 //! `embeddings`, `quantiles`, `explanation` or `metadata`, a classification
 //! answer that is not of its target's type, and the tabular model.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use arrow_array::builder::{Float64Builder, MapBuilder, MapFieldNames, StringBuilder};
@@ -426,8 +426,8 @@ pub struct Notice {
 fn member(value: &Value) -> String {
     match value {
         Value::Number(token) => match token.parse::<f64>() {
-            Ok(n) if n == 0.0 => "n0".to_owned(),
-            Ok(n) => format!("n{:016x}", n.to_bits()),
+            // 0.0 and -0.0 are one member, as Python's set holds them.
+            Ok(n) => format!("n{:016x}", (n + 0.0).to_bits()),
             Err(_) => format!("t{token}"),
         },
         Value::Text(text) => format!("s{text}"),
@@ -472,11 +472,12 @@ pub fn preflight(
 ) -> Result<Vec<Notice>, CoreError> {
     let mut notices = Vec::new();
     for payload in payloads {
-        if let Some((_, rows)) = instance_table(payload, "context") {
-            if rows.is_empty() {
-                return Err(unsupported(model, "no context rows are left")
-                    .with_field("context_rows", count(0)));
-            }
+        if let Some((_, rows)) = instance_table(payload, "context")
+            && rows.is_empty()
+        {
+            return Err(
+                unsupported(model, "no context rows are left").with_field("context_rows", count(0))
+            );
         }
     }
     for payload in payloads {
@@ -490,7 +491,7 @@ pub fn preflight(
             .and_then(|t| t.get("column_name"))
             .and_then(Value::as_text);
         if let Some(values) = target_values(payload, column) {
-            let labels: HashSet<String> = values.iter().map(|v| member(v)).collect();
+            let labels: BTreeSet<String> = values.iter().map(|v| member(v)).collect();
             if labels.len() > CLASSES_MAX {
                 return Err(
                     unsupported(model, "the target has more classes than the model takes")
@@ -513,7 +514,7 @@ pub fn preflight(
         let Some(values) = target_values(payload, column) else {
             continue;
         };
-        let answered: HashSet<String> = values
+        let answered: BTreeSet<String> = values
             .iter()
             .filter(|v| !matches!(v, Value::Null))
             .map(|v| member(v))
@@ -623,7 +624,7 @@ fn predicted_column(query: &str) -> Option<&str> {
             .map_or(s.len(), |(at, _)| at)
     };
     let table = ident(spaced);
-    if table == 0 || spaced[table..].chars().next() != Some('.') {
+    if table == 0 || !spaced[table..].starts_with('.') {
         return None;
     }
     let column = ident(&spaced[table + 1..]);
@@ -949,7 +950,7 @@ fn spelled(probabilities: &[(String, f64)], answers: AnswerType) -> Vec<(String,
             (key.unwrap_or_else(|| class.clone()), *p)
         })
         .collect();
-    let distinct: HashSet<&str> = respelled.iter().map(|(k, _)| k.as_str()).collect();
+    let distinct: BTreeSet<&str> = respelled.iter().map(|(k, _)| k.as_str()).collect();
     if distinct.len() == probabilities.len() {
         respelled
     } else {
@@ -1101,7 +1102,7 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
     if part.rows.is_empty() {
         return vec![];
     }
-    let mut seen = HashSet::new();
+    let mut seen = BTreeSet::new();
     named
         .iter()
         .filter(|name| seen.insert(name.as_str()))
