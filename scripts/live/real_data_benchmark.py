@@ -32,11 +32,15 @@ whether the core answers as well as the old route.
     columns, relationships and edits). ``build.py`` fetches the files
     (about 23 MB) when run once with ``--source DIR/adventureworks`` and no
     ``--write``; this script never downloads.
-  - ``rel-hm``: RelBench's H&M (``DIR/rel-hm/``: ``article.parquet``,
-    ``customer.parquet``, ``transactions.parquet``), a local sample or the
-    full tables, described by inference alone (keys, time column and links
-    by name; ``transactions`` has no key, and is read by foreign key as the
-    reference reads a keyless table).
+  - ``rel-hm``: RelBench's H&M (``DIR/rel-hm/``, or ``--hm-dir``:
+    ``article.parquet``, ``customer.parquet``, ``transactions.parquet``),
+    described by inference alone (keys, time column and links by name;
+    ``transactions`` has no key, and is read by foreign key as the
+    reference reads a keyless table). The local sample's tables hold under
+    1,000 rows each, so with it H&M never reaches the whole-table time
+    inference; ``--hm-dir`` names the full tables where they are local (an
+    option, not the default), which do. The summary says, per dataset,
+    which tables are past a preview (``tables_past_preview``).
 
 - **Tasks** (:data:`TASKS`), fixed before any data is read, each with its
   labels computed in DuckDB from the rows past the anchor time as the
@@ -76,7 +80,7 @@ whether the core answers as well as the old route.
   Nothing written names an endpoint, workspace, host, profile, token or
   request id: every line passes through ``rfm_smoke``'s redaction.
 
-    scripts/live/real_data_benchmark.py --dry-run --data-dir DIR
+    scripts/live/real_data_benchmark.py --dry-run --data-dir DIR [--hm-dir DIR]
     scripts/live/real_data_benchmark.py --data-dir DIR --endpoint NAME \
         --profile NAME --raw-dir DIR --summary FILE [--dataset NAME ...]
         [--seeds 0,1] [--entities 16] [--max-predictions 500]
@@ -155,6 +159,9 @@ AUROC_FLOOR = 0.6
 #: The bootstrap of each unit's intervals: resamples and seed.
 BOOTSTRAP = base.BOOTSTRAP
 BOOTSTRAP_SEED = base.BOOTSTRAP_SEED
+#: The rows a preview reads (``sdm-schema``'s ``PREVIEW_ROWS``): a table of
+#: this many or more has its time column chosen over every row.
+PREVIEW_ROWS = 1_000
 #: AdventureWorks' anchor time, inside its order dates (2022-06 to 2025-06).
 AW_ANCHOR = '2025-03-01'
 #: H&M's anchor time, inside its transactions (to 2020-09-22).
@@ -386,10 +393,13 @@ def load_hm(directory: Path, database: Any) -> None:
         )
 
 
-def dataset(name: str, data_dir: Path, scratch: Path) -> Any:
+def dataset(
+    name: str, data_dir: Path, scratch: Path, hm_dir: Path | None = None
+) -> Any:
     r"""Dataset ``name`` as ``null_link_benchmark`` runs one: its rows
     loaded once into a DuckDB file under ``scratch``, each connection a
-    fresh one to that file, read only."""
+    fresh one to that file, read only; H&M from ``hm_dir`` where given,
+    else ``data_dir / 'rel-hm'``."""
     import duckdb
 
     path = scratch / f'{name}.duckdb'
@@ -400,7 +410,7 @@ def dataset(name: str, data_dir: Path, scratch: Path) -> Any:
             given = json.loads(AW_CASE.read_text(encoding='utf-8'))['input']
             from_source, edits = given['from_source'], given['edits']
         else:
-            load_hm(data_dir / 'rel-hm', database)
+            load_hm(hm_dir or data_dir / 'rel-hm', database)
             from_source, edits = {}, []
     finally:
         database.close()
@@ -612,10 +622,18 @@ def run(
         connection = dataset.connect()
         rows = rows_of(connection)
         routes = {route: describe(dataset, route) for route in ('old', 'core')}
+        # Which tables a preview of PREVIEW_ROWS may not hold whole, so
+        # their time column is chosen over every row.
+        past = sorted(name for name, n in rows.items() if n >= PREVIEW_ROWS)
         described.append(
-            {'dataset': dataset.name, 'rows': rows, 'routes': routes}
+            {
+                'dataset': dataset.name,
+                'rows': rows,
+                'tables_past_preview': past,
+                'routes': routes,
+            }
         )
-        say(f'{dataset.name}: rows {rows}')
+        say(f'{dataset.name}: rows {rows}, past a preview {past}')
         for route, found in routes.items():
             say(f'{dataset.name}: {route} route describes {found}')
         for task in dataset.tasks:
@@ -820,6 +838,12 @@ def _parser() -> argparse.ArgumentParser:
         help='where the local files are: adventureworks/ and rel-hm/',
     )
     parser.add_argument(
+        '--hm-dir',
+        type=Path,
+        help='where the H&M tables are, when not DATA_DIR/rel-hm (the full '
+        'tables, to reach the whole-table time inference)',
+    )
+    parser.add_argument(
         '--raw-dir', type=Path, help="where each call's predictions go"
     )
     parser.add_argument('--summary', type=Path, help='where the summary goes')
@@ -893,7 +917,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 smoke._no_network()
             try:
                 sets = [
-                    dataset(name, arguments.data_dir, Path(scratch))
+                    dataset(
+                        name,
+                        arguments.data_dir,
+                        Path(scratch),
+                        arguments.hm_dir,
+                    )
                     for name in names
                 ]
             except MissingData as missing:

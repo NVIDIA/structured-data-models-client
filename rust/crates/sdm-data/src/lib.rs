@@ -15,7 +15,7 @@
 //! built at T1.11b DuckDB renders the catalog (`describe` in each part,
 //! `preview`, `key_counts`, `time_bounds`), and from T1.11c the sampler's
 //! `sample_entities`, `neighbors` and `lookup`, and from T1.32e
-//! `column_ranges`; the rest come with the
+//! `column_ranges` and `repeated_key`; the rest come with the
 //! tasks that reach them. A plan expects the schema the contract fixes for
 //! the request's answer, or discovers it where the answer's columns are the
 //! source's own (`DataRequest::expected`, decision E36), so a host provider

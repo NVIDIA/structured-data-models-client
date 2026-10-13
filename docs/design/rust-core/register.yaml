@@ -1341,7 +1341,7 @@ entries:
   cases: [T1.32e]
   status: proposed
   approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E84}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
   notes: >-
     ORD-2's notes foresaw this entry. Measured by
     scripts/live/real_data_benchmark.py --dry-run on the full H&M tables

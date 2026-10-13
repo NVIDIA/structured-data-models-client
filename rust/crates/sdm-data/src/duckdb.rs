@@ -805,7 +805,6 @@ fn time_bounds(columns: &[TableColumn]) -> String {
         .join("\nUNION ALL\n")
 }
 
-/// `name` as an identifier: in double quotes, each one in it doubled.
 /// The reference's one query over every row of a table for its time
 /// column's choice (`Table._full_range`): `COUNT(*)`, then each column's
 /// `MIN`, `MAX` and `COUNT`, in its text.
@@ -833,6 +832,7 @@ fn repeated_key(table: &str, key: &[String]) -> String {
     )
 }
 
+/// `name` as an identifier: in double quotes, each one in it doubled.
 fn identifier(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
