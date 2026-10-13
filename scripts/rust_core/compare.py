@@ -516,6 +516,20 @@ def _core_consistent(
     core = observation['core']
     if core is None:
         return
+    if (
+        core.get('described') is not None
+        or core.get('materialized') is not None
+    ) and not (isinstance(core.get('fetches'), list) and core['fetches']):
+        # A description or request state is built from fetched rows, so its
+        # step trace holds at least one fetch: an empty or missing trace is
+        # missing evidence, failed on its own runner, never taken as the
+        # two hosts agreeing (T1.29; the test author's seed of a trace
+        # emptied on both hosts).
+        report.fail(
+            f'{case["id"]}: {who}: core.fetches: a description or request '
+            'state with no fetch recorded',
+            'core',
+        )
     if 'predict' in case.get('core', {}) and core['materialized'] is not None:
         # Materialized, the call goes on to predict, which answers its call
         # and result or an error, never both (T1.11d); its error ends the
