@@ -5,7 +5,7 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
-## 1.0.0 - 2026-10-12
+## 1.0.0 - 2026-10-13
 
 First public release. The five distributions are versioned and published
 together, and a given version of one is tested only against the same version

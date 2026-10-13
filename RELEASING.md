@@ -56,7 +56,8 @@ done
 Internal pins (`structured-data-models-api==1.0.0` in `structured-data-models-client`'s dependencies) move with them.
 
 Update `CHANGELOG.md`: the entries for the release go under its own heading
-with today's date, so the tag carries a changelog that names the version it
+with the date you are tagging on, not the date you wrote them, so the tag
+carries a changelog that names the version it
 publishes.
 
 ## Tagging
