@@ -45,13 +45,16 @@ and, beside it, what DuckDB hands over: ``f``'s catalog type
 (``typeof``) and its Arrow type (``duckdb_arrow``), observed with the
 reference environment's DuckDB.
 
-``register`` marks the vectors where the core is expected to differ, so
-that it may only under a register entry naming the vector
-(``REGISTER_REF``). It is derived from the reference's answer, never
-chosen: the reference fails with an unnamed exception (no
-``StructuredDataError`` code) or with ``INTERNAL_ERROR`` (E66(b)'s class:
-a named refusal or a success in its place is a change to register). Every
-other vector is held to the reference exactly. This decides no policy.
+``register`` marks the vectors where the core is expected to differ. It is
+derived from the reference's answer, never chosen: the reference fails
+with an unnamed exception (no ``StructuredDataError`` code) or with
+``INTERNAL_ERROR`` (E66(b)'s class: a named refusal or a success in its
+place is a change to register). The mark decides no policy: any vector,
+marked or not, may differ from the reference only under an approved
+register entry whose ``refs`` name it with exactly the transition it makes,
+``REGISTER_REF`` + ``<id or glob> <from> -> <to>``, each side ``success``
+or ``refusal <CODE>`` (``outcome_class``; the reference's unnamed
+exception is ``refusal UNNAMED``).
 
 Nothing here is written by hand but the types: every expected value is the
 reference's. ``TYPES``, ``case_for``, ``run`` and ``project`` are imported
@@ -76,8 +79,10 @@ TEMPLATE = ROOT / 'contract/cases/s1/nested.list-int.json'
 RUNNER = ROOT / 'contract/runners/run_python.py'
 FORMAT = 'sdm-nested-type-vectors/1'
 #: How a register entry names the vectors it covers, in its ``refs``: this
-#: prefix and a vector's id, or a glob of ids (``fnmatch``), for example
-#: ``contract/nested-type-vectors.json#struct.*``.
+#: prefix, a vector's id or a glob of ids (``fnmatch``), and the transition
+#: it declares, for example
+#: ``contract/nested-type-vectors.json#struct.* refusal UNNAMED -> refusal
+#: UNSUPPORTED_REQUEST``.
 REGISTER_REF = 'contract/nested-type-vectors.json#'
 #: Each vector's case id is this prefix and the vector's id.
 CASE_PREFIX = 't132c.'
@@ -570,6 +575,20 @@ def project(
         'warnings': list(host.get('warnings') or []),
         'payload': _payload(public.get('payloads'), vector['table']),
     }
+
+
+#: The class of a refusal with no ``StructuredDataError`` code (the
+#: reference's unnamed ``RuntimeError`` or ``ValueError``).
+UNNAMED = 'UNNAMED'
+
+
+def outcome_class(outcome: dict[str, Any]) -> str:
+    r"""``success`` or ``refusal <CODE>`` of an answer's ``outcome`` (its
+    ``result`` and ``code``): a register entry's transition is written from
+    one of these to another."""
+    if outcome['result'] == 'success':
+        return 'success'
+    return f'refusal {outcome.get("code") or UNNAMED}'
 
 
 def register(answer: dict[str, Any]) -> list[str]:

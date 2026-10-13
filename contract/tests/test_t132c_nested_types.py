@@ -27,13 +27,30 @@ by the same code; ``sdm-testkit``'s ``tests/t132c_nested_types.rs`` holds
   answer must be the reference's: the outcome (result, stage, class,
   code), what the schema made of ``f`` (described, left out), the warning
   classes, and ``f`` in the request the endpoint received.
-- A vector the recorder marked ``register.required`` (the reference fails
-  unnamed or with INTERNAL_ERROR) may differ only where an entry of
-  ``docs/design/rust-core/register.yaml``, proposed or approved, names it
-  in its ``refs`` (``contract/nested-type-vectors.json#<id or glob>``);
-  every other vector is held to the reference exactly. No vector may end
-  in ``UNSUPPORTED_REQUEST``, a rule the core does not take yet: the brief
-  lifts ``column_type`` for this family.
+- A vector may differ from the reference only under an approved entry of
+  ``docs/design/rust-core/register.yaml`` whose ``refs`` name it with the
+  transition it makes (T1.32a's binding-transition form):
+  ``contract/nested-type-vectors.json#<id or glob> <from> -> <to>``, each
+  side ``success`` or ``refusal <CODE>``, from the reference's answer to
+  the host's (the reference's unnamed exception is ``refusal UNNAMED``).
+  A ref covers exactly the transition it declares, nothing else; a
+  proposed entry excuses nothing, so its vectors stay pending until the
+  owner approves it. So the core's ``UNSUPPORTED_REQUEST`` (rule
+  ``column_type``) passes where an approved entry declares it, P1B-10's
+  struct and map for instance, and fails everywhere else. The recorder's
+  ``register.required`` marks where a difference is expected (the
+  reference fails unnamed or with INTERNAL_ERROR); it excuses nothing by
+  itself, and an unmarked vector (BLOB, which the reference leaves out
+  with its warning) is held to the reference exactly unless an approved
+  entry declares its transition.
+- Reviewers: only the owner approves an entry, but a ref attached to an
+  already approved entry (P1B-7, P1B-9, P1B-10) takes effect here at once.
+  Each newly attached ref therefore needs a reviewer's check that the
+  entry's approved ``new_behavior`` really is that transition for those
+  vectors, and that its glob names no vector the owner did not approve.
+- Every vector ref of a proposed or approved entry must name a transition
+  in that form; a malformed ref fails rather than being read as covering
+  nothing (or everything).
 - The vectors themselves: recorded at the reference of
   ``contract/reference-env.txt``, every type of the recorder present with
   its setup, the register marks what the recorder derives, and not vacuous.
@@ -52,6 +69,7 @@ import copy
 import fnmatch
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -81,37 +99,83 @@ RECORDED: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
 BY_ID = {vector['id']: vector for vector in RECORDED['vectors']}
 
 
-def registered(vector_id: str) -> str | None:
-    r"""The register entry, proposed or approved, whose ``refs`` name the
-    vector (by id or a glob of ids), or None."""
-    document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+#: A vector ref and the transition it declares.
+TRANSITION = re.compile(
+    re.escape(R.REGISTER_REF)
+    + r'(?P<glob>\S+) (?P<old>success|refusal [A-Z][A-Z_]*)'
+    + r' -> (?P<new>success|refusal [A-Z][A-Z_]*)'
+)
+
+
+def transitions(
+    document: dict[str, Any] | None = None,
+) -> tuple[list[tuple[str, str, str, str, str]], list[str]]:
+    r"""Each vector ref of the register's proposed or approved entries, as
+    (entry, status, glob, from, to), and the refs naming vectors that
+    declare no transition in the form (malformed)."""
+    if document is None:
+        document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    out: list[tuple[str, str, str, str, str]] = []
+    malformed: list[str] = []
     for entry in document['entries']:
-        if entry.get('status') not in ('proposed', 'approved'):
+        status = entry.get('status')
+        if status not in ('proposed', 'approved'):
             continue
         for ref in entry.get('refs') or []:
             if not isinstance(ref, str) or not ref.startswith(R.REGISTER_REF):
                 continue
-            if fnmatch.fnmatchcase(vector_id, ref[len(R.REGISTER_REF) :]):
-                return str(entry['id'])
-    return None
+            found = TRANSITION.fullmatch(ref)
+            if found is None:
+                malformed.append(f'{entry["id"]}: {ref}')
+                continue
+            out.append(
+                (
+                    str(entry['id']),
+                    str(status),
+                    found['glob'],
+                    found['old'],
+                    found['new'],
+                )
+            )
+    return out, malformed
+
+
+def covered(
+    vector_id: str, old: str, new: str
+) -> tuple[str | None, str | None]:
+    r"""The approved entry whose ref names the vector with exactly the
+    transition ``old -> new``, and a proposed one that would, if any."""
+    approved = proposed = None
+    for entry, status, glob, frm, to in transitions()[0]:
+        if (frm, to) != (old, new) or not fnmatch.fnmatchcase(vector_id, glob):
+            continue
+        if status == 'approved':
+            approved = approved or entry
+        else:
+            proposed = proposed or entry
+    return approved, proposed
 
 
 def problem_of(vector: dict[str, Any], got: dict[str, Any]) -> str | None:
     r"""Why ``got`` fails the vector, or None when it is the reference's
-    answer, or a marked vector's registered difference."""
+    answer, or a difference an approved entry declares exactly."""
     want = vector['reference']
-    if got['outcome'].get('code') == 'UNSUPPORTED_REQUEST':
-        return f'refused by a rule the core does not take yet: {got["outcome"]}'
     if got == want:
         return None
-    if vector['register']['required'] and registered(vector['id']):
+    old = R.outcome_class(want['outcome'])
+    new = R.outcome_class(got['outcome'])
+    approved, proposed = covered(vector['id'], old, new)
+    if approved is not None:
         return None
-    marked = (
-        'marked register entry required, and no entry names it'
-        if vector['register']['required']
-        else 'held to the reference exactly'
+    why = (
+        f'{proposed} declares it but is only proposed'
+        if proposed is not None
+        else 'no approved entry declares it'
     )
-    return f'{vector["id"]}: got {got}, the reference {want} ({marked})'
+    return (
+        f'{vector["id"]}: got {got}, the reference {want}; the transition '
+        f'{old} -> {new}: {why}'
+    )
 
 
 @pytest.fixture(scope='module')
@@ -258,25 +322,92 @@ def test_the_gate_holds_a_pending_test_to_failing(
         G.held('python-core', 'seeded.unlisted', failing)
 
 
-def test_a_difference_is_held_unless_marked_and_registered(
+def test_every_vector_ref_names_its_transition() -> None:
+    assert transitions()[1] == []
+
+
+def test_a_difference_passes_only_under_an_approved_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Fail closed: the comparison itself, on a seeded difference.
-    plain = next(
-        v for v in RECORDED['vectors'] if not v['register']['required']
-    )
-    marked = next(v for v in RECORDED['vectors'] if v['register']['required'])
-    other = copy.deepcopy(plain['reference'])
-    other['outcome'] = {
+    # Fail closed: the comparison itself, on seeded differences and
+    # seeded register entries.
+    module = sys.modules[__name__]
+    plain = BY_ID['list.integer']
+    marked = BY_ID['struct.integer']
+    assert R.outcome_class(marked['reference']['outcome']) == 'refusal UNNAMED'
+    unported = copy.deepcopy(marked['reference'])
+    unported['outcome'] = {
         'result': 'refusal',
         'stage': 'from_source',
-        'error': 'StructuredDataError',
-        'code': 'NOT_THE_REFERENCE_S',
+        'error': 'UnsupportedRequestError',
+        'code': 'UNSUPPORTED_REQUEST',
     }
+    entries: list[tuple[str, str, str, str, str]] = []
+    monkeypatch.setattr(module, 'transitions', lambda: (entries, []))
     assert problem_of(plain, plain['reference']) is None
-    assert problem_of(plain, other) is not None
-    # Each part of the answer counts: f described where it was left out,
-    # another warning, f in the request.
+    # No entry: held exactly, marked or not.
+    assert problem_of(marked, unported) is not None
+    # A proposed entry excuses nothing.
+    entries[:] = [
+        (
+            'P-1',
+            'proposed',
+            'struct.*',
+            'refusal UNNAMED',
+            'refusal UNSUPPORTED_REQUEST',
+        )
+    ]
+    assert 'only proposed' in (problem_of(marked, unported) or '')
+    # An approved one covers exactly its transition and its glob.
+    entries[:] = [
+        (
+            'A-1',
+            'approved',
+            'struct.*',
+            'refusal UNNAMED',
+            'refusal UNSUPPORTED_REQUEST',
+        )
+    ]
+    assert problem_of(marked, unported) is None
+    assert problem_of(BY_ID['map.empty'], unported) is not None
+    described = copy.deepcopy(unported)
+    described['outcome'] = dict(
+        unported['outcome'], result='success', stage='predict', code=None
+    )
+    assert problem_of(marked, described) is not None
+    entries[:] = [
+        (
+            'A-1',
+            'approved',
+            'struct.*',
+            'refusal INTERNAL_ERROR',
+            'refusal UNSUPPORTED_REQUEST',
+        )
+    ]
+    assert problem_of(marked, unported) is not None
+    # An unmarked vector is held exactly, and excused only the same way:
+    # BLOB, which the reference leaves out with its warning.
+    blob = BY_ID['scalar.blob']
+    assert not blob['register']['required']
+    refused = copy.deepcopy(blob['reference'])
+    refused['outcome'] = unported['outcome']
+    refused['described'] = refused['payload'] = None
+    refused['warnings'] = []
+    entries[:] = []
+    assert problem_of(blob, refused) is not None
+    entries[:] = [
+        (
+            'A-2',
+            'approved',
+            'scalar.blob',
+            'success',
+            'refusal UNSUPPORTED_REQUEST',
+        )
+    ]
+    assert problem_of(blob, refused) is None
+    # Each part of a success counts: f described where it was left out,
+    # another warning, f in the request (success -> success, undeclared).
+    entries[:] = []
     for part, value in (
         ('described', {'dtype': 'int64', 'stype': 'numerical'}),
         ('warnings', []),
@@ -285,49 +416,55 @@ def test_a_difference_is_held_unless_marked_and_registered(
         changed = copy.deepcopy(plain['reference'])
         changed[part] = value
         assert problem_of(plain, changed) is not None, part
-    unported = copy.deepcopy(other)
-    unported['outcome']['code'] = 'UNSUPPORTED_REQUEST'
-    monkeypatch.setattr(
-        sys.modules[__name__], 'registered', lambda _: 'SEEDED-1'
-    )
-    assert problem_of(marked, unported) is not None
-    assert problem_of(marked, other) is None
-    # An unmarked vector is never excused by an entry.
-    assert problem_of(plain, other) is not None
-    monkeypatch.setattr(sys.modules[__name__], 'registered', lambda _: None)
-    assert problem_of(marked, other) is not None
 
 
-def test_the_register_reading_is_by_ref_and_status(tmp_path: Path) -> None:
-    # A ref names a vector by id or glob; an entry neither proposed nor
-    # approved, or a ref of another file, names none.
+def test_the_register_reading_is_by_ref_status_and_transition() -> None:
+    # Refs of proposed and approved entries are read; a rejected entry's
+    # and another file's are not; a ref naming vectors with no transition
+    # in the form is malformed.
+    ref = R.REGISTER_REF
     document = {
         'entries': [
             {
                 'id': 'A-1',
                 'status': 'approved',
-                'refs': [R.REGISTER_REF + 'struct.*'],
+                'refs': [
+                    f'{ref}struct.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+                ],
             },
             {
                 'id': 'A-2',
-                'status': 'rejected',
-                'refs': [R.REGISTER_REF + 'map.*'],
+                'status': 'proposed',
+                'refs': [f'{ref}array.* refusal UNNAMED -> success'],
             },
             {
                 'id': 'A-3',
-                'status': 'proposed',
-                'refs': ['contract/other.json#map.*'],
+                'status': 'rejected',
+                'refs': [f'{ref}map.* refusal UNNAMED -> success'],
+            },
+            {
+                'id': 'A-4',
+                'status': 'approved',
+                'refs': [
+                    'contract/other.json#map.* success -> success',
+                    f'{ref}map.*',
+                    f'{ref}map.* refusal unnamed -> success',
+                ],
             },
         ]
     }
-    seeded = tmp_path / 'register.yaml'
-    seeded.write_text(yaml.safe_dump(document), encoding='utf-8')
-    module = sys.modules[__name__]
-    original = module.REGISTER
-    try:
-        module.REGISTER = seeded  # type: ignore[attr-defined]
-        assert registered('struct.integer') == 'A-1'
-        assert registered('map.empty') is None
-        assert registered('list.integer') is None
-    finally:
-        module.REGISTER = original  # type: ignore[attr-defined]
+    read, malformed = transitions(document)
+    assert read == [
+        (
+            'A-1',
+            'approved',
+            'struct.*',
+            'refusal UNNAMED',
+            'refusal UNSUPPORTED_REQUEST',
+        ),
+        ('A-2', 'proposed', 'array.*', 'refusal UNNAMED', 'success'),
+    ]
+    assert malformed == [
+        f'A-4: {ref}map.*',
+        f'A-4: {ref}map.* refusal unnamed -> success',
+    ]

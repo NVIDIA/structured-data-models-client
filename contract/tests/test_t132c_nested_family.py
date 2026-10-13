@@ -22,17 +22,20 @@ copy).
 - "Each with its reference observation" and the cases' expectations: each
   case's ``expect`` is what ``python-ref`` observed
   (``contract/reference/<commit>.jsonl``), and ``python-core``'s outcome
-  (result, stage, class and code) is ``python-ref``'s, or a register entry,
-  proposed or approved, lists the case in its ``cases`` (P1B-1, the
-  inventory's placeholder, does not count: its own notes give each changed
-  case an entry of its own). No case ends in ``UNSUPPORTED_REQUEST``: the
-  brief lifts the ``column_type`` refusal this family owns
-  (``contract/refusal-maps/nested.json``). ``sdm-testkit``'s
+  (result, stage, class and code) is ``python-ref``'s, or an approved
+  register entry lists the case in its ``cases`` (a proposed one excuses
+  nothing, so its case stays pending until the owner approves it; P1B-1,
+  the inventory's placeholder, does not count: its own notes give each
+  changed case an entry of its own). The core's ``UNSUPPORTED_REQUEST``
+  is no exception: it passes where an approved entry lists the case
+  (P1B-10's ``nested.map`` and ``nested.struct``), as any other
+  difference does. ``sdm-testkit``'s
   ``tests/t132c_nested_sql.rs`` holds ``rust-host`` the same way, and
   ``test_t132c_nested_types.py`` both hosts over the family's types.
 - "Statement counts equal the reference's or are registered,
   cross-checked against DuckDB's query log": per public call, as
-  ``compare.py`` counts them, with the capture complete against the log.
+  ``compare.py`` counts them, with the capture complete against the log;
+  a difference passes where an approved entry lists the case.
 - "Capture on and off give the same public projection on the Python
   runners": ``capture_check.py`` over the family's cases and the nested
   type vectors (``contract/nested-type-vectors.json``, as cases) run with
@@ -110,13 +113,13 @@ def reference() -> dict[str, dict[str, Any]]:
 
 
 def registered_case(case: str) -> str | None:
-    r"""The entry, proposed or approved, other than the placeholder, that
-    lists ``case`` in its ``cases``."""
+    r"""The approved entry, other than the placeholder, that lists ``case``
+    in its ``cases``."""
     path = ROOT / 'docs/design/rust-core/register.yaml'
     for entry in yaml.safe_load(path.read_text(encoding='utf-8'))['entries']:
         if entry['id'] == PLACEHOLDER:
             continue
-        if entry.get('status') in ('proposed', 'approved') and case in (
+        if entry.get('status') == 'approved' and case in (
             entry.get('cases') or []
         ):
             return str(entry['id'])
@@ -249,7 +252,6 @@ def test_python_core_answers_each_nested_case_as_python_ref(
     def check() -> None:
         ours = runs['on'][case]['outcome']
         theirs = reference()[case]['outcome']
-        assert ours.get('code') != 'UNSUPPORTED_REQUEST', ours
         fields = ('result', 'stage', 'error', 'code')
         differs = {
             k: (ours.get(k), theirs.get(k))

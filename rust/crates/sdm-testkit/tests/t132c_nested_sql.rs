@@ -19,15 +19,17 @@
 //! - Exit "statement counts equal the reference's or are registered,
 //!   cross-checked against DuckDB's query log": per public call, the
 //!   number of statements this host's provider ran equals the `python-ref`
-//!   observation's (`contract/reference/<commit>.jsonl`), unless a register
-//!   entry, proposed or approved, other than P1B-1 lists the case in its
-//!   `cases`; and the provider's record is complete, its count equal to
-//!   DuckDB's query log with no logged statement differing.
+//!   observation's (`contract/reference/<commit>.jsonl`), unless an
+//!   approved register entry other than P1B-1 lists the case in its
+//!   `cases` (a proposed one excuses nothing: the case stays pending until
+//!   the owner approves it); and the provider's record is complete, its
+//!   count equal to DuckDB's query log with no logged statement differing.
 //! - Exit "`python-core` and `rust-host` agree on `core` fields for the
 //!   family", this host's half: each case's outcome is the `python-ref`
-//!   observation's (`success`, or the refusal's code), or an entry other
-//!   than P1B-1 lists the case; and no case ends in `UNSUPPORTED_REQUEST`,
-//!   since the brief lifts the `column_type` refusal this family owns.
+//!   observation's (`success`, or the refusal's code), or an approved
+//!   entry other than P1B-1 lists the case. The core's
+//!   `UNSUPPORTED_REQUEST` is no exception: it passes where an approved
+//!   entry lists the case (P1B-10's `nested.map` and `nested.struct`).
 //!   `contract/tests/test_t132c_nested_family.py` holds `python-core` the
 //!   same way; the gate's `core` rule compares the two.
 //!
@@ -129,8 +131,9 @@ fn reference() -> BTreeMap<String, Value> {
         .collect()
 }
 
-/// A list field of each register entry, proposed or approved, read from the
-/// YAML's text entry by entry, in its flow or block form.
+/// A list field of each approved register entry (a proposed one excuses
+/// nothing), read from the YAML's text entry by entry, in its flow or
+/// block form.
 fn register_lists(field: &str) -> Vec<(String, Vec<String>)> {
     let text = std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
     let head = format!("  {field}:");
@@ -142,7 +145,7 @@ fn register_lists(field: &str) -> Vec<(String, Vec<String>)> {
             .find_map(|l| l.strip_prefix("  status: "))
             .unwrap_or_default()
             .trim();
-        if status != "proposed" && status != "approved" {
+        if status != "approved" {
             continue;
         }
         let lines: Vec<&str> = block.lines().collect();
@@ -179,7 +182,7 @@ fn register_lists(field: &str) -> Vec<(String, Vec<String>)> {
     out
 }
 
-/// The entry, proposed or approved, that lists the case in its `cases`.
+/// The approved entry that lists the case in its `cases`.
 /// P1B-1 does not count: it is the inventory's placeholder, whose own notes
 /// say each case whose outcome changes gets an entry of its own.
 fn registered_case(id: &str) -> Option<String> {
@@ -425,13 +428,6 @@ fn rust_host_answers_each_nested_case_as_python_ref() {
                     continue;
                 }
             };
-            if code.as_deref() == Some("UNSUPPORTED_REQUEST") {
-                problems.push(format!(
-                    "{}: refused by a rule the core does not take yet",
-                    case.id
-                ));
-                continue;
-            }
             let want_result = theirs["result"].as_str().unwrap();
             let want_code = theirs["code"].as_str().map(str::to_owned);
             if (result != want_result || code != want_code) && registered_case(&case.id).is_none() {

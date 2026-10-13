@@ -21,13 +21,27 @@
 //!   described it, and in the model call's body exactly where the
 //!   reference's request held it; or a refusal with the reference's code
 //!   (this host observes no stage or exception class).
-//! - A vector the recorder marked `register.required` (the reference fails
-//!   unnamed or with INTERNAL_ERROR) may differ only where an entry of
-//!   `docs/design/rust-core/register.yaml`, proposed or approved, names it
-//!   in its `refs` (`contract/nested-type-vectors.json#<id or glob>`); every
-//!   other vector is held to the reference exactly.
-//! - A refusal by a rule the core does not take yet (`UNSUPPORTED_REQUEST`)
-//!   never passes: the brief lifts `column_type` for this family.
+//! - A vector may differ from the reference only under an approved entry
+//!   of `docs/design/rust-core/register.yaml` whose `refs` name it with the
+//!   transition it makes (T1.32a's binding-transition form):
+//!   `contract/nested-type-vectors.json#<id or glob> <from> -> <to>`, each
+//!   side `success` or `refusal <CODE>`, from the reference's answer to
+//!   this host's (the reference's unnamed exception is `refusal UNNAMED`).
+//!   A ref covers exactly the transition it declares; a proposed entry
+//!   excuses nothing, so its vectors stay pending until the owner approves
+//!   it. The core's `UNSUPPORTED_REQUEST` (rule `column_type`) passes only
+//!   where an approved entry declares it (P1B-10's struct and map, for
+//!   instance). The recorder's `register.required` marks where a
+//!   difference is expected and excuses nothing by itself; an unmarked
+//!   vector (BLOB, left out with the reference's warning) is held exactly
+//!   unless an approved entry declares its transition.
+//! - Reviewers: a ref attached to an already approved entry (P1B-7, P1B-9,
+//!   P1B-10) takes effect here at once, though only the owner approves
+//!   entries; each newly attached ref needs a reviewer's check that the
+//!   entry's approved behaviour is that transition for exactly those
+//!   vectors.
+//! - Every vector ref of a proposed or approved entry names a transition
+//!   in that form; a malformed one fails.
 //!
 //! Gating: `contract/tests/t132c-pending.json`'s `pending["rust-host"]`
 //! lists the vectors that failed here when the test was written. Each must
@@ -97,19 +111,43 @@ fn glob(pattern: &str, text: &str) -> bool {
     p[pi..].iter().all(|c| *c == '*')
 }
 
-/// The register's entries that name a vector in their `refs`, proposed or
-/// approved: (id, the patterns). Read from the YAML's text, entry by entry
-/// (`- id:` at the margin), the `refs` field alone, in its flow
-/// (`refs: [a, b]`) or block (`refs:` then `  - a`) form.
-fn register_patterns(text: &str) -> Vec<(String, Vec<String>)> {
+/// One vector ref of a register entry, read: the glob, the transition's
+/// start and end, or `None` when it names no transition in the form
+/// `<glob> <from> -> <to>`, each side `success` or `refusal <CODE>`.
+fn transition(item: &str) -> Option<(String, String, String)> {
+    let rest = item.strip_prefix(REF)?;
+    let (glob, rest) = rest.split_once(' ')?;
+    let (old, new) = rest.split_once(" -> ")?;
+    let class = |c: &str| {
+        c == "success"
+            || c.strip_prefix("refusal ").is_some_and(|code| {
+                code.starts_with(|ch: char| ch.is_ascii_uppercase())
+                    && code.chars().all(|ch| ch.is_ascii_uppercase() || ch == '_')
+            })
+    };
+    (!glob.is_empty() && class(old) && class(new))
+        .then(|| (glob.to_owned(), old.to_owned(), new.to_owned()))
+}
+
+/// A vector ref read: entry, status, glob, from, to.
+type Transition = (String, String, String, String, String);
+
+/// Each vector ref of the register's proposed or approved entries, and the
+/// refs naming vectors with no transition in the form (malformed). Read
+/// from the YAML's text, entry by entry (`- id:` at the margin), the `refs`
+/// field alone, in its flow (`refs: [a, b]`) or block (`refs:` then
+/// `  - a`) form.
+fn transitions(text: &str) -> (Vec<Transition>, Vec<String>) {
     let mut out = Vec::new();
+    let mut malformed = Vec::new();
     for block in text.split("\n- id: ").skip(1) {
         let id = block.lines().next().unwrap_or_default().trim().to_owned();
         let status = block
             .lines()
             .find_map(|l| l.strip_prefix("  status: "))
             .unwrap_or_default()
-            .trim();
+            .trim()
+            .to_owned();
         if status != "proposed" && status != "approved" {
             continue;
         }
@@ -137,24 +175,50 @@ fn register_patterns(text: &str) -> Vec<(String, Vec<String>)> {
                 }
             }
         }
-        let patterns: Vec<String> = refs
+        for item in refs
             .iter()
             .map(|r| r.trim_matches(|c| c == '\'' || c == '"'))
-            .filter_map(|r| r.strip_prefix(REF))
-            .map(str::to_owned)
-            .collect();
-        if !patterns.is_empty() {
-            out.push((id, patterns));
+            .filter(|r| r.starts_with(REF))
+        {
+            match transition(item) {
+                Some((glob, old, new)) => {
+                    out.push((id.clone(), status.clone(), glob, old, new));
+                }
+                None => malformed.push(format!("{id}: {item}")),
+            }
         }
     }
-    out
+    (out, malformed)
 }
 
-fn registered(id: &str, entries: &[(String, Vec<String>)]) -> Option<String> {
+/// The approved entry naming `id` with exactly the transition `old -> new`.
+fn covered(id: &str, old: &str, new: &str, entries: &[Transition]) -> Option<String> {
     entries
         .iter()
-        .find(|(_, patterns)| patterns.iter().any(|p| glob(p, id)))
-        .map(|(entry, _)| entry.clone())
+        .find(|(_, status, pattern, from, to)| {
+            status == "approved" && from == old && to == new && glob(pattern, id)
+        })
+        .map(|(entry, ..)| entry.clone())
+}
+
+/// `success` or `refusal <CODE>` of an answer in this host's terms (the
+/// reference's unnamed exception, with no code, is `refusal UNNAMED`).
+fn outcome_class(answer: &Value) -> String {
+    if answer["outcome"] == "success" {
+        "success".to_owned()
+    } else {
+        format!("refusal {}", answer["code"].as_str().unwrap_or("UNNAMED"))
+    }
+}
+
+/// Whether this host's answer passes the vector: the reference's, or a
+/// difference an approved entry declares exactly.
+fn passes(id: &str, got: &Value, want: &Value, entries: &[Transition]) -> bool {
+    if agrees(got, want) {
+        return true;
+    }
+    let answered = got["outcome"] == "success" || got["outcome"] == "refusal";
+    answered && covered(id, &outcome_class(want), &outcome_class(got), entries).is_some()
 }
 
 /// The case this host runs for `vector`: `nested.list-int`'s, its setup the
@@ -331,7 +395,7 @@ fn kind(prefix: &str) {
     let bases = bases::load(&contract.join("bases.yaml")).unwrap();
     let register =
         std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
-    let entries = register_patterns(&register);
+    let (entries, _) = transitions(&register);
     let pending = ids(&read_json("contract/tests/t132c-pending.json")["pending"]["rust-host"]);
     let mut failures = Vec::new();
     let mut passing_but_pending = Vec::new();
@@ -348,12 +412,7 @@ fn kind(prefix: &str) {
             Ok(observed) => project(&observed, table),
             Err(failure) => json!({"outcome": "host failure", "why": failure.to_string()}),
         };
-        let unported = got["code"] == "UNSUPPORTED_REQUEST";
-        let ok = !unported
-            && (agrees(&got, &want)
-                || (vector["register"]["required"] == true
-                    && (got["outcome"] == "success" || got["outcome"] == "refusal")
-                    && registered(id, &entries).is_some()));
+        let ok = passes(id, &got, &want, &entries);
         match (ok, pending.contains(id)) {
             (true, true) => passing_but_pending.push(id.to_owned()),
             (false, false) => failures.push(format!("{id}: got {got}, the reference {want}")),
@@ -447,14 +506,77 @@ fn the_comparison_fails_closed() {
         &json!({"outcome": "refusal", "code": null}),
         &unnamed
     ));
-    // The register: by id or glob, proposed or approved, this file's refs.
-    let text = "entries:\n- id: A-1\n  status: approved\n  refs: ['contract/nested-type-vectors.json#struct.*']\n\
-                - id: A-2\n  status: rejected\n  refs:\n  - contract/nested-type-vectors.json#map.*\n\
-                - id: A-3\n  status: proposed\n  refs:\n  - contract/other.json#map.*\n";
-    let entries = register_patterns(text);
-    assert_eq!(registered("struct.integer", &entries), Some("A-1".into()));
-    assert_eq!(registered("map.empty", &entries), None);
-    assert_eq!(registered("list.integer", &[]), None);
+    // The transitions: an approved entry covers exactly the transition it
+    // declares, for the vectors its glob names; a proposed one, nothing.
+    let unported = json!({"outcome": "refusal", "code": "UNSUPPORTED_REQUEST"});
+    let entry = |status: &str, glob: &str, old: &str, new: &str| {
+        (
+            "E-1".to_owned(),
+            status.to_owned(),
+            glob.to_owned(),
+            old.to_owned(),
+            new.to_owned(),
+        )
+    };
+    assert_eq!(outcome_class(&unnamed), "refusal UNNAMED");
+    assert_eq!(outcome_class(&unported), "refusal UNSUPPORTED_REQUEST");
+    assert!(!passes("struct.integer", &unported, &unnamed, &[]));
+    let declared = "refusal UNSUPPORTED_REQUEST";
+    let proposed = [entry("proposed", "struct.*", "refusal UNNAMED", declared)];
+    assert!(!passes("struct.integer", &unported, &unnamed, &proposed));
+    let approved = [entry("approved", "struct.*", "refusal UNNAMED", declared)];
+    assert!(passes("struct.integer", &unported, &unnamed, &approved));
+    assert!(!passes("map.empty", &unported, &unnamed, &approved));
+    let success = json!({"outcome": "success", "code": null});
+    assert!(!passes("struct.integer", &success, &unnamed, &approved));
+    let other = [entry(
+        "approved",
+        "struct.*",
+        "refusal INTERNAL_ERROR",
+        declared,
+    )];
+    assert!(!passes("struct.integer", &unported, &unnamed, &other));
+    // An unmarked vector, BLOB left out, is excused the same way only.
+    assert!(!passes("scalar.blob", &unported, &want, &[]));
+    let blob = [entry("approved", "scalar.blob", "success", declared)];
+    assert!(passes("scalar.blob", &unported, &want, &blob));
+    let failed = json!({"outcome": "host failure"});
+    assert!(!passes("scalar.blob", &failed, &want, &blob));
+    // The register's text: refs of proposed and approved entries, in both
+    // forms; a rejected entry's and another file's ignored; a ref naming
+    // vectors with no transition malformed.
+    let text = "entries:\n- id: A-1\n  status: approved\n  refs: ['contract/nested-type-vectors.json#struct.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST']\n\
+                - id: A-2\n  status: proposed\n  refs:\n  - contract/nested-type-vectors.json#array.* refusal UNNAMED -> success\n\
+                - id: A-3\n  status: rejected\n  refs:\n  - contract/nested-type-vectors.json#map.* refusal UNNAMED -> success\n\
+                - id: A-4\n  status: approved\n  refs:\n  - contract/other.json#map.* success -> success\n  - contract/nested-type-vectors.json#map.*\n  - contract/nested-type-vectors.json#map.* refusal unnamed -> success\n";
+    let (read, malformed) = transitions(text);
+    assert_eq!(
+        read.iter()
+            .map(|(e, s, g, o, n)| format!("{e} {s} {g} {o} -> {n}"))
+            .collect::<Vec<_>>(),
+        vec![
+            "A-1 approved struct.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST",
+            "A-2 proposed array.* refusal UNNAMED -> success",
+        ]
+    );
+    assert_eq!(
+        malformed,
+        vec![
+            "A-4: contract/nested-type-vectors.json#map.*",
+            "A-4: contract/nested-type-vectors.json#map.* refusal unnamed -> success",
+        ]
+    );
     assert!(glob("struct.*", "struct.null"));
     assert!(!glob("struct.*", "orders.struct"));
+}
+
+#[test]
+fn every_vector_ref_names_its_transition() {
+    let register =
+        std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
+    let (_, malformed) = transitions(&register);
+    assert!(
+        malformed.is_empty(),
+        "vector refs naming no transition `<glob> <from> -> <to>`: {malformed:?}"
+    );
 }
