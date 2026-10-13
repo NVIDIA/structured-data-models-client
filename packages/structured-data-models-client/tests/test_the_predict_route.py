@@ -418,6 +418,46 @@ def test_an_overflowing_prediction_is_the_old_route_s_on_the_core(
         pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
 
 
+def test_an_answer_too_deep_for_python_s_reader_is_too_deep_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Before Python 3.12, json.loads raises RecursionError past about 1,000
+    # levels, which the transport reports as TRANSPORT_ERROR; on the core
+    # route the core is told the answer is too deep, so it is refused
+    # INVALID_RESPONSE on every interpreter (register P1B-22, T1.28b fix
+    # round 2). Seeded here on any interpreter by a reader that refuses
+    # deep text as 3.10's and 3.11's do.
+    from sdm_client.core import transport
+
+    request = _materialized(monkeypatch)
+    real = transport.json.loads
+
+    def loads(text: Any, *args: Any, **kwargs: Any) -> Any:
+        raw = text if isinstance(text, (bytes, bytearray)) else text.encode()
+        if raw.count(b'{') > 900:
+            raise RecursionError('maximum recursion depth exceeded')
+        return real(text, *args, **kwargs)
+
+    deep = '{"d": ' * 5000 + '0' + '}' * 5000
+    answer = (
+        '{"id": "r1", "model": "kumo-relational", "metadata": '
+        + deep
+        + ', "predictions": [{"id": "112", "row_index": 0, "prediction": '
+        '1.0}, {"id": "113", "row_index": 1, "prediction": 1.0}]}'
+    )
+    monkeypatch.setattr(transport.json, 'loads', loads)
+    with _answering(200, answer.encode()) as (url, _):
+        core, old = _both(monkeypatch, request, url)
+    assert isinstance(old, StructuredDataError), old
+    assert old.code == 'TRANSPORT_ERROR'
+    assert isinstance(core, StructuredDataError), core
+    assert core.code == 'INVALID_RESPONSE'
+    assert (core.details['field'], core.details['reason']) == (
+        'response',
+        'too_deep',
+    )
+
+
 def test_a_lone_surrogate_in_an_answer_is_refused_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

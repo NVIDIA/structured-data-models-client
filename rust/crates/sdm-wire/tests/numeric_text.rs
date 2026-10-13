@@ -45,3 +45,15 @@ fn text_is_read_as_the_reference_s_float_reads_it() {
         "{read} read, {refused} refused"
     );
 }
+
+/// The digits every supported Python takes, and no more (T1.28b fix round
+/// 2): Kawi's, which Unicode 15.0 added and the reference's Python 3.12
+/// takes, are refused, as Python 3.10, the floor, refuses them (register
+/// P1B-25); Arabic-Indic and fullwidth digits, in Unicode 13.0, are read.
+#[test]
+fn only_the_digits_every_supported_python_reads_are_read() {
+    assert_eq!(numeric_text("\u{11f50}.\u{11f55}"), None);
+    assert_eq!(numeric_text("\u{16ac0}"), None);
+    assert_eq!(numeric_text("\u{0660}.\u{0665}"), Some(0.5));
+    assert_eq!(numeric_text("\u{ff10}.\u{ff15}"), Some(0.5));
+}

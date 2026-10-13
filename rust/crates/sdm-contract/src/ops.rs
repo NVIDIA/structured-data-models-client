@@ -849,9 +849,13 @@ pub struct Predict {
 pub struct Predicted {
     /// An Arrow attachment, one row per answer, ordered by `row_index` as
     /// the reference's result frame orders them (T1.28b), whose schema
-    /// names its columns in order: `row_index`, `id`, `prediction` and
-    /// `probabilities` where an answer carries them, and `answer_index`,
-    /// each answer's place in the endpoint's order
+    /// names its columns in order: `row_index`, `id`, `prediction` where an
+    /// answer carries one, `prediction_as_answered` where the prediction
+    /// column changed an answer (utf8: the JSON text of the reference's item
+    /// value, null where there was none; present only for a regression's
+    /// integer widened among doubles or a class written as a non-finite
+    /// number), `probabilities` where an answer carries them, and
+    /// `answer_index`, each answer's place in the endpoint's order
     /// (`sdm_request::predict::table`).
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.

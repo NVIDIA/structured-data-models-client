@@ -189,10 +189,12 @@ def _refusal(refused: NimRequestError) -> NimRequestError:
 
 
 def _as_answered(row: dict[str, Any]) -> Any:
-    r"""A row's prediction as the answer wrote it: where the core's column
-    changed one (an integer widened among doubles, a missing one as NaN),
-    the core gives each as its JSON text (``prediction_as_answered``), read
-    as the client's transport reads JSON, ``None`` where there was none."""
+    r"""A row's prediction as the reference's item holds it: where the
+    core's column changed an answer (a regression's integer widened among
+    doubles, a class written as a non-finite number), the core gives each
+    as the JSON text of that value (``prediction_as_answered``), read as the
+    client's transport reads JSON; elsewhere the column's value, a missing
+    prediction ``None`` either way."""
     if 'prediction_as_answered' in row:
         text = row['prediction_as_answered']
         return None if text is None else json.loads(text)
@@ -242,10 +244,12 @@ def predict(
         raise RouteError(
             'predict on the core needs a request materialize built on the core'
         )
-    if len(request.payloads) != 1:
+    payloads = request.payloads
+    if payloads is None or len(payloads) != 1:
         raise RouteError(
             'predict on the core takes the one payload materialize wrote'
         )
+    [payload] = payloads
     # A model handle is the host's object; its id, or the id given, is the
     # core's to check.
     model_id = model if isinstance(model, str) else spec_for(model).model_id
@@ -256,6 +260,7 @@ def predict(
         # even the context of what is raised.
         failure: StructuredDataError | None = None
         transport_failed = False
+        too_deep = False
         refused: NimRequestError | None = None
         try:
             # The core's call, its bytes as written (register PD-2, T1.28a),
@@ -264,13 +269,24 @@ def predict(
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
-            if failed.code == 'TRANSPORT_ERROR':
+            if failed.code == 'TRANSPORT_ERROR' and isinstance(
+                failed.__cause__, RecursionError
+            ):
+                # An answer nested deeper than Python's reader takes on this
+                # interpreter (before 3.12, past about 1,000 levels): the
+                # core is told so with an answer cut one level past its own
+                # depth, which it refuses as too deep, as on every
+                # interpreter (register P1B-22).
+                too_deep = True
+            elif failed.code == 'TRANSPORT_ERROR':
                 transport_failed = True
             else:
                 failure = StructuredDataError(
                     'the transport to the model endpoint refused the call',
                     code=failed.code,
                 )
+        if too_deep:
+            return b'[' * _ENCODED_DEPTH + b']' * _ENCODED_DEPTH
         if transport_failed:
             raise TransportFailed
         if refused is not None:
@@ -299,7 +315,7 @@ def predict(
     if outputs is None:
         operation['default_outputs'] = True
     attachments = {
-        1: _payload(request.payloads[0]),
+        1: _payload(payload),
         2: codec.attachment(request.query),
     }
     finished = run(operation, attachments, model=model_call)
