@@ -12,8 +12,14 @@
 //! one they read is read (`contract/response-vectors.json` holds the two
 //! together). A refusal names the field and why, never a value.
 //!
+//! From T1.28b an item's `probabilities` is read as the bindings'
+//! `_float_dict` reads it: absent or `null` is none, any other value not an
+//! object is refused (`not_an_object`), and each member's value is a
+//! number, or text a float reads, not a boolean (`not_a_number`) and
+//! finite (`not_finite`), kept in the order written.
+//!
 //! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it, and its other fields (`probabilities`, `scores`,
+//! bindings take it, and its other fields (`scores`,
 //! `rankings`, `embeddings`, `quantiles`, `explanation`, `metadata`) are
 //! not read or type-checked: when one is there and not null, it is named in
 //! [`PredictionItem::carried`], for the caller to refuse by name as a field
@@ -40,8 +46,7 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
-pub const UNREAD_ITEM_FIELDS: [&str; 7] = [
-    "probabilities",
+pub const UNREAD_ITEM_FIELDS: [&str; 6] = [
     "scores",
     "rankings",
     "embeddings",
@@ -51,7 +56,7 @@ pub const UNREAD_ITEM_FIELDS: [&str; 7] = [
 ];
 
 /// One answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PredictionItem {
     /// Which row of the request this answers; a whole number, of any size
     /// a response may write.
@@ -61,12 +66,15 @@ pub struct PredictionItem {
     /// The answer as the response wrote it; absent and `null` alike are
     /// `None`, as the bindings read both.
     pub prediction: Option<Value>,
+    /// Each class's probability, in the order written; absent and `null`
+    /// alike are `None`.
+    pub probabilities: Option<Vec<(String, f64)>>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
 }
 
 /// The response to one prediction request.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PredictionResponse {
     pub id: String,
     pub model: String,
@@ -132,6 +140,16 @@ impl PredictionItem {
             None | Some(Value::Null) => None,
             Some(answer) => Some(answer.clone()),
         };
+        let probabilities = match value.get("probabilities") {
+            None | Some(Value::Null) => None,
+            Some(Value::Object(members)) => Some(
+                members
+                    .iter()
+                    .map(|(class, p)| Ok((class.clone(), probability(p)?)))
+                    .collect::<Result<_, Refused>>()?,
+            ),
+            Some(_) => return Err(refused("prediction.probabilities", "not_an_object")),
+        };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
             .filter(|name| !matches!(value.get(name), None | Some(Value::Null)))
@@ -141,6 +159,7 @@ impl PredictionItem {
             id,
             forecast_step,
             prediction,
+            probabilities,
             carried,
         })
     }
@@ -160,5 +179,22 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
     match value {
         Value::Number(token) => whole(token).ok_or(refused(field, "not_whole")),
         _ => Err(refused(field, "not_whole")),
+    }
+}
+
+/// A probability as the bindings' `_finite` reads one: a number, or text
+/// `float` reads (surrounding whitespace aside), never a boolean, and
+/// finite.
+fn probability(value: &Value) -> Result<f64, Refused> {
+    const FIELD: &str = "prediction.probabilities";
+    let read = match value {
+        Value::Number(token) => token.parse::<f64>().ok(),
+        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        _ => None,
+    };
+    match read {
+        None => Err(refused(FIELD, "not_a_number")),
+        Some(p) if !p.is_finite() => Err(refused(FIELD, "not_finite")),
+        Some(p) => Ok(p),
     }
 }

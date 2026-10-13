@@ -966,9 +966,13 @@ pub const REQUEST_ID: &str = "sdm-000000000000";
 /// One Arrow result as rows of tagged cells, the same for both core
 /// runners: an integer as `{"i64": digits}`, a float as its IEEE-754 bits
 /// `{"f64_bits": 16 hex digits}`, so no text form of a float is compared,
-/// and text as `{"utf8": text}`.
+/// and text as `{"utf8": text}`; from T1.28b, which lays out a
+/// classification's answers, a boolean as `{"bool": value}` and a class's
+/// probabilities as `{"map": [[class, its bits], ...]}`, in order.
 pub fn result_rows(data: &ArrowData) -> Result<Value> {
-    use duckdb::arrow::array::{Array, Float64Array, Int64Array, StringArray};
+    use duckdb::arrow::array::{
+        Array, BooleanArray, Float64Array, Int64Array, MapArray, StringArray,
+    };
     use duckdb::arrow::datatypes::DataType;
     let columns: Vec<Value> = data
         .schema
@@ -979,6 +983,8 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
                 DataType::Int64 => "int64",
                 DataType::Float64 => "float64",
                 DataType::Utf8 => "utf8",
+                DataType::Boolean => "bool",
+                DataType::Map(..) => "map",
                 _ => "other",
             };
             json!({"name": f.name(), "type": kind})
@@ -997,6 +1003,25 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
                     cells.push(json!({"f64_bits": format!("{:016x}", a.value(row).to_bits())}));
                 } else if let Some(a) = column.as_any().downcast_ref::<StringArray>() {
                     cells.push(json!({"utf8": a.value(row)}));
+                } else if let Some(a) = column.as_any().downcast_ref::<BooleanArray>() {
+                    cells.push(json!({"bool": a.value(row)}));
+                } else if let Some(a) = column.as_any().downcast_ref::<MapArray>() {
+                    let entries = a.value(row);
+                    let (Some(classes), Some(probabilities)) = (
+                        entries.column(0).as_any().downcast_ref::<StringArray>(),
+                        entries.column(1).as_any().downcast_ref::<Float64Array>(),
+                    ) else {
+                        bail!("a map column of a type this host does not record");
+                    };
+                    let pairs: Vec<Value> = (0..entries.len())
+                        .map(|i| {
+                            json!([
+                                classes.value(i),
+                                format!("{:016x}", probabilities.value(i).to_bits())
+                            ])
+                        })
+                        .collect();
+                    cells.push(json!({"map": pairs}));
                 } else {
                     bail!("a result column of a type this host does not record");
                 }
@@ -1036,7 +1061,10 @@ fn predict(
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
-            outputs: vec!["prediction".into()],
+            // The case names no outputs: the task's default ones, as the
+            // client asks when its caller names none (T1.28b).
+            outputs: vec![],
+            default_outputs: true,
             inference_asked: vec![],
         }),
     }));

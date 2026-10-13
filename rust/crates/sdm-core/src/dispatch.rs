@@ -121,15 +121,17 @@ pub fn start(
             else {
                 return Err(internal("the payload is not the bytes named"));
             };
-            // The query rides with the state; the checks that name it (an
-            // empty context, a constant target) stay in the host's client
-            // at T1.11d (decision E45), so it is read and not used.
-            let _query: String = take_json(&mut attachments, request.state.query)?;
+            // The query rides with the state: the constant-context notice
+            // names the target from it where the wire calls it TARGET
+            // (T1.28b).
+            let query: String = take_json(&mut attachments, request.state.query)?;
             let inputs = crate::predict::Inputs {
                 payload,
+                query,
                 model: request.model,
                 request_id: request.request_id,
                 outputs: request.outputs,
+                default_outputs: request.default_outputs,
                 inference_asked: request.inference_asked,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))

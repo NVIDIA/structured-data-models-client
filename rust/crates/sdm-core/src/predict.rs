@@ -5,13 +5,19 @@
 //! `predict`: a materialized request sent to the model, and its answer.
 //!
 //! The run reads the request state a `materialize` run answered and the
-//! host held since (decision H23), makes the call the reference's client
-//! makes of it ([`sdm_request::predict::body`]), asks the host to send it
-//! (one `CallModel` step), reads the answer as the client's bindings read
-//! it ([`sdm_wire::response`]) and lays it out
-//! ([`sdm_request::predict::layout`]): an Arrow table of one row per answer,
-//! the endpoint's `metadata` as JSON, and the model and call id the
-//! endpoint named.
+//! host held since (decision H23), and runs the client's predict-side
+//! rules in the reference's order (`sdm_request::predict`, T1.28b): the
+//! model and outputs checked and the default outputs chosen (`prepare`); a
+//! request with no row to score answered without a call (`empty`); the
+//! adapter's checks of what the call sends (`preflight`, its notice of a
+//! constant context given as a warning); the call written (`body`) and
+//! sent (one `CallModel` step); the answer read as the client's bindings
+//! read it ([`sdm_wire::response`]), a non-finite number taken as the
+//! reference's reader takes it; laid out (`layout`), the parts merged
+//! (`merge`) and the outputs the caller named that no answer carries given
+//! as a notice (`absent`); the result an Arrow table of one row per answer
+//! ordered by `row_index` (`table`), the endpoint's `metadata` as JSON, and
+//! the model and call id the endpoint named.
 //!
 //! An answer with a status other than 2xx is the endpoint's refusal, which
 //! the host's transport reports as the reference's does; a host that hands
@@ -22,8 +28,11 @@
 
 use sdm_contract::ops::{OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
-use sdm_request::predict::{bad_response, body, call_bytes, check_outputs, layout, refused};
+use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_request::predict::{
+    Notice, Part, absent, absent_notice, bad_response, body, call_bytes, empty, layout, merge,
+    nothing_to_score, preflight, prepare, refused, table,
+};
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
 
@@ -33,10 +42,14 @@ use crate::run::{ArrowData, Asker, Attachment, ModelResult, Reply, internal};
 pub(crate) struct Inputs {
     /// The request state's payload, as the host attached it.
     pub payload: Vec<u8>,
+    /// The question's text, as the state holds it.
+    pub query: String,
     pub model: String,
     pub request_id: String,
-    /// The outputs asked for, by the wire's names.
+    /// The outputs the caller asked for, by the wire's names.
     pub outputs: Vec<String>,
+    /// The caller named no outputs.
+    pub default_outputs: bool,
     /// The inference options the caller set at `materialize`.
     pub inference_asked: Vec<String>,
 }
@@ -58,16 +71,71 @@ fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
     })
 }
 
+fn warn(asker: &Asker, notice: Notice) {
+    asker.warn(CoreWarning {
+        code: notice.code.to_owned(),
+        message: notice.message.to_owned(),
+        fields: notice
+            .fields
+            .into_iter()
+            .map(|(name, value)| (name.to_owned(), value))
+            .collect(),
+    });
+}
+
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
-    // The outputs this core asks for: the task's default alone, any other
-    // list refused by name (decision E61), once the state's task is read.
     let payload = payload(&inputs.payload)?;
-    check_outputs(&payload, &inputs.outputs)?;
-    let call = body(
+    let outputs = prepare(
         &payload,
         &inputs.model,
-        &inputs.request_id,
         &inputs.outputs,
+        inputs.default_outputs,
+    )?;
+    // The parts of the request: the request state holds one payload, which
+    // `materialize` writes; the merge holds for several (its own tests).
+    let payloads = vec![payload];
+    let merged = if payloads.iter().all(nothing_to_score) {
+        empty(&inputs.model, &payloads[0])
+    } else {
+        for notice in preflight(&payloads, &outputs, &inputs.query, &inputs.model)? {
+            warn(&asker, notice);
+        }
+        let mut parts = Vec::with_capacity(payloads.len());
+        for payload in &payloads {
+            parts.push(call(&asker, &inputs, payload, &outputs).await?);
+        }
+        merge(parts)?
+    };
+    if !inputs.default_outputs {
+        let left_out = absent(&merged, &outputs);
+        if !left_out.is_empty() {
+            warn(&asker, absent_notice(&inputs.model, &left_out));
+        }
+    }
+    let laid = table(&merged)?;
+    let result = asker.attach(Attachment::Arrow(ArrowData::new(laid.schema(), vec![laid])))?;
+    let metadata = asker.attach(Attachment::Bytes(merged.metadata.to_bytes()))?;
+    Ok(OperationResult::Predict(Predicted {
+        result,
+        model: merged.model,
+        request_id: merged.request_id,
+        metadata,
+        outputs,
+    }))
+}
+
+/// One payload's call, sent and its answer laid out.
+async fn call(
+    asker: &Asker,
+    inputs: &Inputs,
+    payload: &Value,
+    outputs: &[String],
+) -> Result<Part, CoreError> {
+    let call = body(
+        payload,
+        &inputs.model,
+        &inputs.request_id,
+        outputs,
         &inputs.inference_asked,
     )?;
     let reply = asker
@@ -91,36 +159,19 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         Reply::Fetch(_) => return Err(internal("a model call was answered as a fetch")),
     };
     // The answer is read whatever content type it names, as the client's
-    // transport decodes every answer's body as JSON.
-    // Text nested past the reader's depth is refused before anything of it
-    // is built (`sdm_wire::json::MAX_DEPTH`).
-    let read = json::read(&answer).map_err(|e| {
+    // transport decodes every answer's body as JSON, a `NaN` or `Infinity`
+    // token taken as the number Python's reader takes it for, and a token
+    // past a double's range as an infinity (owner decision of 2026-10-12,
+    // register P1B-4). Text nested past the reader's depth is refused
+    // before anything of it is built (`sdm_wire::json::MAX_DEPTH`, approved
+    // by the owner, register P1B-22).
+    let read = json::read_answer(&answer).map_err(|e| {
         let reason = match e.category {
             "depth" => "too_deep",
-            "not_finite" => "not_finite",
             _ => "not_json",
         };
         bad_response("response", reason).with_field("category", Detail::text(e.category))
     })?;
-    // One policy for a number that is not finite, wherever in the answer it
-    // is, and however it was written: a `NaN` or `Infinity` token (above), or
-    // a token past a double's range, which reads as an infinity, is refused
-    // (register P1B-4). The Python host writes back any non-finite number
-    // its reader made as such a token, so both hosts refuse alike.
-    if !read.all_finite() {
-        return Err(bad_response("response", "not_finite"));
-    }
     let response = PredictionResponse::read(&read).map_err(refused)?;
-    let table = layout(&payload, &response)?;
-    let result = asker.attach(Attachment::Arrow(ArrowData::new(
-        table.schema(),
-        vec![table],
-    )))?;
-    let metadata = asker.attach(Attachment::Bytes(response.metadata.to_bytes()))?;
-    Ok(OperationResult::Predict(Predicted {
-        result,
-        model: response.model,
-        request_id: response.id,
-        metadata,
-    }))
+    layout(payload, &response)
 }

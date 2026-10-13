@@ -83,6 +83,98 @@ pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
     value(raw).map_err(|e| ReadError::of(&e))
 }
 
+/// Reads an endpoint's answer as [`read`] does, but takes a `NaN`,
+/// `Infinity` or `-Infinity` token outside text as the number Python's
+/// reader takes it for, as the reference's client reads an answer (owner
+/// decision of 2026-10-12, relayed: a non-finite prediction is passed
+/// through, register P1B-4): each such token is a [`Value::Number`] of the
+/// token as written, which `str::parse::<f64>` reads as a NaN or an
+/// infinity, and which [`Value::to_bytes`] writes back as written.
+///
+/// Each token is read as a JSON string literal standing for it, one whose
+/// text the answer itself does not hold (`"\uE000NaN"`, the private-use
+/// character's number raised until no such text is in the answer), and the
+/// value whose raw text is that literal is read back as the token; so no
+/// text the endpoint wrote is read as a number.
+pub fn read_answer(bytes: &[u8]) -> Result<Value, ReadError> {
+    let tokens = non_finite_tokens(bytes);
+    if tokens.is_empty() {
+        return read(bytes);
+    }
+    let marker = (0xE000u32..=0xF8FF)
+        .map(|n| format!("\\u{n:04X}"))
+        .find(|m| !contains(bytes, m.as_bytes()))
+        .ok_or(ReadError {
+            category: "syntax",
+            line: 1,
+            column: 0,
+        })?;
+    let mut text = Vec::with_capacity(bytes.len() + tokens.len() * 16);
+    let mut from = 0;
+    for &(at, token) in &tokens {
+        text.extend_from_slice(&bytes[from..at]);
+        text.push(b'"');
+        text.extend_from_slice(marker.as_bytes());
+        text.extend_from_slice(token.as_bytes());
+        text.push(b'"');
+        from = at + token.len();
+    }
+    text.extend_from_slice(&bytes[from..]);
+    serde_json::from_slice::<serde::de::IgnoredAny>(&text).map_err(|e| ReadError::of(&e))?;
+    check_depth(&text)?;
+    let raw: &RawValue = serde_json::from_slice(&text).map_err(|e| ReadError::of(&e))?;
+    value_with(raw, Some(&marker)).map_err(|e| ReadError::of(&e))
+}
+
+/// Whether `haystack` holds `needle`.
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// Each `NaN`, `Infinity` and `-Infinity` token outside text: where it
+/// starts, and the token.
+fn non_finite_tokens(bytes: &[u8]) -> Vec<(usize, &'static str)> {
+    let mut found = Vec::new();
+    let (mut in_text, mut escaped) = (false, false);
+    let mut at = 0;
+    while at < bytes.len() {
+        let byte = bytes[at];
+        if in_text {
+            match (escaped, byte) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_text = false,
+                _ => {}
+            }
+            at += 1;
+            continue;
+        }
+        let rest = &bytes[at..];
+        let token = if rest.starts_with(b"NaN") {
+            Some("NaN")
+        } else if rest.starts_with(b"Infinity") {
+            Some("Infinity")
+        } else if rest.starts_with(b"-Infinity") {
+            Some("-Infinity")
+        } else {
+            None
+        };
+        match token {
+            Some(token) => {
+                found.push((at, token));
+                at += token.len();
+            }
+            None => {
+                if byte == b'"' {
+                    in_text = true;
+                }
+                at += 1;
+            }
+        }
+    }
+    found
+}
+
 /// Refuses a `NaN`, `Infinity` or `-Infinity` token outside text, as the
 /// non-finite number Python's reader takes it for. JSON's only bare words
 /// are `true`, `false` and `null`, so a bare `N` or `I` is one of these or
@@ -170,7 +262,23 @@ fn check_depth(bytes: &[u8]) -> Result<(), ReadError> {
 }
 
 fn value(raw: &RawValue) -> Result<Value, serde_json::Error> {
+    value_with(raw, None)
+}
+
+/// [`value`], reading a string literal of `marker` and a token
+/// ([`read_answer`]) as that token.
+fn value_with(raw: &RawValue, marker: Option<&str>) -> Result<Value, serde_json::Error> {
     let text = raw.get();
+    if let Some(marker) = marker {
+        if let Some(token) = text
+            .strip_prefix('"')
+            .and_then(|t| t.strip_suffix('"'))
+            .and_then(|t| t.strip_prefix(marker))
+            .filter(|t| matches!(*t, "NaN" | "Infinity" | "-Infinity"))
+        {
+            return Ok(Value::Number(token.to_owned()));
+        }
+    }
     Ok(match text.as_bytes().first() {
         Some(b'{') => {
             let Members(members) = serde_json::from_str(text)?;
@@ -179,7 +287,7 @@ fn value(raw: &RawValue) -> Result<Value, serde_json::Error> {
             // a wide object reads in n log n, not n squared.
             let mut placed: BTreeMap<String, usize> = BTreeMap::new();
             for (name, raw) in members {
-                let member = value(raw)?;
+                let member = value_with(raw, marker)?;
                 match placed.get(&name) {
                     Some(&at) => read[at].1 = member,
                     None => {
@@ -192,7 +300,12 @@ fn value(raw: &RawValue) -> Result<Value, serde_json::Error> {
         }
         Some(b'[') => {
             let items: Vec<&RawValue> = serde_json::from_str(text)?;
-            Value::Array(items.into_iter().map(value).collect::<Result<_, _>>()?)
+            Value::Array(
+                items
+                    .into_iter()
+                    .map(|raw| value_with(raw, marker))
+                    .collect::<Result<_, _>>()?,
+            )
         }
         Some(b'"') => Value::Text(serde_json::from_str(text)?),
         Some(b't') => Value::Bool(true),

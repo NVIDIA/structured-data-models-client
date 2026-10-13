@@ -649,6 +649,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],
+            default_outputs: false,
             inference_asked: vec![],
         }),
         vec![],

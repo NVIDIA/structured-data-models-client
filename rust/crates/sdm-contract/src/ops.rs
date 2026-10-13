@@ -822,10 +822,18 @@ pub struct Predict {
     /// draws it, as the reference's client draws one for every request; the
     /// core draws nothing at random but under a seed.
     pub request_id: String,
-    /// The outputs asked for, by the wire's names, in order; the core
-    /// predicts a regression's default, `prediction`, alone, and refuses
-    /// any other list by name, `outputs` (decision E61).
+    /// The outputs the caller asked for, by the wire's names, in order,
+    /// as given (a name repeated, kept), which the core checks against the
+    /// model as the client's `_prepare` does: an empty list refused
+    /// (`INVALID_REQUEST`), a name the model does not produce refused
+    /// (`UNSUPPORTED_REQUEST`). Empty when [`Predict::default_outputs`].
     pub outputs: Vec<String>,
+    /// The caller named no outputs: the core asks the task's default ones
+    /// (a regression's `prediction`, a classification's `prediction` and
+    /// `probabilities`), and gives no notice of one the answer leaves out,
+    /// which it gives only for outputs the caller named (T1.28b).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_outputs: bool,
     /// The inference-config keys the caller set at `materialize`, rather
     /// than left to their defaults, as the host holds them: a key the model
     /// does not read among them is refused before the call is made, the
@@ -839,15 +847,22 @@ pub struct Predict {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Predicted {
-    /// An Arrow attachment, one row per answer in the order the endpoint
-    /// gave them, whose schema names its columns in order.
+    /// An Arrow attachment, one row per answer, ordered by `row_index` as
+    /// the reference's result frame orders them (T1.28b), whose schema
+    /// names its columns in order: `row_index`, `id`, and `prediction` and
+    /// `probabilities` where an answer carries them
+    /// (`sdm_request::predict::table`).
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.
     pub model: String,
-    /// The endpoint's id for the call.
+    /// The endpoint's id for the call; empty for a request with no row to
+    /// score, answered without a call.
     pub request_id: String,
     /// A bytes attachment of the endpoint's `metadata` object as JSON.
     pub metadata: AttachmentId,
+    /// The outputs the call asked for, the task's default ones where the
+    /// caller named none.
+    pub outputs: Vec<String>,
 }
 
 // --- attachments ----------------------------------------------------------------

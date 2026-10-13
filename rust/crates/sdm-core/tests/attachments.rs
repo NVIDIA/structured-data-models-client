@@ -142,7 +142,7 @@ fn a_retyped_or_dropped_decode_fails() {
         ["DescribeSource.source: dispatch decodes SourceDescription, the lock SourceSpec"]
     );
     let dropped = source.replace(
-        "let _query: String = take_json(&mut attachments, request.state.query)?;",
+        "let query: String = take_json(&mut attachments, request.state.query)?;",
         "",
     );
     assert_ne!(dropped, source);

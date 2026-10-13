@@ -4,30 +4,49 @@
 
 //! A materialized request sent to the model, and its answer laid out.
 //!
-//! [`body`] is the call the reference's relational adapter makes of one
-//! gathered payload (`RelationalAdapter.prediction_plan`): the payload with
-//! the model named, the outputs asked for, the request's id in its
-//! metadata, and only the inference options the model reads. [`layout`] is
-//! its reading of the answer (`RelationalAdapter.normalize`): each answer
-//! checked against the row it claims, given back under the entity it is
-//! about, in the endpoint's order.
+//! The client's predict-side rules, in the reference's order (T1.28b, the
+//! design's "Host-held semantics" rows it moved):
 //!
-//! As built at T1.11d it is thin: a regression, asked for its default
-//! output, answered by `kumo-relational`; everything else is refused with
-//! `UNSUPPORTED_REQUEST` naming the rule ([`not_yet`], register entry
-//! P1B-4), never guessed. From T1.28a the call is written for a
-//! classification too, asked for its default outputs, with the inference
-//! options the model reads, and an option the caller set that it does not
-//! read refused before the call (the adapter's `_inference`); the answer to
-//! a classification is still refused (`problem_type`, T1.28b). The client's
-//! checks before the call (an empty context, a constant target) and its
-//! presentation of the answer stay in the host (decision E45).
+//! - [`prepare`] is `SDMClient._prepare`: the model the request is sent to
+//!   (`UNKNOWN_MODEL` for one the contract does not carry), the outputs
+//!   asked for (the task's default ones when the caller named none, an
+//!   empty list refused `INVALID_REQUEST`) and `check_request_against_model`
+//!   (the request's shape, its task's kind, each output and the context's
+//!   size against what the model serves);
+//! - [`nothing_to_score`] is `Request.nothing_to_score`: a request with no
+//!   row to score is answered without a call (`_empty_answer`, [`empty`]);
+//! - [`preflight`] is the relational adapter's `_preflight`: an empty
+//!   context, more classes than the model takes and a classification whose
+//!   context has one answer refused, a regression's constant context given
+//!   as a notice, and an explanation's row count and run mode;
+//! - [`body`] is `prediction_plan`'s call of one payload: the payload with
+//!   the model named, the outputs asked for (a regression's with its
+//!   statistic), the request's id in its metadata, and only the inference
+//!   options the model reads (`_inference`);
+//! - [`layout`] is `normalize` and `_named_entities`, with the answer's
+//!   classes given back as the target's own type (`as_declared_target`):
+//!   each answer checked against the row it claims and given back under the
+//!   entity it is about, as a [`Part`];
+//! - [`merge`] is `PredictionResult.merge`, the parts of one request put
+//!   together, and [`absent`] is `_report_absent`'s finding, the outputs the
+//!   caller named that no answer carries;
+//! - [`table`] lays a part out as the result: one row per answer, ordered
+//!   by `row_index` as `PredictionResult.to_pandas` orders them.
+//!
+//! What the result does not carry yet is refused by name, never dropped
+//! (`UNSUPPORTED_REQUEST`, register P1B-4): an item's `scores`, `rankings`,
+//! `embeddings`, `quantiles`, `explanation` or `metadata`, a classification
+//! answer that is not of its target's type, and the tabular model.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
-use arrow_array::{ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray};
+use arrow_array::builder::{Float64Builder, MapBuilder, MapFieldNames, StringBuilder};
+use arrow_array::{
+    Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
+};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_wire::json::{Value, is_integer_token};
 use sdm_wire::response::{PredictionResponse, Refused};
 
@@ -66,12 +85,87 @@ pub const INFERENCE_OPTIONS: [&str; 6] = [
     "class_shuffle",
 ];
 
+/// The most classes `kumo-relational` classifies (`classes_max`).
+pub const CLASSES_MAX: usize = 10;
+
+/// The most context rows `kumo-relational` reads (`context_rows_max`).
+pub const CONTEXT_ROWS_MAX: usize = 10_000;
+
+/// The context the mode that explains takes at most (`context_rows_fast`).
+pub const CONTEXT_ROWS_FAST: usize = 1_000;
+
+/// The rows an explanation covers (`explanation_predict_rows`).
+pub const EXPLANATION_PREDICT_ROWS: usize = 1;
+
+/// What the wire calls the target column whatever the question was.
+const WIRE_TARGET: &str = "TARGET";
+
 /// What the wire calls the column holding the entity a row is about, by
 /// its prefix.
 const ENTITY_REF: &str = "__kumo_entity_ref";
 
 /// What the wire calls the column a row is answered under.
 const INSTANCE_ID: &str = "instance_id";
+
+/// The notice of a regression whose every context row has the same answer
+/// (the adapter's `_check_target_varies`), worded by the host.
+pub const CONTEXT_CONSTANT: &str = "CONTEXT_CONSTANT";
+
+/// The notice of an output the caller named that the answer left out
+/// (`_report_absent`), worded by the host.
+pub const OUTPUTS_ABSENT: &str = "OUTPUTS_ABSENT";
+
+/// The shapes a request may need of a model (`SHAPE_CAPABILITIES`), in the
+/// reference's order.
+const SHAPES: [&str; 6] = [
+    "relationships",
+    "multiple_tables",
+    "link_prediction",
+    "forecasting",
+    "static",
+    "temporal",
+];
+
+/// What the client knows a model serves (`ModelSpec`): its id, the shapes
+/// its profile takes, its task kinds and its outputs.
+struct Spec {
+    id: &'static str,
+    shapes: &'static [&'static str],
+    tasks: &'static [&'static str],
+    outputs: &'static [&'static str],
+}
+
+/// `KUMO_RELATIONAL`: every shape (the relational profile), its six task
+/// kinds and seven outputs, each list sorted.
+const KUMO_RELATIONAL: Spec = Spec {
+    id: RELATIONAL,
+    shapes: &SHAPES,
+    tasks: &[
+        "binary_classification",
+        "classification",
+        "forecasting",
+        "multiclass_classification",
+        "regression",
+        "temporal_link_prediction",
+    ],
+    outputs: &[
+        "embeddings",
+        "explanation",
+        "prediction",
+        "probabilities",
+        "quantiles",
+        "rankings",
+        "scores",
+    ],
+};
+
+/// `KUMO_TABULAR`: one table, static, no link or forecast.
+const KUMO_TABULAR: Spec = Spec {
+    id: TABULAR,
+    shapes: &["static"],
+    tasks: &["classification", "regression"],
+    outputs: &["prediction", "probabilities", "quantiles"],
+};
 
 /// The refusal of a `predict` input that takes a rule this build does not
 /// port yet, naming the rule, never a value (decision H17).
@@ -83,6 +177,31 @@ pub fn not_yet(rule: &'static str) -> CoreError {
     )
     .with_field("operation", Detail::text("predict"))
     .with_field("rule", Detail::text(rule))
+}
+
+/// The model cannot answer the request, as the client refuses it before
+/// anything is sent (`UnsupportedRequestError`): the model named, never a
+/// value of the request.
+fn unsupported(model: &str, message: &str) -> CoreError {
+    CoreError::new(
+        ErrorKind::Unsupported,
+        ErrorCode::UnsupportedRequest,
+        message,
+    )
+    .with_field("model", Detail::text(model))
+}
+
+fn texts<'a>(values: impl IntoIterator<Item = &'a str>) -> Detail {
+    Detail::List(
+        values
+            .into_iter()
+            .map(|v| Scalar::Utf8(v.to_owned()))
+            .collect(),
+    )
+}
+
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
 
 /// A request state's payload this build cannot read as one: the field and
@@ -114,55 +233,409 @@ pub fn refused(refused: Refused) -> CoreError {
     bad_response(refused.field, refused.reason)
 }
 
-/// The task's kind, which must be a regression in this build.
-fn regression(payload: &Value) -> Result<(), CoreError> {
+/// The task's kind as the payload writes it.
+fn kind_of(payload: &Value) -> Result<&str, CoreError> {
     let Value::Object(_) = payload else {
         return Err(bad_payload("not_an_object"));
     };
     match payload.get("task").and_then(|task| task.get("kind")) {
-        Some(Value::Text(kind)) if kind == "regression" => Ok(()),
-        _ => Err(not_yet("problem_type")),
-    }
-}
-
-/// The model a request is sent to: `kumo-relational`; the tabular model
-/// takes no relational request yet, and any other is no model.
-pub fn check_model(model: &str) -> Result<(), CoreError> {
-    match model {
-        RELATIONAL => Ok(()),
-        TABULAR => Err(not_yet("model")),
-        _ => Err(CoreError::new(
-            ErrorKind::NotFound,
-            ErrorCode::UnknownModel,
-            "the model named is not one the contract carries",
-        )
-        .with_field("field", Detail::text("model"))),
+        Some(Value::Text(kind)) => Ok(kind),
+        _ => Err(bad_payload("task")),
     }
 }
 
 /// The task's kind, when it is one whose call this build writes.
 fn called(payload: &Value) -> Result<&str, CoreError> {
-    let Value::Object(_) = payload else {
-        return Err(bad_payload("not_an_object"));
-    };
-    match payload.get("task").and_then(|task| task.get("kind")) {
-        Some(Value::Text(kind)) if CALLED.contains(&kind.as_str()) => Ok(kind),
-        _ => Err(not_yet("problem_type")),
+    let kind = kind_of(payload)?;
+    if CALLED.contains(&kind) {
+        Ok(kind)
+    } else {
+        Err(not_yet("problem_type"))
     }
 }
 
-/// The outputs this build asks for of a payload: its task's default, and
-/// any other list refused by name (`outputs`, decision E61).
-pub fn check_outputs(payload: &Value, outputs: &[String]) -> Result<(), CoreError> {
-    let default: &[&str] = if called(payload)? == "regression" {
-        &REGRESSION_FIELDS
-    } else {
-        &CLASSIFICATION_FIELDS
+fn classifies(kind: &str) -> bool {
+    kind.contains("classification")
+}
+
+/// One half's instance table: its column names and its rows.
+fn instance_table<'a>(payload: &'a Value, half: &str) -> Option<(Vec<&'a str>, &'a [Value])> {
+    let table = payload.get(half)?.get("instance_table")?;
+    let Some(Value::Array(columns)) = table.get("columns") else {
+        return None;
     };
-    if outputs != default {
-        return Err(not_yet("outputs"));
+    let Some(Value::Array(rows)) = table.get("rows") else {
+        return None;
+    };
+    let names: Vec<&str> = columns.iter().filter_map(Value::as_text).collect();
+    (names.len() == columns.len()).then_some((names, rows.as_slice()))
+}
+
+/// The rows of one half, counted as `Request._rows` counts them: none
+/// where the half cannot be read.
+fn rows_of(payload: &Value, half: &str) -> usize {
+    instance_table(payload, half).map_or(0, |(_, rows)| rows.len())
+}
+
+/// The outputs asked of `payload` sent to `model`, as the client's
+/// `_prepare` resolves and checks them: the model the contract carries
+/// (`UNKNOWN_MODEL` otherwise), the outputs the caller named or, when it
+/// named none (`defaulted`), the task's default ones, an empty list refused
+/// (`INVALID_REQUEST`, field `outputs`), then `check_request_against_model`
+/// in its order: the shapes the model's profile does not take, a task kind
+/// it does not serve, an output it does not produce and a context past what
+/// it reads, each `UNSUPPORTED_REQUEST` naming the model.
+pub fn prepare(
+    payload: &Value,
+    model: &str,
+    asked: &[String],
+    defaulted: bool,
+) -> Result<Vec<String>, CoreError> {
+    let spec = match model {
+        RELATIONAL => &KUMO_RELATIONAL,
+        TABULAR => &KUMO_TABULAR,
+        _ => {
+            return Err(CoreError::new(
+                ErrorKind::NotFound,
+                ErrorCode::UnknownModel,
+                "the model named is not one the contract carries",
+            )
+            .with_field("field", Detail::text("model")));
+        }
+    };
+    let kind = kind_of(payload)?;
+    let outputs: Vec<String> = if defaulted {
+        default_outputs(kind)
+            .iter()
+            .map(|f| (*f).to_owned())
+            .collect()
+    } else {
+        asked.to_vec()
+    };
+    if outputs.is_empty() {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "outputs must name at least one field",
+        )
+        .with_field("field", Detail::text("outputs")));
     }
-    Ok(())
+
+    // The shapes the request needs (`required_capabilities`), from the
+    // payload: its links, its tables, its kind and its anchor.
+    let schema = payload.get("schema");
+    let linked = matches!(
+        schema.and_then(|s| s.get("relationships")),
+        Some(Value::Array(links)) if !links.is_empty()
+    );
+    let tables = 1 + match schema.and_then(|s| s.get("related_tables")) {
+        Some(Value::Object(related)) => related.len(),
+        _ => 0,
+    };
+    let anchored = instance_table(payload, "predict")
+        .is_some_and(|(names, _)| names.contains(&"__kumo_anchor_time"));
+    let temporal = anchored || matches!(kind, "forecasting" | "temporal_link_prediction");
+    let needed = |shape: &str| match shape {
+        "relationships" => linked,
+        "multiple_tables" => tables > 1,
+        "link_prediction" => kind == "temporal_link_prediction",
+        "forecasting" => kind == "forecasting",
+        "temporal" => temporal,
+        "static" => !temporal,
+        _ => false,
+    };
+    let mut lacking: Vec<&str> = SHAPES
+        .into_iter()
+        .filter(|shape| needed(shape) && !spec.shapes.contains(shape))
+        .collect();
+    lacking.sort_unstable();
+    if !lacking.is_empty() {
+        return Err(
+            unsupported(spec.id, "the model cannot answer a request of this shape")
+                .with_field("unsupported", texts(lacking)),
+        );
+    }
+    if !spec.tasks.contains(&kind) {
+        return Err(
+            unsupported(spec.id, "the model does not serve the task's kind")
+                .with_field("task", Detail::text(kind))
+                .with_field("supported", texts(spec.tasks.iter().copied())),
+        );
+    }
+    let mut unknown: Vec<&str> = outputs
+        .iter()
+        .map(String::as_str)
+        .filter(|name| !spec.outputs.contains(name))
+        .collect();
+    if !unknown.is_empty() {
+        unknown.sort_unstable();
+        unknown.dedup();
+        return Err(
+            unsupported(spec.id, "the model does not produce an output asked for")
+                .with_field("unsupported_outputs", texts(unknown))
+                .with_field("supported_outputs", texts(spec.outputs.iter().copied())),
+        );
+    }
+    let rows = rows_of(payload, "context");
+    if spec.id == RELATIONAL && rows > CONTEXT_ROWS_MAX {
+        return Err(unsupported(
+            spec.id,
+            "the request's context is larger than the model reads",
+        )
+        .with_field("context_rows", count(rows))
+        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
+    }
+    if spec.id == TABULAR {
+        // The tabular model takes no relational request this build sends.
+        return Err(not_yet("model"));
+    }
+    Ok(outputs)
+}
+
+/// The outputs a task asks for when the caller names none (the adapter's
+/// `_DEFAULT_OUTPUTS`): asking for everything would make a regression ask
+/// for probabilities, which the endpoint refuses.
+pub fn default_outputs(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "classification" | "binary_classification" | "multiclass_classification" => {
+            &CLASSIFICATION_FIELDS
+        }
+        "temporal_link_prediction" => &["rankings"],
+        _ => &REGRESSION_FIELDS,
+    }
+}
+
+/// Whether the payload asks about no row at all (`Request.nothing_to_score`):
+/// its predict half's rows a list, and empty. One that cannot be read is
+/// not empty, and goes on to be refused where it is read.
+pub fn nothing_to_score(payload: &Value) -> bool {
+    instance_table(payload, "predict").is_some_and(|(_, rows)| rows.is_empty())
+}
+
+/// A notice the run gives: its code and fields, worded by the host.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Notice {
+    pub code: &'static str,
+    pub message: &'static str,
+    pub fields: Vec<(&'static str, Detail)>,
+}
+
+/// A JSON value as a member of a set, as Python's `set` holds the values the
+/// wire's rows read as: a number by its value (`1` and `1.0` one member, a
+/// NaN its own), text, a boolean, null.
+fn member(value: &Value) -> String {
+    match value {
+        Value::Number(token) => match token.parse::<f64>() {
+            Ok(n) if n == 0.0 => "n0".to_owned(),
+            Ok(n) => format!("n{:016x}", n.to_bits()),
+            Err(_) => format!("t{token}"),
+        },
+        Value::Text(text) => format!("s{text}"),
+        Value::Bool(b) => format!("b{b}"),
+        Value::Null => "z".to_owned(),
+        other => format!("j{}", String::from_utf8_lossy(&other.to_bytes())),
+    }
+}
+
+/// The context's target column, its values by row, where the context holds
+/// the target and at least one row.
+fn target_values<'a>(payload: &'a Value, column: Option<&str>) -> Option<Vec<&'a Value>> {
+    let (names, rows) = instance_table(payload, "context")?;
+    let column = column?;
+    let at = names.iter().position(|n| *n == column)?;
+    if rows.is_empty() {
+        return None;
+    }
+    Some(
+        rows.iter()
+            .filter_map(|row| match row {
+                Value::Array(cells) => cells.get(at),
+                _ => None,
+            })
+            .collect(),
+    )
+}
+
+/// The adapter's checks of what the call sends, before it is sent
+/// (`_preflight`), in its order: a context with no rows, a classification
+/// target with more classes than the model takes, a context whose every
+/// answered row has the same answer (a classification refused, a regression
+/// noted, [`CONTEXT_CONSTANT`]), then, when an explanation is asked for,
+/// the rows scored (exactly one) and the run mode (the one the smaller
+/// context selects). `query` is the question's text, which names the
+/// target where the wire calls it `TARGET`.
+pub fn preflight(
+    payloads: &[Value],
+    outputs: &[String],
+    query: &str,
+    model: &str,
+) -> Result<Vec<Notice>, CoreError> {
+    let mut notices = Vec::new();
+    for payload in payloads {
+        if let Some((_, rows)) = instance_table(payload, "context") {
+            if rows.is_empty() {
+                return Err(unsupported(model, "no context rows are left")
+                    .with_field("context_rows", count(0)));
+            }
+        }
+    }
+    for payload in payloads {
+        let kind = kind_of(payload)?;
+        if !classifies(kind) {
+            continue;
+        }
+        let column = payload
+            .get("task")
+            .and_then(|t| t.get("target"))
+            .and_then(|t| t.get("column_name"))
+            .and_then(Value::as_text);
+        if let Some(values) = target_values(payload, column) {
+            let labels: HashSet<String> = values.iter().map(|v| member(v)).collect();
+            if labels.len() > CLASSES_MAX {
+                return Err(
+                    unsupported(model, "the target has more classes than the model takes")
+                        .with_field("classes", count(labels.len()))
+                        .with_field("limit", count(CLASSES_MAX)),
+                );
+            }
+        }
+    }
+    for payload in payloads {
+        let kind = kind_of(payload)?;
+        if !classifies(kind) && kind != "regression" {
+            continue;
+        }
+        let column = payload
+            .get("task")
+            .and_then(|t| t.get("target"))
+            .and_then(|t| t.get("column_name"))
+            .and_then(Value::as_text);
+        let Some(values) = target_values(payload, column) else {
+            continue;
+        };
+        let answered: HashSet<String> = values
+            .iter()
+            .filter(|v| !matches!(v, Value::Null))
+            .map(|v| member(v))
+            .collect();
+        if answered.len() != 1 {
+            continue;
+        }
+        let column = column.unwrap_or_default();
+        if classifies(kind) {
+            return Err(unsupported(model, "every context row has the same answer")
+                .with_field("target", Detail::text(column))
+                .with_field("classes_in_context", count(1)));
+        }
+        notices.push(constant_context(column, query));
+        break;
+    }
+    if !outputs.iter().any(|o| o == "explanation") {
+        return Ok(notices);
+    }
+    let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
+    if scored != EXPLANATION_PREDICT_ROWS {
+        return Err(unsupported(model, "an explanation covers one entity")
+            .with_field("scored", count(scored)));
+    }
+    if asks_for_the_larger_context(payloads) {
+        return Err(
+            unsupported(model, "an explanation is given only in the fast run mode")
+                .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)),
+        );
+    }
+    Ok(notices)
+}
+
+/// Whether the request selected the mode that does not explain: a run mode
+/// other than `fast` on any payload that names one, else more context rows
+/// than the fast mode takes (`_asks_for_the_larger_context`).
+fn asks_for_the_larger_context(payloads: &[Value]) -> bool {
+    let modes: Vec<String> = payloads
+        .iter()
+        .filter_map(
+            |p| match p.get("inference").and_then(|i| i.get("run_mode")) {
+                None | Some(Value::Null) => None,
+                Some(Value::Text(mode)) => Some(mode.clone()),
+                Some(other) => Some(String::from_utf8_lossy(&other.to_bytes()).into_owned()),
+            },
+        )
+        .collect();
+    if !modes.is_empty() {
+        return modes.iter().any(|m| m != "fast");
+    }
+    payloads
+        .iter()
+        .map(|p| rows_of(p, "context"))
+        .sum::<usize>()
+        > CONTEXT_ROWS_FAST
+}
+
+/// The constant-context notice, with how the host names the target
+/// (`_how_to_name_the_target`): the target column when the wire names it
+/// so (`variant` `column`), else the column the question predicts when its
+/// text names one as `PREDICT table.column` (`predicted`), else the
+/// question itself (`question`).
+fn constant_context(column: &str, query: &str) -> Notice {
+    let mut fields = vec![("target", Detail::text(column))];
+    let variant = if column != WIRE_TARGET {
+        "column"
+    } else if let Some(predicted) = predicted_column(query) {
+        fields.push(("predicted", Detail::text(predicted)));
+        "predicted"
+    } else if query.is_empty() {
+        "answer"
+    } else {
+        fields.push(("question", Detail::text(query)));
+        "question"
+    };
+    fields.push(("variant", Detail::text(variant)));
+    Notice {
+        code: CONTEXT_CONSTANT,
+        message: "every context row has the same answer",
+        fields,
+    }
+}
+
+/// `table.column` when the question opens `PREDICT table.column` followed
+/// by white space (the adapter's `_A_PREDICTED_COLUMN`: leading white
+/// space, the keyword in any case, then two identifiers, each an ASCII
+/// letter or an underscore followed by letters, digits and underscores).
+fn predicted_column(query: &str) -> Option<&str> {
+    let rest = query.trim_start();
+    let keyword = rest.get(..7)?;
+    if !keyword.eq_ignore_ascii_case("predict") {
+        return None;
+    }
+    let after = &rest[7..];
+    let spaced = after.trim_start();
+    if spaced.len() == after.len() {
+        return None;
+    }
+    let ident = |s: &str| -> usize {
+        let mut chars = s.char_indices();
+        match chars.next() {
+            Some((_, c)) if c == '_' || c.is_ascii_alphabetic() => {}
+            _ => return 0,
+        }
+        s.char_indices()
+            .find(|(_, c)| !(*c == '_' || c.is_alphanumeric()))
+            .map_or(s.len(), |(at, _)| at)
+    };
+    let table = ident(spaced);
+    if table == 0 || spaced[table..].chars().next() != Some('.') {
+        return None;
+    }
+    let column = ident(&spaced[table + 1..]);
+    if column == 0 {
+        return None;
+    }
+    let end = table + 1 + column;
+    spaced[end..]
+        .chars()
+        .next()
+        .filter(|c| c.is_whitespace())
+        .map(|_| &spaced[..end])
 }
 
 /// The call one gathered payload makes of `model`, with `request_id`,
@@ -177,7 +650,6 @@ pub fn body(
     outputs: &[String],
     asked: &[String],
 ) -> Result<Value, CoreError> {
-    check_model(model)?;
     let kind = called(payload)?;
     let mut envelope = payload.clone();
     envelope.set("model", Value::text(model));
@@ -246,15 +718,7 @@ pub fn body(
                         "the model does not read an inference option the call set",
                     )
                     .with_field("model", Detail::text(model))
-                    .with_field(
-                        "unsupported",
-                        Detail::List(
-                            refused
-                                .iter()
-                                .map(|n| sdm_contract::Scalar::Utf8((*n).clone()))
-                                .collect(),
-                        ),
-                    ));
+                    .with_field("unsupported", texts(refused.iter().map(|n| n.as_str()))));
                 }
                 let trimmed = Value::Object(
                     config
@@ -286,45 +750,218 @@ pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
             "the call is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("call"))
-        .with_field(
-            "bytes",
-            Detail::Scalar(sdm_contract::Scalar::UInt64(bytes.len() as u64)),
-        )
+        .with_field("bytes", Detail::Scalar(Scalar::UInt64(bytes.len() as u64)))
         .with_field(
             "limit",
-            Detail::Scalar(sdm_contract::Scalar::UInt64(
-                crate::payload::PAYLOAD_BYTES as u64,
-            )),
+            Detail::Scalar(Scalar::UInt64(crate::payload::PAYLOAD_BYTES as u64)),
         ));
     }
     Ok(bytes)
 }
 
 /// The entity a row is about, as the result gives it.
-enum Entity {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Entity {
     Integer(i64),
     Text(String),
 }
 
-/// The answer laid out: one row per answer, in the endpoint's order, with
-/// `row_index` (int64), `id` (the entity the row is about, int64 for an
-/// integer key and utf8 for a text one) and `prediction` (float64).
-pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<RecordBatch, CoreError> {
-    regression(payload)?;
-    let table = payload
-        .get("predict")
-        .and_then(|p| p.get("instance_table"))
-        .ok_or_else(|| bad_payload("predict"))?;
-    let Some(Value::Array(columns)) = table.get("columns") else {
-        return Err(bad_payload("predict"));
-    };
-    let Some(Value::Array(rows)) = table.get("rows") else {
-        return Err(bad_payload("predict"));
-    };
-    let names: Vec<&str> = columns.iter().filter_map(Value::as_text).collect();
-    if names.len() != columns.len() {
-        return Err(bad_payload("predict"));
+/// An answer's prediction as the result gives it: a regression's as a
+/// double (a JSON `null` as `None`), a class as its target's type.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Answer {
+    None,
+    Float(f64),
+    Bool(bool),
+    Int(i64),
+    Text(String),
+}
+
+/// The type a part's predictions are given back as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnswerType {
+    Float,
+    Bool,
+    Int,
+    Text,
+}
+
+/// One answer laid out.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Row {
+    pub row_index: i64,
+    pub id: Entity,
+    pub prediction: Answer,
+    /// Each class's probability, keyed by the class as the target column
+    /// spells it, in the order the answer wrote them.
+    pub probabilities: Option<Vec<(String, f64)>>,
+}
+
+/// The answer to one call, or the parts of one request put together.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Part {
+    pub model: String,
+    pub request_id: String,
+    /// The endpoint's `metadata` object.
+    pub metadata: Value,
+    /// The answers, in the endpoint's order.
+    pub rows: Vec<Row>,
+    pub answers: AnswerType,
+    /// Whether an entity's key is text (else an integer).
+    pub text_ids: bool,
+}
+
+/// The answer to a request with no rows, made without a call
+/// (`_empty_answer`): no rows, no request id, empty metadata.
+pub fn empty(model: &str, payload: &Value) -> Part {
+    Part {
+        model: model.to_owned(),
+        request_id: String::new(),
+        metadata: Value::Object(vec![]),
+        rows: vec![],
+        answers: answer_type(payload).unwrap_or(AnswerType::Float),
+        text_ids: entity_dtype(payload).as_deref() == Some("string"),
     }
+}
+
+/// The target's dtype as the payload's task names it.
+fn target_dtype(payload: &Value) -> Option<&str> {
+    payload.get("task")?.get("target")?.get("dtype")?.as_text()
+}
+
+/// How a payload's answers are given back (`as_declared_target`): a
+/// regression's as doubles, a classification's as its target's dtype, a
+/// boolean, an integer or, for any other dtype, the class's text. A
+/// classification of a float target is not one `materialize` writes
+/// (`target_type`), and is refused by name.
+fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
+    let kind = called(payload)?;
+    if !classifies(kind) {
+        return Ok(AnswerType::Float);
+    }
+    Ok(match target_dtype(payload) {
+        Some(d) if d.starts_with("bool") => AnswerType::Bool,
+        Some(d) if d.starts_with("int") => AnswerType::Int,
+        Some(d) if d.starts_with("float") => return Err(not_yet("target_type")),
+        _ => AnswerType::Text,
+    })
+}
+
+/// The spellings a declared boolean is read back from (`_as_bool`).
+const TRUE: [&str; 3] = ["true", "t", "1"];
+const FALSE: [&str; 3] = ["false", "f", "0"];
+
+/// A class read back as the target's boolean (`_as_bool`): a boolean, text
+/// that spells one (trimmed, any case), or the integer 0 or 1.
+fn as_bool(value: &Value) -> Option<bool> {
+    match value {
+        Value::Bool(b) => Some(*b),
+        Value::Text(text) => {
+            let text = text.trim().to_lowercase();
+            if TRUE.contains(&text.as_str()) {
+                Some(true)
+            } else if FALSE.contains(&text.as_str()) {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        Value::Number(token) if is_integer_token(token) => match token.parse::<i64>() {
+            Ok(0) => Some(false),
+            Ok(1) => Some(true),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// A class read back as the target's integer (`as_declared`'s `int`): text
+/// of an integer (trimmed), an integer, or a float that is whole.
+fn as_int(value: &Value) -> Option<i64> {
+    match value {
+        Value::Text(text) => text.trim().parse::<i64>().ok(),
+        Value::Number(token) if is_integer_token(token) => token.parse::<i64>().ok(),
+        Value::Number(token) => {
+            let float: f64 = token.parse().ok()?;
+            (float.is_finite() && float.fract() == 0.0 && float.abs() < 9.2e18)
+                .then_some(float as i64)
+        }
+        _ => None,
+    }
+}
+
+/// One answer's prediction as the result gives it.
+fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, CoreError> {
+    let Some(value) = prediction else {
+        return Ok(Answer::None);
+    };
+    match answers {
+        // A regression's prediction is a number (owner decision of
+        // 2026-10-12, relayed): a token past a double's range, a `NaN` and
+        // an infinity read as the reference reads them; an integer past
+        // int64, text, a boolean, an array or an object refused.
+        AnswerType::Float => match value {
+            Value::Number(token) if is_integer_token(token) => token
+                .parse::<i64>()
+                .map(|n| Answer::Float(n as f64))
+                .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
+            Value::Number(token) => token
+                .parse::<f64>()
+                .map(Answer::Float)
+                .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
+            _ => Err(bad_response("prediction.prediction", "not_a_number")),
+        },
+        AnswerType::Bool => as_bool(value)
+            .map(Answer::Bool)
+            .ok_or_else(|| not_yet("prediction_type")),
+        AnswerType::Int => as_int(value)
+            .map(Answer::Int)
+            .ok_or_else(|| not_yet("prediction_type")),
+        AnswerType::Text => match value {
+            Value::Text(text) => Ok(Answer::Text(text.clone())),
+            _ => Err(not_yet("prediction_type")),
+        },
+    }
+}
+
+/// The probabilities keyed by each class as the target column spells it
+/// (`_as_the_column_spells_them`), left as written where reading them back
+/// would make two classes one.
+fn spelled(probabilities: &[(String, f64)], answers: AnswerType) -> Vec<(String, f64)> {
+    let respelled: Vec<(String, f64)> = probabilities
+        .iter()
+        .map(|(class, p)| {
+            let as_written = Value::Text(class.clone());
+            let key = match answers {
+                AnswerType::Bool => as_bool(&as_written).map(|b| {
+                    if b {
+                        "True".to_owned()
+                    } else {
+                        "False".to_owned()
+                    }
+                }),
+                AnswerType::Int => as_int(&as_written).map(|n| n.to_string()),
+                _ => None,
+            };
+            (key.unwrap_or_else(|| class.clone()), *p)
+        })
+        .collect();
+    let distinct: HashSet<&str> = respelled.iter().map(|(k, _)| k.as_str()).collect();
+    if distinct.len() == probabilities.len() {
+        respelled
+    } else {
+        probabilities.to_vec()
+    }
+}
+
+/// The answer to one payload laid out (`normalize`, `_named_entities`,
+/// `as_declared_target`): each answer checked against the row it claims
+/// before it is given the entity of that row (in range, not a forecast's,
+/// once, under the instance id the row was asked under, every row
+/// answered), its prediction given back as [`answer_of`] reads it.
+pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, CoreError> {
+    let answers = answer_type(payload)?;
+    let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let reference = names
         .iter()
         .position(|n| n.starts_with(ENTITY_REF))
@@ -350,9 +987,6 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<RecordBa
         None => None,
     };
 
-    // Each answer is checked against the row it claims before it is given
-    // the entity of that row: in range, not a forecast's, once, and under
-    // the instance id that row was asked under.
     let mut answered = vec![false; entities.len()];
     let mut placed = Vec::with_capacity(response.predictions.len());
     for item in &response.predictions {
@@ -381,67 +1015,235 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<RecordBa
         return Err(bad_response("prediction.row_index", "unanswered"));
     }
 
-    // What the result does not carry yet is refused by name, never
-    // dropped: a field of an answer beyond its prediction, and a
-    // prediction that is not written as a float.
-    let mut predictions = Vec::with_capacity(placed.len());
-    for item in &response.predictions {
+    let mut laid = Vec::with_capacity(placed.len());
+    for (item, index) in response.predictions.iter().zip(&placed) {
         if let Some(field) = item.carried.first() {
             return Err(not_yet("response_field").with_field("field", Detail::text(*field)));
         }
-        match &item.prediction {
-            Some(Value::Number(token)) if !is_integer_token(token) => {
-                let value: f64 = token
-                    .parse()
-                    .map_err(|_| bad_response("prediction.prediction", "not_a_number"))?;
-                // A finite token past a double's range reads as infinity,
-                // which the reference passes on and this build refuses, as
-                // it refuses NaN and Infinity (register P1B-4).
-                if !value.is_finite() {
-                    return Err(bad_response("prediction.prediction", "not_finite"));
-                }
-                predictions.push(value);
-            }
-            _ => return Err(not_yet("prediction_type")),
-        }
+        laid.push(Row {
+            row_index: i64::try_from(*index).unwrap_or(i64::MAX),
+            id: entities[*index].clone(),
+            prediction: answer_of(item.prediction.as_ref(), answers)?,
+            probabilities: item
+                .probabilities
+                .as_ref()
+                .map(|given| spelled(given, answers)),
+        });
     }
+    Ok(Part {
+        model: response.model.clone(),
+        request_id: response.id.clone(),
+        metadata: response.metadata.clone(),
+        rows: laid,
+        answers,
+        text_ids: dtype.as_deref() == Some("string"),
+    })
+}
 
+/// The answers of one request sent in several calls, put together
+/// (`PredictionResult.merge`): none refused (`INTERNAL_ERROR`, as the
+/// reference's merge refuses nothing to merge), one as it is; several, each
+/// answering its own rows, are one: every part's answers in order, the
+/// first part's model and request id, its metadata with `batches` (how many
+/// parts) and `batch_request_ids` (each part's id), parts of different
+/// models refused (`INTERNAL_ERROR`).
+pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
+    let internal =
+        |message: &str| CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message);
+    let mut parts = parts.into_iter();
+    let Some(first) = parts.next() else {
+        return Err(internal("no parts to merge"));
+    };
+    let rest: Vec<Part> = parts.collect();
+    if rest.is_empty() {
+        return Ok(first);
+    }
+    if rest.iter().any(|p| p.model != first.model) {
+        return Err(internal("the parts were answered by different models"));
+    }
+    let mut metadata = first.metadata.clone();
+    metadata.set(
+        "batches",
+        Value::int(i64::try_from(rest.len() + 1).unwrap_or(i64::MAX)),
+    );
+    let ids: Vec<&str> = std::iter::once(first.request_id.as_str())
+        .chain(rest.iter().map(|p| p.request_id.as_str()))
+        .collect();
+    metadata.set("batch_request_ids", Value::texts(ids));
+    let mut rows = first.rows;
+    for part in rest {
+        rows.extend(part.rows);
+    }
+    Ok(Part {
+        model: first.model,
+        request_id: first.request_id,
+        metadata,
+        rows,
+        answers: first.answers,
+        text_ids: first.text_ids,
+    })
+}
+
+/// The outputs the caller named that the answer does not carry
+/// (`PredictionResult.absent`), each once, in the order named: none for an
+/// answer with no rows; `prediction` when no answer holds one,
+/// `probabilities` when none holds any, `explanation` and the fields this
+/// build refuses an answer for carrying always; a name the result does not
+/// know is taken as carried.
+pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
+    if part.rows.is_empty() {
+        return vec![];
+    }
+    let mut seen = HashSet::new();
+    named
+        .iter()
+        .filter(|name| seen.insert(name.as_str()))
+        .filter(|name| match name.as_str() {
+            "prediction" => part.rows.iter().all(|r| r.prediction == Answer::None),
+            "probabilities" => part
+                .rows
+                .iter()
+                .all(|r| r.probabilities.as_ref().is_none_or(Vec::is_empty)),
+            "explanation" | "quantiles" | "scores" | "rankings" | "embeddings" => true,
+            _ => false,
+        })
+        .cloned()
+        .collect()
+}
+
+/// The notice of the outputs [`absent`] found, naming the model asked.
+pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
+    Notice {
+        code: OUTPUTS_ABSENT,
+        message: "the answer left out outputs the request asked for",
+        fields: vec![
+            ("model", Detail::text(model)),
+            ("absent", texts(absent.iter().map(String::as_str))),
+        ],
+    }
+}
+
+/// The result of a part: one row per answer, ordered by `row_index` (as
+/// `PredictionResult.to_pandas` orders them; the order is stable among
+/// equal ones, which a merge of parts holds), with `row_index` (int64),
+/// `id` (int64 for an integer key, utf8 for a text one), `prediction` when
+/// any answer holds one (float64, a `null` as NaN, as the reference's frame
+/// gives it; a class as bool, int64 or utf8, a `null` as null) and
+/// `probabilities` when any answer holds them (a map of each class, as its
+/// column spells it, to its probability, in the order written).
+pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
+    let mut rows: Vec<&Row> = part.rows.iter().collect();
+    rows.sort_by_key(|r| r.row_index);
     let row_index: ArrayRef = Arc::new(Int64Array::from_iter_values(
-        placed.iter().map(|i| i64::try_from(*i).unwrap_or(i64::MAX)),
+        rows.iter().map(|r| r.row_index),
     ));
-    let (id_type, ids): (DataType, ArrayRef) = match entities.first() {
-        Some(Entity::Text(_)) => (
+    let (id_type, ids): (DataType, ArrayRef) = if part.text_ids {
+        (
             DataType::Utf8,
-            Arc::new(StringArray::from_iter_values(placed.iter().map(
-                |i| match &entities[*i] {
-                    Entity::Text(text) => text.as_str(),
-                    Entity::Integer(_) => "",
+            Arc::new(StringArray::from_iter_values(rows.iter().map(
+                |r| match &r.id {
+                    Entity::Text(text) => text.clone(),
+                    Entity::Integer(n) => n.to_string(),
                 },
             ))),
-        ),
-        _ => (
+        )
+    } else {
+        (
             DataType::Int64,
-            Arc::new(Int64Array::from_iter_values(placed.iter().map(
-                |i| match &entities[*i] {
-                    Entity::Integer(value) => *value,
+            Arc::new(Int64Array::from_iter_values(rows.iter().map(
+                |r| match &r.id {
+                    Entity::Integer(n) => *n,
                     Entity::Text(_) => 0,
                 },
             ))),
-        ),
+        )
     };
-    let prediction: ArrayRef = Arc::new(Float64Array::from(predictions));
-    let schema = Schema::new(vec![
+    let mut fields = vec![
         Field::new("row_index", DataType::Int64, false),
         Field::new("id", id_type, false),
-        Field::new("prediction", DataType::Float64, false),
-    ]);
-    RecordBatch::try_new(Arc::new(schema), vec![row_index, ids, prediction]).map_err(|_| {
-        CoreError::new(
-            ErrorKind::Internal,
-            ErrorCode::InternalError,
-            "the result does not lay out",
-        )
-    })
+    ];
+    let mut columns = vec![row_index, ids];
+    if rows.iter().any(|r| r.prediction != Answer::None) {
+        let (data_type, column): (DataType, ArrayRef) = match part.answers {
+            AnswerType::Float => (
+                DataType::Float64,
+                Arc::new(Float64Array::from_iter_values(rows.iter().map(
+                    |r| match r.prediction {
+                        Answer::Float(v) => v,
+                        _ => f64::NAN,
+                    },
+                ))),
+            ),
+            AnswerType::Bool => (
+                DataType::Boolean,
+                Arc::new(BooleanArray::from_iter(rows.iter().map(
+                    |r| match r.prediction {
+                        Answer::Bool(b) => Some(b),
+                        _ => None,
+                    },
+                ))),
+            ),
+            AnswerType::Int => (
+                DataType::Int64,
+                Arc::new(Int64Array::from_iter(rows.iter().map(
+                    |r| match r.prediction {
+                        Answer::Int(n) => Some(n),
+                        _ => None,
+                    },
+                ))),
+            ),
+            AnswerType::Text => (
+                DataType::Utf8,
+                Arc::new(StringArray::from_iter(rows.iter().map(
+                    |r| match &r.prediction {
+                        Answer::Text(t) => Some(t.clone()),
+                        _ => None,
+                    },
+                ))),
+            ),
+        };
+        fields.push(Field::new("prediction", data_type, true));
+        columns.push(column);
+    }
+    if rows
+        .iter()
+        .any(|r| r.probabilities.as_ref().is_some_and(|p| !p.is_empty()))
+    {
+        let names = MapFieldNames {
+            entry: "entries".to_owned(),
+            key: "class".to_owned(),
+            value: "probability".to_owned(),
+        };
+        let mut builder = MapBuilder::new(Some(names), StringBuilder::new(), Float64Builder::new());
+        for row in &rows {
+            match &row.probabilities {
+                Some(given) if !given.is_empty() => {
+                    for (class, p) in given {
+                        builder.keys().append_value(class);
+                        builder.values().append_value(*p);
+                    }
+                    builder.append(true).map_err(|_| internal_layout())?;
+                }
+                _ => builder.append(false).map_err(|_| internal_layout())?,
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new(
+            "probabilities",
+            column.data_type().clone(),
+            true,
+        ));
+        columns.push(Arc::new(column));
+    }
+    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| internal_layout())
+}
+
+fn internal_layout() -> CoreError {
+    CoreError::new(
+        ErrorKind::Internal,
+        ErrorCode::InternalError,
+        "the result does not lay out",
+    )
 }
 
 /// The dtype of the column the entity reference stands for: the column
@@ -473,6 +1275,13 @@ fn key_dtype(payload: &Value, reference: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The dtype of the payload's entity key, as [`key_dtype`] finds it.
+fn entity_dtype(payload: &Value) -> Option<String> {
+    let (names, _) = instance_table(payload, "predict")?;
+    let reference = names.iter().find(|n| n.starts_with(ENTITY_REF))?;
+    key_dtype(payload, reference)
+}
+
 /// The entity of a row: its reference's value read back as the key's
 /// dtype, as the reference's client reads it. This build takes an integer
 /// key, written as an integer or, past the doubles' exact range, as its
@@ -499,5 +1308,26 @@ fn instance_text(value: &Value) -> Result<String, CoreError> {
         Value::Number(token) if is_integer_token(token) => Ok(token.clone()),
         Value::Text(text) => Ok(text.clone()),
         _ => Err(not_yet("instance_id_type")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_predicted_column_is_read_as_the_adapter_reads_it() {
+        assert_eq!(
+            predicted_column("PREDICT users.age FOR EACH users.id"),
+            Some("users.age")
+        );
+        assert_eq!(predicted_column("  predict u.a\tFOR"), Some("u.a"));
+        assert_eq!(
+            predicted_column("PREDICT COUNT(orders.*, 0, 1, days) > 0 FOR"),
+            None
+        );
+        assert_eq!(predicted_column("PREDICT users.age"), None);
+        assert_eq!(predicted_column("PREDICTusers.age FOR"), None);
+        assert_eq!(predicted_column("PREDICT 1a.b FOR"), None);
     }
 }

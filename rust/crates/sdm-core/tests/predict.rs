@@ -2,14 +2,19 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `predict` (T1.11d): the request state handed back is read only at its
-//! own version, refused by name otherwise (H23); the call is the
-//! reference's adapter's, every number as the payload wrote it; the answer
-//! is read as the bindings read it and laid out under each row's entity;
-//! and every answer the result does not carry, or a call that failed, ends
-//! the run with a named error that holds no value of the request or the
-//! answer (H17). The refusals of what the thin route does not port are
-//! diagnostic, register entry P1B-4.
+//! `predict` (T1.11d, T1.28b): the request state handed back is read only
+//! at its own version, refused by name otherwise (H23); the model and the
+//! outputs are checked as the client's `_prepare` checks them, the task's
+//! default outputs asked where the caller named none; a request with no row
+//! to score is answered without a call; the context is checked as the
+//! adapter's `_preflight` checks it; the call is the reference's adapter's,
+//! every number as the payload wrote it; the answer is read as the bindings
+//! read it, a non-finite number as Python's reader takes it, and laid out
+//! under each row's entity, ordered by `row_index`, a class as its target's
+//! type; and every answer the result does not carry, or a call that
+//! failed, ends the run with a named error that holds no value of the
+//! request or the answer (H17). The refusals of what the route does not
+//! port are diagnostic, register entry P1B-4.
 
 #![allow(
     clippy::disallowed_methods,
@@ -18,6 +23,7 @@
 
 use std::sync::Arc;
 
+use arrow_array::Array;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{Float64Type, Int64Type};
 use arrow_schema::DataType;
@@ -77,6 +83,16 @@ fn predict_run_asking(
     model: &str,
     outputs: &[&str],
 ) -> Result<Run, CoreError> {
+    predict_run_with(version, payload, model, outputs, false)
+}
+
+fn predict_run_with(
+    version: u32,
+    payload: String,
+    model: &str,
+    outputs: &[&str],
+    default_outputs: bool,
+) -> Result<Run, CoreError> {
     let operation = Operation::Predict(Predict {
         state: RequestState {
             version,
@@ -86,6 +102,7 @@ fn predict_run_asking(
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),
         outputs: outputs.iter().map(|o| (*o).to_owned()).collect(),
+        default_outputs,
         inference_asked: vec![],
     });
     let attachments = Attachments::from([
@@ -240,7 +257,7 @@ fn a_chosen_statistic_is_sent_and_an_inference_section_not_an_object_is_left_out
 }
 
 #[test]
-fn the_answer_is_laid_out_under_each_row_s_entity_in_the_endpoint_s_order() {
+fn the_answer_is_laid_out_under_each_row_s_entity_ordered_by_row_index() {
     let answer = br#"{"object":"prediction.response","id":"r9","model":"kumo-relational","metadata":{"n":12345678901234567890},"predictions":[{"id":"3","row_index":1,"prediction":2.5},{"id":"2","row_index":0.0,"prediction":1.0}]}"#;
     let (mut run, step) = answered(200, answer);
     let Step::Done {
@@ -266,13 +283,15 @@ fn the_answer_is_laid_out_under_each_row_s_entity_in_the_endpoint_s_order() {
     let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
     assert_eq!(names, ["row_index", "id", "prediction"]);
     assert_eq!(batch.column(1).data_type(), &DataType::Int64);
+    // Ordered by row_index, as the reference's frame orders them, whatever
+    // the endpoint's order (T1.28b).
     assert_eq!(
         batch
             .column(0)
             .as_primitive::<Int64Type>()
             .values()
             .to_vec(),
-        [1, 0]
+        [0, 1]
     );
     // The second row's entity was written as digits past 2**53.
     assert_eq!(
@@ -281,7 +300,7 @@ fn the_answer_is_laid_out_under_each_row_s_entity_in_the_endpoint_s_order() {
             .as_primitive::<Int64Type>()
             .values()
             .to_vec(),
-        [9_007_199_254_740_993, 7]
+        [7, 9_007_199_254_740_993]
     );
     assert_eq!(
         batch
@@ -289,7 +308,7 @@ fn the_answer_is_laid_out_under_each_row_s_entity_in_the_endpoint_s_order() {
             .as_primitive::<Float64Type>()
             .values()
             .to_vec(),
-        [2.5, 1.0]
+        [1.0, 2.5]
     );
 }
 
@@ -351,7 +370,48 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
             "not_text",
         ),
         (format!("{{\"{CANARY}\""), "response", "not_json"),
-        ("[1, NaN]".to_owned(), "response", "not_finite"),
+        ("[1, NaN]".to_owned(), "response", "not_an_object"),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":"1.0"}"#.to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.prediction",
+            "not_a_number",
+        ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":123456789012345678901}"#.to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.prediction",
+            "not_a_number",
+        ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":1.0,"probabilities":[1]}"#.to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.probabilities",
+            "not_an_object",
+        ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":1.0,"probabilities":{"a":true}}"#
+                    .to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.probabilities",
+            "not_a_number",
+        ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":1.0,"probabilities":{"a":NaN}}"#.to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.probabilities",
+            "not_finite",
+        ),
     ];
     for (answer, field, reason) in cases {
         let (_, step) = answered(200, answer.as_bytes());
@@ -382,16 +442,10 @@ fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
             Some("explanation"),
         ),
         (
-            r#"{"id":"2","row_index":0,"prediction":1}"#,
-            "prediction_type",
-            None,
+            r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.5":1.0}}"#,
+            "response_field",
+            Some("quantiles"),
         ),
-        (
-            r#"{"id":"2","row_index":0,"prediction":"1.0"}"#,
-            "prediction_type",
-            None,
-        ),
-        (r#"{"id":"2","row_index":0}"#, "prediction_type", None),
     ] {
         let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
         let error = step.unwrap_err();
@@ -412,6 +466,16 @@ fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
         .as_bytes(),
     );
     assert!(step.is_ok());
+    // An integer prediction is a regression's number, and a missing one is
+    // none, laid out as NaN, as the reference's frame gives it (T1.28b).
+    for item in [
+        r#"{"id":"2","row_index":0,"prediction":1}"#,
+        r#"{"id":"2","row_index":0}"#,
+        r#"{"id":"2","row_index":0,"prediction":null}"#,
+    ] {
+        let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
+        assert!(step.is_ok(), "{item}");
+    }
 }
 
 #[test]
@@ -448,10 +512,19 @@ fn a_refusal_and_a_failed_transport_end_the_run_with_named_errors() {
 
 #[test]
 fn what_predict_does_not_port_yet_is_refused_by_name() {
-    // Another model than the relational one, and one that is no model.
+    // The tabular model cannot answer a request of this shape, as the
+    // client's check refuses it; one that is no model is unknown.
     let mut run = predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-tabular").unwrap();
     let error = run.next().unwrap_err();
-    assert_eq!(rule(&error), Some(&text("model")));
+    assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(error.fields["model"], text("kumo-tabular"));
+    assert_eq!(
+        error.fields["unsupported"],
+        Detail::List(vec![
+            Scalar::Utf8("multiple_tables".into()),
+            Scalar::Utf8("relationships".into())
+        ])
+    );
     let mut run = predict_run(REQUEST_STATE_VERSION, payload_text(), CANARY).unwrap();
     let error = run.next().unwrap_err();
     assert_eq!(
@@ -465,38 +538,6 @@ fn what_predict_does_not_port_yet_is_refused_by_name() {
         r#""kind":"forecasting","target""#,
     );
     let mut run = predict_run(REQUEST_STATE_VERSION, forecast, "kumo-relational").unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), Some(&text("problem_type")));
-    // A classification (T1.28a): asked for a regression's outputs, refused
-    // by name before the call; asked for its own, the call is made and the
-    // answer refused, its layout T1.28b's.
-    let binary = payload_text().replace(
-        r#""kind":"regression","target""#,
-        r#""kind":"binary_classification","target""#,
-    );
-    let mut run = predict_run(REQUEST_STATE_VERSION, binary.clone(), "kumo-relational").unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), Some(&text("outputs")));
-    let mut run = predict_run_asking(
-        REQUEST_STATE_VERSION,
-        binary,
-        "kumo-relational",
-        &["prediction", "probabilities"],
-    )
-    .unwrap();
-    let (id, body) = call(&mut run);
-    let sent: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(
-        sent["output"],
-        json!({"fields": ["prediction", "probabilities"]})
-    );
-    run.submit_model(
-        id,
-        ModelResult::Response {
-            status: 200,
-            content_type: "application/json".into(),
-            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[]}"#.to_vec(),
-        },
-    )
-    .unwrap();
     assert_eq!(rule(&run.next().unwrap_err()), Some(&text("problem_type")));
     // An entity of a key whose type the result does not lay out yet.
     let payload = payload_text().replace(
@@ -574,54 +615,85 @@ fn a_deeply_nested_answer_ends_the_run_in_a_process_of_its_own() {
     assert!(stdout.contains("deep answer refused"), "{stdout}");
 }
 
-/// A prediction written as a finite token past a double's range reads as
-/// infinity: refused, as NaN and Infinity are, on every host (register
-/// P1B-4), never laid out.
+/// A non-finite number in the answer is read as the reference's reader
+/// reads it (owner decision of 2026-10-12, register P1B-4): a prediction
+/// written as a token past a double's range is an infinity, the `NaN` and
+/// `Infinity` tokens a NaN and an infinity, laid out as such; and the
+/// endpoint's metadata keeps each such token as written, which the Python
+/// host's reader reads back as the same number.
 #[test]
-fn an_overflowing_prediction_is_an_invalid_response() {
-    for token in ["1e400", "-1e400", "1.7976931348623159e308"] {
+fn a_non_finite_prediction_is_read_as_the_reference_reads_it() {
+    for (token, read) in [
+        ("1e400", f64::INFINITY),
+        ("-1e400", f64::NEG_INFINITY),
+        ("1.7976931348623159e308", f64::INFINITY),
+        ("Infinity", f64::INFINITY),
+        ("-Infinity", f64::NEG_INFINITY),
+        ("NaN", f64::NAN),
+    ] {
         let answer = format!(
-            r#"{{"id":"r1","model":"m","metadata":{{}},"predictions":[{{"id":"2","row_index":0,"prediction":{token}}},{{"id":"3","row_index":1,"prediction":1.0}}]}}"#
+            r#"{{"id":"r1","model":"m","metadata":{{"x":[1,{{"y":{token}}}],"w":"NaN Infinity"}},"predictions":[{{"id":"2","row_index":0,"prediction":{token}}},{{"id":"3","row_index":1,"prediction":1.0}}]}}"#
         );
-        let (_, step) = answered(200, answer.as_bytes());
-        let error = step.unwrap_err();
-        assert_eq!(error.code, ErrorCode::InvalidResponse, "{token}");
-        assert_eq!(error.fields["field"], text("response"));
-        assert_eq!(error.fields["reason"], text("not_finite"));
-    }
-    // The same policy over the whole answer: a non-finite number in the
-    // endpoint's metadata, written as a token past a double's range or as
-    // the NaN and Infinity tokens JSON does not hold (Python's reader takes
-    // them), is refused alike, as the Python host's tests show
-    // (`tests/test_the_predict_route.py`).
-    for token in ["1e400", "-1e400", "Infinity", "-Infinity", "NaN"] {
-        let answer = format!(
-            r#"{{"id":"r1","model":"m","metadata":{{"x":[1,{{"y":{token}}}]}},"predictions":[{{"id":"2","row_index":0,"prediction":1.0}},{{"id":"3","row_index":1,"prediction":1.0}}]}}"#
+        let (mut run, step) = answered(200, answer.as_bytes());
+        let Step::Done {
+            result: OperationResult::Predict(predicted),
+        } = step.unwrap()
+        else {
+            panic!("done");
+        };
+        let Some(Attachment::Bytes(metadata)) = run.take_attachment(predicted.metadata) else {
+            panic!("the metadata is attached");
+        };
+        assert_eq!(
+            String::from_utf8(metadata).unwrap(),
+            format!(r#"{{"x":[1,{{"y":{token}}}],"w":"NaN Infinity"}}"#)
         );
-        let (_, step) = answered(200, answer.as_bytes());
-        let error = step.unwrap_err();
-        assert_eq!(error.code, ErrorCode::InvalidResponse, "{token}");
-        assert_eq!(error.fields["field"], text("response"), "{token}");
-        assert_eq!(error.fields["reason"], text("not_finite"), "{token}");
+        let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
+            panic!("the result is attached");
+        };
+        let got = result.batches[0]
+            .column(2)
+            .as_primitive::<Float64Type>()
+            .value(0);
+        assert_eq!(got.to_bits(), read.to_bits(), "{token}");
     }
-    // Text holding those words, and an integer of any size, are finite.
-    let answer = r#"{"id":"r1","model":"m","metadata":{"w":"NaN Infinity","n":123456789012345678901234567890},"predictions":[{"id":"2","row_index":0,"prediction":1.0},{"id":"3","row_index":1,"prediction":1.0}]}"#;
-    assert!(answered(200, answer.as_bytes()).1.is_ok());
-    // The largest double is a prediction like any other.
-    let answer = r#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.7976931348623157e308},{"id":"3","row_index":1,"prediction":1.0}]}"#;
-    assert!(answered(200, answer.as_bytes()).1.is_ok());
 }
 
-/// The outputs asked for pass through the host to the core (T1.24, decision
-/// E61): any list but a regression's default is refused by name, `outputs`,
-/// before the state is read or the model called; the default is predicted.
+/// The outputs are checked as the client's `_prepare` checks them (T1.28b):
+/// none named refused `INVALID_REQUEST`; one the model does not produce
+/// refused naming the model; an explanation over two rows refused as the
+/// adapter's `_preflight` refuses it; any the model produces asked as named,
+/// a name repeated kept.
 #[test]
-fn outputs_other_than_the_default_are_refused_by_name() {
+fn the_outputs_are_checked_as_the_client_checks_them() {
+    let refused = |outputs: &[&str]| {
+        let mut run = predict_run_asking(
+            REQUEST_STATE_VERSION,
+            payload_text(),
+            "kumo-relational",
+            outputs,
+        )
+        .unwrap();
+        run.next().unwrap_err()
+    };
+    let none = refused(&[]);
+    assert_eq!(none.code, ErrorCode::InvalidRequest);
+    assert_eq!(none.fields["field"], text("outputs"));
+    let unknown = refused(&["prediction", "bogus"]);
+    assert_eq!(unknown.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(
+        unknown.fields["unsupported_outputs"],
+        Detail::List(vec![Scalar::Utf8("bogus".into())])
+    );
+    for outputs in [&["prediction", "explanation"][..], &["explanation"]] {
+        let error = refused(outputs);
+        assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(error.fields["scored"], Detail::Scalar(Scalar::UInt64(2)));
+    }
     for outputs in [
-        &[][..],
-        &["prediction", "explanation"],
-        &["explanation"],
-        &["prediction", "prediction"],
+        &["prediction", "prediction"][..],
+        &["quantiles"],
+        &["probabilities"],
     ] {
         let mut run = predict_run_asking(
             REQUEST_STATE_VERSION,
@@ -630,15 +702,210 @@ fn outputs_other_than_the_default_are_refused_by_name() {
             outputs,
         )
         .unwrap();
-        let Err(err) = run.next() else {
-            panic!("{outputs:?} is refused before any step");
-        };
-        assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{outputs:?}");
-        assert_eq!(err.fields["operation"], Detail::text("predict"));
-        assert_eq!(err.fields["rule"], Detail::text("outputs"));
+        let (_, body) = call(&mut run);
+        let sent: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(sent["output"]["fields"], json!(outputs));
     }
-    let mut run = predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-relational").unwrap();
+}
+
+/// The caller naming no outputs asks the task's default ones, a
+/// classification's prediction and probabilities, laid out as its target's
+/// type: a boolean target's classes as booleans, read from the wire's
+/// spellings, and its probabilities keyed as the column spells the classes;
+/// the result says the outputs asked.
+#[test]
+fn a_classification_s_default_outputs_and_its_answer_as_its_target_s_type() {
+    let binary = payload_text()
+        .replace(
+            r#""kind":"regression","target":{"column_name":"TARGET","dtype":"float32"}"#,
+            r#""kind":"binary_classification","target":{"column_name":"TARGET","dtype":"bool","classes":["false","true"],"positive_class":"true"}"#,
+        )
+        .replace("[[0,1e-05],[1,12345678.900000001]]", r#"[[0,true],[1,false]]"#);
+    let mut run =
+        predict_run_with(REQUEST_STATE_VERSION, binary, "kumo-relational", &[], true).unwrap();
+    let (id, body) = call(&mut run);
+    let sent: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        sent["output"],
+        json!({"fields": ["prediction", "probabilities"]})
+    );
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"3","row_index":1,"prediction":"0"},{"id":"2","row_index":0,"prediction":"TRUE","probabilities":{"false":0.25,"true":0.75}}]}"#.to_vec(),
+        },
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::Predict(predicted),
+    } = run.next().unwrap()
+    else {
+        panic!("done");
+    };
+    assert_eq!(predicted.outputs, ["prediction", "probabilities"]);
+    // No notice for an output the caller did not name.
+    assert!(run.take_warnings().is_empty());
+    let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
+        panic!("the result is attached");
+    };
+    let batch = &result.batches[0];
+    assert_eq!(batch.column(2).data_type(), &DataType::Boolean);
+    let predictions: Vec<Option<bool>> = batch.column(2).as_boolean().iter().collect();
+    assert_eq!(predictions, [Some(true), Some(false)]);
+    let probabilities = batch.column(3).as_map();
+    assert!(probabilities.is_valid(0) && !probabilities.is_valid(1));
+    let keys: Vec<&str> = probabilities
+        .keys()
+        .as_string::<i32>()
+        .iter()
+        .flatten()
+        .collect();
+    assert_eq!(keys, ["False", "True"]);
+    // A class the target's type cannot hold is refused by name.
+    let multiclass_text = payload_text().replace(
+        r#""kind":"regression","target":{"column_name":"TARGET","dtype":"float32"}"#,
+        r#""kind":"multiclass_classification","target":{"column_name":"TARGET","dtype":"string","classes":["a","b"]}"#,
+    );
+    let mut run = predict_run_with(
+        REQUEST_STATE_VERSION,
+        multiclass_text,
+        "kumo-relational",
+        &[],
+        true,
+    )
+    .unwrap();
+    let (id, _) = call(&mut run);
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1},{"id":"3","row_index":1,"prediction":"a"}]}"#.to_vec(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        rule(&run.next().unwrap_err()),
+        Some(&text("prediction_type"))
+    );
+}
+
+/// The adapter's checks of the context (`_preflight`), before any call: a
+/// context with no rows, a classification with more classes than the model
+/// takes or a single one refused; a regression's constant context given as
+/// a notice naming the target as the host words it, and answered.
+#[test]
+fn the_context_is_checked_before_the_call() {
+    let with_context = |kind_and_target: &str, rows: &str| {
+        payload_text()
+            .replace(
+                r#""kind":"regression","target":{"column_name":"TARGET","dtype":"float32"}"#,
+                kind_and_target,
+            )
+            .replace("[[0,1e-05],[1,12345678.900000001]]", rows)
+    };
+    const MULTICLASS: &str = r#""kind":"multiclass_classification","target":{"column_name":"TARGET","dtype":"string","classes":["a"]}"#;
+    let refused = |payload: String| {
+        let mut run =
+            predict_run_with(REQUEST_STATE_VERSION, payload, "kumo-relational", &[], true).unwrap();
+        run.next().unwrap_err()
+    };
+    let empty = refused(with_context(MULTICLASS, "[]"));
+    assert_eq!(empty.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(
+        empty.fields["context_rows"],
+        Detail::Scalar(Scalar::UInt64(0))
+    );
+    let eleven: Vec<String> = (0..11).map(|i| format!(r#"[{i},"c{i}"]"#)).collect();
+    let many = refused(with_context(MULTICLASS, &format!("[{}]", eleven.join(","))));
+    assert_eq!(many.fields["classes"], Detail::Scalar(Scalar::UInt64(11)));
+    assert_eq!(many.fields["limit"], Detail::Scalar(Scalar::UInt64(10)));
+    let one = refused(with_context(MULTICLASS, r#"[[0,"a"],[1,null],[2,"a"]]"#));
+    assert_eq!(
+        one.fields["classes_in_context"],
+        Detail::Scalar(Scalar::UInt64(1))
+    );
+    // A regression over a constant: noted, then sent.
+    let constant = payload_text().replace(
+        "[[0,1e-05],[1,12345678.900000001]]",
+        "[[0,3],[1,3.0],[2,null]]",
+    );
+    let mut run = predict_run(REQUEST_STATE_VERSION, constant, "kumo-relational").unwrap();
     let _ = call(&mut run);
+    let warnings = run.take_warnings();
+    let [warning] = warnings.as_slice() else {
+        panic!("one notice: {warnings:?}");
+    };
+    assert_eq!(warning.code, "CONTEXT_CONSTANT");
+    // The wire calls the target TARGET and the question names no column, so
+    // the question itself names it.
+    assert_eq!(warning.fields["variant"], text("question"));
+    assert_eq!(
+        warning.fields["question"],
+        text("PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id")
+    );
+}
+
+/// A request with no row to score is answered without a call
+/// (`_empty_answer`): no rows, no request id, empty metadata, the outputs
+/// asked.
+#[test]
+fn a_request_with_no_rows_is_answered_without_a_call() {
+    let nothing = payload_text().replace(r#"[[2,7],[3,"9007199254740993"]]"#, "[]");
+    let mut run = predict_run(REQUEST_STATE_VERSION, nothing, "kumo-relational").unwrap();
+    let Step::Done {
+        result: OperationResult::Predict(predicted),
+    } = run.next().unwrap()
+    else {
+        panic!("answered without a call");
+    };
+    assert_eq!(predicted.request_id, "");
+    assert_eq!(predicted.outputs, ["prediction"]);
+    let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
+        panic!("the result is attached");
+    };
+    assert_eq!(result.batches[0].num_rows(), 0);
+    let Some(Attachment::Bytes(metadata)) = run.take_attachment(predicted.metadata) else {
+        panic!("the metadata is attached");
+    };
+    assert_eq!(metadata, b"{}");
+}
+
+/// An output the caller named that the answer leaves out is given as a
+/// notice naming the model asked and the outputs (`_report_absent`), and
+/// the answer is laid out.
+#[test]
+fn an_output_named_and_left_out_is_noted() {
+    let mut run = predict_run_asking(
+        REQUEST_STATE_VERSION,
+        payload_text(),
+        "kumo-relational",
+        &["prediction", "quantiles", "prediction"],
+    )
+    .unwrap();
+    let (id, _) = call(&mut run);
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.0},{"id":"3","row_index":1,"prediction":2.0}]}"#.to_vec(),
+        },
+    )
+    .unwrap();
+    assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    let warnings = run.take_warnings();
+    let [warning] = warnings.as_slice() else {
+        panic!("one notice: {warnings:?}");
+    };
+    assert_eq!(warning.code, "OUTPUTS_ABSENT");
+    assert_eq!(warning.fields["model"], text("kumo-relational"));
+    assert_eq!(
+        warning.fields["absent"],
+        Detail::List(vec![Scalar::Utf8("quantiles".into())])
+    );
 }
 
 /// The call's size: the core writes the call's bytes, which the host sends

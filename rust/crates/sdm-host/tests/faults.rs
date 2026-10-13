@@ -687,6 +687,7 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],
+            default_outputs: false,
             inference_asked: vec![],
         })),
         Attachments::from([
@@ -797,7 +798,8 @@ fn predict_s_canaries_reach_no_error() {
             ErrorCode::InvalidResponse,
             ErrorCode::InvalidResponse,
             ErrorCode::InvalidResponse,
-            ErrorCode::UnsupportedRequest,
+            // A regression's prediction that is not a number (T1.28b, P1B-23).
+            ErrorCode::InvalidResponse,
             ErrorCode::InvalidResponse,
             ErrorCode::TransportError,
         ]

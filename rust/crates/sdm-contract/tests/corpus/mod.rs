@@ -150,6 +150,15 @@ pub fn messages() -> Vec<ControlMessage> {
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),
             outputs: vec!["prediction".into()],
+            default_outputs: false,
+            inference_asked: vec![],
+        })),
+        start(Operation::Predict(Predict {
+            state: state.clone(),
+            model: "kumo-relational".into(),
+            request_id: "sdm-000000000001".into(),
+            outputs: vec![],
+            default_outputs: true,
             inference_asked: vec![],
         })),
         ControlMessage::Step(Step::Fetch {
@@ -374,6 +383,7 @@ pub fn messages() -> Vec<ControlMessage> {
                 model: "kumo-relational".into(),
                 request_id: "r1".into(),
                 metadata: AttachmentId(12),
+                outputs: vec!["prediction".into(), "probabilities".into()],
             }),
         }),
         ControlMessage::Attached {

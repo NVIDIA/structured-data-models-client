@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/19",
+  "$id": "sdm-contract/20",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -2921,11 +2921,15 @@
               "type": "string"
             },
             "outputs": {
-              "description": "The outputs asked for, by the wire's names, in order; the core\npredicts a regression's default, `prediction`, alone, and refuses\nany other list by name, `outputs` (decision E61).",
+              "description": "The outputs the caller asked for, by the wire's names, in order,\nas given (a name repeated, kept), which the core checks against the\nmodel as the client's `_prepare` does: an empty list refused\n(`INVALID_REQUEST`), a name the model does not produce refused\n(`UNSUPPORTED_REQUEST`). Empty when [`Predict::default_outputs`].",
               "type": "array",
               "items": {
                 "type": "string"
               }
+            },
+            "default_outputs": {
+              "description": "The caller named no outputs: the core asks the task's default ones\n(a regression's `prediction`, a classification's `prediction` and\n`probabilities`), and gives no notice of one the answer leaves out,\nwhich it gives only for outputs the caller named (T1.28b).",
+              "type": "boolean"
             },
             "inference_asked": {
               "description": "The inference-config keys the caller set at `materialize`, rather\nthan left to their defaults, as the host holds them: a key the model\ndoes not read among them is refused before the call is made, the\nothers' defaults left out of it silently (T1.28a).",
@@ -4295,7 +4299,7 @@
           "type": "object",
           "properties": {
             "result": {
-              "description": "An Arrow attachment, one row per answer in the order the endpoint\ngave them, whose schema names its columns in order.",
+              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, and `prediction` and\n`probabilities` where an answer carries them\n(`sdm_request::predict::table`).",
               "$ref": "#/$defs/AttachmentId"
             },
             "model": {
@@ -4303,12 +4307,19 @@
               "type": "string"
             },
             "request_id": {
-              "description": "The endpoint's id for the call.",
+              "description": "The endpoint's id for the call; empty for a request with no row to\nscore, answered without a call.",
               "type": "string"
             },
             "metadata": {
               "description": "A bytes attachment of the endpoint's `metadata` object as JSON.",
               "$ref": "#/$defs/AttachmentId"
+            },
+            "outputs": {
+              "description": "The outputs the call asked for, the task's default ones where the\ncaller named none.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "op": {
               "type": "string",
@@ -4321,7 +4332,8 @@
             "result",
             "model",
             "request_id",
-            "metadata"
+            "metadata",
+            "outputs"
           ]
         }
       ]
