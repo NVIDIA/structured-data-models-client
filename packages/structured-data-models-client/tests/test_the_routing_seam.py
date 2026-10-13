@@ -318,7 +318,8 @@ def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
 #: The old validator holds a date as a pandas Timestamp. pandas 3 holds any
 #: year; pandas 2 (on Python 3.10, which pandas 3 does not support) only
 #: 1677 to 2262, so there the old route refuses a date in year 0 or 1 as a
-#: query (OutOfBoundsDatetime), where the core reads it.
+#: query (OutOfBoundsDatetime), and the core, told pandas 2's range by the
+#: host, refuses it alike (T1.20 fix 1).
 PANDAS_3 = int(pd.__version__.split('.')[0]) >= 3
 
 #: Date literals with a run of five digits or more (D8), which the
@@ -481,9 +482,9 @@ def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
     # T1.6c brief: D1 to D7 and D9 unchanged. Each answers on the core as
     # on the old route: read and accepted, or (D9) refused as a query,
     # INVALID_REQUEST with no rule named. On pandas 2 the old route refuses
-    # a date in year 0 or 1 as a query; the core reads it, and its shadow
-    # check, which runs the old validator, reports the disagreement as
-    # INTERNAL_ERROR.
+    # a date in year 0 or 1 as a query, and so does the core: the host
+    # declares pandas 2's range (date_literal_range) and the core refuses a
+    # literal outside it as unreadable (T1.20 fix 1), never INTERNAL_ERROR.
     text = _filtered(f'orders.ts > {literal}')
     schema = _orders_schema()
     answers = []
@@ -499,12 +500,7 @@ def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
                 assert 'rule' not in refused.details, refused.details
                 answers.append(refused.code)
     assert core == [text]
-    if accepted:
-        want = [None, None]
-    elif literal.startswith(('0000-', '0001/')):
-        want = ['INTERNAL_ERROR', 'INVALID_REQUEST']
-    else:
-        want = ['INVALID_REQUEST', 'INVALID_REQUEST']
+    want = [None, None] if accepted else ['INVALID_REQUEST', 'INVALID_REQUEST']
     assert answers == want
 
 
