@@ -43,11 +43,12 @@ Kitmaker attestation instead is Kitmaker's to say; what this repository can
 tell you is that it does not sign these files itself.
 
 You can compare a downloaded file against the asset of the same name on the
-corresponding GitHub release. That shows the two locations hold the same bytes
-at the time you look, which is worth something, but it is not proof of how
-either was built: release assets can be replaced after publication, so a
-mismatch is not by itself evidence of tampering on PyPI, and a match is not
-evidence that this repository produced them.
+corresponding GitHub release. The release workflow checks this itself: it will
+not finish unless PyPI holds the same bytes it built and attached, and it never
+replaces an asset it has already uploaded. So the two should agree. It is still
+not proof of how either was built, and a release asset can be replaced by hand
+afterwards, so a mismatch is not by itself evidence of tampering on PyPI and a
+match is not evidence that this repository produced them.
 
 ```bash
 pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify

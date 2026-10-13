@@ -222,17 +222,27 @@ jobs:
           name: distributions
           path: dist/
 
-  # Kitmaker fetches artifacts from a URL rather than accepting an upload, and
-  # it accepts an Artifactory path or a GitHub release asset. The release is
-  # created here so those asset URLs exist. They have to be publicly reachable:
-  # Kitmaker refuses private GitHub assets, so this cannot publish while the
-  # repository is internal.
+  # Kitmaker fetches artifacts from a URL rather than accepting an upload, so
+  # the GitHub Release exists to give it public asset URLs. It refuses private
+  # assets, so this cannot publish while the repository is internal.
+  #
+  # Creating the release and publishing it are one gated job because the
+  # release cannot be a draft. Split, a rejected publish would leave a public
+  # release marked Latest for a version that never reached PyPI. The cost is
+  # the Kitmaker token sharing a job with `contents: write`.
   release:
     needs: build
     runs-on: ubuntu-latest
+    environment: pypi          # a protected environment, so a release is reviewable
     permissions:
       contents: write
     steps:
+      # Before the download, because checkout cleans the working directory.
+      # `kitmaker_release.py` ships in the repository, not in the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: distributions
@@ -258,29 +268,26 @@ jobs:
           # The SBOM is a release asset and was never meant for the index; the
           # notes are already the release body.
           rm -f dist/notes.md
-          gh release upload "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" --clobber
 
-  # One Portal project per distribution, because Kitmaker matches the project
-  # name against the distribution name parsed from each filename.
-  #
-  # Two passes on purpose. Every project is validated and dry-run to a terminal
-  # state before any of them publishes, because the five distributions pin each
-  # other by exact version: a client live without the engine it requires is
-  # worse than a release that did not start. Portal batches are sequential and
-  # not atomic, and a published file cannot be recalled, so the only moment
-  # this can be stopped cheaply is before the first upload.
-  kitmaker:
-    needs: release
-    runs-on: ubuntu-latest
-    environment: pypi          # a protected environment, so a release is reviewable
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: distributions
-          path: dist/
+          # Deliberately not `--clobber`: these builds are not byte
+          # reproducible, so re-running would swap the assets for new bytes
+          # while PyPI keeps the old, breaking the GitHub-to-PyPI comparison
+          # SECURITY.md asks a consumer to make. An attached asset is left
+          # alone. See RELEASING.md on re-running.
+          mapfile -t attached < <(
+            gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --json assets --jq '.assets[].name'
+          )
+          for path in dist/*; do
+            name=$(basename "$path")
+            for existing in ${attached+"${attached[@]}"}; do
+              if [ "$name" = "$existing" ]; then
+                echo "already attached, left alone: $name"
+                continue 2
+              fi
+            done
+            gh release upload "$GITHUB_REF_NAME" "$path" --repo "$GITHUB_REPOSITORY"
+          done
 
       - name: Publish each distribution through Kitmaker
         env:

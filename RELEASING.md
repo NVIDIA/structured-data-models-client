@@ -95,14 +95,43 @@ distributions pin each other by exact version and a client live without its
 engine is worse than a release that never started. Kitmaker batches are
 sequential and not atomic, and a published file cannot be recalled.
 
+The GitHub Release is created in the same job that publishes, behind the
+protected `pypi` environment. A release cannot be a draft, because Kitmaker
+needs a public URL, so creating it in an earlier ungated job would make it
+public before anyone approved the upload.
+
 **There is a stored credential.** `KITMAKER_API_TOKEN` is a long-lived bearer
-token in this repository's secrets, held only by the `kitmaker` job behind the
+token in this repository's secrets, held only by the `release` job behind the
 protected `pypi` environment. The previous Trusted Publishing setup avoided a
 stored token; this is the cost of publishing through Kitmaker.
 
 **This workflow no longer signs what it ships.** PEP 740 attestations go to
 whoever uploads, and that is Kitmaker, so nothing here produces one naming this
 repository. SECURITY.md tells consumers what they can check instead.
+
+### If a run fails partway
+
+**Use "Re-run failed jobs", never "Re-run all jobs."** These builds are not
+byte reproducible, so rebuilding produces a different wheel and sdist for the
+same version. The workflow will not clobber an already-attached asset, so a
+full re-run leaves the release holding the original bytes while `dist/` holds
+new ones, and the publish step fails rather than publishing something the
+GitHub Release does not match. "Re-run failed jobs" reuses the original
+`distributions` artifact, which is what you want.
+
+A re-run is safe to repeat. Before each project is submitted, PyPI is asked
+whether it already holds that version; if it does, with digests matching the
+artifact, the project is skipped. A rerun after a partial publish therefore
+finishes the projects that did not land.
+
+Two states it refuses to guess at, both needing a hand:
+
+- **The version is partly on PyPI.** PyPI will not accept more files under a
+  version it already has, so the release cannot be completed. Yank the
+  partial version and release the next patch.
+- **PyPI holds different bytes than the artifact.** Someone published this
+  version from other artifacts. Do not re-run; work out what was published
+  first.
 
 ## After
 
