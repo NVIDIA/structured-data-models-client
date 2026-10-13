@@ -213,9 +213,9 @@ const DECIMAL_ZEROS: [u32; 65] = [
     0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6, 0x1E140, 0x1E2F0, 0x1E950, 0x1FBF0,
 ];
 
-/// The white space Python 3.12's `float` strips around a number: what
-/// `str.isspace` takes as white space but the four separators 0x1C to 0x1F,
-/// which `float` refuses (measured on the reference's interpreter).
+/// The white space every supported Python's `float` strips around a
+/// number: what `str.isspace` takes as white space but the four separators
+/// 0x1C to 0x1F, which `float` refuses (measured on Python 3.10 to 3.14).
 const WHITE_SPACE: [u32; 25] = [
     0x9, 0xA, 0xB, 0xC, 0xD, 0x20, 0x85, 0xA0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
     0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000,

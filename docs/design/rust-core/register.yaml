@@ -2377,7 +2377,9 @@ entries:
     reader cannot read for its depth (before 3.12, past about 1,000
     levels, which the transport reports as TRANSPORT_ERROR) is told to the
     core as too deep, so it is refused INVALID_RESPONSE there too (T1.28b
-    fix round 2). The default route is unchanged.
+    fix round 2), on every interpreter and both transports, the HTTP one
+    and the Databricks serving one, which flag it (fix round 3). The
+    default route is unchanged.
   affected_inputs: >-
     SDMClient.predict of a request materialized on the core over a DuckDB
     source, under a forced core route, answered with JSON nested more

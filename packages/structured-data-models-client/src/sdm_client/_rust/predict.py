@@ -269,6 +269,9 @@ def predict(
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
+            # The flag is set only where the transport's json.loads raised
+            # RecursionError; one raised under a lowered recursion limit is
+            # read as too deep too, which is acceptable.
             if failed.code == 'TRANSPORT_ERROR' and failed._response_too_deep:
                 # An answer nested deeper than Python's reader takes on this
                 # interpreter (before 3.12, past about 1,000 levels): the
