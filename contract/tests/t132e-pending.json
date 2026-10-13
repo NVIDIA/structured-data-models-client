@@ -3,7 +3,13 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [],
+  "exits": [
+   "py:test_a_core_refusal_over_the_floor_is_no_pass_in_the_unit",
+   "py:test_a_core_refusal_under_the_floor_is_inconclusive_in_the_unit",
+   "py:test_a_unit_with_no_refusal_is_operationally_ok",
+   "py:test_an_old_route_refusal_is_inconclusive_and_operational",
+   "py:test_run_keeps_the_floor_when_the_core_refuses"
+  ],
   "key-python-core": [
    "nulls-1-decimal.200"
   ],
@@ -179,6 +185,8 @@
    "timestamptz.5000"
   ],
   "exits": [
+   "py:test_a_core_refusal_over_the_floor_is_no_pass_in_the_unit",
+   "py:test_a_core_refusal_under_the_floor_is_inconclusive_in_the_unit",
    "py:test_a_generated_dataset_is_refused[generated-control]",
    "py:test_a_generated_dataset_is_refused[generated-nulls]",
    "py:test_a_generated_dataset_is_refused[generated]",
@@ -253,8 +261,11 @@
    "py:test_a_unit_under_the_floor_is_inconclusive[mae-worse-than-the-mean-core-perfect]",
    "py:test_a_unit_under_the_floor_is_inconclusive[mae-worse-than-the-mean-core-same]",
    "py:test_a_unit_under_the_floor_is_inconclusive[mae-worse-than-the-mean-core-worst]",
+   "py:test_a_unit_with_no_refusal_is_operationally_ok",
+   "py:test_an_old_route_refusal_is_inconclusive_and_operational",
    "py:test_no_host_appears_in_the_summary",
    "py:test_no_request_passes_the_plan",
+   "py:test_run_keeps_the_floor_when_the_core_refuses",
    "py:test_the_budget_is_500_predictions[-1]",
    "py:test_the_budget_is_500_predictions[0]",
    "py:test_the_budget_is_500_predictions[1000]",

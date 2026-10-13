@@ -62,6 +62,21 @@ re-export what ``scripts/live/null_link_benchmark.py`` already has:
   ``--max-predictions``, its message naming ``max-predictions``; each
   refused before any data is read or request built.
 
+Added after the review of 18bd89d6 (the sanity floor bypassed when the
+core refuses), against the interface the benchmark then had:
+
+- ``unit(dataset, task, keys, truth, answers, refused, digests) -> dict``
+  (``task`` with ``name`` and ``kind``; ``answers`` and ``digests`` by
+  route, ``'old'`` and ``'core'``; ``refused`` each refusing route's
+  refusal) and ``run(sets, seeds, count, client, recording, raw, wire)
+  -> (described, units)``. A unit's ``verdict`` is its quality verdict
+  alone: the sanity floor is applied to the old route's evidence first,
+  so under it the verdict is ``'INCONCLUSIVE'`` even where the core
+  refused. A refusal is reported apart from it, in ``refused`` (kept as
+  recorded) and in a new field ``operational``: ``'FAIL'`` when any route
+  refused, ``'OK'`` otherwise. Over the floor a core refusal is never a
+  pass.
+
 Brief lines proved, T1.32e part 1 scope 2 ("a real-data parity
 benchmark ... with no generated data. It is a sanity check, not a gate"):
 
@@ -558,5 +573,166 @@ def test_no_host_appears_in_the_summary(request: pytest.FixtureRequest) -> None:
         found = json.loads(text)
         assert found['units'][0]['verdict'] == 'INCONCLUSIVE'
         assert found['units'][0]['dataset'] == 'rel-hm'
+
+    held(request, check)
+
+
+# --- a refusal beside the floor (the review of 18bd89d6) --------------------
+
+#: The review's reproduction: binary labels, the old route's scores all
+#: 0.5 (AUROC 0.5, under the floor), two seeds.
+FLAT_TRUTH = [False, False, True, True]
+FLAT = [{'prediction': False, 'score': 0.5} for _ in FLAT_TRUTH]
+#: The old route answering perfectly (AUROC 1, over the floor).
+SHARP = [{'prediction': s > 0.5, 'score': s} for s in (0.1, 0.2, 0.8, 0.9)]
+CORE_REFUSED = {'error': 'StructuredDataError', 'code': 'INVALID_REQUEST'}
+
+
+def _task(kind: str = 'binary') -> Any:
+    from types import SimpleNamespace
+
+    return SimpleNamespace(name=kind, kind=kind)
+
+
+def _unit(
+    module: Any,
+    old: list[list[dict[str, Any]]],
+    core: list[list[dict[str, Any]]],
+    refused: dict[str, Any],
+) -> dict[str, Any]:
+    found: dict[str, Any] = module.unit(
+        'rel-hm',
+        _task(),
+        [0, 1, 2, 3],
+        list(FLAT_TRUTH),
+        {'old': old, 'core': core},
+        refused,
+        {'old': ['o'] * len(old), 'core': ['c'] * len(core)},
+    )
+    return found
+
+
+def test_a_core_refusal_under_the_floor_is_inconclusive_in_the_unit(
+    request: pytest.FixtureRequest,
+) -> None:
+    def check() -> None:
+        module = benchmark()
+        found = _unit(module, [FLAT, FLAT], [], {'core': dict(CORE_REFUSED)})
+        assert found['verdict'] == 'INCONCLUSIVE', found['verdict']
+        assert found['refused']['core']['code'] == 'INVALID_REQUEST'
+        assert found['operational'] == 'FAIL'
+
+    held(request, check)
+
+
+def test_a_core_refusal_over_the_floor_is_no_pass_in_the_unit(
+    request: pytest.FixtureRequest,
+) -> None:
+    r"""The control: over the floor a core refusal never passes, and is
+    an operational failure too."""
+
+    def check() -> None:
+        module = benchmark()
+        found = _unit(module, [SHARP, SHARP], [], {'core': dict(CORE_REFUSED)})
+        assert found['verdict'] != 'PASS', found['verdict']
+        assert found['operational'] == 'FAIL'
+
+    held(request, check)
+
+
+def test_an_old_route_refusal_is_inconclusive_and_operational(
+    request: pytest.FixtureRequest,
+) -> None:
+    def check() -> None:
+        module = benchmark()
+        found = _unit(module, [], [SHARP, SHARP], {'old': dict(CORE_REFUSED)})
+        assert found['verdict'] == 'INCONCLUSIVE'
+        assert found['operational'] == 'FAIL'
+
+    held(request, check)
+
+
+def test_a_unit_with_no_refusal_is_operationally_ok(
+    request: pytest.FixtureRequest,
+) -> None:
+    def check() -> None:
+        module = benchmark()
+        flat = _unit(module, [FLAT, FLAT], [FLAT, FLAT], {})
+        assert flat['verdict'] == 'INCONCLUSIVE'
+        assert flat['operational'] == 'OK'
+        sharp = _unit(module, [SHARP, SHARP], [SHARP, SHARP], {})
+        assert sharp['verdict'] == 'PASS'
+        assert sharp['operational'] == 'OK'
+
+    held(request, check)
+
+
+class _Refused(Exception):
+    r"""A refusal as the client raises one: a class and a code."""
+
+    code = 'INVALID_REQUEST'
+
+
+def test_run_keeps_the_floor_when_the_core_refuses(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""``run`` end to end on stubs: one binary task, the old route
+    building a request the stub client answers with 0.5 for every entity
+    on each seed, the core refusing to build one. No data is read, no
+    request leaves the process."""
+
+    def check() -> None:
+        import io
+        from types import SimpleNamespace
+
+        import pandas as pd
+
+        module = benchmark()
+        base = module.base
+        labels = dict(enumerate(FLAT_TRUTH))
+        task = base.Task(
+            name='binary',
+            kind='binary',
+            pql='PREDICT stub',
+            anchor=None,
+            labels=lambda connection: labels,
+        )
+        dataset = SimpleNamespace(
+            name='rel-hm', connect=lambda: None, tasks=[task]
+        )
+
+        def build(
+            dataset: Any, task: Any, route: str, seed: int, keys: Any
+        ) -> Any:
+            if route == 'core':
+                raise _Refused('refused')
+            return {'route': route, 'seed': seed, 'keys': list(keys)}
+
+        monkeypatch.setattr(base, 'build', build)
+        monkeypatch.setattr(module, 'describe', lambda dataset, route: {})
+        monkeypatch.setattr(module, 'rows_of', lambda connection: {})
+        recording = SimpleNamespace(digests=[])
+
+        class Client:
+            def predict(self, built: Any, **_: Any) -> Any:
+                recording.digests.append(f'{built["route"]}-{built["seed"]}')
+                frame = pd.DataFrame(
+                    {
+                        'id': list(built['keys']),
+                        'prediction': [False] * len(built['keys']),
+                        'probability_true': [0.5] * len(built['keys']),
+                    }
+                )
+                return SimpleNamespace(to_pandas=lambda: frame)
+
+        _, units = module.run(
+            [dataset], [0, 1], 4, Client(), recording, io.StringIO(), None
+        )
+        assert len(units) == 1
+        found = units[0]
+        assert recording.digests == ['old-0', 'old-1']
+        assert found['verdict'] == 'INCONCLUSIVE', found['verdict']
+        assert found['refused']['core']['code'] == 'INVALID_REQUEST'
+        assert found['operational'] == 'FAIL'
 
     held(request, check)
