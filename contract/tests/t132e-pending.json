@@ -142,6 +142,11 @@
    "text.windows-path"
   ],
   "p2-exits": [
+   "canary:describe: multi-category text holding the sentinel",
+   "canary:describe: multi-category text on the fact table holding the sentinel",
+   "canary:describe: times of day as text, one the sentinel",
+   "canary:materialize: a multi-category column summed",
+   "canary:materialize: a multi-category target",
    "py:test_each_case_is_admitted[feature.bool]",
    "py:test_each_case_is_admitted[time.date]",
    "py:test_each_case_is_admitted[time.feature-date-and-timestamp-with-null]",
@@ -704,6 +709,11 @@
    "text.windows-path"
   ],
   "p2-exits": [
+   "canary:describe: multi-category text holding the sentinel",
+   "canary:describe: multi-category text on the fact table holding the sentinel",
+   "canary:describe: times of day as text, one the sentinel",
+   "canary:materialize: a multi-category column summed",
+   "canary:materialize: a multi-category target",
    "py:test_each_case_is_admitted[feature.bool]",
    "py:test_each_case_is_admitted[time.date]",
    "py:test_each_case_is_admitted[time.feature-date-and-timestamp-with-null]",
