@@ -171,11 +171,16 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks'
     }
+    # From T1.29 the inventory's three baseline cases are acceptance cases
+    # with their routes and paths, keeping its input and expectation.
+    admitted = {'base.regression', 'base.binary', 'base.multiclass'}
     for entry in inventory['cases']:
         case = committed[entry['id']]
-        assert case['status'] == 'diagnostic', entry['id']
+        assert case['status'] == (
+            'acceptance' if entry['id'] in admitted else 'diagnostic'
+        ), entry['id']
         assert _held_to_its_input(case) == [], entry['id']
-        if entry['id'] == 'base.regression':
+        if entry['id'] in admitted:
             mapped = run_python.inventory_case(entry, defaults)
             for key in ('input', 'expect', 'seam', 'cells', 'until'):
                 assert case[key] == mapped[key], key
@@ -629,8 +634,14 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 )
                 # A result with a row: from T1.11e the comparator's
                 # `reach` rule gates base.regression reaching its result.
+                # The call the core wrote is the request the endpoint
+                # received, the reference's, as the payload rule holds an
+                # acceptance case to it (from T1.29).
+                received = (observation.get('public') or {}).get(
+                    'payloads'
+                ) or []
                 predicted = {
-                    'body': {},
+                    'body': received[0]['parsed'] if received else {},
                     'model': 'kumo-relational',
                     'request_id': 'r1',
                     'metadata': {},

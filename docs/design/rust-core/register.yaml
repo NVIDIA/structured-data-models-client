@@ -2986,6 +2986,64 @@ entries:
     reviewers, never self-approved. Approved by the subagent's round 3
     (APPROVE-P1B-37), the split confirmed by Codex's round 3.
 
+- id: P1B-26
+  title: The four baseline cases admitted to acceptance as the reference answers them
+  kind: keep
+  old_behavior: >-
+    base.regression, base.binary, base.multiclass and base.adventureworks
+    were diagnostic cases: run and reported, gating nothing but
+    base.regression's reaching its result; base.binary, base.multiclass and
+    base.adventureworks ran python-core on the default route, and
+    base.adventureworks named describe_source alone among its core
+    operations.
+  new_behavior: >-
+    Acceptance cases (T1.29): python-core runs each on the core route
+    (base.binary and base.multiclass with base.regression's routes,
+    base.adventureworks with its notebook probe's), base.adventureworks
+    names materialize and predict too, so rust-host runs its whole
+    journey, carrying the call's inference options as the client does; on
+    every runner each meets its reference observation on every gated rule,
+    so no outcome changes: success at predict on the Python runners and
+    success on rust-host, as before. Measured by gate.sh against f1d1808
+    in ref-pandas3 and dbr17-pandas2 (compare: no differences); in
+    floor-pandas2.2 the warnings rule differs, which is HOST-5's, judged
+    by part 1's comparator once HOST-5 is approved.
+  affected_inputs: >-
+    The case files of base.regression, base.binary, base.multiclass and
+    base.adventureworks, which the ratchet's cases rule passes only under an
+    approved entry naming each.
+  cases: [T1.29, base.regression, base.binary, base.multiclass, base.adventureworks]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
+  notes: >-
+    The admission record H19 asks for, with no deviation of its own: the
+    change that admits a case approves its deviations, and these cases have
+    none against the reference. For the reviewers to approve (the
+    orchestrator's decision of 2026-10-13, option (a)), never the
+    implementer. Approved by both reviewers of T1.29's review round 1 of
+    cdd0fdf (Codex and the independent subagent: APPROVE-P1B-26, the
+    admission preserves the reference outcomes, each runner's outcome its
+    reference's and its row below, the four reference lines' semantic
+    projections unchanged), relayed by the orchestrator, recorded in part
+    2, which lands from part 1's landing once HOST-5's owner approval is on
+    the phase head (E81). The outcomes below are each runner's baseline
+    at the checkpoint (none where the case had none) and the projection the
+    package's observations give.
+  case_outcomes:
+  - {case: base.adventureworks, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.adventureworks, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.adventureworks, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.binary, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.binary, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.binary, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.multiclass, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.multiclass, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.multiclass, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.regression, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.regression, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: base.regression, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
 - id: SMP-1

@@ -1,7 +1,7 @@
 {
   "format": "sdm-case/1",
   "id": "base.adventureworks",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
   "paths": [
     "schema.from-source/tables/duckdb",
@@ -10,7 +10,22 @@
     "query.materialize/indices-regression/duckdb",
     "client.predict/regression/duckdb"
   ],
-  "routes": [],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
   "seam": "baseline",
   "cells": [
     "int64/primary-key",
@@ -171,6 +186,23 @@
         ]
       },
       "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "709"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
     }
   },
   "expect": {
@@ -178,6 +210,6 @@
     "stage": "predict",
     "today": "customers keyed by CustomerID, with no time column; products keyed by ProductID, SellStartDate inferred as its time column and cleared by the edit; the order headers keyless; OrderDate the time column of both event tables; the three relationships as given; four SDMWarnings and a UserWarning; result columns row_index int64, id int64, prediction float64, one row"
   },
-  "why": "E27's AdventureWorks baseline case, in addition to the 40-case inventory (E31): the journey of the notebook's demand_30d question (tables named, keys and time columns given, relationships passed, a time column cleared, columns deleted, inference_config passed, then materialize and predict) on local DuckDB over a 1,000-row subset of Microsoft's sample (contract/fixtures/adventureworks). It forces no route: Schema.from_source with tables named has no core route yet. The refusals the core route hits on it, probe by probe, are contract/refusal-maps/base.adventureworks.json's (T1.21b), and core.describe_source is the operation its call would start, its tables by the names the notebook gives them beside their source names, with its keys, time columns and relationships (contract version 12, T1.23). Diagnostic until T1.29",
+  "why": "E27's AdventureWorks baseline case, in addition to the 40-case inventory (E31): the journey of the notebook's demand_30d question (tables named, keys and time columns given, relationships passed, a time column cleared, columns deleted, inference_config passed, then materialize and predict) on local DuckDB over a 1,000-row subset of Microsoft's sample (contract/fixtures/adventureworks). From T1.29 an acceptance case on the core route: core.describe_source is the operation its call starts, its tables by the names the notebook gives them beside their source names, with its keys, time columns and relationships (contract version 12, T1.23), then materialize, whose call values carry the inference options (rust-host reads them from input.materialize, as the client passes them), and predict. The refusal map's probes (contract/refusal-maps/base.adventureworks.json, T1.21b) stay the journey's lower bound",
   "source": "examples/databricks/adventureworks_relational.ipynb, demand_30d, and PR #29's kumo_relational_quickstart.ipynb for the data, loaded as its Step 4 loads them, swapped to local DuckDB (E27); the question is the notebook's unchanged, and indices its top_product query's answer over the fixture"
 }
