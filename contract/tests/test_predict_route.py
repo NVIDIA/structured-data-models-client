@@ -172,16 +172,24 @@ def test_the_pin_holds_a_whole_call_and_result() -> None:
         'class_shuffle',
     }
     result = predicted['result']
+    # From T1.28b each answer's place in the endpoint's order is the last
+    # column (answer_index).
     assert [c['name'] for c in result['columns']] == [
         'row_index',
         'id',
         'prediction',
+        'answer_index',
     ]
     rows = [
-        (int(row[0]['i64']), int(row[1]['i64']), _float(row[2]))
+        (
+            int(row[0]['i64']),
+            int(row[1]['i64']),
+            _float(row[2]),
+            int(row[3]['i64']),
+        )
         for row in result['rows']
     ]
-    assert rows == [(0, 0, 1.0), (1, 1, 1.0)]
+    assert rows == [(0, 0, 1.0, 0), (1, 1, 1.0, 1)]
     assert [i['op'] for i in pinned['inputs']] == [
         'describe_source',
         'materialize',

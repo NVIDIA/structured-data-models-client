@@ -230,13 +230,14 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
     // The state predict started with is the one materialize answered, as
     // this host held it between the runs.
     assert_eq!(observed.inputs[2]["state"], materialized);
-    // Not vacuous: two rows, each its entity and a prediction of 1.0.
+    // Not vacuous: two rows, each its entity, a prediction of 1.0 and its
+    // place in the endpoint's order (answer_index, T1.28b).
     let rows = pinned["predicted"]["result"]["rows"].as_array().unwrap();
     assert_eq!(
         rows,
         &[
-            serde_json::json!([{"i64": "0"}, {"i64": "0"}, {"f64_bits": "3ff0000000000000"}]),
-            serde_json::json!([{"i64": "1"}, {"i64": "1"}, {"f64_bits": "3ff0000000000000"}]),
+            serde_json::json!([{"i64": "0"}, {"i64": "0"}, {"f64_bits": "3ff0000000000000"}, {"i64": "0"}]),
+            serde_json::json!([{"i64": "1"}, {"i64": "1"}, {"f64_bits": "3ff0000000000000"}, {"i64": "1"}]),
         ]
     );
     assert_eq!(
