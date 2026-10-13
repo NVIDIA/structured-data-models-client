@@ -152,10 +152,12 @@ jobs:
       - name: The tag must match what the distributions declare
         run: |
           python - <<'EOF'
-          import os, pathlib, re, sys
+          import os, pathlib, sys
 
           tag = os.environ['GITHUB_REF_NAME'].lstrip('v')
-          built = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+          wheels = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+          sdists = sorted(p.name for p in pathlib.Path('dist').glob('*.tar.gz'))
+          built = wheels + sdists
           print('\n'.join(built))
 
           # All five, every time. The four pure-Python distributions and the
@@ -169,12 +171,19 @@ jobs:
           }
           if len(expected) != 5:
               sys.exit(f'expected 5 distributions, found {sorted(expected)}')
-          present = {name.split('-')[0] for name in built}
+          present = {name.split('-')[0] for name in wheels}
           missing = expected - present
           if missing:
               sys.exit(f'refusing to publish without {sorted(missing)}')
 
-          versions = {re.match(r'[^-]+-([^-]+)-', name).group(1) for name in built}
+          # Every file, not only the wheels: an sdist carrying a different
+          # version passes a wheels-only check and is published anyway.
+          versions = {
+              name.split('-')[1]
+              if name.endswith('.whl')
+              else name.rsplit('-', 1)[1].removesuffix('.tar.gz')
+              for name in built
+          }
           if len(versions) != 1:
               sys.exit(f'distributions disagree on the version: {sorted(versions)}')
           built_version = versions.pop()

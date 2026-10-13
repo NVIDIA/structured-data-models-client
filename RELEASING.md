@@ -120,8 +120,16 @@ new ones, and the publish step fails rather than publishing something the
 GitHub Release does not match. "Re-run failed jobs" reuses the original
 `distributions` artifact, which is what you want.
 
-A re-run is safe to repeat. Before each project is submitted, PyPI is asked
-what it already holds at that version. A project fully published with the
+A re-run is usually safe to repeat, with one exception: read
+`kitmaker-summary.txt` first. A line saying **MAY be published** means the
+upload was asked for and no answer came back, so Portal may have accepted it.
+PyPI can still answer 404 for a few minutes after a publish, so re-running
+straight away can submit that project a second time. Check the project on
+pypi.org by hand before re-running, and if it is there, nothing more is needed
+for it.
+
+Otherwise, before each project is submitted, PyPI is asked what it already
+holds at that version. A project fully published with the
 artifact's bytes is skipped, and one that is part-published is reduced to the
 files still missing, since PyPI takes files into a version one at a time. A
 re-run after a partial publish therefore finishes what did not land.

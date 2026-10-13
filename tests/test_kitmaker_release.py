@@ -382,3 +382,40 @@ def test_an_upload_with_no_answer_is_not_called_unpublished(
         names[1]: 'MAY be published, no answer from Portal',
         **{name: 'NOT published' for name in names[2:]},
     }
+
+
+def test_distributions_that_disagree_on_the_version_are_refused(
+    kitmaker, release, tmp_path
+):
+    """The workflow gate reads the wheels; this is what submits, so it reads
+    every file."""
+    release()
+    (tmp_path / 'dist' / 'structured_data_models_api-9.9.9.tar.gz').write_bytes(
+        b'x'
+    )
+    with pytest.raises(SystemExit, match='disagree on the version'):
+        kitmaker.main()
+
+
+def test_a_portal_rejection_is_not_reported_as_uncertain(
+    kitmaker, release, monkeypatch
+):
+    """Portal answered, so the upload did not happen. Saying it may be live
+    sends someone to check PyPI for something that was never offered to it."""
+    names = list(kitmaker.PROJECTS.values())
+    summary = release()
+    calls = {'n': 0}
+
+    def reject_the_second(uuid, what):
+        if what == names[1]:
+            raise kitmaker.Rejected(f'{what} finished as rejected (uuid)')
+        calls['n'] += 1
+
+    monkeypatch.setattr(kitmaker, 'wait_for', reject_the_second)
+    with pytest.raises(SystemExit, match='finished as rejected'):
+        kitmaker.main()
+
+    assert states(summary, kitmaker) == {
+        names[0]: 'published',
+        **{name: 'NOT published' for name in names[1:]},
+    }

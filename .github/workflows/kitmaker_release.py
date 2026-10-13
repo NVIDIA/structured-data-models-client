@@ -89,6 +89,12 @@ READ_BACKOFF = 4
 VERIFY_ATTEMPTS = 20
 VERIFY_SECONDS = 15
 
+
+class Rejected(SystemExit):
+    r"""Portal gave a terminal answer. Unlike a lost connection, this says the
+    upload did not happen, which the summary has to keep apart."""
+
+
 TOKEN = os.environ['KITMAKER_API_TOKEN']
 PIC = os.environ['PIC']
 
@@ -191,7 +197,7 @@ def wait_for(uuid: str, what: str) -> None:
             print(f'  {what}: {status}')
             return
         if status in TERMINAL_BAD:
-            raise SystemExit(f'{what} finished as {status} ({uuid})')
+            raise Rejected(f'{what} finished as {status} ({uuid})')
         if status not in PENDING:
             raise SystemExit(
                 f'{what} reported an unrecognised status {status!r} ({uuid}). '
@@ -347,7 +353,15 @@ def main() -> None:
     }
     if not built:
         raise SystemExit('dist/ holds no distributions')
-    version = version_of(next(iter(built)))
+    # The workflow checks this too, but only across the wheels, and this is
+    # what submits: one version here is the version every file is published
+    # under.
+    versions = {version_of(filename) for filename in built}
+    if len(versions) != 1:
+        raise SystemExit(
+            f'distributions disagree on the version: {sorted(versions)}'
+        )
+    version = versions.pop()
 
     # Only files this run built may be published. A rerun against an existing
     # release can see assets left by an earlier one, so the release listing
@@ -439,7 +453,13 @@ def main() -> None:
             # says nothing about whether Portal accepted the upload, so the
             # project is recorded as uncertain before it is asked for.
             in_flight.append(name)
-            wait_for(submit(project_id, name, project_urls, True), name)
+            try:
+                wait_for(submit(project_id, name, project_urls, True), name)
+            except Rejected:
+                # Portal answered: nothing was uploaded, so this is not
+                # uncertain, it is simply not published.
+                in_flight.remove(name)
+                raise
             # Portal has reported success, so the files are live whatever
             # verification then finds.
             in_flight.remove(name)
