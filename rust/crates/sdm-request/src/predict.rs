@@ -790,6 +790,9 @@ pub enum AnswerType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub row_index: i64,
+    /// The answer's place in the endpoint's order (across a merge's parts,
+    /// the parts in order), which the result's items keep.
+    pub answer_index: i64,
     pub id: Entity,
     pub prediction: Answer,
     /// Each class's probability, keyed by the class as the target column
@@ -1022,6 +1025,7 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, Co
         }
         laid.push(Row {
             row_index: i64::try_from(*index).unwrap_or(i64::MAX),
+            answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
             id: entities[*index].clone(),
             prediction: answer_of(item.prediction.as_ref(), answers)?,
             probabilities: item
@@ -1073,6 +1077,9 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
     let mut rows = first.rows;
     for part in rest {
         rows.extend(part.rows);
+    }
+    for (at, row) in rows.iter_mut().enumerate() {
+        row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
     }
     Ok(Part {
         model: first.model,
@@ -1130,7 +1137,9 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
 /// any answer holds one (float64, a `null` as NaN, as the reference's frame
 /// gives it; a class as bool, int64 or utf8, a `null` as null) and
 /// `probabilities` when any answer holds them (a map of each class, as its
-/// column spells it, to its probability, in the order written).
+/// column spells it, to its probability, in the order written), and last
+/// `answer_index` (int64, the answer's place in the endpoint's order, which
+/// the result's items keep, as the reference's do).
 pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     let mut rows: Vec<&Row> = part.rows.iter().collect();
     rows.sort_by_key(|r| r.row_index);
@@ -1235,6 +1244,10 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         ));
         columns.push(Arc::new(column));
     }
+    fields.push(Field::new("answer_index", DataType::Int64, false));
+    columns.push(Arc::new(Int64Array::from_iter_values(
+        rows.iter().map(|r| r.answer_index),
+    )));
     RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| internal_layout())
 }
 

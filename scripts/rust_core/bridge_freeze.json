@@ -56,7 +56,7 @@
         "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
       },
       "predict": {
-        "fingerprint": "fbfcf621583f9513625b29504c7e671bb1a2606f9a2cd7748eb763a71bcd9955"
+        "fingerprint": "75dbd9ba30c5bcc23cf0374c0b5e65dd006ea6289cee092ac44f02ae95c146b5"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {

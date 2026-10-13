@@ -4299,7 +4299,7 @@
           "type": "object",
           "properties": {
             "result": {
-              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, and `prediction` and\n`probabilities` where an answer carries them\n(`sdm_request::predict::table`).",
+              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `prediction` and\n`probabilities` where an answer carries them, and `answer_index`,\neach answer's place in the endpoint's order\n(`sdm_request::predict::table`).",
               "$ref": "#/$defs/AttachmentId"
             },
             "model": {

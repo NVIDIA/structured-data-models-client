@@ -19,6 +19,7 @@ use sdm_wire::json::Value;
 fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
     Row {
         row_index,
+        answer_index: 0,
         id: Entity::Integer(id),
         prediction,
         probabilities: None,
@@ -80,6 +81,13 @@ fn parts_are_merged_as_the_reference_merges_them() {
     assert_eq!(indexes, [0, 0, 1]);
     assert_eq!(ids, [7, 9, 8]);
     assert_eq!(predictions, [1.0, 3.0, 2.0]);
+    // Each answer's place in the endpoint's order, the parts in order.
+    let order: Vec<i64> = batch
+        .column(batch.num_columns() - 1)
+        .as_primitive::<Int64Type>()
+        .values()
+        .to_vec();
+    assert_eq!(order, [1, 2, 0]);
     // Parts of different models are not one request's.
     let mut other = part("r3", vec![]);
     other.model = "kumo-tabular".into();
@@ -109,7 +117,13 @@ fn an_absent_output_is_one_no_answer_carries() {
     // The prediction column is left out when no answer carries one, and a
     // null among them is NaN, as the reference's frame gives them.
     let batch = table(&unanswered).unwrap();
-    assert_eq!(batch.num_columns(), 2);
+    let names: Vec<String> = batch
+        .schema()
+        .fields()
+        .iter()
+        .map(|f| f.name().clone())
+        .collect();
+    assert_eq!(names, ["row_index", "id", "answer_index"]);
     let batch = table(&answered).unwrap();
     let column = batch.column(2).as_primitive::<Float64Type>();
     assert!(column.value(0).is_nan() && column.value(1).is_nan());

@@ -11,7 +11,7 @@
     reason = "test code: reruns its own binary for the deep-text test"
 )]
 
-use sdm_wire::json::{MAX_DEPTH, Value, is_integer_token, read, whole};
+use sdm_wire::json::{MAX_DEPTH, Value, is_integer_token, read, read_answer, whole};
 
 #[test]
 fn a_value_read_and_written_again_is_the_same_text() {
@@ -177,4 +177,58 @@ fn a_wide_object_reads_in_n_log_n() {
     let (small, large) = (text(20_000), text(160_000));
     let (small, large) = (best(&small), best(&large));
     assert!(large / small.max(1e-6) < 24.0, "{small} s, then {large} s");
+}
+
+/// An endpoint's answer (T1.28b): `NaN`, `Infinity` and `-Infinity`
+/// tokens outside text read as numbers of the token written, as Python's
+/// reader takes them, and written back as written; text that holds those
+/// words, or the marker the reader stands them in with, stays text; what
+/// `read` refuses otherwise is refused alike, the depth bound included,
+/// tokens or not, deep or wide.
+#[test]
+fn an_answer_reads_non_finite_tokens_as_python_s_reader_does() {
+    let text = r#"{"a":[NaN,-Infinity,Infinity,1e400],"b":"NaN Infinity","c":"\uE000NaN"}"#;
+    assert_eq!(read(text.as_bytes()).unwrap_err().category, "not_finite");
+    let value = read_answer(text.as_bytes()).unwrap();
+    assert_eq!(
+        value.get("a"),
+        Some(&Value::Array(vec![
+            Value::Number("NaN".into()),
+            Value::Number("-Infinity".into()),
+            Value::Number("Infinity".into()),
+            Value::Number("1e400".into()),
+        ]))
+    );
+    assert_eq!(value.get("b"), Some(&Value::Text("NaN Infinity".into())));
+    assert_eq!(value.get("c"), Some(&Value::Text("\u{e000}NaN".into())));
+    // Written back, the tokens are as written.
+    assert!(
+        String::from_utf8(value.to_bytes())
+            .unwrap()
+            .starts_with(r#"{"a":[NaN,-Infinity,Infinity,1e400],"b":"NaN Infinity","c":"#)
+    );
+    // The marker's own escaped spelling in the answer moves the marker on:
+    // that text stays text.
+    let spelled = br#"{"a":"\uE000NaN","b":NaN}"#;
+    let value = read_answer(spelled).unwrap();
+    assert_eq!(value.get("a"), Some(&Value::Text("\u{e000}NaN".into())));
+    assert_eq!(value.get("b"), Some(&Value::Number("NaN".into())));
+    // Faults read refuses stay refused: a bare word that is not a token,
+    // and a token glued to another.
+    for bad in [&b"[Nan]"[..], b"[NaNx]", b"[-NaN]", b"[Infinityy]"] {
+        assert!(
+            read_answer(bad).is_err(),
+            "{}",
+            String::from_utf8_lossy(bad)
+        );
+    }
+    // Deep: refused by its depth, with tokens or not; wide: read.
+    let mut deep = b"[NaN,".to_vec();
+    deep.extend(nested(10_000));
+    deep.push(b']');
+    assert_eq!(read_answer(&deep).unwrap_err().category, "depth");
+    let wide: Vec<String> = (0..50_000).map(|i| format!("\"k{i}\":NaN")).collect();
+    let wide = format!("{{{}}}", wide.join(","));
+    let value = read_answer(wide.as_bytes()).unwrap();
+    assert_eq!(value.get("k49999"), Some(&Value::Number("NaN".into())));
 }

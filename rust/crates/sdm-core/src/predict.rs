@@ -38,6 +38,18 @@ use sdm_wire::response::PredictionResponse;
 
 use crate::run::{ArrowData, Asker, Attachment, ModelResult, Reply, internal};
 
+/// Predict's notices, each with the variants it gives (none: one
+/// sentence), which a host words (decision E59(d)): a regression's constant
+/// context, by how the target is named, and an output the caller named
+/// that the answer left out.
+pub const WARNINGS: &[(&str, &[&str])] = &[
+    (
+        sdm_request::predict::CONTEXT_CONSTANT,
+        &["column", "predicted", "question", "answer"],
+    ),
+    (sdm_request::predict::OUTPUTS_ABSENT, &[]),
+];
+
 /// What a `predict` start gives its body.
 pub(crate) struct Inputs {
     /// The request state's payload, as the host attached it.

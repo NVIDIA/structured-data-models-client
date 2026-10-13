@@ -293,7 +293,12 @@ def predict(
     }
     finished = run(operation, attachments, model=model_call)
     answered = finished.result
-    rows = _rows(finished.take(answered['result']))
+    # The core's rows are ordered by row_index, as the result's frame is;
+    # its items keep the endpoint's order, as the old route's do.
+    rows = sorted(
+        _rows(finished.take(answered['result'])),
+        key=lambda row: row['answer_index'],
+    )
     metadata = json.loads(finished.take(answered['metadata']))
     return PredictionResult(
         model=answered['model'],

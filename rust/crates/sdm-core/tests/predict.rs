@@ -281,7 +281,17 @@ fn the_answer_is_laid_out_under_each_row_s_entity_ordered_by_row_index() {
     };
     let schema = batch.schema();
     let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
-    assert_eq!(names, ["row_index", "id", "prediction"]);
+    assert_eq!(names, ["row_index", "id", "prediction", "answer_index"]);
+    // Each answer's place in the endpoint's order, which the host's items
+    // keep.
+    assert_eq!(
+        batch
+            .column(3)
+            .as_primitive::<Int64Type>()
+            .values()
+            .to_vec(),
+        [1, 0]
+    );
     assert_eq!(batch.column(1).data_type(), &DataType::Int64);
     // Ordered by row_index, as the reference's frame orders them, whatever
     // the endpoint's order (T1.28b).

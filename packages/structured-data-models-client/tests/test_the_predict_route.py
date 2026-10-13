@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import socket
 import sys
 import threading
@@ -236,23 +237,48 @@ def test_a_request_the_core_did_not_materialize_has_no_core_route(
         _predict('http://127.0.0.1:9', request)
 
 
-def test_outputs_other_than_a_regression_s_default_are_refused_by_name(
+def test_the_outputs_are_checked_on_the_core_as_on_the_old_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # From T1.28b the core checks the outputs as the client's _prepare does
+    # and notes one named and left out as _report_absent does: the class,
+    # code and notices are the old route's.
     request = _materialized(monkeypatch)
-    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with _endpoint().serve() as (url, received):
-        # The default, named, is taken.
-        assert len(_predict(url, request, outputs=['prediction'])) == 2
-        with pytest.raises(StructuredDataError) as refused:
-            _predict(url, request, outputs=['prediction', 'quantiles'])
-    # Passed through to the core, which refuses it by name before the
-    # model is called (T1.24, decision E61); the bridge refuses none.
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert type(refused.value).__name__ == 'UnsupportedRequestError'
-    assert refused.value.details['operation'] == 'predict'
-    assert refused.value.details['rule'] == 'outputs'
-    assert len(received.requests) == 1
+    with _endpoint().serve() as (url, _):
+        for outputs in (
+            ['prediction'],
+            ['prediction', 'quantiles'],
+            ['prediction', 'prediction'],
+            [],
+            ['bogus'],
+        ):
+            seen = []
+            for routes in (CORE, None):
+                if routes is None:
+                    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
+                else:
+                    monkeypatch.setenv(_routing.ENVIRONMENT, routes)
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter('always')
+                    try:
+                        outcome: Any = _predict(url, request, outputs=outputs)
+                    except StructuredDataError as error:
+                        outcome = error
+                notices = sorted(
+                    re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
+                    for w in caught
+                    if type(w.message).__name__ == 'SDMWarning'
+                )
+                seen.append((outcome, notices))
+            (core, core_notices), (old, old_notices) = seen
+            assert core_notices == old_notices, outputs
+            if isinstance(old, StructuredDataError):
+                assert isinstance(core, type(old)), outputs
+                assert core.code == old.code, outputs
+            else:
+                pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+                assert core.outputs == old.outputs, outputs
+    monkeypatch.delenv(_routing.ENVIRONMENT, raising=False)
 
 
 def test_an_endpoint_s_refusal_is_shown_as_on_the_old_route(
@@ -362,6 +388,8 @@ def test_distinct_answers_out_of_order_land_on_their_own_entities(
         core, old = _both(monkeypatch, request, url)
     assert not isinstance(core, Exception), core
     pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    # The items keep the endpoint's order, as the old route's (the core's
+    # rows are ordered by row_index, with each answer's place, T1.28b).
     assert core.items == old.items
     assert (core.request_id, core.metadata) == (old.request_id, old.metadata)
     frame = core.to_pandas()
@@ -370,11 +398,14 @@ def test_distinct_answers_out_of_order_land_on_their_own_entities(
     assert [item.row_index for item in core.items] == [2, 1, 0]
 
 
-def test_an_overflowing_prediction_is_refused_on_the_core(
+def test_an_overflowing_prediction_is_the_old_route_s_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # From T1.28b, by the owner's decision of 2026-10-12, the core reads a
+    # token past a double's range as the infinity the old route reads
+    # (register P1B-4).
     request = _materialized(monkeypatch)
-    for token in ('1e400', '-1e400'):
+    for token in ('1e400', '-1e400', 'NaN', 'Infinity', '-Infinity'):
         answer = (
             '{"id": "r1", "model": "kumo-relational", "metadata": {}, '
             '"predictions": [{"id": "112", "row_index": 0, "prediction": '
@@ -383,17 +414,8 @@ def test_an_overflowing_prediction_is_refused_on_the_core(
         )
         with _answering(200, answer.encode()) as (url, _):
             core, old = _both(monkeypatch, request, url)
-        # The core refuses it as the Rust host does (sdm-core's
-        # tests/predict.rs), where the old route gives an infinity
-        # (register P1B-4).
-        assert isinstance(core, StructuredDataError)
-        assert core.code == 'INVALID_RESPONSE'
-        assert core.details['field'] == 'response'
-        assert core.details['reason'] == 'not_finite'
-        assert old.to_pandas()['prediction'].tolist()[0] in (
-            float('inf'),
-            float('-inf'),
-        )
+        assert not isinstance(core, Exception), (token, core)
+        pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
 
 
 def test_a_failed_transport_is_named_for_what_failed(
@@ -408,12 +430,12 @@ def test_a_failed_transport_is_named_for_what_failed(
     assert 'its answer could not be read' in str(core)
 
 
-def test_a_non_finite_number_anywhere_in_the_answer_is_refused_on_the_core(
+def test_a_non_finite_number_anywhere_in_the_answer_is_the_old_route_s(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # One policy over the whole answer, as the Rust host's (sdm-core's
-    # tests/predict.rs, the same tokens in the metadata): the old route
-    # passes the value on (register P1B-4).
+    # tests/predict.rs, the same tokens in the metadata): from T1.28b the
+    # value is passed on, as on the old route (register P1B-4).
     request = _materialized(monkeypatch)
     for token in ('1e400', '-1e400', 'Infinity', '-Infinity', 'NaN'):
         answer = (
@@ -424,13 +446,9 @@ def test_a_non_finite_number_anywhere_in_the_answer_is_refused_on_the_core(
         )
         with _answering(200, answer.encode()) as (url, _):
             core, old = _both(monkeypatch, request, url)
-        assert isinstance(core, StructuredDataError), token
-        assert core.code == 'INVALID_RESPONSE', token
-        assert (core.details['field'], core.details['reason']) == (
-            'response',
-            'not_finite',
-        ), token
+        assert not isinstance(core, Exception), token
         assert not isinstance(old, Exception), token
+        assert json.dumps(core.metadata) == json.dumps(old.metadata), token
 
 
 def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
