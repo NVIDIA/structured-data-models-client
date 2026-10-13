@@ -92,13 +92,18 @@ _DESCRIBE_ONLY = {
 
 
 def _written(index: dict[str, Any]) -> str:
-    r"""An entity scalar's value as the call writes it: a decimal's at its
-    scale, any other's ``v``."""
-    from decimal import Decimal
-
-    if index['t'] in ('d128', 'd256'):
-        return str(Decimal(index['v']).scaleb(-index['s']))
-    return str(index['v'])
+    r"""An entity scalar's value as the call writes it: a decimal's unscaled
+    digits with the point shifted by its scale, by hand, so no decimal
+    context rounds a wide one; any other's ``v``."""
+    if index['t'] not in ('d128', 'd256'):
+        return str(index['v'])
+    digits, scale = index['v'], index['s']
+    sign = '-' if digits.startswith('-') else ''
+    digits = digits.lstrip('-')
+    if scale <= 0:
+        return sign + digits + '0' * -scale if digits != '0' else '0'
+    digits = digits.rjust(scale + 1, '0')
+    return f'{sign}{digits[:-scale]}.{digits[-scale:]}'
 
 
 def _anchor(text: str) -> dict[str, Any]:

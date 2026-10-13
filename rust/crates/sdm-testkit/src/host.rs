@@ -578,10 +578,10 @@ fn edit_schema(
 fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
     use duckdb::arrow::array::NullArray;
     use duckdb::arrow::array::builder::{
-        BinaryBuilder, BooleanBuilder, Date32Builder, Decimal128Builder, Float32Builder,
-        Float64Builder, Int8Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
-        TimestampMicrosecondBuilder, TimestampNanosecondBuilder, UInt8Builder, UInt16Builder,
-        UInt32Builder, UInt64Builder,
+        BinaryBuilder, BooleanBuilder, Date32Builder, Decimal128Builder, Decimal256Builder,
+        Float32Builder, Float64Builder, Int8Builder, Int16Builder, Int32Builder, Int64Builder,
+        StringBuilder, TimestampMicrosecondBuilder, TimestampNanosecondBuilder, UInt8Builder,
+        UInt16Builder, UInt32Builder, UInt64Builder,
     };
     let Some(first) = values.iter().find(|v| !matches!(v, Scalar::Null)) else {
         return Ok(Arc::new(NullArray::new(values.len())));
@@ -625,6 +625,24 @@ fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
                 match value {
                     Scalar::Null => built.append_null(),
                     Scalar::Decimal128 {
+                        precision: p,
+                        scale: s,
+                        value,
+                    } if (*p, *s) == (precision, scale) => built.append_value(*value),
+                    _ => return Err(mixed()),
+                }
+            }
+            Arc::new(built.finish().with_precision_and_scale(precision, scale)?)
+        }
+        Scalar::Decimal256 {
+            precision, scale, ..
+        } => {
+            let (precision, scale) = (*precision, *scale);
+            let mut built = Decimal256Builder::new();
+            for value in values {
+                match value {
+                    Scalar::Null => built.append_null(),
+                    Scalar::Decimal256 {
                         precision: p,
                         scale: s,
                         value,

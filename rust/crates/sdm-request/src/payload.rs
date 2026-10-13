@@ -226,12 +226,15 @@ pub fn wire_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
 }
 
 /// The wire dtype of a key's column (the entity table's key, and the
-/// instance table's reference to it), as the reference names a decimal by
-/// what it holds (`_decimal_dtype_name`), at any precision: a whole
-/// decimal of up to 18 digits as `int64`; one of more as `int64` where
-/// every value fits and `string` where one does not; one with a scale as
-/// `float64`. No question sums a key, so the declared precision a decimal
-/// feature's sum is held to (`wire_dtype`) never applies to one (T1.32a).
+/// instance table's reference to it), as the reference names a whole
+/// decimal by what it holds (`_decimal_dtype_name`), at any precision: up
+/// to 18 digits as `int64`; more as `int64` where every value fits and
+/// `string` where one does not. A decimal key with a scale, which the
+/// reference cannot sample, is `string`, each value its exact decimal text
+/// with no trailing zeros, never a double, which could make two keys one
+/// (T1.32a fix round 1, P1B-33). No question sums a key, so the declared
+/// precision a decimal feature's sum is held to (`wire_dtype`) never
+/// applies to one.
 pub fn key_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
     match array.data_type() {
         DataType::Decimal128(precision, 0) if *precision <= 18 => Ok(Dtype::Int64),
@@ -240,8 +243,35 @@ pub fn key_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
             let fits = values.iter().flatten().all(|v| i64::try_from(v).is_ok());
             Ok(if fits { Dtype::Int64 } else { Dtype::String })
         }
-        DataType::Decimal128(_, scale) if *scale > 0 => Ok(Dtype::Float64),
+        DataType::Decimal128(_, scale) if *scale > 0 => Ok(Dtype::String),
         _ => wire_dtype(array),
+    }
+}
+
+/// A decimal's exact text: `value` ten-to-the-`scale`ths, with no trailing
+/// zeros after the point (and no point for a whole one).
+fn decimal_text(value: i128, scale: i8) -> String {
+    let digits = value.unsigned_abs().to_string();
+    let sign = if value < 0 { "-" } else { "" };
+    if scale <= 0 {
+        let zeros = "0".repeat(usize::from(scale.unsigned_abs()));
+        return if value == 0 {
+            "0".to_owned()
+        } else {
+            format!("{sign}{digits}{zeros}")
+        };
+    }
+    let scale = usize::from(scale.unsigned_abs());
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.is_empty() {
+        if whole.trim_start_matches('0').is_empty() {
+            return "0".to_owned();
+        }
+        format!("{sign}{whole}")
+    } else {
+        format!("{sign}{whole}.{fraction}")
     }
 }
 
@@ -390,7 +420,7 @@ fn cell(array: &ArrayRef, row: usize, column: &str, dtype: Dtype) -> Result<Valu
             let value = array.as_primitive::<Decimal128Type>().value(row);
             match dtype {
                 // A whole decimal's own digits (`_decimal_text`).
-                Dtype::String => Ok(Value::Text(value.to_string())),
+                Dtype::String => Ok(Value::Text(decimal_text(value, *scale))),
                 Dtype::Int64 => int_cell(value, column),
                 Dtype::Float64 => decimal_float(value, *scale, column),
                 _ => Err(internal("a decimal's dtype is not one a decimal takes")),

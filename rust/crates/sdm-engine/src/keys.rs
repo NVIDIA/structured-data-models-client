@@ -230,10 +230,9 @@ enum Entity<'a> {
     Float(f64, String),
     Bool(bool),
     Text(&'a str),
-    /// `value` ten-to-the-`scale`ths; `None` when it is past what 128 bits
-    /// hold (a `decimal256`), kept as its digits for a text key.
+    /// Its unscaled `digits` (signed) ten-to-the-`scale`ths, of any width
+    /// (a `decimal256`'s too), read by its exact text.
     Decimal {
-        value: Option<i128>,
         scale: i8,
         digits: String,
     },
@@ -275,7 +274,6 @@ fn entity(entities: &ArrayRef, row: usize) -> Entity<'_> {
         DataType::Decimal128(_, scale) => {
             let value = entities.as_primitive::<Decimal128Type>().value(row);
             Entity::Decimal {
-                value: Some(value),
                 scale: *scale,
                 digits: value.to_string(),
             }
@@ -283,7 +281,6 @@ fn entity(entities: &ArrayRef, row: usize) -> Entity<'_> {
         DataType::Decimal256(_, scale) => {
             let value = entities.as_primitive::<Decimal256Type>().value(row);
             Entity::Decimal {
-                value: value.to_i128(),
                 scale: *scale,
                 digits: value.to_string(),
             }
@@ -448,8 +445,9 @@ enum Cast {
 /// | decimal | whole, in range | its digits at its own scale | exact at scale s, in p digits |
 /// | any other type | refused (`type`) | refused | refused |
 ///
-/// A float key (32 or 64 bits) takes an integer or a boolean only where
-/// the width holds it exactly (`inexact` otherwise), and a float, text in
+/// A float key (32 or 64 bits) takes an integer or a boolean only within
+/// the range its width holds every integer in, 2**24 or 2**53 (`inexact`
+/// past it), and a float, text in
 /// the decimal syntax above or a decimal as the nearest float of its
 /// width, rounded once, as a float is by its type; one past the width's
 /// range is refused (`out_of_range`). Otherwise nothing is rounded or
@@ -475,9 +473,10 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
         }
         (Entity::Bool(value), Target::Int { .. }) => Ok(Cast::Int(i128::from(value))),
         (Entity::Text(text), Target::Int { min, max }) => in_range(read_integer(text)?, min, max),
-        (Entity::Decimal { value, scale, .. }, Target::Int { min, max }) => {
-            let value = value.ok_or(Uncast::OutOfRange)?;
-            in_range(rescale(value, i64::from(scale), 0)?, min, max)
+        // A decimal of any width (a decimal256's past 128 bits among them)
+        // is read by its exact text, its trailing zeros carrying no value.
+        (Entity::Decimal { scale, digits, .. }, Target::Int { min, max }) => {
+            in_range(read_decimal(&decimal_text(&digits, scale), 0)?, min, max)
         }
 
         (Entity::Int(value), Target::Text) => Ok(Cast::Text(value.to_string())),
@@ -502,16 +501,15 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
         }
         (
             Entity::Decimal {
-                value, scale: from, ..
+                scale: from,
+                digits,
+                ..
             },
             Target::Decimal { precision, scale },
-        ) => {
-            let value = value.ok_or(Uncast::OutOfRange)?;
-            within(
-                rescale(value, i64::from(from), i64::from(scale))?,
-                precision,
-            )
-        }
+        ) => within(
+            read_decimal(&decimal_text(&digits, from), scale)?,
+            precision,
+        ),
 
         (Entity::Int(value), Target::Float { single }) => whole_float(value, single),
         (Entity::Float(value, _), Target::Float { single }) => finite(if single {
@@ -527,21 +525,19 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
     }
 }
 
-/// An integer as a float of the key's width, only where that float is the
-/// integer exactly (within 2**24 of zero for 32 bits, 2**53 for 64, and
-/// past them only the integers the width holds): any other would be a
-/// neighbouring entity, so it is `Inexact` (T1.32a fix round 1, the
-/// orchestrator's decision, as the reference refuses it).
+/// An integer as a float of the key's width, only within the range where
+/// the width holds every integer exactly: up to 2**24 from zero for 32
+/// bits, 2**53 for 64, ends included. Past it, where a float holds only
+/// some integers, it is `Inexact` even where one is held exactly, as the
+/// reference refuses it (Arrow's checked cast of an integer to a float),
+/// so whether an entity is taken never depends on its bits (T1.32a fix
+/// round 1, the recorded reference).
 fn whole_float(value: i128, single: bool) -> Result<Cast, Uncast> {
-    let float = if single {
-        f64::from(value as f32)
-    } else {
-        value as f64
-    };
-    if !float.is_finite() || float.abs() >= 2f64.powi(127) || float as i128 != value {
+    let limit: i128 = if single { 1 << 24 } else { 1 << 53 };
+    if value < -limit || value > limit {
         return Err(Uncast::Inexact);
     }
-    Ok(Cast::Float(float))
+    Ok(Cast::Float(value as f64))
 }
 
 /// A float of the key's width, held as a double: `OutOfRange` where the
@@ -889,8 +885,12 @@ mod tests {
             cast_to(ints, &DataType::Float64).unwrap_err(),
             ("inexact".into(), 1)
         );
-        let ints: ArrayRef = Arc::new(Int64Array::from(vec![1 << 60]));
-        assert!(cast_to(ints, &DataType::Float32).is_ok());
+        // Past 2**24 a float32 key refuses even an integer it holds.
+        let ints: ArrayRef = Arc::new(Int64Array::from(vec![1 << 24, (1 << 24) + 2]));
+        assert_eq!(
+            cast_to(ints, &DataType::Float32).unwrap_err(),
+            ("inexact".into(), 1)
+        );
         assert_eq!(
             cast_to(texts(&["1e39"]), &DataType::Float32).unwrap_err().0,
             "out_of_range"
