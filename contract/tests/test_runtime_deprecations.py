@@ -192,10 +192,12 @@ def test_only_the_owner_s_approval_activates_it(tmp_path: Path) -> None:
     assert not compare.owner_approved('HOST-5', tmp_path / 'not-utf8.yaml')
 
 
-def test_the_committed_register_leaves_it_inactive_until_the_owner() -> None:
-    # HOST-5 is proposed when T1.29's part 1 lands; the baseline cases are
-    # admitted (part 2) once the owner's approval is on the phase head.
-    assert not compare.owner_approved('HOST-5')
+def test_the_committed_register_holds_the_owner_s_approval() -> None:
+    # HOST-5 was proposed when T1.29's part 1 landed; the owner approved it
+    # on 2026-10-13 (relayed, recorded at T1.32d), so the narrowing is
+    # active once that approval is on the phase head, where T1.29's part 2
+    # admits the baseline cases.
+    assert compare.owner_approved('HOST-5')
 
 
 def _observation(warnings: dict[str, Any]) -> dict[str, Any]:

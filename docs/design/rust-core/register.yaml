@@ -3206,8 +3206,8 @@ entries:
     and base.adventureworks once T1.29's part 2 admits them.
   cases: [T1.29, base.regression, base.binary, base.multiclass, base.adventureworks]
   refs: [HOST-3]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
   notes: >-
     Found when T1.29 first admitted the baseline cases: gate.sh against
@@ -3223,7 +3223,10 @@ entries:
     only once part 1, which builds it, has landed and this entry's owner
     approval is on the phase head; so T1.29 lands in two parts, the
     admission in part 2 (the orchestrator's decision of 2026-10-13). A
-    candidate cannot approve it for itself. Seeded in
+    candidate cannot approve it for itself. Approved by the owner
+    2026-10-13 (relayed by the orchestrator): these are pandas and pyarrow
+    deprecation warnings raised only by the old route on old pandas, and
+    harmless. Seeded in
     contract/tests/test_runtime_deprecations.py.
 
 # --- PQL validation (T1.12) ---------------------------------------------------
