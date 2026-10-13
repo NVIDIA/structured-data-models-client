@@ -6,7 +6,8 @@ r"""T1.32e's pending list, read by its acceptance tests (the package's
 independent test author's).
 
 ``t132e-pending.json`` beside this file names, per group (``python-core``
-and ``rust-host`` vector ids, and ``exits``, test ids), the tests that
+and ``rust-host`` time-inference vector ids, ``key-python-core`` and
+``key-rust-host`` key vector ids, and ``exits``, test ids), the tests that
 failed when they were written, before the implementation. :func:`held`
 runs a test's check: a test not listed must pass; a listed one must still
 fail, and once it passes it fails, naming itself, until its id is taken
@@ -24,7 +25,13 @@ from pathlib import Path
 from typing import Any
 
 FILE = Path(__file__).with_name('t132e-pending.json')
-GROUPS = ('python-core', 'rust-host', 'exits')
+GROUPS = (
+    'python-core',
+    'rust-host',
+    'key-python-core',
+    'key-rust-host',
+    'exits',
+)
 
 
 def gating() -> dict[str, Any]:
