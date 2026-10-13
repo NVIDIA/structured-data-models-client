@@ -37,6 +37,14 @@ must equal the reference's. Each case names the exit it covers:
   naming a proposed entry (P1B-4) is held to the reference;
 - ``CARRY``, the brief's carry-forward: ``np.longdouble`` options and a
   NumPy array of ``target_transforms`` end as on the reference;
+- ``INTEGERS``, ``ABSENT_VALUES`` and ``NUMERIC_TEXT`` (the review of
+  part 2): a regression's integer predictions kept exact past 2**53 in an
+  int64 column, a column mixing integers and floats as float64; a missing
+  and a null prediction ``None`` in ``.items``, a NaN a NaN; probabilities
+  written as text accepted where ``float()`` reads them (digit separators,
+  Unicode digits, whitespace) and refused where the reference refuses them
+  (``"1e999"``, ``"abc"``, ``"0__5"`` ...); ``.items`` compared as well as
+  ``to_pandas()``;
 - ``SIZE``, the carry-forward "size refusals on the core route ... make the
   message explain it": the refusal's code as the reference's, and its
   message names the limit.
@@ -173,6 +181,10 @@ def _held(got: dict[str, Any], expected: dict[str, Any], name: str) -> None:
         assert got.get(key) == expected.get(key), f'{name}: {key}'
     assert got.get('frame_error') == expected.get('frame_error'), name
     assert _notices(got['notices']) == _notices(expected['notices']), name
+    if 'items' in expected:
+        # .items as the reference's: each prediction's value and Python type
+        # (an int kept exact, None apart from NaN) and its probabilities.
+        assert got.get('items') == expected['items'], f'{name}: items'
 
 
 def test_the_recording_is_the_reference_s() -> None:
@@ -230,6 +242,23 @@ def test_the_recording_is_the_reference_s() -> None:
     )
     assert any(len(v['body']) > 100_000 for v in BOUNDARIES), 'no wide answer'
     assert any(v['body'].count('{') > 4000 for v in BOUNDARIES), 'no deep'
+    # The integer, absent-value and numeric-text exits: an int64 column
+    # exact past 2**53, a mixed column as float64, None kept apart from
+    # NaN in .items, and numeric text both accepted and refused.
+    assert outcomes[R.INTEGERS] == {'result'}
+    assert outcomes[R.ABSENT_VALUES] == {'result'}
+    assert outcomes[R.NUMERIC_TEXT] == {'result', 'refused'}
+    exact = by_name['integers.all-past-2-53']
+    assert exact['dtypes'][2] == 'int64'
+    assert exact['rows'][0][2] == {'int': '9007199254740993'}
+    assert by_name['integers.mixed-int-float']['dtypes'][2] == 'float64'
+    missing = by_name['absent-values.missing-one']['items'][0]
+    assert missing['prediction'] is None, missing
+    assert by_name['absent-values.nan-one']['items'][0]['prediction'] == {
+        'f64': 'nan'
+    }
+    assert by_name['numeric-text.digit-separator']['outcome'] == 'result'
+    assert by_name['numeric-text.double-separator']['outcome'] == 'refused'
 
 
 @pytest.mark.parametrize('spec', CASES, ids=[c['name'] for c in CASES])

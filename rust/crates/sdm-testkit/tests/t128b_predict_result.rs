@@ -23,6 +23,11 @@
 //!   boolean and text results match the reference" (`CLASSIFICATION`): the
 //!   prediction a bool or text as the reference's (the probabilities'
 //!   columns are compared on python-core, where `to_pandas()` names them);
+//! - the review of part 2: a regression's integer predictions exact past
+//!   2**53 (int64) and mixed with floats (float64), a missing or null
+//!   prediction null (the reference's `.items` say `None`) and a NaN a NaN,
+//!   and probabilities written as text, accepted (their values compared,
+//!   each class as `str()` writes it) or refused as the reference does;
 //! - the ledger rows "the call's model and output checks" and "the parts
 //!   merged into one result with the notice of an absent output" (`PREPARE`
 //!   and `CONTEXT` cases over a contract case): the reference's refusal code,
@@ -51,7 +56,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use duckdb::arrow::array::{
-    Array, BooleanArray, Float64Array, Int64Array, LargeStringArray, StringArray,
+    Array, BooleanArray, Float64Array, Int64Array, LargeStringArray, MapArray, StringArray,
 };
 use sdm_contract::data::AttachmentId;
 use sdm_contract::ops::{Materialize, Operation, OperationResult, Predict, RequestState};
@@ -170,6 +175,17 @@ fn cells(column: &dyn Array) -> Vec<Value> {
                 json!({"str": a.value(row)})
             } else if let Some(a) = any.downcast_ref::<LargeStringArray>() {
                 json!({"str": a.value(row)})
+            } else if let Some(a) = any.downcast_ref::<MapArray>() {
+                // Each entry as [its key's text, its value's cell].
+                let entries = a.value(row);
+                let keys = cells(entries.column(0).as_ref());
+                let values = cells(entries.column(1).as_ref());
+                Value::Array(
+                    keys.into_iter()
+                        .zip(values)
+                        .map(|(k, v)| json!([k.get("str").cloned().unwrap_or(k), v]))
+                        .collect(),
+                )
             } else {
                 json!({"other": format!("{:?}", column.data_type())})
             }
@@ -288,7 +304,7 @@ fn digits(cell: &Value) -> Value {
 
 /// The reference's `row_index`, `id` and `prediction` columns, from the
 /// recorded `to_pandas()`.
-fn reference_columns(expected: &Value) -> BTreeMap<&'static str, Vec<Value>> {
+fn reference_columns(expected: &Value) -> BTreeMap<&'static str, Option<Vec<Value>>> {
     let names: Vec<&str> = expected["columns"]
         .as_array()
         .unwrap()
@@ -297,16 +313,16 @@ fn reference_columns(expected: &Value) -> BTreeMap<&'static str, Vec<Value>> {
         .collect();
     let mut out = BTreeMap::new();
     for name in ["row_index", "id", "prediction"] {
-        let at = names.iter().position(|n| *n == name).unwrap();
-        out.insert(
-            name,
+        // `to_pandas()` leaves out a prediction column no answer filled.
+        let column = names.iter().position(|n| *n == name).map(|at| {
             expected["rows"]
                 .as_array()
                 .unwrap()
                 .iter()
                 .map(|row| row[at].clone())
-                .collect(),
-        );
+                .collect()
+        });
+        out.insert(name, column);
     }
     out
 }
@@ -316,17 +332,68 @@ fn assert_result(name: &str, got: Ended, expected: &Value) {
         panic!("{name}: rust-host refused it ({got:?}) where the reference gave a result");
     };
     let want = reference_columns(expected);
-    for (column, cells) in &want {
+    for column in ["row_index", "id"] {
+        let cells = want[column]
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name}: the reference has no {column}"));
         let have = columns
-            .get(*column)
+            .get(column)
             .unwrap_or_else(|| panic!("{name}: no {column} column in {:?}", columns.keys()));
-        if *column == "id" {
+        if column == "id" {
             let have: Vec<Value> = have.iter().map(digits).collect();
             let cells: Vec<Value> = cells.iter().map(digits).collect();
             assert_eq!(have, cells, "{name}: {column}");
         } else {
             assert_eq!(have, cells, "{name}: {column}");
         }
+    }
+    let items = expected.get("items").and_then(Value::as_array);
+    let have = columns.get("prediction");
+    match (&want["prediction"], have) {
+        (Some(cells), Some(have)) => {
+            // The frame's cells (an int64 column exact, a mixed one as
+            // float64), except that an item the reference left None is
+            // null here, never NaN.
+            let wanted: Vec<Value> = cells
+                .iter()
+                .enumerate()
+                .map(|(i, cell)| match items {
+                    Some(items) if items[i]["prediction"].is_null() => Value::Null,
+                    _ => cell.clone(),
+                })
+                .collect();
+            assert_eq!(have, &wanted, "{name}: prediction");
+        }
+        (Some(_), None) => panic!("{name}: no prediction column in {:?}", columns.keys()),
+        // No answer filled one: left out, or every cell null.
+        (None, Some(have)) => assert!(
+            have.iter().all(Value::is_null),
+            "{name}: prediction {have:?} where the reference has none"
+        ),
+        (None, None) => {}
+    }
+    let Some(items) = items else {
+        return;
+    };
+    if items.iter().all(|i| i["probabilities"].is_null()) {
+        return;
+    }
+    // Each item's probabilities: each class as `str()` writes it, and its
+    // probability, in the order written.
+    let have = columns
+        .get("probabilities")
+        .unwrap_or_else(|| panic!("{name}: no probabilities column in {:?}", columns.keys()));
+    for (i, item) in items.iter().enumerate() {
+        let wanted: Value = match item["probabilities"].as_array() {
+            None => Value::Null,
+            Some(pairs) => Value::Array(
+                pairs
+                    .iter()
+                    .map(|p| json!([p[0].clone(), p[2].clone()]))
+                    .collect(),
+            ),
+        };
+        assert_eq!(have[i], wanted, "{name}: row {i}'s probabilities");
     }
 }
 
@@ -452,6 +519,21 @@ fn the_model_and_output_checks_and_the_absent_output_are_the_reference_s() {
     // Ledger rows: SDMClient._prepare's model and output checks, the
     // adapter's _preflight, and the parts' result with an absent output.
     assert!(run_recorded(&["the adapter's _preflight", "empty and constant"]) >= 8);
+}
+
+#[test]
+fn integer_missing_null_and_nan_predictions_and_numeric_text_are_the_reference_s() {
+    // The review of part 2: integers exact past 2**53 and mixed with
+    // floats; a missing or null prediction null, never NaN, and a NaN a
+    // NaN; probabilities written as text accepted and refused as the
+    // reference does, their values as it read them.
+    assert!(
+        run_recorded(&[
+            "integer predictions",
+            "a missing, a null",
+            "probabilities written"
+        ]) >= 30
+    );
 }
 
 #[test]

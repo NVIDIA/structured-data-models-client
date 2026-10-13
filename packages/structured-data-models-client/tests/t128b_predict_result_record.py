@@ -86,6 +86,18 @@ CARRY = (
     'accepted as the reference accepts them'
 )
 SIZE = 'carry-forward: the size refusal explains the limit, as the reference'
+INTEGERS = (
+    "integer predictions: a regression's integers kept exact (past 2**53) "
+    "and mixed with floats, in to_pandas() and in .items, as the reference's"
+)
+ABSENT_VALUES = (
+    'a missing, a null and a NaN prediction: .items (None or NaN) and '
+    "to_pandas(), as the reference's"
+)
+NUMERIC_TEXT = (
+    'probabilities written as text (float() grammar: digit separators, '
+    'Unicode digits, whitespace): accepted and refused as the reference does'
+)
 
 #: The register entries a boundary answer's outcome on the core may differ
 #: from the reference's by, once the owner approves them (never before):
@@ -300,6 +312,35 @@ def answer(script: str, body: bytes) -> tuple[int, str]:
             'truncated': _text(_envelope(items))[:-7],
             'null': 'null',
         }[arg]
+    if kind == 'predictions':
+        # Each row's prediction written as the token given ('MISSING' leaves
+        # the member out), in row order.
+        tokens = arg.split(',')
+        assert len(tokens) == len(items), (arg, len(items))
+        for item, token in zip(items, tokens, strict=True):
+            item['prediction'] = (
+                '__t128b_missing__'
+                if token == 'MISSING'
+                else f'__t128b_{token}__'
+            )
+        text = _text(_envelope(items))
+        text = text.replace(', "prediction": "__t128b_missing__"', '')
+        for token in set(tokens) - {'MISSING'}:
+            text = text.replace(f'"__t128b_{token}__"', token)
+        return 200, text
+    if kind == 'probabilities':
+        # Row 0's probabilities, each class's written as the token given
+        # (JSON text: a string, a number, null ...), separated by '|'.
+        tokens = arg.split('|')
+        classes = call['task']['target']['classes']
+        assert len(tokens) == len(classes), (arg, classes)
+        items[0]['probabilities'] = {
+            c: f'__t128b_p{k}__' for k, c in enumerate(classes)
+        }
+        text = _text(_envelope(items))
+        for k, token in enumerate(tokens):
+            text = text.replace(f'"__t128b_p{k}__"', token)
+        return 200, text
     if kind == 'mutate':
         envelope = _envelope(items)
         _mutate(envelope, arg)
@@ -358,6 +399,7 @@ def case(
     predict: dict[str, Any] | None = None,
     rust_case: str | None = None,
     divergence: str | None = None,
+    items: bool = False,
     **materialize: Any,
 ) -> None:
     CASES.append(
@@ -371,6 +413,8 @@ def case(
             'script': script,
             'rust_case': rust_case,
             'divergence': divergence,
+            # Whether .items is recorded and compared, as well as the frame.
+            **({'items': True} if items else {}),
         }
     )
 
@@ -383,6 +427,7 @@ def base_case(
     script: str = 'order:given',
     predict: dict[str, Any] | None = None,
     divergence: str | None = None,
+    items: bool = False,
 ) -> None:
     r"""A case over a contract case's own input, so rust-host can replay it:
     its materialize is the case's, its answer the bytes recorded here."""
@@ -396,6 +441,7 @@ def base_case(
         predict=predict,
         rust_case=contract,
         divergence=divergence,
+        items=items,
         **spec['materialize'],
     )
 
@@ -719,6 +765,74 @@ for name, script, divergence in BOUNDARIES:
     )
 
 
+# Integer predictions, exact past 2**53, and mixed with floats.
+for name, tokens in (
+    ('all-past-2-53', '9007199254740993,-12'),
+    ('all-small', '3,4'),
+    ('int64-extremes', '9223372036854775807,-9223372036854775808'),
+    ('mixed-int-float', '3,2.5'),
+    ('mixed-past-2-53-float', '9007199254740993,0.5'),
+    ('whole-float-and-int', '3.0,4'),
+):
+    base_case(
+        'base.regression',
+        f'integers.{name}',
+        INTEGERS,
+        script=f'predictions:{tokens}',
+        items=True,
+    )
+
+# A missing, a null and a NaN prediction.
+for name, tokens in (
+    ('missing-one', 'MISSING,1.5'),
+    ('null-one', 'null,1.5'),
+    ('nan-one', 'NaN,1.5'),
+    ('missing-all', 'MISSING,MISSING'),
+    ('null-all', 'null,null'),
+    ('nan-all', 'NaN,NaN'),
+    ('missing-and-null', 'MISSING,null'),
+    ('null-and-nan', 'null,NaN'),
+    ('missing-and-nan', 'MISSING,NaN'),
+):
+    base_case(
+        'base.regression',
+        f'absent-values.{name}',
+        ABSENT_VALUES,
+        script=f'predictions:{tokens}',
+        items=True,
+    )
+
+# Probabilities written as text, accepted or refused as float() reads it.
+for name, token in (
+    ('digit-separator', '"0_0.5"'),
+    ('arabic-indic-digits', json.dumps('\u0660.\u0665')),
+    ('fullwidth-digits', json.dumps('\uff10.\uff15')),
+    ('surrounding-spaces', '" 0.5 "'),
+    ('tab-and-newline', json.dumps('\t0.5\n')),
+    ('plain', '"0.5"'),
+    ('exponent', '"5e-1"'),
+    ('overflowing-1e999', '"1e999"'),
+    ('nan-text', '"nan"'),
+    ('infinity-text', '"-Infinity"'),
+    ('letters', '"abc"'),
+    ('double-separator', '"0__5"'),
+    ('trailing-separator', '"0.5_"'),
+    ('empty', '""'),
+    ('hexadecimal', '"0x1p-1"'),
+    ('vulgar-fraction', json.dumps('\u00bd')),
+    ('null', 'null'),
+    ('boolean', 'true'),
+    ('list', '[0.5]'),
+):
+    base_case(
+        'base.binary',
+        f'numeric-text.{name}',
+        NUMERIC_TEXT,
+        script=f'probabilities:{token}|0.5',
+        items=True,
+    )
+
+
 # The carry-forward: option values the reference accepts.
 def _carry_cases() -> None:
     import numpy as np
@@ -913,6 +1027,8 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
                 'notices': notices,
                 **_frame(result),
             }
+            if spec.get('items'):
+                out['items'] = _items_of(result)
     out['calls'] = [
         {
             'status': c['status'],
@@ -921,6 +1037,31 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
         }
         for c in calls
     ]
+    return out
+
+
+def _items_of(result: Any) -> list[dict[str, Any]]:
+    r"""``result.items`` as recorded: each item's row, its id, its
+    prediction (``None`` kept apart from NaN) and its probabilities, each
+    class as ``str()`` writes it, as the value it holds, and its
+    probability."""
+    out = []
+    for item in result.items:
+        probabilities = getattr(item, 'probabilities', None)
+        out.append(
+            {
+                'row_index': _cell(item.row_index),
+                'id': _cell(item.id),
+                'prediction': _cell(item.prediction),
+                'prediction_type': type(item.prediction).__name__,
+                'probabilities': None
+                if probabilities is None
+                else [
+                    [str(k), _cell(k), _cell(v), type(v).__name__]
+                    for k, v in probabilities.items()
+                ],
+            }
+        )
     return out
 
 
