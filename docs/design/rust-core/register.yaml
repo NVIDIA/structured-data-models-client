@@ -2666,6 +2666,49 @@ entries:
   - key.hugeint
   - key.decimal-18-0
   - key.decimal-38-10
+  case_outcomes:
+  - case: key.declared-int32
+    cell: ref-pandas3
+    runner: python-ref
+    old: success at predict
+    new: success at predict
+    summary: 'input-only correction: the core inputs the hosts send, python-ref''s outcome unchanged'
+  - case: key.uint8
+    cell: ref-pandas3
+    runner: python-ref
+    old: success at predict
+    new: success at predict
+    summary: 'input-only correction: the core inputs the hosts send, python-ref''s outcome unchanged'
+  - case: key.uint64-small
+    cell: ref-pandas3
+    runner: python-ref
+    old: success at predict
+    new: success at predict
+    summary: 'input-only correction: the core inputs the hosts send, python-ref''s outcome unchanged'
+  - case: key.uint64-above-int64-max
+    cell: ref-pandas3
+    runner: python-ref
+    old: refusal INVALID_REQUEST at materialize (StructuredDataError)
+    new: refusal INVALID_REQUEST at materialize (StructuredDataError)
+    summary: 'input-only correction: the core inputs the hosts send, python-ref''s outcome unchanged'
+  - case: key.hugeint
+    cell: ref-pandas3
+    runner: rust-host
+    old: success
+    new: success
+    summary: 'input-only correction: the core inputs the hosts send; rust-host''s outcome unchanged, since python-ref''s is INTERNAL_ERROR, which no entry may carry as new'
+  - case: key.decimal-18-0
+    cell: ref-pandas3
+    runner: rust-host
+    old: success
+    new: success
+    summary: 'input-only correction: the core inputs the hosts send; rust-host''s outcome unchanged, since python-ref''s is INTERNAL_ERROR, which no entry may carry as new'
+  - case: key.decimal-38-10
+    cell: ref-pandas3
+    runner: rust-host
+    old: success
+    new: success
+    summary: 'input-only correction: the core inputs the hosts send; rust-host''s outcome unchanged, since python-ref''s is INTERNAL_ERROR, which no entry may carry as new'
   status: approved
   approved_by: reviewer
   decision_ref: null
