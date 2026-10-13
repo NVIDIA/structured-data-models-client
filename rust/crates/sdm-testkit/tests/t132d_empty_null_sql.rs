@@ -32,7 +32,8 @@
 //!   `predict` where the reference reached it; `validate_query`'s refusal
 //!   read as INVALID_REQUEST, for a case whose query the reference refused
 //!   before reading data), or an approved entry other
-//!   than P1B-1 lists the case. `empty.fact-table`'s `UNSUPPORTED_REQUEST`
+//!   than P1B-1 lists the case. `empty.fact-table`'s `INVALID_REQUEST`
+//!   (`UNSUPPORTED_REQUEST` until the owner's switch of 2026-10-13)
 //!   passes because the owner approved P1B-11, which lists it;
 //!   `empty.indices` passes only once the case carries its empty entity
 //!   list to the core, as the reference refuses it at `materialize` (the

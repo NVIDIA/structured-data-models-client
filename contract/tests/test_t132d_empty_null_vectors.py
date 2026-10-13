@@ -38,9 +38,9 @@ vectors, so the two hosts agree through them.
   the host's (the reference's unnamed exception is ``refusal UNNAMED``).
   A ref covers exactly the transition it declares, nothing else; a
   proposed entry excuses nothing, so its vectors stay pending until the
-  owner approves it. So the core's ``UNSUPPORTED_REQUEST`` for an empty
-  table (rule ``empty_table``) passes where an approved entry declares it
-  (P1B-11, once a ref names the vectors, or the code it is amended to)
+  owner approves it. So the core's ``INVALID_REQUEST`` for an empty table
+  (rule ``empty_table``; ``UNSUPPORTED_REQUEST`` until the owner's switch of
+  2026-10-13, T1.32g) passes where an approved entry declares it (P1B-11)
   and fails everywhere else. The recorder's ``register.required`` marks
   where a difference is expected (the reference fails unnamed or with
   INTERNAL_ERROR); it excuses nothing by itself, and an unmarked vector
@@ -55,6 +55,16 @@ vectors, so the two hosts agree through them.
 - Every vector ref of a proposed or approved entry must name a transition
   in that form; a malformed ref fails rather than being read as covering
   nothing (or everything).
+- The owner's switch of P1B-11 (2026-10-13, T1.32g): each vector the
+  reference refuses unnamed at ``from_source`` over an empty table is
+  refused by ``python-core`` at ``from_source`` with ``INVALID_REQUEST``
+  (class ``StructuredDataError``) in place of ``UNSUPPORTED_REQUEST``.
+  The change is the code alone, and with it the class the host raises it
+  as: the stage stays. The register declares exactly ``refusal UNNAMED -> refusal
+  INVALID_REQUEST`` for each, by an approved entry, and declares
+  ``-> refusal UNSUPPORTED_REQUEST`` for none. ``rust-host`` is held to
+  the same through the declared transition: its per-vector check passes
+  only on a code an approved entry declares.
 - The vectors themselves: recorded at the reference of
   ``contract/reference-env.txt``, every vector of the recorder present with
   its inputs, the register marks what the recorder derives, DuckDB holding
@@ -425,6 +435,73 @@ def test_every_vector_ref_names_its_transition() -> None:
     assert transitions()[1] == []
 
 
+#: The vectors of an empty table the reference refuses unnamed at
+#: ``from_source`` ("Table '...' is empty"): P1B-11's.
+EMPTY_TABLES = (
+    'empty.orders',
+    'empty.users',
+    'empty.both',
+    'empty.third-table',
+    'empty.third-table-named',
+    'empty.orders-named',
+    'empty.orders-filtered-out',
+    'edge.no-entities-empty-orders',
+)
+#: What the owner chose for them (P1B-11, 2026-10-13): the code alone
+#: changes, from ``UNSUPPORTED_REQUEST``.
+EMPTY_TABLE_REFUSAL = {
+    'result': 'refusal',
+    'stage': 'from_source',
+    'error': 'StructuredDataError',
+    'code': 'INVALID_REQUEST',
+}
+
+
+def test_the_empty_tables_are_the_reference_s_unnamed_refusals() -> None:
+    # The list is the evidence's: every vector reading an empty table that
+    # the reference refuses unnamed at from_source, and no other.
+    found = [
+        v['id']
+        for v in RECORDED['vectors']
+        if R.outcome_class(v['reference']['outcome']) == 'refusal UNNAMED'
+        and v['reference']['outcome']['stage'] == 'from_source'
+        and 0 in v['duckdb']['rows'].values()
+    ]
+    assert sorted(found) == sorted(EMPTY_TABLES)
+
+
+def test_an_empty_table_is_refused_invalid_request(
+    core_runs: dict[str, Any], request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        entries = transitions()[0]
+        problems = []
+        for vid in EMPTY_TABLES:
+            declared = [
+                (entry, status, old, new)
+                for entry, status, glob, old, new in entries
+                if fnmatch.fnmatchcase(vid, glob)
+            ]
+            if not any(
+                status == 'approved'
+                and (old, new) == ('refusal UNNAMED', 'refusal INVALID_REQUEST')
+                for _, status, old, new in declared
+            ):
+                problems.append(
+                    f'{vid}: no approved entry declares refusal UNNAMED -> '
+                    f'refusal INVALID_REQUEST ({declared})'
+                )
+            for entry, _, _, new in declared:
+                if new == 'refusal UNSUPPORTED_REQUEST':
+                    problems.append(f'{vid}: {entry} still declares {new}')
+            got = R.project(core_runs[vid], BY_ID[vid])['outcome']
+            if got != EMPTY_TABLE_REFUSAL:
+                problems.append(f'{vid}: python-core answered {got}')
+        assert problems == [], '\n'.join(problems)
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
 def test_a_difference_passes_only_under_an_approved_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -436,12 +513,7 @@ def test_a_difference_passes_only_under_an_approved_transition(
     assert marked['register']['required']
     assert R.outcome_class(marked['reference']['outcome']) == 'refusal UNNAMED'
     named = copy.deepcopy(marked['reference'])
-    named['outcome'] = {
-        'result': 'refusal',
-        'stage': 'from_source',
-        'error': 'UnsupportedRequestError',
-        'code': 'UNSUPPORTED_REQUEST',
-    }
+    named['outcome'] = dict(EMPTY_TABLE_REFUSAL)
     entries: list[tuple[str, str, str, str, str]] = []
     monkeypatch.setattr(module, 'transitions', lambda: (entries, []))
     assert problem_of(plain, plain['reference']) is None
@@ -454,7 +526,7 @@ def test_a_difference_passes_only_under_an_approved_transition(
             'proposed',
             'empty.*',
             'refusal UNNAMED',
-            'refusal UNSUPPORTED_REQUEST',
+            'refusal INVALID_REQUEST',
         )
     ]
     assert 'only proposed' in (problem_of(marked, named) or '')
@@ -465,7 +537,7 @@ def test_a_difference_passes_only_under_an_approved_transition(
             'approved',
             'empty.*',
             'refusal UNNAMED',
-            'refusal UNSUPPORTED_REQUEST',
+            'refusal INVALID_REQUEST',
         )
     ]
     assert problem_of(marked, named) is None
@@ -475,9 +547,13 @@ def test_a_difference_passes_only_under_an_approved_transition(
         named['outcome'], result='success', stage='predict', code=None
     )
     assert problem_of(marked, described) is not None
-    invalid = copy.deepcopy(named)
-    invalid['outcome'] = dict(named['outcome'], code='INVALID_REQUEST')
-    assert problem_of(marked, invalid) is not None
+    unsupported = copy.deepcopy(named)
+    unsupported['outcome'] = dict(
+        named['outcome'],
+        error='UnsupportedRequestError',
+        code='UNSUPPORTED_REQUEST',
+    )
+    assert problem_of(marked, unsupported) is not None
     # An unmarked vector is held exactly, and excused only the same way: a
     # null key, which the reference refuses with INVALID_REQUEST at
     # materialize.
@@ -487,7 +563,7 @@ def test_a_difference_passes_only_under_an_approved_transition(
         'refusal INVALID_REQUEST'
     )
     early = copy.deepcopy(key['reference'])
-    early['outcome'] = dict(named['outcome'])
+    early['outcome'] = dict(unsupported['outcome'])
     early['schema'] = None
     entries[:] = []
     assert problem_of(key, early) is not None
@@ -570,7 +646,7 @@ def test_the_register_reading_is_by_ref_status_and_transition() -> None:
                 'id': 'A-1',
                 'status': 'approved',
                 'refs': [
-                    f'{ref}empty.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+                    f'{ref}empty.* refusal UNNAMED -> refusal INVALID_REQUEST'
                 ],
             },
             {
@@ -601,7 +677,7 @@ def test_the_register_reading_is_by_ref_status_and_transition() -> None:
             'approved',
             'empty.*',
             'refusal UNNAMED',
-            'refusal UNSUPPORTED_REQUEST',
+            'refusal INVALID_REQUEST',
         ),
         ('A-2', 'proposed', 'null.key-*', 'refusal INVALID_REQUEST', 'success'),
     ]

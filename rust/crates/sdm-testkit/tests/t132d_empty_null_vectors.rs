@@ -36,9 +36,11 @@
 //!   this host's (the reference's unnamed exception is `refusal UNNAMED`).
 //!   A ref covers exactly the transition it declares; a proposed entry
 //!   excuses nothing, so its vectors stay pending until the owner approves
-//!   it. The core's `UNSUPPORTED_REQUEST` for an empty table (rule
-//!   `empty_table`) passes only where an approved entry declares it
-//!   (P1B-11, once a ref names the vectors). The recorder's
+//!   it. The core's `INVALID_REQUEST` for an empty table (rule
+//!   `empty_table`; `UNSUPPORTED_REQUEST` until the owner's switch of
+//!   2026-10-13, T1.32g) passes only where an approved entry declares it
+//!   (P1B-11, whose refs `test_t132d_empty_null_vectors.py` holds to
+//!   exactly that transition). The recorder's
 //!   `register.required` marks where a difference is expected and excuses
 //!   nothing by itself; an unmarked vector (a null key, refused by the
 //!   reference with INVALID_REQUEST) is held exactly unless an approved
@@ -845,22 +847,26 @@ fn the_comparison_fails_closed() {
     };
     assert_eq!(outcome_class(&unnamed), "refusal UNNAMED");
     assert_eq!(outcome_class(&refused), "refusal UNSUPPORTED_REQUEST");
-    assert!(!passes("empty.orders", &refused, &unnamed, &[]));
-    let declared = "refusal UNSUPPORTED_REQUEST";
-    let proposed = [entry("proposed", "empty.*", "refusal UNNAMED", declared)];
-    assert!(!passes("empty.orders", &refused, &unnamed, &proposed));
-    let approved = [entry("approved", "empty.*", "refusal UNNAMED", declared)];
-    assert!(passes("empty.orders", &refused, &unnamed, &approved));
-    assert!(!passes("null.interval", &refused, &unnamed, &approved));
+    // An empty table: the code P1B-11 declares since the owner's switch.
+    let invalid = json!({"outcome": "refusal", "code": "INVALID_REQUEST"});
+    assert!(!passes("empty.orders", &invalid, &unnamed, &[]));
+    let switched = "refusal INVALID_REQUEST";
+    let proposed = [entry("proposed", "empty.*", "refusal UNNAMED", switched)];
+    assert!(!passes("empty.orders", &invalid, &unnamed, &proposed));
+    let approved = [entry("approved", "empty.*", "refusal UNNAMED", switched)];
+    assert!(passes("empty.orders", &invalid, &unnamed, &approved));
+    assert!(!passes("empty.orders", &refused, &unnamed, &approved));
+    assert!(!passes("null.interval", &invalid, &unnamed, &approved));
     let success = json!({"outcome": "success", "code": null});
     assert!(!passes("empty.orders", &success, &unnamed, &approved));
     let other = [entry(
         "approved",
         "empty.*",
         "refusal INTERNAL_ERROR",
-        declared,
+        switched,
     )];
-    assert!(!passes("empty.orders", &refused, &unnamed, &other));
+    assert!(!passes("empty.orders", &invalid, &unnamed, &other));
+    let declared = "refusal UNSUPPORTED_REQUEST";
     // An unmarked vector, a null key refused by name, is excused the same
     // way only.
     let key = wanted(&json!({"outcome": {"result": "refusal", "code": "INVALID_REQUEST"}}));
@@ -877,7 +883,7 @@ fn the_comparison_fails_closed() {
     // The register's text: refs of proposed and approved entries, in both
     // forms; a rejected entry's and another file's ignored; a ref naming
     // vectors with no transition malformed.
-    let text = "entries:\n- id: A-1\n  status: approved\n  refs: ['contract/empty-null-vectors.json#empty.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST']\n\
+    let text = "entries:\n- id: A-1\n  status: approved\n  refs: ['contract/empty-null-vectors.json#empty.* refusal UNNAMED -> refusal INVALID_REQUEST']\n\
                 - id: A-2\n  status: proposed\n  refs:\n  - contract/empty-null-vectors.json#null.key-* refusal INVALID_REQUEST -> success\n\
                 - id: A-3\n  status: rejected\n  refs:\n  - contract/empty-null-vectors.json#empty.* refusal UNNAMED -> success\n\
                 - id: A-4\n  status: approved\n  refs:\n  - contract/nested-type-vectors.json#map.* success -> success\n  - contract/empty-null-vectors.json#empty.*\n  - contract/empty-null-vectors.json#empty.* refusal unnamed -> success\n";
@@ -887,7 +893,7 @@ fn the_comparison_fails_closed() {
             .map(|(e, s, g, o, n)| format!("{e} {s} {g} {o} -> {n}"))
             .collect::<Vec<_>>(),
         vec![
-            "A-1 approved empty.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST",
+            "A-1 approved empty.* refusal UNNAMED -> refusal INVALID_REQUEST",
             "A-2 proposed null.key-* refusal INVALID_REQUEST -> success",
         ]
     );

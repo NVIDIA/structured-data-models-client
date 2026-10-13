@@ -36,10 +36,12 @@ gap ``contract/refusal-maps/empty-null.json`` gives T1.32d); each is run by
   ``contract/tools/empty_null_record.py``'s ``project`` reads both, or an
   approved register entry other than the inventory's placeholder P1B-1
   lists the case in its ``cases`` (a proposed one excuses nothing, so its
-  case stays pending until the owner approves it). The core's
-  ``UNSUPPORTED_REQUEST`` for the empty table passes because P1B-11, which
-  the owner approved, lists ``empty.fact-table``; so does any code the
-  entry, amended and approved, comes to name. ``sdm-testkit``'s
+  case stays pending until the owner approves it). The core's refusal of
+  the empty table passes because P1B-11, which the owner approved, lists
+  ``empty.fact-table``. Its code is pinned by the owner's switch of
+  2026-10-13 (T1.32g): ``INVALID_REQUEST`` (class ``StructuredDataError``)
+  at ``from_source``, in place of ``UNSUPPORTED_REQUEST``: the code alone
+  changes, and with it the class the host raises it as. ``sdm-testkit``'s
   ``tests/t132d_empty_null_sql.rs`` holds ``rust-host`` to the same cases,
   and ``test_t132d_empty_null_vectors.py`` both hosts over the family's
   vectors.
@@ -321,6 +323,22 @@ def test_python_core_answers_each_case_as_python_ref(
     def check() -> None:
         problem = answer_problem(case, runs['on'][case], reference()[case])
         assert problem is None, problem
+
+    gated(request, check)
+
+
+def test_the_empty_fact_table_is_refused_invalid_request(
+    runs: dict[str, Any], request: pytest.FixtureRequest
+) -> None:
+    # P1B-11's switch (owner, 2026-10-13): the code alone changes, from
+    # UNSUPPORTED_REQUEST; the stage stays from_source.
+    def check() -> None:
+        assert runs['on']['empty.fact-table']['outcome'] == {
+            'result': 'refusal',
+            'stage': 'from_source',
+            'error': 'StructuredDataError',
+            'code': 'INVALID_REQUEST',
+        }
 
     gated(request, check)
 
