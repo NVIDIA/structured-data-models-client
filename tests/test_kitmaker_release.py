@@ -12,6 +12,7 @@ properties of the workflow job that a reviewer had to notice by eye.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import os
 import pathlib
@@ -170,22 +171,22 @@ EXPECTED = {'a-1.0.0-py3-none-any.whl': 'aaa', 'a-1.0.0.tar.gz': 'bbb'}
 def test_a_version_already_published_is_skipped(kitmaker, monkeypatch):
     """What makes a rerun after a partial publish finish the rest."""
     monkeypatch.setattr(kitmaker, 'on_pypi', lambda *a: dict(EXPECTED))
-    assert kitmaker.settled('a', '1.0.0', EXPECTED) is True
+    assert kitmaker.outstanding('a', '1.0.0', EXPECTED) == {}
 
 
-def test_a_version_not_on_pypi_is_work_to_do(kitmaker, monkeypatch):
+def test_a_version_not_on_pypi_is_published_whole(kitmaker, monkeypatch):
     monkeypatch.setattr(kitmaker, 'on_pypi', lambda *a: None)
-    assert kitmaker.settled('a', '1.0.0', EXPECTED) is False
+    assert kitmaker.outstanding('a', '1.0.0', EXPECTED) == EXPECTED
 
 
-def test_a_partly_published_version_is_refused(kitmaker, monkeypatch):
-    """PyPI will not accept the rest of the files under a version it already
-    has, so publishing over it cannot repair this."""
+def test_a_partly_published_version_is_finished(kitmaker, monkeypatch):
+    """PyPI takes files into a version one at a time, so the rest can still go."""
     monkeypatch.setattr(
         kitmaker, 'on_pypi', lambda *a: {'a-1.0.0-py3-none-any.whl': 'aaa'}
     )
-    with pytest.raises(SystemExit, match='partly on PyPI'):
-        kitmaker.settled('a', '1.0.0', EXPECTED)
+    assert kitmaker.outstanding('a', '1.0.0', EXPECTED) == {
+        'a-1.0.0.tar.gz': 'bbb'
+    }
 
 
 def test_a_version_published_from_other_bytes_is_refused(kitmaker, monkeypatch):
@@ -198,7 +199,18 @@ def test_a_version_published_from_other_bytes_is_refused(kitmaker, monkeypatch):
         },
     )
     with pytest.raises(SystemExit, match='different bytes'):
-        kitmaker.settled('a', '1.0.0', EXPECTED)
+        kitmaker.outstanding('a', '1.0.0', EXPECTED)
+
+
+def test_a_version_holding_files_we_did_not_build_is_refused(
+    kitmaker, monkeypatch
+):
+    held = dict(EXPECTED) | {'a-1.0.0-cp312-cp312-linux_x86_64.whl': 'ccc'}
+    monkeypatch.setattr(kitmaker, 'on_pypi', lambda *a: held)
+    with pytest.raises(SystemExit, match='did not build'):
+        kitmaker.outstanding('a', '1.0.0', EXPECTED)
+    with pytest.raises(SystemExit, match='did not build'):
+        kitmaker.verify('a', '1.0.0', EXPECTED)
 
 
 def test_publishing_is_not_complete_until_pypi_holds_the_built_bytes(
@@ -209,3 +221,89 @@ def test_publishing_is_not_complete_until_pypi_holds_the_built_bytes(
     monkeypatch.setattr(kitmaker, 'VERIFY_ATTEMPTS', 2)
     with pytest.raises(SystemExit, match='did not appear in full'):
         kitmaker.verify('a', '1.0.0', EXPECTED)
+
+
+@pytest.fixture
+def release(kitmaker, tmp_path, monkeypatch):
+    """A whole release laid out the way the workflow hands it over, with every
+    call to Portal and PyPI answered locally."""
+
+    def arrange(*, already_on_pypi=()):
+        dist = tmp_path / 'dist'
+        dist.mkdir(exist_ok=True)
+        lines = []
+        for name in kitmaker.PROJECTS.values():
+            filename = f'{name.replace("-", "_")}-1.0.0-py3-none-any.whl'
+            (dist / filename).write_bytes(name.encode())
+            lines.append(f'{filename}\thttps://example.invalid/{filename}')
+        (tmp_path / 'assets.tsv').write_text('\n'.join(lines) + '\n')
+
+        live = set(already_on_pypi)
+
+        def on_pypi(name, version):
+            if name not in live:
+                return None
+            filename = f'{name.replace("-", "_")}-1.0.0-py3-none-any.whl'
+            return {filename: hashlib.sha256(name.encode()).hexdigest()}
+
+        def submit(project_id, name, urls, upload):
+            if upload:
+                live.add(name)
+            return 'uuid'
+
+        monkeypatch.setattr(kitmaker, 'on_pypi', on_pypi)
+        monkeypatch.setattr(kitmaker, 'submit', submit)
+        monkeypatch.setattr(kitmaker, 'wait_for', lambda *a: None)
+        monkeypatch.setattr(
+            kitmaker,
+            'call',
+            lambda method, path, body=None: {'name': _name_for(kitmaker, path)},
+        )
+        monkeypatch.chdir(tmp_path)
+        return tmp_path / 'kitmaker-summary.txt'
+
+    return arrange
+
+
+def _name_for(kitmaker, path):
+    return kitmaker.PROJECTS[int(path.rsplit('/', 1)[1])]
+
+
+def test_a_clean_release_reports_every_project_once(kitmaker, release):
+    """Each project belongs in exactly one line of the summary: the record of
+    what is live is what a half-finished release is read for."""
+    summary = release()
+    kitmaker.main()
+    lines = summary.read_text().strip().splitlines()
+    assert sorted(lines) == sorted(
+        f'published: {name}' for name in kitmaker.PROJECTS.values()
+    )
+
+
+def test_a_release_already_published_still_writes_a_summary(kitmaker, release):
+    summary = release(already_on_pypi=set(kitmaker.PROJECTS.values()))
+    kitmaker.main()
+    lines = summary.read_text().strip().splitlines()
+    assert sorted(lines) == sorted(
+        f'already published: {name}' for name in kitmaker.PROJECTS.values()
+    )
+
+
+def test_a_project_live_but_unverified_is_not_reported_as_unpublished(
+    kitmaker, release, monkeypatch
+):
+    """Kitmaker reported success, so the files are on PyPI whatever
+    verification finds. Calling that 'NOT published' would send the next person
+    to republish something that is already there."""
+    summary = release()
+    monkeypatch.setattr(
+        kitmaker,
+        'verify',
+        lambda *a: (_ for _ in ()).throw(SystemExit('bad bytes')),
+    )
+    with pytest.raises(SystemExit):
+        kitmaker.main()
+    lines = summary.read_text()
+    first = next(iter(kitmaker.PROJECTS.values()))
+    assert f'published but NOT verified: {first}' in lines
+    assert f'NOT published: {first}' not in lines

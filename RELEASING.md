@@ -120,18 +120,21 @@ GitHub Release does not match. "Re-run failed jobs" reuses the original
 `distributions` artifact, which is what you want.
 
 A re-run is safe to repeat. Before each project is submitted, PyPI is asked
-whether it already holds that version; if it does, with digests matching the
-artifact, the project is skipped. A rerun after a partial publish therefore
-finishes the projects that did not land.
+what it already holds at that version. A project fully published with the
+artifact's bytes is skipped, and one that is part-published is reduced to the
+files still missing, since PyPI takes files into a version one at a time. A
+re-run after a partial publish therefore finishes what did not land.
 
 Two states it refuses to guess at, both needing a hand:
 
-- **The version is partly on PyPI.** PyPI will not accept more files under a
-  version it already has, so the release cannot be completed. Yank the
-  partial version and release the next patch.
 - **PyPI holds different bytes than the artifact.** Someone published this
-  version from other artifacts. Do not re-run; work out what was published
-  first.
+  version from other artifacts. PyPI will not replace a file, so do not
+  re-run; work out what was published first, then yank and release a patch.
+- **PyPI holds files this run did not build.** Same reasoning: the version on
+  PyPI is not the one in `dist/`.
+
+`kitmaker-summary.txt`, printed at the end of the job, is the record of what
+is live. Read it before re-running.
 
 ## After
 

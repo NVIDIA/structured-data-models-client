@@ -274,10 +274,12 @@ jobs:
           # while PyPI keeps the old, breaking the GitHub-to-PyPI comparison
           # SECURITY.md asks a consumer to make. An attached asset is left
           # alone. See RELEASING.md on re-running.
-          mapfile -t attached < <(
-            gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-              --json assets --jq '.assets[].name'
-          )
+          # Not a process substitution: its exit status is not the one
+          # `mapfile` returns, so a failed query would read as "nothing is
+          # attached" and `set -e` would never see it.
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' > attached.txt
+          mapfile -t attached < attached.txt
           for path in dist/*; do
             name=$(basename "$path")
             for existing in ${attached+"${attached[@]}"}; do

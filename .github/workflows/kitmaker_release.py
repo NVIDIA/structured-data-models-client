@@ -227,17 +227,21 @@ def submit(project_id: int, name: str, urls: list[str], upload: bool) -> str:
     return str(uuid)
 
 
-def settled(name: str, version: str, expected: dict[str, str]) -> bool:
-    r"""Whether PyPI already holds exactly this project's files at this version.
+def outstanding(
+    name: str, version: str, expected: dict[str, str]
+) -> dict[str, str]:
+    r"""Which of this project's files are not on PyPI yet, as ``{filename:
+    sha256}``.
 
-    Wholly absent is work to do, wholly present is work done and skipped. A
-    partial or mismatched version raises instead: PyPI will not replace a file,
-    so publishing over it cannot repair either case.
+    Empty means the version is already published with the bytes this run built,
+    and is skipped; a partial version returns the rest, because PyPI accepts
+    files into a version one at a time. Two states raise instead, since neither
+    can be repaired by publishing more: a file held under different bytes, and a
+    file held that this run did not build.
     """
     held = on_pypi(name, version)
     if held is None:
-        return False
-    missing = sorted(set(expected) - set(held))
+        return dict(expected)
     differing = sorted(
         filename
         for filename, digest in expected.items()
@@ -246,39 +250,75 @@ def settled(name: str, version: str, expected: dict[str, str]) -> bool:
     if differing:
         raise SystemExit(
             f'{name} {version} is on PyPI with different bytes than this run '
-            f'built: {differing}. PyPI does not allow a file to be replaced, '
-            f'so this release cannot be completed from these artifacts.'
+            f'built: {differing}. PyPI does not allow a file to be replaced.'
         )
-    if missing:
+    unknown = sorted(set(held) - set(expected))
+    if unknown:
         raise SystemExit(
-            f'{name} {version} is partly on PyPI, missing {missing}. '
-            f'Publishing again cannot add them under the same version; see '
-            f'the recovery section in RELEASING.md.'
+            f'{name} {version} is on PyPI with files this run did not build: '
+            f'{unknown}.'
         )
-    return True
+    return {
+        filename: digest
+        for filename, digest in expected.items()
+        if filename not in held
+    }
 
 
 def verify(name: str, version: str, expected: dict[str, str]) -> None:
-    r"""Confirm PyPI holds the bytes this run built. Kitmaker fetches whatever
-    is at the asset URL, so without this the only claim is that a job reported
-    success."""
+    r"""Confirm PyPI holds exactly the bytes this run built. Kitmaker fetches
+    whatever is at the asset URL, so without this the only claim is that a job
+    reported success."""
     for _ in range(VERIFY_ATTEMPTS):
         held = on_pypi(name, version)
-        if held is not None and not set(expected) - set(held):
-            wrong = sorted(f for f, d in expected.items() if held[f] != d)
+        if held is not None:
+            unknown = sorted(set(held) - set(expected))
+            if unknown:
+                raise SystemExit(
+                    f'{name} {version} on PyPI holds files this run did not '
+                    f'build: {unknown}'
+                )
+            wrong = sorted(
+                filename
+                for filename, digest in expected.items()
+                if filename in held and held[filename] != digest
+            )
             if wrong:
                 raise SystemExit(
                     f'{name}: PyPI holds different bytes for {wrong}'
                 )
-            print(
-                f'  verified on PyPI: {name} {version} ({len(expected)} files)'
-            )
-            return
+            if not set(expected) - set(held):
+                print(
+                    f'  verified on PyPI: {name} {version} '
+                    f'({len(expected)} files)'
+                )
+                return
         time.sleep(VERIFY_SECONDS)
     raise SystemExit(
         f'{name} {version} did not appear in full on PyPI after '
         f'{VERIFY_ATTEMPTS * VERIFY_SECONDS}s'
     )
+
+
+def write_summary(
+    published: list[str], unverified: list[str], attempted: list[str]
+) -> None:
+    r"""What is live and what is not, written whatever happens: a half-finished
+    release is the one case where this file is read."""
+    lines = [f'published: {name}' for name in published]
+    lines += [f'published but NOT verified: {name}' for name in unverified]
+    lines += [
+        f'NOT published: {name}'
+        for name in attempted
+        if name not in published and name not in unverified
+    ]
+    lines += [
+        f'already published: {name}'
+        for name in PROJECTS.values()
+        if name not in attempted
+    ]
+    pathlib.Path('kitmaker-summary.txt').write_text('\n'.join(lines) + '\n')
+    print('\n'.join(lines))
 
 
 def main() -> None:
@@ -293,9 +333,8 @@ def main() -> None:
     version = version_of(next(iter(built)))
 
     # Only files this run built may be published. A rerun against an existing
-    # release can see assets left by an earlier one, and `--clobber` replaces
-    # only the names that collide, so the release listing alone is not a safe
-    # description of what belongs to this release.
+    # release can see assets left by an earlier one, so the release listing
+    # alone is not a safe description of what belongs to this release.
     assets: dict[str, str] = {}
     for line in pathlib.Path('assets.tsv').read_text().splitlines():
         if not line.strip():
@@ -308,7 +347,7 @@ def main() -> None:
     if missing:
         raise SystemExit(f'not attached to the release: {sorted(missing)}')
 
-    by_project: dict[int, list[str]] = {}
+    urls: dict[int, dict[str, str]] = {}
     digests: dict[int, dict[str, str]] = {}
     for project_id, name in PROJECTS.items():
         mine = {
@@ -318,66 +357,68 @@ def main() -> None:
         }
         if not mine:
             raise SystemExit(f'nothing in this release belongs to {name}')
-        by_project[project_id] = sorted(mine.values())
-        digests[project_id] = {f: built[f] for f in mine}
+        urls[project_id] = mine
+        digests[project_id] = {filename: built[filename] for filename in mine}
 
-    claimed = sum(len(urls) for urls in by_project.values())
+    claimed = sum(len(mine) for mine in urls.values())
     if claimed != len(assets):
         raise SystemExit(
             f'{len(assets) - claimed} built file(s) match no Portal project'
         )
 
     print(
-        f'{len(assets)} distributions at {version} across {len(by_project)} projects'
+        f'{len(assets)} distributions at {version} '
+        f'across {len(PROJECTS)} projects'
     )
 
     # Pass one: nothing publishes until every project has validated and every
-    # dry run has finished. One already live at this version is left alone.
-    todo: dict[int, str] = {}
+    # dry run has finished. A project already on PyPI at this version is left
+    # alone, and a part-published one is reduced to the files still missing.
+    todo: dict[int, tuple[str, list[str], dict[str, str]]] = {}
     for project_id, name in PROJECTS.items():
-        if settled(name, version, digests[project_id]):
+        pending = outstanding(name, version, digests[project_id])
+        if not pending:
             print(f'already on PyPI, skipping: {name} {version}')
             continue
-        todo[project_id] = name
+        todo[project_id] = (
+            name,
+            sorted(url for f, url in urls[project_id].items() if f in pending),
+            digests[project_id],
+        )
         actual = call('GET', f'/projects/{project_id}').get('name')
         if actual != name:
             raise SystemExit(
                 f'Portal project {project_id} is {actual!r}, not {name!r}'
             )
-        print(f'dry run: {name} ({len(by_project[project_id])} files)')
+        print(f'dry run: {name} ({len(pending)} files)')
         wait_for(
-            submit(project_id, name, by_project[project_id], False),
+            submit(project_id, name, todo[project_id][1], False),
             f'dry run {name}',
         )
 
+    attempted = [name for name, _, _ in todo.values()]
     if not todo:
         print('every distribution is already published at this version')
+        write_summary([], [], attempted)
         return
 
     # Pass two: from here a failure can leave part of the release live, which
     # is why the whole of pass one had to pass first.
-    published = []
-    summary = pathlib.Path('kitmaker-summary.txt')
+    published: list[str] = []
+    unverified: list[str] = []
     try:
-        for project_id, name in todo.items():
+        for project_id, (name, project_urls, expected) in todo.items():
             print(f'publishing: {name}')
-            wait_for(
-                submit(project_id, name, by_project[project_id], True), name
-            )
-            verify(name, version, digests[project_id])
+            wait_for(submit(project_id, name, project_urls, True), name)
+            # Kitmaker has reported success, so the files are live whatever
+            # verification then finds. Recording it before the check keeps the
+            # summary honest about what is on PyPI.
+            unverified.append(name)
+            verify(name, version, expected)
+            unverified.remove(name)
             published.append(name)
     finally:
-        lines = [f'published: {n}' for n in published]
-        lines += [
-            f'NOT published: {n}' for n in todo.values() if n not in published
-        ]
-        lines += [
-            f'already published: {n}'
-            for n in PROJECTS.values()
-            if n not in todo
-        ]
-        summary.write_text('\n'.join(lines) + '\n')
-        print('\n'.join(lines))
+        write_summary(published, unverified, attempted)
 
 
 if __name__ == '__main__':
