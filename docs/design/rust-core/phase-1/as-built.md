@@ -412,7 +412,6 @@ Predict-side rules and the result (E78), in two landings.
 - The freeze (part 2): the baseline in format 3, `ALLOWANCES` deleted, T1.28b's four changed entries declared `moved` and the declarations the merge base holds pruned; part 1's copy passes the candidate against part 1's landing and as landed.
 - The maps: the baseline family's map has no entry; the AdventureWorks map's `inference_config` gap is T1.32f's (E78(m)); the family pin's warnings of `null.target-all-null` rewritten, its context of zero sums constant, the core now giving the reference's notice.
 
-
 ## T1.6c
 
 D8 date literals refused by name (the owner's decision of 2026-10-12; decision E79; register DT-5 and PK-5), each claim with its mechanism.
