@@ -2076,22 +2076,24 @@ entries:
   cases: [T1.26b]
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E94}
   notes: >-
     Found by T1.26b's old-against-core differential (E49); proposed as a
     refusal by name (null_foreign_key, null_key) at T1.26b. The owner's
     decision (b) of 2026-10-11, relayed by the orchestrator (E66(a)): a
-    null is no link, in place of the refusals, conditional on all cases
-    passing and model accuracy holding; benchmark before Phase 1
-    acceptance (T1.29). The benchmark's protocol, fixed by the owner on
-    2026-10-12 before any result is seen (decisions E73(a)): against the
-    serving endpoint the owner authorised; generated DuckDB datasets with
-    null keys and null foreign keys, the same datasets without nulls as a
-    control, and AdventureWorks; the old route against the core with
-    paired seeds, the same endpoint and configuration; MAE for a
-    regression, AUROC for a binary task, macro-F1 for a multiclass one;
-    it passes when the core is no more than 2% worse, relative, on any
-    dataset and the no-null controls agree within noise.
+    null is no link, in place of the refusals, then conditional on all
+    cases passing and model accuracy holding (E73(a)'s benchmark).
+    Re-approved by the owner on 2026-10-13, relayed by the orchestrator
+    (E94), on correctness grounds, the condition dropped: T1.29's
+    investigation showed the reference corrupts requests when keys are
+    null (null order keys collapse into one row, linked to an arbitrary
+    user; a null foreign key becomes pandas' code -1, a phantom "last
+    item" row that shifts later links, 44 of 58 item links wrong in one
+    request), where the core sends each row and no link for a null
+    foreign key, which is correct. E73(a)'s benchmark on generated data
+    is set aside as having no signal; a real-data parity benchmark
+    (AdventureWorks and RelBench H&M) runs after the time_whole_table fix
+    as a sanity check, not a gate.
 
 - id: P1B-14
   title: A schema's keys, links or time column edited between two materialize calls is followed on the core route
