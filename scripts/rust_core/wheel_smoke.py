@@ -54,6 +54,20 @@ wheel of their own (a macOS build, in a local Python 3.10, say). Either way:
    fail the probe, with an import error naming ``sdm_client._native``,
    and the binding's tests, or the lane fails.
 
+The binding's tests judge; what they read as the contract, its inputs,
+comes from ``--inputs TREE`` (the checkout itself by default, as in CI's
+own job): the API and PQL distributions built into wheels, the message
+builder (``messages.py``), the contract's version and error codes
+(``sdm-contract``'s ``lib.rs`` and ``error.rs``) and the native module's
+stub. The gate's locked check 3 runs the checkpoint's copy of this script
+on the candidate's wheels with ``--inputs`` the candidate's tree, so the
+checkpoint's tests, ``EXPECTED``, guard and control judge a candidate at
+the contract version it builds (T1.20, Codex P2): :func:`suite` puts them
+together. ``--commit SHA`` holds each wheel to the identity
+``native_wheel.py`` wrote beside it (:func:`provenance`): built from SHA,
+from a clean tree, the file it describes, and the build it names, so a
+wheel of another commit cannot stand in for the candidate's.
+
 ``environment.json`` in the output directory records the lane, the image,
 the interpreter, the wheels' SHA-256, the versions resolved, each report's
 counts, and the warnings pyarrow's own ``to_pandas()`` raises in the lane
@@ -62,7 +76,7 @@ judged).
 
     scripts/rust_core/wheel_smoke.py --lane floor|newest \\
         --wheel SHIPPED.whl --test-ops-wheel TEST_OPS.whl --out DIR \\
-        [--container | --python PATH]
+        [--inputs TREE] [--commit SHA] [--container | --python PATH]
 """
 
 from __future__ import annotations
@@ -140,8 +154,17 @@ FILES = {
 }
 #: The modules whose origin the guard records inside the test process.
 ORIGINS = ('sdm_client', 'sdm_client._native')
-#: The sibling distributions the client pins, installed from the checkout.
+#: The sibling distributions the client pins, installed from the inputs.
 SIBLINGS = ('structured-data-models-api', 'structured-data-models-pql')
+#: What the binding's tests take from the tree under test, the inputs: the
+#: message builder, and the files they read as the contract (its version,
+#: its error codes) and as the native module's surface (its stub).
+INPUTS = (
+    f'{TESTS}/messages.py',
+    'rust/crates/sdm-contract/src/lib.rs',
+    'rust/crates/sdm-contract/src/error.rs',
+    'packages/structured-data-models-client/src/sdm_client/_native.pyi',
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -226,6 +249,60 @@ def _checked(command: list[str], **kwargs: Any) -> str:
             f'({done.returncode}):\n{done.stdout}\n{done.stderr}'
         )
     return done.stdout
+
+
+def suite(
+    own: pathlib.Path, inputs: pathlib.Path, into: pathlib.Path
+) -> pathlib.Path:
+    """The binding's tests as this smoke runs them, under `into`, laid out
+    as the repository is: every file of `own`'s tests directory but the
+    message builder (the test files, ``conftest.py``, the shim), which
+    judge, and `inputs`' :data:`INPUTS` at their own paths, which say what
+    the build under test is. Returns the tests directory. An input
+    missing from `inputs` is refused by name."""
+    missing = [name for name in INPUTS if not (inputs / name).is_file()]
+    if missing:
+        raise SmokeFailed(f'the inputs {inputs} lack {missing}')
+    tests = into / TESTS
+    tests.mkdir(parents=True, exist_ok=True)
+    for path in sorted((own / TESTS).iterdir()):
+        if path.is_file() and path.name != 'messages.py':
+            shutil.copyfile(path, tests / path.name)
+    for name in INPUTS:
+        (into / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(inputs / name, into / name)
+    return tests
+
+
+def provenance(wheel: pathlib.Path, commit: str, test_ops: bool) -> None:
+    """Holds `wheel` to its identity, ``<wheel>.json`` beside it, as
+    ``native_wheel.py`` writes it: built from `commit` (in full), from a
+    clean tree, its SHA-256 the file's own, and the build asked for
+    (``features`` ``["test-ops"]`` for the test-ops wheel, none for the
+    shipped one); refuses anything else by name."""
+    identity = wheel.with_name(wheel.name + '.json')
+    try:
+        found = json.loads(identity.read_text())
+    except (OSError, ValueError, RecursionError) as error:
+        raise SmokeFailed(
+            f'{wheel.name}: no readable identity ({error})'
+        ) from error
+    if not isinstance(found, dict):
+        raise SmokeFailed(f'{wheel.name}: the identity is not an object')
+    want = {
+        'commit': commit,
+        'tree_clean': True,
+        'sha256': sha256(wheel),
+        'features': ['test-ops'] if test_ops else [],
+    }
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise SmokeFailed(f'--commit {commit!r} is not a full SHA')
+    for field, value in want.items():
+        if found.get(field) != value:
+            raise SmokeFailed(
+                f'{wheel.name}: identity {field} is {found.get(field)!r}, '
+                f'not {value!r}'
+            )
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -315,6 +392,8 @@ def _environment(
     work: pathlib.Path,
     out: pathlib.Path,
     constraints: pathlib.Path,
+    inputs: pathlib.Path,
+    tests_root: pathlib.Path,
 ) -> dict[str, Any]:
     env_dir = work / build
     _checked([python, '-m', 'venv', str(env_dir)])
@@ -331,7 +410,9 @@ def _environment(
     probe = json.loads(_checked([py, '-I', '-c', _PROBE], cwd=work))
     for module in ('client', 'native'):
         path, installed = probe[module]
-        if not installed or pathlib.Path(path).is_relative_to(REPO):
+        if not installed or any(
+            pathlib.Path(path).is_relative_to(tree) for tree in (REPO, inputs)
+        ):
             raise SmokeFailed(f'{build}: {module} imported from {path}')
     if probe['test_ops'] != (build == 'test-ops'):
         raise SmokeFailed(f'{build}: TEST_OPS is {probe["test_ops"]}')
@@ -345,9 +426,9 @@ def _environment(
     report = out / f'junit-{build}.xml'
     report.unlink(missing_ok=True)
     collection = out / f'collection-{build}.json'
-    tests = _pytest(py, work, files, build, report, collection)
+    tests = _pytest(py, work, files, build, report, collection, tests_root)
     counts = junit_verdict(report, files)
-    collection_verdict(collection, counts, env_dir)
+    collection_verdict(collection, counts, env_dir, (inputs, tests_root))
     if tests.returncode != 0:
         raise SmokeFailed(f'{build}: pytest exited {tests.returncode}')
     return {
@@ -406,6 +487,7 @@ def _pytest(
     build: str,
     report: pathlib.Path,
     collection: pathlib.Path,
+    root: pathlib.Path = REPO,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess[str]:
     """The binding's tests in `files`, with nothing the caller's
@@ -413,7 +495,8 @@ def _pytest(
     variable dropped (``PYTEST_ADDOPTS`` among them), plugins loaded only
     by name, an empty configuration file of the smoke's own, and conftest
     files read only from the tests' own directory; the guard plugin
-    records what was collected and deselected in `collection`."""
+    records what was collected and deselected in `collection`. `root` is
+    the tree the tests run from (:func:`suite`'s)."""
     guard = work / 'guard'
     guard.mkdir(exist_ok=True)
     (guard / 'smoke_guard.py').write_text(_GUARD)
@@ -425,9 +508,9 @@ def _pytest(
     env['SDM_SMOKE_COLLECTION'] = str(collection)
     return _run(
         [py, '-I', '-B', '-c', _PYTEST, str(guard),
-         *(str(REPO / TESTS / name) for name in files),
-         '-c', str(guard / 'pytest.ini'), '--rootdir', str(REPO),
-         '--confcutdir', str(REPO / TESTS),
+         *(str(root / TESTS / name) for name in files),
+         '-c', str(guard / 'pytest.ini'), '--rootdir', str(root),
+         '--confcutdir', str(root / TESTS),
          '-p', 'smoke_guard', '-p', 'no:cacheprovider', '-q', '-rfEs',
          '--native-build', build, f'--junitxml={report}'],
         cwd=work,
@@ -440,14 +523,15 @@ def collection_verdict(
     collection: pathlib.Path,
     counts: dict[str, dict[str, int]],
     environment: pathlib.Path,
+    outside: tuple[pathlib.Path, ...] = (),
 ) -> None:
     """Refuses a run that deselected any test, that collected none of a
     test `EXPECTED` names for a file it ran, or whose report's passed tests
     are not, file by file, every test collected: so no test is dropped
     unseen, whatever selected it. Refuses too a run whose test process
     imported ``sdm_client`` or its native module from anywhere but
-    `environment` (the checkout included), and a record missing or
-    unreadable."""
+    `environment` (the checkout, and each tree of `outside`, included),
+    and a record missing or unreadable."""
     try:
         record = json.loads(collection.read_text())
         items, deselected = record['items'], record['deselected']
@@ -487,7 +571,7 @@ def collection_verdict(
         if (
             where is None
             or home not in where.parents
-            or where.is_relative_to(REPO)
+            or any(where.is_relative_to(tree) for tree in (REPO, *outside))
         ):
             raise SmokeFailed(
                 f'{collection.name}: the tests imported {module} from {path}'
@@ -519,7 +603,11 @@ def without_native(wheel: pathlib.Path, into: pathlib.Path) -> pathlib.Path:
 
 
 def missing_library_control(
-    lane: Lane, wheel: pathlib.Path, work: pathlib.Path, out: pathlib.Path
+    lane: Lane,
+    wheel: pathlib.Path,
+    work: pathlib.Path,
+    out: pathlib.Path,
+    tests_root: pathlib.Path = REPO,
 ) -> dict[str, Any]:
     """The control: the shipped environment, its client reinstalled from
     a copy of the wheel without its native library, must fail the probe
@@ -538,7 +626,7 @@ def missing_library_control(
     files = FILES['production']
     tests = _pytest(
         py, work, files, 'production', report,
-        out / 'collection-control.json', capture_output=True,
+        out / 'collection-control.json', tests_root, capture_output=True,
     )  # fmt: skip
     try:
         junit_verdict(report, files)
@@ -567,6 +655,7 @@ def smoke(
     out: pathlib.Path,
     python: str,
     image: str | None,
+    inputs: pathlib.Path = REPO,
 ) -> int:
     lane = LANES[lane_name]
     out.mkdir(parents=True, exist_ok=True)
@@ -574,6 +663,7 @@ def smoke(
         'lane': lane_name,
         'image': image,
         'pins': list(lane.pins),
+        'inputs': str(inputs),
         'builds': {},
     }
     status = 0
@@ -581,7 +671,7 @@ def smoke(
         work = pathlib.Path(temporary)
         for name in SIBLINGS:
             shutil.copytree(
-                REPO / 'packages' / name,
+                inputs / 'packages' / name,
                 work / 'src' / name,
                 ignore=shutil.ignore_patterns(
                     'build', '*.egg-info', '__pycache__', 'tests'
@@ -590,6 +680,8 @@ def smoke(
         constraints = work / 'constraints.txt'
         constraints.write_text('\n'.join(lane.pins) + '\n')
         try:
+            tests_root = work / 'suite'
+            suite(REPO, inputs, tests_root)
             # The siblings built once, each a wheel, so every distribution
             # an environment installs is a wheel (--only-binary=:all:).
             _checked([python, '-m', 'venv', str(work / 'build')])
@@ -603,8 +695,9 @@ def smoke(
             )  # fmt: skip
             for build in ('production', 'test-ops'):
                 record['builds'][build] = _environment(
-                    lane, build, wheels[build], python, work, out, constraints
-                )
+                    lane, build, wheels[build], python, work, out, constraints,
+                    inputs, tests_root,
+                )  # fmt: skip
                 # The test-ops environment holds what the shipped one
                 # resolved, so both lanes' wheels meet the same versions.
                 constraints.write_text(
@@ -624,7 +717,7 @@ def smoke(
                 )
             # Last, since it breaks the shipped environment.
             record['missing_library_control'] = missing_library_control(
-                lane, wheels['production'], work, out
+                lane, wheels['production'], work, out, tests_root
             )
         except SmokeFailed as failure:
             record['failure'] = str(failure)
@@ -653,16 +746,24 @@ def _docker_platform(wheel: pathlib.Path) -> str:
 
 
 def in_container(
-    lane_name: str, wheels: dict[str, pathlib.Path], out: pathlib.Path
+    lane_name: str,
+    wheels: dict[str, pathlib.Path],
+    out: pathlib.Path,
+    inputs: pathlib.Path = REPO,
 ) -> int:
-    """Runs this script in the lane's image, the checkout and the wheels
-    mounted read-only, as the caller's user, writing only to `out`."""
+    """Runs this script in the lane's image, the checkout, the inputs and
+    the wheels mounted read-only, as the caller's user, writing only to
+    `out`."""
     lane = LANES[lane_name]
     platforms = {_docker_platform(w) for w in wheels.values()}
     if len(platforms) != 1:
         raise SmokeFailed(f'the wheels are for {sorted(platforms)}')
     out.mkdir(parents=True, exist_ok=True)
-    mounts = ['-v', f'{REPO}:/repo:ro', '-v', f'{out.resolve()}:/out']
+    mounts = [
+        '-v', f'{REPO}:/repo:ro',
+        '-v', f'{inputs.resolve()}:/inputs:ro',
+        '-v', f'{out.resolve()}:/out',
+    ]  # fmt: skip
     inside = {}
     for build, wheel in wheels.items():
         mounts += ['-v', f'{wheel.resolve()}:/wheels/{build}/{wheel.name}:ro']
@@ -675,7 +776,7 @@ def in_container(
         'python', '/repo/scripts/rust_core/wheel_smoke.py',
         '--lane', lane_name, '--wheel', inside['production'],
         '--test-ops-wheel', inside['test-ops'], '--out', '/out',
-        '--image', lane.image,
+        '--image', lane.image, '--inputs', '/inputs',
     ]  # fmt: skip
     return _run(command).returncode
 
@@ -692,6 +793,11 @@ def main(argv: list[str] | None = None) -> int:
     where = parser.add_mutually_exclusive_group()
     where.add_argument('--container', action='store_true')
     where.add_argument('--python', default=sys.executable)
+    # The tree whose contract the wheels build (the candidate's, under the
+    # gate); by default this checkout.
+    parser.add_argument('--inputs', type=pathlib.Path, default=REPO)
+    # The commit the wheels must be built from, by their identity files.
+    parser.add_argument('--commit')
     # Set by --container for the run inside, which records it.
     parser.add_argument('--image', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -699,10 +805,17 @@ def main(argv: list[str] | None = None) -> int:
     for build, wheel in wheels.items():
         if not wheel.is_file() or wheel.suffix != '.whl':
             parser.error(f'{build}: {wheel} is not a wheel')
+    if not args.inputs.is_dir():
+        parser.error(f'--inputs {args.inputs} is not a directory')
     try:
+        if args.commit is not None:
+            for build, wheel in wheels.items():
+                provenance(wheel, args.commit, build == 'test-ops')
         if args.container:
-            return in_container(args.lane, wheels, args.out)
-        return smoke(args.lane, wheels, args.out, args.python, args.image)
+            return in_container(args.lane, wheels, args.out, args.inputs)
+        return smoke(
+            args.lane, wheels, args.out, args.python, args.image, args.inputs
+        )
     except SmokeFailed as failure:
         print(f'wheel-smoke ({args.lane}): FAILED: {failure}', file=sys.stderr)
         return 1

@@ -83,7 +83,13 @@
 #                                its two clean containers, on --wheel and
 #                                --test-ops-wheel (CI's native-wheel and
 #                                native-test-ops artifacts), failing
-#                                without them;
+#                                without them; each wheel held to its
+#                                identity file, built from the candidate's
+#                                commit (--commit), and the checkpoint's
+#                                binding tests run on the candidate's
+#                                contract inputs (--inputs: its message
+#                                builder, contract version, error codes,
+#                                stub and sibling distributions);
 #                   inventory    (1b) the 40 cases of the Phase 1b
 #                                inventory and base.adventureworks are
 #                                acceptance cases.
@@ -453,6 +459,7 @@ smoke() {
   for lane in floor newest; do
     "$PYTHON" "$here/scripts/rust_core/wheel_smoke.py" --lane "$lane" \
       --wheel "$wheel" --test-ops-wheel "$test_ops_wheel" \
+      --inputs "$candidate" --commit "$head" \
       --out "$scratch/wheel-smoke/$lane" --container || status=1
   done
   return $status
