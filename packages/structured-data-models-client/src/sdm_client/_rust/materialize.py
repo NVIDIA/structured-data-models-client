@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: the host-held rule here (design, "Host-held semantics"),
-# the entities' cast to the key's type (T1.32a, checkpoint 4), is deleted
-# in Phase 1 by that task.
+# Bridge code: from T1.32a it holds no rule of the request; the entities'
+# cast to the key's type, its last host-held rule (design, "Host-held
+# semantics"), is the core's.
 # Frozen meanwhile (E50, scripts/rust_core/bridge_freeze.py).
 
 r"""``materialize`` on the core: the request (T1.11c, T1.28a).
@@ -29,7 +29,8 @@ schema and the schema as it stands (from T1.24b, decision E67), which the
 core reads together: what the schema says now, with what the description
 said of each column that the schema does not hold (the type the source
 handed over, whether it may be null, whether the source keys it); and the
-entities to predict for as one Arrow column of the key's own type. From T1.21d the core holds that schema to the reference's
+entities to predict for as one Arrow column of the type pyarrow gives
+their values, which the core casts to the key's type (T1.32a). From T1.21d the core holds that schema to the reference's
 consistency check itself, marking the columns it joins on again from what
 each column means and meant before it was joined on (decision E55); this
 module checks none of it. Nothing here imports the relational engine.
@@ -50,6 +51,7 @@ T1.24b, a schema changed in a way no edit it takes says
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -88,28 +90,6 @@ VALUED = frozenset(
         'inference_config',
     }
 )
-
-#: The integer types a key the core samples may have, as pyarrow names
-#: them, by the contract's spelling.
-_ARROW_TYPES = {
-    'int8': 'int8',
-    'int16': 'int16',
-    'int32': 'int32',
-    'int64': 'int64',
-    'uint8': 'uint8',
-    'uint16': 'uint16',
-    'uint32': 'uint32',
-    'uint64': 'uint64',
-    'utf8': 'string',
-}
-
-
-def _not_taken(rule: str) -> StructuredDataError:
-    return StructuredDataError(
-        'materialize on the core does not take this yet',
-        code='UNSUPPORTED_REQUEST',
-        details={'operation': 'materialize', 'rule': rule},
-    )
 
 
 def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -191,55 +171,41 @@ def _anchor(value: Any) -> dict[str, Any] | None:
     return codec.timestamp(int(value.as_unit('ns').value), 'ns', zone)
 
 
-def _indices(indices: Sequence[Any], schema: Schema, entity: str) -> Any:
-    r"""The entities to predict for, as one Arrow column of the entity key's
-    own type, cast as the engine casts them: by pandas, to the dtype its
-    sampled key has (``pd.Series(indices, dtype=train_pkey.dtype)``, the
-    key's Arrow type as a ``pd.ArrowDtype``), so text digits, booleans and
-    integral floats cast as they do there; an entity that does not cast is
-    the engine's refusal (``INVALID_REQUEST``). A host's conversion of its
-    own values, which the core never sees."""
-    import pandas as pd
+def _indices(indices: Sequence[Any]) -> Any:
+    r"""The entities to predict for as one Arrow column, of the type
+    pyarrow infers from the values themselves (``pa.array``); where it
+    infers none, as when numbers and text are mixed or an integer is past
+    int64, each value as its text (``str``), a missing one (``None``,
+    ``pd.NA``, ``pd.NaT`` or a float NaN) null, and missing values alone
+    a column of Arrow's null type. The core casts the column to the key's
+    type under its own rule table, and refuses an entity that does not
+    cast (T1.32a); this host decides nothing of it."""
     import pyarrow as pa
 
-    described = schema._core_description
-    key = schema[entity].primary_key
-    received = next(
-        (
-            column['received']
-            for table in described['tables']
-            if table['name'] == entity
-            for column in table['columns']
-            if column['name'] == key
-        ),
-        None,
-    )
-    arrow = _ARROW_TYPES.get((received or {}).get('type', ''))
-    if arrow is None:
-        raise _not_taken('key_type')
+    values = list(indices)
     try:
-        cast = pd.Series(
-            list(indices), dtype=pd.ArrowDtype(pa.type_for_alias(arrow))
-        )
-        column = pa.array(cast)
-    except (TypeError, ValueError):
-        # The engine raises these as a ValueError naming the key, which the
-        # client maps to INVALID_REQUEST.
-        raise StructuredDataError(
-            f"'indices' must hold values matching the primary key of "
-            f"'{entity}', which is {arrow}",
-            code='INVALID_REQUEST',
-        ) from None
-    except Exception as failure:  # noqa: BLE001 - every cast failure
-        # Any other failure (an integer past the key's width overflows, a
-        # date has no cast) escapes the engine's own handling, and the
-        # client's guard of the engine reports it as INTERNAL_ERROR.
-        raise StructuredDataError(
-            f'the relational engine failed while building this request: '
-            f'{type(failure).__name__}',
-            code='INTERNAL_ERROR',
-        ) from None
+        column = pa.array(values)
+    except (pa.ArrowException, OverflowError, TypeError, ValueError):
+        if all(_missing(value) for value in values):
+            column = pa.nulls(len(values))
+        else:
+            column = pa.array(
+                [None if _missing(value) else str(value) for value in values],
+                pa.string(),
+            )
     return pa.table({'indices': column})
+
+
+def _missing(value: Any) -> bool:
+    r"""Whether ``value`` is a missing value of Python, pandas or a float."""
+    import pandas as pd
+
+    return (
+        value is None
+        or value is pd.NA
+        or value is pd.NaT
+        or (isinstance(value, float) and math.isnan(value))
+    )
 
 
 def gather(
@@ -258,10 +224,7 @@ def gather(
             materialize yet; and the client's own checks of the call's
             types.
     """
-    from predictive_query.validator.utils import table_name
-
     schema = materializer.schema
-    entity = table_name(query.entity_column)
     anchor = options.get('anchor_time')
     described, held = description(schema)
     operation = {
@@ -285,7 +248,7 @@ def gather(
     attachments = {
         1: codec.attachment(described),
         2: codec.attachment(query.to_string()),
-        3: _indices(indices, schema, entity),
+        3: _indices(indices),
         4: codec.attachment(held),
         # Each as the caller gave it, a value JSON cannot hold refused as
         # the client's transport refuses it; a context size of none is none.

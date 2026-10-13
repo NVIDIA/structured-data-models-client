@@ -15,22 +15,22 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "122ec77e97934d423c91bb2321aec2fdd00049b622bbd48f175a186a03c6efd6"
+        "fingerprint": "ae38b0c9eafe39c1ec608807927f1bf63fec50d61b6745546c9794f0bdac720f"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
       },
       "_indices": {
-        "fingerprint": "658f8de413023137a45da2f3af263e11d4f381c78538b7d3583a8929310c5540"
+        "fingerprint": "a988da663164bb77ab747cacaff119e293c1ad20161fd7a7a44989fc0f4e02e4"
       },
-      "_not_taken": {
-        "fingerprint": "598f82876807adb55c4c77a1d0f88c166fd23eae2c884d2841f48922de37575f"
+      "_missing": {
+        "fingerprint": "466127ee6c502f180f36fbe6b1e4750b86ffbce40dad1d2a16b53b2d79c117a0"
       },
       "description": {
         "fingerprint": "46970a104391a3525c759f021bd8dc29df124cca4f834dca9c191ac386f06281"
       },
       "gather": {
-        "fingerprint": "10a8342d3dd327b8ea62e66a842f66338ae2c57a01a2598073a787943fcd9595"
+        "fingerprint": "2b34aa748d494fb067891c126066416f2fb8a5c83aaf66eb1c4310259d2c9317"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {

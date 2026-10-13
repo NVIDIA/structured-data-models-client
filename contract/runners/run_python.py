@@ -679,17 +679,88 @@ _INTEGER_TAGS = {
 
 def _scalars(table: Any) -> list[dict[str, Any]]:
     r"""The one column of an Arrow table the host sent, each value as the
-    contract's tagged scalar: an integer by its width, text as ``utf8``."""
+    contract's tagged scalar, of the column's own type (from T1.32a the
+    host sends the entities as pyarrow infers them, and the core casts
+    them): an integer by its width, text as ``utf8``, a boolean, a float
+    as the shortest text that reads back as it, a decimal as its unscaled
+    digits, a time as its count of the column's unit, bytes as base64, and
+    a null as ``null``."""
+    import base64
+    import datetime
+
+    import pyarrow as pa
     from sdm_client._rust import codec
 
     column = table.column(0)
-    kind = str(column.type)
+    kind = column.type
     values = column.to_pylist()
-    if kind in _INTEGER_TAGS:
-        return [codec.integer(_INTEGER_TAGS[kind], v) for v in values]
-    if kind in ('string', 'large_string'):
-        return [{'t': 'utf8', 'v': v} for v in values]
-    raise RunnerFailure('the entities sent are neither integers nor text')
+    if str(kind) in _INTEGER_TAGS:
+        return [
+            {'t': 'null'}
+            if v is None
+            else codec.integer(_INTEGER_TAGS[str(kind)], v)
+            for v in values
+        ]
+
+    def one(value: Any) -> dict[str, Any]:
+        if value is None:
+            return {'t': 'null'}
+        if pa.types.is_string(kind) or pa.types.is_large_string(kind):
+            return {'t': 'utf8', 'v': value}
+        if pa.types.is_boolean(kind):
+            return {'t': 'bool', 'v': value}
+        if pa.types.is_float32(kind) or pa.types.is_float64(kind):
+            return {
+                't': 'f32' if pa.types.is_float32(kind) else 'f64',
+                'v': _float_text(value),
+            }
+        if pa.types.is_decimal(kind):
+            return {
+                't': 'd128' if pa.types.is_decimal128(kind) else 'd256',
+                'p': kind.precision,
+                's': kind.scale,
+                'v': str(int(value.scaleb(kind.scale))),
+            }
+        if pa.types.is_date32(kind):
+            return {
+                't': 'date32',
+                'v': str((value - datetime.date(1970, 1, 1)).days),
+            }
+        if pa.types.is_binary(kind) or pa.types.is_large_binary(kind):
+            return {'t': 'binary', 'v': base64.b64encode(value).decode()}
+        raise RunnerFailure(
+            f'the entities sent are of a type not recorded: {kind}'
+        )
+
+    if pa.types.is_null(kind):
+        return [{'t': 'null'} for _ in values]
+    if pa.types.is_timestamp(kind) and kind.unit in ('us', 'ns'):
+        counts = column.cast(pa.int64()).to_pylist()
+        return [
+            {'t': 'null'}
+            if v is None
+            else codec.timestamp(v, kind.unit, kind.tz)
+            for v in counts
+        ]
+    return [one(v) for v in values]
+
+
+def _float_text(value: float) -> str:
+    r"""A float as the contract writes it: the shortest text that reads back
+    as it, an exponent with no plus sign or leading zeros, ``NaN``, ``inf``
+    or ``-inf``."""
+    import math
+
+    if math.isnan(value):
+        return 'NaN'
+    if math.isinf(value):
+        return 'inf' if value > 0 else '-inf'
+    text = repr(float(value))
+    if 'e' in text:
+        mantissa, exponent = text.split('e')
+        sign = '-' if exponent.startswith('-') else ''
+        text = f'{mantissa}e{sign}{exponent.lstrip("+-").lstrip("0") or "0"}'
+    return text
 
 
 class _Handle:

@@ -685,20 +685,24 @@ def test_the_provider_refuses_two_key_sets_bound_to_one_name() -> None:
     'indices',
     [[2**100], [2**63, 0], [2**64, 0], [datetime.date(2024, 1, 1), 0]],
 )
-def test_entities_that_do_not_cast_fail_as_the_reference_fails_them(
+def test_entities_that_do_not_cast_are_the_caller_s_error_on_the_core(
     monkeypatch: pytest.MonkeyPatch, indices: list[Any]
 ) -> None:
     # Past the key's width, or of no castable type: the engine's own
-    # handling lets these escape, and the client reports INTERNAL_ERROR.
+    # handling lets these escape, and the old route reports INTERNAL_ERROR;
+    # the core's cast (T1.32a) refuses them as the caller's error,
+    # INVALID_REQUEST, naming the entity's position (register P1B-27).
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(StructuredDataError) as refused:
         _materialize(indices=indices)
-    assert refused.value.code == 'INTERNAL_ERROR'
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['field'] == 'indices'
+    assert refused.value.details['position'] == 0
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         with pytest.raises(StructuredDataError) as old:
             _materialize(indices=indices)
-        assert old.value.code == refused.value.code
+        assert old.value.code == 'INTERNAL_ERROR'
 
 
 def _warned(query: PredictiveQuery, calls: list[dict[str, Any]]) -> list[int]:
@@ -748,20 +752,20 @@ def test_a_refused_call_does_not_lose_the_index_warning(
         assert shown['old'] == shown['core']
 
 
-def test_a_call_refused_before_the_run_leaves_the_warning_to_the_next(
+def test_an_entity_that_does_not_cast_is_refused_after_the_index_warning(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # An entity that does not cast is refused in the host, before the core
-    # reads the indexes; the reference casts after its index read, so it
-    # warns on that call (decision E41(j)). The warning is not lost: the
-    # next call gives it.
+    # From T1.32a the core casts the entities where the reference casts
+    # them, after its sample and so after its index read: the refused call
+    # gives the warning, as the reference's does (decision E41(j)), and the
+    # next calls do not.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(_connection()))
     query = PredictiveQuery(QUERY, schema)
     calls = [{'indices': ['abc']}, {'indices': [0, 1]}, {'indices': [0, 1]}]
-    assert _warned(query, calls) == [0, 1, 0]
+    assert _warned(query, calls) == [1, 0, 0]
 
 
 def test_a_source_of_5000_columns_is_described_and_materialized_on_the_core(

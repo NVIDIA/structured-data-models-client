@@ -1771,9 +1771,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         }
         None => None,
     };
-    if indices.data_type() != entity_key.data_type() {
-        return Err(not_yet("indices_type"));
-    }
+    // The entities, cast to the sampled key's type under the core's rule
+    // table (T1.32a), where the reference casts them, after its sample
+    // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
+    // not cast is the caller's error, never the core's (E41(l)).
+    let indices = keys::cast(&indices, entity_key.data_type())?;
     let mut rng = default_rng(&entropy);
     let examples = match &aggregated {
         Some((windowed, ..)) => sample::temporal_examples(

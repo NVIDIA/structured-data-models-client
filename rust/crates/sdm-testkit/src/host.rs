@@ -571,44 +571,102 @@ fn edit_schema(
     }
 }
 
-/// One Arrow column of contract scalars, all of one integer or text type.
+/// One Arrow column of contract scalars, all of one type, nulls among
+/// them; a column of nulls alone is Arrow's null type. This host hands the
+/// core the entities as the case types them, each scalar's type its own
+/// (T1.32a: the core casts them to the key's type).
 fn column_of(values: &[Scalar]) -> Result<ArrayRef> {
-    macro_rules! ints {
-        ($array:ty, $variant:ident) => {
-            Arc::new(<$array>::from_iter_values(
-                values
-                    .iter()
-                    .map(|v| match v {
-                        Scalar::$variant(v) => Ok(*v),
-                        _ => Err(anyhow!("the indices are not of one type")),
-                    })
-                    .collect::<Result<Vec<_>>>()?,
-            )) as ArrayRef
-        };
-    }
-    use duckdb::arrow::array::{
-        Int8Array, Int16Array, Int32Array, Int64Array, StringArray, UInt8Array, UInt16Array,
-        UInt32Array, UInt64Array,
+    use duckdb::arrow::array::NullArray;
+    use duckdb::arrow::array::builder::{
+        BinaryBuilder, BooleanBuilder, Date32Builder, Decimal128Builder, Float32Builder,
+        Float64Builder, Int8Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
+        TimestampMicrosecondBuilder, TimestampNanosecondBuilder, UInt8Builder, UInt16Builder,
+        UInt32Builder, UInt64Builder,
     };
-    Ok(match values.first() {
-        Some(Scalar::Int8(_)) => ints!(Int8Array, Int8),
-        Some(Scalar::Int16(_)) => ints!(Int16Array, Int16),
-        Some(Scalar::Int32(_)) => ints!(Int32Array, Int32),
-        Some(Scalar::Int64(_)) => ints!(Int64Array, Int64),
-        Some(Scalar::UInt8(_)) => ints!(UInt8Array, UInt8),
-        Some(Scalar::UInt16(_)) => ints!(UInt16Array, UInt16),
-        Some(Scalar::UInt32(_)) => ints!(UInt32Array, UInt32),
-        Some(Scalar::UInt64(_)) => ints!(UInt64Array, UInt64),
-        Some(Scalar::Utf8(_)) => Arc::new(StringArray::from(
-            values
-                .iter()
-                .map(|v| match v {
-                    Scalar::Utf8(v) => Ok(v.clone()),
-                    _ => Err(anyhow!("the indices are not of one type")),
-                })
-                .collect::<Result<Vec<_>>>()?,
-        )),
-        _ => bail!("the indices are integers or text, of one type"),
+    let Some(first) = values.iter().find(|v| !matches!(v, Scalar::Null)) else {
+        return Ok(Arc::new(NullArray::new(values.len())));
+    };
+    let mixed = || anyhow!("the indices are not of one type");
+    macro_rules! column {
+        ($builder:expr, $pattern:pat => $value:expr) => {{
+            let mut built = $builder;
+            for value in values {
+                match value {
+                    Scalar::Null => built.append_null(),
+                    $pattern => built.append_value($value),
+                    _ => return Err(mixed()),
+                }
+            }
+            Arc::new(built.finish()) as ArrayRef
+        }};
+    }
+    Ok(match first {
+        Scalar::Null => unreachable!("a non-null scalar was found"),
+        Scalar::Bool(_) => column!(BooleanBuilder::new(), Scalar::Bool(v) => *v),
+        Scalar::Int8(_) => column!(Int8Builder::new(), Scalar::Int8(v) => *v),
+        Scalar::Int16(_) => column!(Int16Builder::new(), Scalar::Int16(v) => *v),
+        Scalar::Int32(_) => column!(Int32Builder::new(), Scalar::Int32(v) => *v),
+        Scalar::Int64(_) => column!(Int64Builder::new(), Scalar::Int64(v) => *v),
+        Scalar::UInt8(_) => column!(UInt8Builder::new(), Scalar::UInt8(v) => *v),
+        Scalar::UInt16(_) => column!(UInt16Builder::new(), Scalar::UInt16(v) => *v),
+        Scalar::UInt32(_) => column!(UInt32Builder::new(), Scalar::UInt32(v) => *v),
+        Scalar::UInt64(_) => column!(UInt64Builder::new(), Scalar::UInt64(v) => *v),
+        Scalar::Float32(_) => column!(Float32Builder::new(), Scalar::Float32(v) => *v),
+        Scalar::Float64(_) => column!(Float64Builder::new(), Scalar::Float64(v) => *v),
+        Scalar::Utf8(_) => column!(StringBuilder::new(), Scalar::Utf8(v) => v),
+        Scalar::Binary(_) => column!(BinaryBuilder::new(), Scalar::Binary(v) => v),
+        Scalar::Date32(_) => column!(Date32Builder::new(), Scalar::Date32(v) => *v),
+        Scalar::Decimal128 {
+            precision, scale, ..
+        } => {
+            let (precision, scale) = (*precision, *scale);
+            let mut built = Decimal128Builder::new();
+            for value in values {
+                match value {
+                    Scalar::Null => built.append_null(),
+                    Scalar::Decimal128 {
+                        precision: p,
+                        scale: s,
+                        value,
+                    } if (*p, *s) == (precision, scale) => built.append_value(*value),
+                    _ => return Err(mixed()),
+                }
+            }
+            Arc::new(built.finish().with_precision_and_scale(precision, scale)?)
+        }
+        Scalar::Timestamp { unit, zone, .. } => {
+            let (unit, zone) = (*unit, zone.clone());
+            let same = |u: &Unit, z: &Option<String>| *u == unit && *z == zone;
+            match unit {
+                Unit::Ns => {
+                    let mut built = TimestampNanosecondBuilder::new();
+                    for value in values {
+                        match value {
+                            Scalar::Null => built.append_null(),
+                            Scalar::Timestamp { unit, zone, value } if same(unit, zone) => {
+                                built.append_value(*value)
+                            }
+                            _ => return Err(mixed()),
+                        }
+                    }
+                    Arc::new(built.finish().with_timezone_opt(zone))
+                }
+                Unit::Us => {
+                    let mut built = TimestampMicrosecondBuilder::new();
+                    for value in values {
+                        match value {
+                            Scalar::Null => built.append_null(),
+                            Scalar::Timestamp { unit, zone, value } if same(unit, zone) => {
+                                built.append_value(*value)
+                            }
+                            _ => return Err(mixed()),
+                        }
+                    }
+                    Arc::new(built.finish().with_timezone_opt(zone))
+                }
+            }
+        }
+        _ => bail!("the indices are of a type this host does not build"),
     })
 }
 
@@ -746,7 +804,7 @@ fn start_materialize(
         ),
     };
     let column = column_of(&indices)?;
-    let field = Field::new("indices", column.data_type().clone(), false);
+    let field = Field::new("indices", column.data_type().clone(), true);
     let batch = RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![column])?;
     // What this host sends, as it encodes it, is what it records: the
     // description the core last answered, and the schema as this host

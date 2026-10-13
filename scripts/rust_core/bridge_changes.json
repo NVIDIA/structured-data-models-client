@@ -2,20 +2,20 @@
   "format": "sdm-bridge-changes/1",
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
-    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T1.28b: the adapter's _preflight, the model and output checks, the empty answer, the merge and the absent-output notice moved into the core; the bridge's docstring and header say so and it imports Sequence for the outputs it passes"
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
+      "moved": "T1.32a: the entities' cast to the key's type moved into the core (sdm_engine::keys::cast); the bridge's table of the key types it cast to (_ARROW_TYPES) and its key_type refusal (_not_taken) are deleted, and it imports math for the host's own missing values"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T1.28b: the core runs _prepare's checks and default outputs, the empty answer, _preflight, the merge and the absent-output notice; the bridge passes the model's id, the outputs as named or that none were, and the state's one payload, and builds the result from the core's rows"
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
+      "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_adapter": {
-      "moved": "T1.28b: the client's adapter of the model the core checked, which explains the endpoint's refusals (E47), found as _prepare found it, which the core route no longer runs"
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_missing": {
+      "moved": "T1.32a: the host's half of the moved cast: which of its own values are missing when it writes them as text (None, pd.NA, pd.NaT, a float NaN), the core reading a null"
     },
-    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
-      "moved": "T1.28b: on the core route the call goes to the core's bridge after the argument type checks, before _prepare, the empty answer, the merge and _report_absent, which are the core's; the old route's body is as before T1.11d"
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_not_taken": {
+      "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_as_answered": {
-      "moved": "T1.28b (fix round 1): the result's items read from the core's prediction_as_answered, the JSON text the core wrote of each answer its prediction column changed, as the client's transport reads JSON; the core decides which answers and what each holds"
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
+      "moved": "T1.32a: the entities are passed to the core without the schema or the entity's name, which only the bridge's cast read"
     }
   }
 }

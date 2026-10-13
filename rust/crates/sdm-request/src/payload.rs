@@ -225,6 +225,26 @@ pub fn wire_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
     }
 }
 
+/// The wire dtype of a key's column (the entity table's key, and the
+/// instance table's reference to it), as the reference names a decimal by
+/// what it holds (`_decimal_dtype_name`), at any precision: a whole
+/// decimal of up to 18 digits as `int64`; one of more as `int64` where
+/// every value fits and `string` where one does not; one with a scale as
+/// `float64`. No question sums a key, so the declared precision a decimal
+/// feature's sum is held to (`wire_dtype`) never applies to one (T1.32a).
+pub fn key_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
+    match array.data_type() {
+        DataType::Decimal128(precision, 0) if *precision <= 18 => Ok(Dtype::Int64),
+        DataType::Decimal128(_, 0) => {
+            let values = array.as_primitive::<Decimal128Type>();
+            let fits = values.iter().flatten().all(|v| i64::try_from(v).is_ok());
+            Ok(if fits { Dtype::Int64 } else { Dtype::String })
+        }
+        DataType::Decimal128(_, scale) if *scale > 0 => Ok(Dtype::Float64),
+        _ => wire_dtype(array),
+    }
+}
+
 /// An integer cell: past the JSON-safe range, its digits as text; past
 /// int64, refused, as the reference refuses it.
 fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
@@ -465,8 +485,17 @@ fn int_column(name: &str, values: impl Iterator<Item = usize>) -> FrameColumn {
     }
 }
 
-fn arrow_column(name: &str, array: &ArrayRef, rows: &[usize]) -> Result<FrameColumn, CoreError> {
-    let dtype = wire_dtype(array)?;
+fn arrow_column(
+    name: &str,
+    array: &ArrayRef,
+    rows: &[usize],
+    key: bool,
+) -> Result<FrameColumn, CoreError> {
+    let dtype = if key {
+        key_dtype(array)?
+    } else {
+        wire_dtype(array)?
+    };
     Ok(FrameColumn {
         name: name.to_owned(),
         dtype,
@@ -484,9 +513,10 @@ fn sampled_column(
     name: &str,
     column: &SampledColumn,
     rows: &[usize],
+    key: bool,
 ) -> Result<FrameColumn, CoreError> {
     match column {
-        SampledColumn::Arrow(array) => arrow_column(name, array, rows),
+        SampledColumn::Arrow(array) => arrow_column(name, array, rows, key),
         SampledColumn::Words(words) => Ok(FrameColumn {
             name: name.to_owned(),
             dtype: if rows.is_empty() {
@@ -685,7 +715,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         columns: vec![int_column(INSTANCE_ID, 0..examples)],
         rows: examples,
     };
-    let reference_dtype = wire_dtype(key_array)?;
+    let reference_dtype = key_dtype(key_array)?;
     let reference_cells = first
         .iter()
         .map(|row| match row {
@@ -736,7 +766,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             if column.len() != rows.len() {
                 return Err(internal("a sampled column does not align with its rows"));
             }
-            frame.columns.push(sampled_column(name, column, &rows)?);
+            let key = table.primary_key.as_deref() == Some(name.as_str());
+            frame
+                .columns
+                .push(sampled_column(name, column, &rows, key)?);
         }
         let mut stypes = vec![(INSTANCE_ID.to_owned(), Stype::Id)];
         stypes.extend(table.stypes.iter().cloned());
