@@ -2857,3 +2857,32 @@ entries:
     a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named
     (diagnostic). A pandas artifact of format guessing, flagged to the
     owner rather than copied (the T1.6b brief). Recommendation: approve.
+- id: PQL-5
+  title: A query reaching a link that names a table the schema lacks
+  kind: change
+  old_behavior: >-
+    The reference's join validator, looking for a route between the
+    query's tables (JoinValidator._route_between), reads each linked
+    table's key from the schema by name; where a link names a table the
+    schema does not hold, it raises KeyError (an unnamed crash, no PQL
+    error).
+  new_behavior: >-
+    The core answers the query by PQL code: where the walk needs that
+    link, validate_query refuses it with PQL_JOIN_MISSING_FOREIGN_KEY
+    and the aggregation's span, as for any table it cannot join.
+  affected_inputs: >-
+    validate_query against a schema one of whose links names a table the
+    schema does not hold, for a query whose join walk reaches that link.
+  cases: [T1.20]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Measured by T1.20's batch-2 S0 differential: 1 of the 120 queries run
+    against the schema with a link to a missing table ("ghostlink"),
+    PREDICT COUNT(orders.*, 0, 30, days) FOR EACH orders.order_id; the
+    other 119 agree. The reference crashes where the core gives a named
+    refusal, so it is E66(b)'s class, for the reviewer to approve under
+    it. Whether a public Schema can hold such a link, so that a client
+    caller reaches it, is not established here; the differential calls
+    the adapter directly. No case holds it.
