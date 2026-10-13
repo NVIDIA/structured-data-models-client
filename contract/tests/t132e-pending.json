@@ -142,7 +142,21 @@
    "text.windows-path"
   ],
   "p2-exits": [
-   "py:test_no_text_is_refused_for_holding_a_separator"
+   "py:test_each_case_is_admitted[feature.bool]",
+   "py:test_each_case_is_admitted[time.date]",
+   "py:test_each_case_is_admitted[time.feature-date-and-timestamp-with-null]",
+   "py:test_each_case_is_admitted[time.feature-interval]",
+   "py:test_each_case_is_admitted[time.feature-time-of-day]",
+   "py:test_each_case_is_admitted[time.text-declared]",
+   "py:test_each_case_is_admitted[time.text-iso-date]",
+   "py:test_each_case_is_admitted[time.text-one-bad-value]",
+   "py:test_each_case_is_admitted[time.text-us-date]",
+   "py:test_each_case_is_admitted[time.timestamp-ns]",
+   "py:test_each_case_is_admitted[time.timestamp-s]",
+   "py:test_each_case_is_admitted[time.timestamptz]",
+   "py:test_no_text_is_refused_for_holding_a_separator",
+   "py:test_python_core_answers_each_case_as_python_ref[time.feature-time-of-day]",
+   "rust:every_statement_the_family_runs_is_pinned_in_sdm_data_s_tests"
   ]
  },
  "authored": {
@@ -690,7 +704,21 @@
    "text.windows-path"
   ],
   "p2-exits": [
-   "py:test_no_text_is_refused_for_holding_a_separator"
+   "py:test_each_case_is_admitted[feature.bool]",
+   "py:test_each_case_is_admitted[time.date]",
+   "py:test_each_case_is_admitted[time.feature-date-and-timestamp-with-null]",
+   "py:test_each_case_is_admitted[time.feature-interval]",
+   "py:test_each_case_is_admitted[time.feature-time-of-day]",
+   "py:test_each_case_is_admitted[time.text-declared]",
+   "py:test_each_case_is_admitted[time.text-iso-date]",
+   "py:test_each_case_is_admitted[time.text-one-bad-value]",
+   "py:test_each_case_is_admitted[time.text-us-date]",
+   "py:test_each_case_is_admitted[time.timestamp-ns]",
+   "py:test_each_case_is_admitted[time.timestamp-s]",
+   "py:test_each_case_is_admitted[time.timestamptz]",
+   "py:test_no_text_is_refused_for_holding_a_separator",
+   "py:test_python_core_answers_each_case_as_python_ref[time.feature-time-of-day]",
+   "rust:every_statement_the_family_runs_is_pinned_in_sdm_data_s_tests"
   ]
  }
 }
