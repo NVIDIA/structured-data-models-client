@@ -2373,8 +2373,11 @@ entries:
     field response, reason too_deep and category depth, a local error
     (no endpoint status), on every host; the Python host writes an answer
     its transport decoded past that depth cut one level past it, so the
-    core refuses it alike (_rust/predict.py's _encoded). The default
-    route is unchanged.
+    core refuses it alike (_rust/predict.py's _encoded); one Python's own
+    reader cannot read for its depth (before 3.12, past about 1,000
+    levels, which the transport reports as TRANSPORT_ERROR) is told to the
+    core as too deep, so it is refused INVALID_RESPONSE there too (T1.28b
+    fix round 2). The default route is unchanged.
   affected_inputs: >-
     SDMClient.predict of a request materialized on the core over a DuckDB
     source, under a forced core route, answered with JSON nested more
@@ -2470,6 +2473,43 @@ entries:
     owner, never self-approved. Reading it would need text that is not
     UTF-8 (a replacement character would differ too); a named refusal is
     the recommendation.
+
+- id: P1B-25
+  title: A probability written with a decimal digit Unicode added after 13.0 is refused where Python 3.12 and later read it
+  kind: change
+  old_behavior: >-
+    The reference's bindings read a probability written as text with
+    Python's float, which takes any Unicode decimal digit of the
+    interpreter's Unicode database: Unicode 13.0 on Python 3.10, 14.0 on
+    3.11, 15.0 on 3.12 (the reference's), 15.1 on 3.13 and 16.0 on 3.14,
+    so Kawi digits (Unicode 15.0) read as digits on 3.12 and are refused on
+    3.10.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the core reads the decimal digits every supported Python reads, Unicode
+    13.0's (sdm_wire::response::numeric_text, the orchestrator's portable
+    policy, T1.28b fix round 2), on every interpreter, and refuses a
+    probability written with a later one: StructuredDataError, code
+    INVALID_RESPONSE, field prediction.probabilities, reason
+    not_a_number, as Python 3.10 refuses it. The default route is
+    unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a classification materialized on the core over a
+    DuckDB source, under a forced core route, answered with a probability
+    written as text holding a decimal digit added after Unicode 13.0, on
+    Python 3.11 and later.
+  cases: [T1.28b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.28b's review (Codex, round 2); the portable policy is the
+    orchestrator's, for the owner, never self-approved. Pinned by
+    sdm-wire's tests/numeric_text.rs,
+    only_the_digits_every_supported_python_reads_are_read (Kawi and Tangsa
+    digits refused, Arabic-Indic and fullwidth read), and by the test
+    author's recorded case numeric-text.kawi-digits on both hosts, which
+    the reference reads on 3.12 and later and refuses on 3.10 and 3.11.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
