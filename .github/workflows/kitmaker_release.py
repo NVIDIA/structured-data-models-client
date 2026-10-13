@@ -301,10 +301,15 @@ def verify(name: str, version: str, expected: dict[str, str]) -> None:
 
 
 def write_summary(
-    published: list[str], unverified: list[str], attempted: list[str]
+    published: list[str],
+    unverified: list[str],
+    attempted: list[str],
+    skipped: list[str],
 ) -> None:
-    r"""What is live and what is not, written whatever happens: a half-finished
-    release is the one case where this file is read."""
+    r"""What is live and what is not. Written whatever happens, including a
+    failure in pass one, because a release that stopped early is exactly when
+    this file is read. Every project appears once: a project nothing reached is
+    said to be unreached rather than left to be inferred."""
     lines = [f'published: {name}' for name in published]
     lines += [f'published but NOT verified: {name}' for name in unverified]
     lines += [
@@ -312,10 +317,11 @@ def write_summary(
         for name in attempted
         if name not in published and name not in unverified
     ]
+    lines += [f'already published: {name}' for name in skipped]
     lines += [
-        f'already published: {name}'
+        f'not reached: {name}'
         for name in PROJECTS.values()
-        if name not in attempted
+        if name not in attempted and name not in skipped
     ]
     pathlib.Path('kitmaker-summary.txt').write_text('\n'.join(lines) + '\n')
     print('\n'.join(lines))
@@ -371,42 +377,49 @@ def main() -> None:
         f'across {len(PROJECTS)} projects'
     )
 
-    # Pass one: nothing publishes until every project has validated and every
-    # dry run has finished. A project already on PyPI at this version is left
-    # alone, and a part-published one is reduced to the files still missing.
     todo: dict[int, tuple[str, list[str], dict[str, str]]] = {}
-    for project_id, name in PROJECTS.items():
-        pending = outstanding(name, version, digests[project_id])
-        if not pending:
-            print(f'already on PyPI, skipping: {name} {version}')
-            continue
-        todo[project_id] = (
-            name,
-            sorted(url for f, url in urls[project_id].items() if f in pending),
-            digests[project_id],
-        )
-        actual = call('GET', f'/projects/{project_id}').get('name')
-        if actual != name:
-            raise SystemExit(
-                f'Portal project {project_id} is {actual!r}, not {name!r}'
-            )
-        print(f'dry run: {name} ({len(pending)} files)')
-        wait_for(
-            submit(project_id, name, todo[project_id][1], False),
-            f'dry run {name}',
-        )
-
-    attempted = [name for name, _, _ in todo.values()]
-    if not todo:
-        print('every distribution is already published at this version')
-        write_summary([], [], attempted)
-        return
-
-    # Pass two: from here a failure can leave part of the release live, which
-    # is why the whole of pass one had to pass first.
+    attempted: list[str] = []
+    skipped: list[str] = []
     published: list[str] = []
     unverified: list[str] = []
     try:
+        # Pass one: nothing publishes until every project has validated and
+        # every dry run has finished. A project already on PyPI at this version
+        # is left alone, and a part-published one is reduced to the files still
+        # missing.
+        for project_id, name in PROJECTS.items():
+            pending = outstanding(name, version, digests[project_id])
+            if not pending:
+                print(f'already on PyPI, skipping: {name} {version}')
+                skipped.append(name)
+                continue
+            todo[project_id] = (
+                name,
+                sorted(
+                    url
+                    for filename, url in urls[project_id].items()
+                    if filename in pending
+                ),
+                digests[project_id],
+            )
+            attempted.append(name)
+            actual = call('GET', f'/projects/{project_id}').get('name')
+            if actual != name:
+                raise SystemExit(
+                    f'Portal project {project_id} is {actual!r}, not {name!r}'
+                )
+            print(f'dry run: {name} ({len(pending)} files)')
+            wait_for(
+                submit(project_id, name, todo[project_id][1], False),
+                f'dry run {name}',
+            )
+
+        if not todo:
+            print('every distribution is already published at this version')
+            return
+
+        # Pass two: from here a failure can leave part of the release live,
+        # which is why the whole of pass one had to pass first.
         for project_id, (name, project_urls, expected) in todo.items():
             print(f'publishing: {name}')
             wait_for(submit(project_id, name, project_urls, True), name)
@@ -418,7 +431,7 @@ def main() -> None:
             unverified.remove(name)
             published.append(name)
     finally:
-        write_summary(published, unverified, attempted)
+        write_summary(published, unverified, attempted, skipped)
 
 
 if __name__ == '__main__':

@@ -307,3 +307,42 @@ def test_a_project_live_but_unverified_is_not_reported_as_unpublished(
     first = next(iter(kitmaker.PROJECTS.values()))
     assert f'published but NOT verified: {first}' in lines
     assert f'NOT published: {first}' not in lines
+
+
+def test_a_failure_in_pass_one_still_records_what_happened(
+    kitmaker, release, monkeypatch
+):
+    """A release that stopped before publishing is exactly when the summary is
+    read, and a project nothing reached is said to be unreached rather than
+    being left to look like it was already published."""
+    summary = release()
+    names = list(kitmaker.PROJECTS.values())
+
+    def mismatched(method, path, body=None):
+        project_id = int(path.rsplit('/', 1)[1])
+        if kitmaker.PROJECTS[project_id] == names[1]:
+            return {'name': 'something-else'}
+        return {'name': kitmaker.PROJECTS[project_id]}
+
+    monkeypatch.setattr(kitmaker, 'call', mismatched)
+    with pytest.raises(SystemExit, match='not'):
+        kitmaker.main()
+
+    lines = summary.read_text().strip().splitlines()
+    assert len(lines) == len(names)
+    assert f'NOT published: {names[0]}' in lines
+    assert f'NOT published: {names[1]}' in lines
+    for name in names[2:]:
+        assert f'not reached: {name}' in lines
+
+
+def test_every_project_is_accounted_for_exactly_once(kitmaker, release):
+    """The one property the summary exists to have, across a mixed run."""
+    names = list(kitmaker.PROJECTS.values())
+    summary = release(already_on_pypi={names[0], names[2]})
+    kitmaker.main()
+    lines = summary.read_text().strip().splitlines()
+    assert len(lines) == len(names)
+    assert sum(line.endswith(name) for line in lines for name in names) == len(
+        names
+    )
