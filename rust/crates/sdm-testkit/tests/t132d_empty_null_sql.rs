@@ -29,7 +29,9 @@
 //! - Exit "`python-core` and `rust-host` agree on `core` fields for the
 //!   family", this host's half: each case's outcome is the `python-ref`
 //!   observation's (`success`, or the refusal's code; an answer of
-//!   `predict` where the reference reached it), or an approved entry other
+//!   `predict` where the reference reached it; `validate_query`'s refusal
+//!   read as INVALID_REQUEST, for a case whose query the reference refused
+//!   before reading data), or an approved entry other
 //!   than P1B-1 lists the case. `empty.fact-table`'s `UNSUPPORTED_REQUEST`
 //!   passes because the owner approved P1B-11, which lists it;
 //!   `empty.indices` passes only once the case carries its empty entity
@@ -458,6 +460,10 @@ fn rust_host_answers_each_case_as_python_ref() {
             let (result, code) = match &seen.answer {
                 Answer::Predicted(_) => ("success", None),
                 Answer::Error { code, .. } => ("refusal", Some(code.clone())),
+                // A query refused first (a case carrying validate_query in
+                // place of materialize): the refusal INVALID_REQUEST, as
+                // the route maps it.
+                Answer::Validated(false) => ("refusal", Some("INVALID_REQUEST".to_owned())),
                 other => {
                     problems.push(format!("{}: no answer of predict: {other:?}", case.id));
                     continue;

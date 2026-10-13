@@ -22,7 +22,11 @@ gap ``contract/refusal-maps/empty-null.json`` gives T1.32d); each is run by
   routes, carrying to the core every operation up to the stage the
   reference answers at (``describe_source`` for ``from_source``, then
   ``materialize``, then ``predict``): ``empty.indices``'s empty entity list
-  included, so ``rust-host`` reaches the core's refusal too.
+  included, so ``rust-host`` reaches the core's refusal too; a query the
+  reference refused before reading any data (``refuse.unknown-column``:
+  INVALID_REQUEST at ``materialize``, no statement of ``materialize`` in
+  its observation) carries ``validate_query`` in place of ``materialize``,
+  as python-core validates the query first.
 - "Each with its reference observation" and the cases' expectations: each
   case's ``expect`` is what ``python-ref`` observed
   (``contract/reference/<commit>.jsonl``); and ``python-core``'s public
@@ -83,6 +87,13 @@ OPERATIONS = {
     'materialize': ('describe_source', 'materialize'),
     'predict': ('describe_source', 'materialize', 'predict'),
 }
+#: The cases the reference refuses at ``materialize`` by validating the
+#: query, before reading any data: its observation holds no statement of
+#: ``materialize``. Such a case may carry ``validate_query`` to the core in
+#: place of ``materialize``, as python-core validates the query before the
+#: core's ``materialize`` would run (``contract/refusal-maps/refusal.json``,
+#: ``materialize/unknown_column``).
+QUERY_REFUSALS = {'refuse.unknown-column'}
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -238,8 +249,24 @@ def test_each_case_is_admitted(
         assert loaded['status'] == 'acceptance', loaded['status']
         assert loaded['routes'], 'an admitted case names its routes'
         core = loaded.get('core') or {}
-        stage = reference()[case]['outcome']['stage']
-        for operation in OPERATIONS[stage]:
+        observed = reference()[case]
+        stage = observed['outcome']['stage']
+        operations = OPERATIONS[stage]
+        if case in QUERY_REFUSALS:
+            # Only where the reference refused the query before reading:
+            # INVALID_REQUEST at materialize, no statement of materialize.
+            assert observed['outcome']['code'] == 'INVALID_REQUEST'
+            assert stage == 'materialize'
+            assert not [
+                s
+                for s in observed['driver']['capture']['statements']
+                if s['stage'] == 'materialize'
+            ]
+            # validate_query in place of materialize (either is the
+            # query's refusal in the core).
+            if 'materialize' not in core:
+                operations = ('describe_source', 'validate_query')
+        for operation in operations:
             assert core.get(operation), (
                 f'the case carries {operation} to the core (the reference '
                 f'answers at {stage})'
