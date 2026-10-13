@@ -2673,7 +2673,7 @@ entries:
     T1.32a part 1, an input change of the diagnostic cases with no outcome
     of its own, for the reviewers (H19), never self-approved; the ratchet's
     cases rule holds the changed files until it is approved. The outcomes
-    the core's cast changes are P1B-32 to P1B-35.
+    the core's cast changes are P1B-32 to P1B-36.
 
 - id: P1B-32
   title: An entity the key's type cannot hold is the caller's error, INVALID_REQUEST, where the reference fails with INTERNAL_ERROR
@@ -2704,79 +2704,18 @@ entries:
     negative one for an unsigned key, a date or a timestamp.
   cases: [T1.32a]
   refs:
-  - 'contract/key-cast-vectors.json#float32.int.2pow63'
-  - 'contract/key-cast-vectors.json#float32.int.2pow64'
-  - 'contract/key-cast-vectors.json#float32.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#float32.time.date'
-  - 'contract/key-cast-vectors.json#float32.time.timestamp'
-  - 'contract/key-cast-vectors.json#float32.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#float32.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#float64.int.2pow63'
-  - 'contract/key-cast-vectors.json#float64.int.2pow64'
-  - 'contract/key-cast-vectors.json#float64.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#float64.time.date'
-  - 'contract/key-cast-vectors.json#float64.time.timestamp'
-  - 'contract/key-cast-vectors.json#float64.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#float64.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#int16.int.2pow63'
-  - 'contract/key-cast-vectors.json#int16.int.2pow64'
-  - 'contract/key-cast-vectors.json#int16.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#int16.time.date'
-  - 'contract/key-cast-vectors.json#int16.time.timestamp'
-  - 'contract/key-cast-vectors.json#int16.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#int16.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#int32.int.2pow63'
-  - 'contract/key-cast-vectors.json#int32.int.2pow64'
-  - 'contract/key-cast-vectors.json#int32.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#int32.time.timestamp'
-  - 'contract/key-cast-vectors.json#int32.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#int32.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#int64.int.2pow63'
-  - 'contract/key-cast-vectors.json#int64.int.2pow64'
-  - 'contract/key-cast-vectors.json#int64.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#int64.time.date'
-  - 'contract/key-cast-vectors.json#int8.int.2pow63'
-  - 'contract/key-cast-vectors.json#int8.int.2pow64'
-  - 'contract/key-cast-vectors.json#int8.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#int8.time.date'
-  - 'contract/key-cast-vectors.json#int8.time.timestamp'
-  - 'contract/key-cast-vectors.json#int8.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#int8.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#uint16.int.2pow63'
-  - 'contract/key-cast-vectors.json#uint16.int.2pow64'
-  - 'contract/key-cast-vectors.json#uint16.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#uint16.int.negative'
-  - 'contract/key-cast-vectors.json#uint16.time.date'
-  - 'contract/key-cast-vectors.json#uint16.time.timestamp'
-  - 'contract/key-cast-vectors.json#uint16.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#uint16.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#uint32.int.2pow63'
-  - 'contract/key-cast-vectors.json#uint32.int.2pow64'
-  - 'contract/key-cast-vectors.json#uint32.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#uint32.int.negative'
-  - 'contract/key-cast-vectors.json#uint32.time.date'
-  - 'contract/key-cast-vectors.json#uint32.time.timestamp'
-  - 'contract/key-cast-vectors.json#uint32.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#uint32.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#uint64-past-int64.*'
-  - 'contract/key-cast-vectors.json#uint64.int.2pow64'
-  - 'contract/key-cast-vectors.json#uint64.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#uint64.int.negative'
-  - 'contract/key-cast-vectors.json#uint64.time.date'
-  - 'contract/key-cast-vectors.json#uint64.time.timestamp'
-  - 'contract/key-cast-vectors.json#uint64.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#uint64.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#uint8.int.2pow63'
-  - 'contract/key-cast-vectors.json#uint8.int.2pow64'
-  - 'contract/key-cast-vectors.json#uint8.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#uint8.int.negative'
-  - 'contract/key-cast-vectors.json#uint8.time.date'
-  - 'contract/key-cast-vectors.json#uint8.time.timestamp'
-  - 'contract/key-cast-vectors.json#uint8.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#uint8.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#utf8.int.2pow63'
-  - 'contract/key-cast-vectors.json#utf8.int.2pow64'
-  - 'contract/key-cast-vectors.json#utf8.int.minus-2pow63-minus-1'
+  - 'contract/key-cast-vectors.json#float32.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#float64.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#int16.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#int32.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#int64.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#int8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#uint16.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#uint32.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#uint64-past-int64.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#uint64.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#uint8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#utf8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -2807,10 +2746,12 @@ entries:
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     core samples such a key as any other: its sampler compares keys by
-    value (sdm_engine::keys::read), the payload names a decimal key's column
-    as the reference names a decimal by what it holds (int64 up to 18
-    digits or where every value fits, string past that, float64 with a
-    scale; sdm_request::payload::key_dtype), and the entities are cast
+    value (sdm_engine::keys::read), the payload names a whole decimal key's
+    column as the reference names a decimal by what it holds (int64 up to
+    18 digits or where every value fits, string past that) and one with a
+    scale as string, each value its exact decimal text, never a double,
+    which could make two keys one (sdm_request::payload::key_dtype; T1.32a
+    fix round 1), and the entities, of any decimal width, are cast
     under the core's rule table: a request where they cast and the table
     holds them, otherwise INVALID_REQUEST at materialize (P1B-32's fields).
     The default route is unchanged.
@@ -2820,100 +2761,17 @@ entries:
     or text DuckDB hands over as large_string (arrow_large_buffer_size).
   cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint]
   refs:
-  - 'contract/key-cast-vectors.json#decimal128-*.bool.both'
-  - 'contract/key-cast-vectors.json#decimal128-*.bytes.digit'
-  - 'contract/key-cast-vectors.json#decimal128-*.decimal.integral'
-  - 'contract/key-cast-vectors.json#decimal128-*.float.1e20'
-  - 'contract/key-cast-vectors.json#decimal128-*.float.2pow63'
-  - 'contract/key-cast-vectors.json#decimal128-*.float.half'
-  - 'contract/key-cast-vectors.json#decimal128-*.float.integral'
-  - 'contract/key-cast-vectors.json#decimal128-*.float.negative-zero'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.128'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.256'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.2pow31'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.2pow32'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.2pow53-plus-1'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.2pow63'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.2pow64'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.32768'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.65536'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.absent'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.negative'
-  - 'contract/key-cast-vectors.json#decimal128-*.int.present'
-  - 'contract/key-cast-vectors.json#decimal128-*.mixed.bool-int'
-  - 'contract/key-cast-vectors.json#decimal128-*.mixed.int-float'
-  - 'contract/key-cast-vectors.json#decimal128-*.mixed.int-half'
-  - 'contract/key-cast-vectors.json#decimal128-*.mixed.int-nan'
-  - 'contract/key-cast-vectors.json#decimal128-*.mixed.int-none'
-  - 'contract/key-cast-vectors.json#decimal128-*.mixed.text-none'
-  - 'contract/key-cast-vectors.json#decimal128-*.null.nan'
-  - 'contract/key-cast-vectors.json#decimal128-*.null.none'
-  - 'contract/key-cast-vectors.json#decimal128-*.null.pd-na'
-  - 'contract/key-cast-vectors.json#decimal128-*.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#decimal128-*.text.2pow64'
-  - 'contract/key-cast-vectors.json#decimal128-*.text.decimal-point'
-  - 'contract/key-cast-vectors.json#decimal128-*.text.digits'
-  - 'contract/key-cast-vectors.json#decimal128-*.text.exponent'
-  - 'contract/key-cast-vectors.json#decimal128-*.text.leading-zero'
-  - 'contract/key-cast-vectors.json#decimal128-*.text.negative'
-  - 'contract/key-cast-vectors.json#decimal128-*.time.date'
-  - 'contract/key-cast-vectors.json#decimal128-*.time.timestamp'
-  - 'contract/key-cast-vectors.json#decimal128-*.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#decimal128-*.time.timestamp-utc'
-  - 'contract/key-cast-vectors.json#decimal128-38-0.numpy.int64'
-  - 'contract/key-cast-vectors.json#decimal128-38-10.*'
-  - 'contract/key-cast-vectors.json#large-utf8.bool.both'
-  - 'contract/key-cast-vectors.json#large-utf8.bytes.digit'
-  - 'contract/key-cast-vectors.json#large-utf8.decimal.half'
-  - 'contract/key-cast-vectors.json#large-utf8.decimal.integral'
-  - 'contract/key-cast-vectors.json#large-utf8.float.1e20'
-  - 'contract/key-cast-vectors.json#large-utf8.float.2pow63'
-  - 'contract/key-cast-vectors.json#large-utf8.float.half'
-  - 'contract/key-cast-vectors.json#large-utf8.float.inf'
-  - 'contract/key-cast-vectors.json#large-utf8.float.integral'
-  - 'contract/key-cast-vectors.json#large-utf8.float.negative-zero'
-  - 'contract/key-cast-vectors.json#large-utf8.int.128'
-  - 'contract/key-cast-vectors.json#large-utf8.int.256'
-  - 'contract/key-cast-vectors.json#large-utf8.int.2pow31'
-  - 'contract/key-cast-vectors.json#large-utf8.int.2pow32'
-  - 'contract/key-cast-vectors.json#large-utf8.int.2pow53-plus-1'
-  - 'contract/key-cast-vectors.json#large-utf8.int.2pow63'
-  - 'contract/key-cast-vectors.json#large-utf8.int.2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#large-utf8.int.2pow64'
-  - 'contract/key-cast-vectors.json#large-utf8.int.32768'
-  - 'contract/key-cast-vectors.json#large-utf8.int.65536'
-  - 'contract/key-cast-vectors.json#large-utf8.int.absent'
-  - 'contract/key-cast-vectors.json#large-utf8.int.minus-2pow63-minus-1'
-  - 'contract/key-cast-vectors.json#large-utf8.int.negative'
-  - 'contract/key-cast-vectors.json#large-utf8.int.present'
-  - 'contract/key-cast-vectors.json#large-utf8.mixed.int-float'
-  - 'contract/key-cast-vectors.json#large-utf8.mixed.int-half'
-  - 'contract/key-cast-vectors.json#large-utf8.mixed.int-nan'
-  - 'contract/key-cast-vectors.json#large-utf8.mixed.int-none'
-  - 'contract/key-cast-vectors.json#large-utf8.mixed.text-none'
-  - 'contract/key-cast-vectors.json#large-utf8.null.nan'
-  - 'contract/key-cast-vectors.json#large-utf8.null.none'
-  - 'contract/key-cast-vectors.json#large-utf8.null.pd-na'
-  - 'contract/key-cast-vectors.json#large-utf8.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#large-utf8.numpy.int64'
-  - 'contract/key-cast-vectors.json#large-utf8.text.2pow64'
-  - 'contract/key-cast-vectors.json#large-utf8.text.decimal-point'
-  - 'contract/key-cast-vectors.json#large-utf8.text.digits'
-  - 'contract/key-cast-vectors.json#large-utf8.text.empty'
-  - 'contract/key-cast-vectors.json#large-utf8.text.exponent'
-  - 'contract/key-cast-vectors.json#large-utf8.text.fullwidth-digit'
-  - 'contract/key-cast-vectors.json#large-utf8.text.half'
-  - 'contract/key-cast-vectors.json#large-utf8.text.hex'
-  - 'contract/key-cast-vectors.json#large-utf8.text.leading-zero'
-  - 'contract/key-cast-vectors.json#large-utf8.text.letters'
-  - 'contract/key-cast-vectors.json#large-utf8.text.negative'
-  - 'contract/key-cast-vectors.json#large-utf8.text.spaced'
-  - 'contract/key-cast-vectors.json#large-utf8.time.date'
-  - 'contract/key-cast-vectors.json#large-utf8.time.timestamp'
-  - 'contract/key-cast-vectors.json#large-utf8.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#large-utf8.time.timestamp-utc'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-0-wide.* refusal INTERNAL_ERROR -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-wide.* refusal INTERNAL_ERROR -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-37.* refusal INTERNAL_ERROR -> success'
+  - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> success'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -2922,9 +2780,8 @@ entries:
     (P1B-1's process); never self-approved. key.varchar-large-buffers is
     P1B-6's case. Decimal features keep wire_dtype's refusal (T1.32b): no
     question sums a key, so the declared precision a decimal sum is held to
-    does not arise for one. Until T1.32a's part 2, predict refuses by name
-    (id_type, P1B-4) to read back the entities of a decimal key with a
-    scale, which the payload names float64 (key.decimal-38-10).
+    does not arise for one. A decimal key with a scale, written as text,
+    is read back by predict's result as text (key.decimal-38-10).
 
 - id: P1B-34
   title: An entity pandas coerces to the key's type is refused, where the reference accepts it changed
@@ -2949,60 +2806,14 @@ entries:
     mixed with integers.
   cases: [T1.32a]
   refs:
-  - 'contract/key-cast-vectors.json#float32.bytes.digit'
-  - 'contract/key-cast-vectors.json#float32.mixed.bool-int'
-  - 'contract/key-cast-vectors.json#float64.bytes.digit'
-  - 'contract/key-cast-vectors.json#float64.mixed.bool-int'
-  - 'contract/key-cast-vectors.json#int16.bytes.digit'
-  - 'contract/key-cast-vectors.json#int16.decimal.half'
-  - 'contract/key-cast-vectors.json#int16.float.half'
-  - 'contract/key-cast-vectors.json#int16.mixed.int-half'
-  - 'contract/key-cast-vectors.json#int16.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#int16.text.hex'
-  - 'contract/key-cast-vectors.json#int32.bytes.digit'
-  - 'contract/key-cast-vectors.json#int32.decimal.half'
-  - 'contract/key-cast-vectors.json#int32.float.half'
-  - 'contract/key-cast-vectors.json#int32.mixed.int-half'
-  - 'contract/key-cast-vectors.json#int32.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#int32.text.hex'
-  - 'contract/key-cast-vectors.json#int64.bytes.digit'
-  - 'contract/key-cast-vectors.json#int64.decimal.half'
-  - 'contract/key-cast-vectors.json#int64.float.half'
-  - 'contract/key-cast-vectors.json#int64.mixed.int-half'
-  - 'contract/key-cast-vectors.json#int64.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#int64.text.hex'
-  - 'contract/key-cast-vectors.json#int64.time.timestamp-1us'
-  - 'contract/key-cast-vectors.json#int8.bytes.digit'
-  - 'contract/key-cast-vectors.json#int8.decimal.half'
-  - 'contract/key-cast-vectors.json#int8.float.half'
-  - 'contract/key-cast-vectors.json#int8.mixed.int-half'
-  - 'contract/key-cast-vectors.json#int8.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#int8.text.hex'
-  - 'contract/key-cast-vectors.json#uint16.bytes.digit'
-  - 'contract/key-cast-vectors.json#uint16.decimal.half'
-  - 'contract/key-cast-vectors.json#uint16.float.half'
-  - 'contract/key-cast-vectors.json#uint16.mixed.int-half'
-  - 'contract/key-cast-vectors.json#uint16.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#uint16.text.hex'
-  - 'contract/key-cast-vectors.json#uint32.bytes.digit'
-  - 'contract/key-cast-vectors.json#uint32.decimal.half'
-  - 'contract/key-cast-vectors.json#uint32.float.half'
-  - 'contract/key-cast-vectors.json#uint32.mixed.int-half'
-  - 'contract/key-cast-vectors.json#uint32.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#uint32.text.hex'
-  - 'contract/key-cast-vectors.json#uint64.bytes.digit'
-  - 'contract/key-cast-vectors.json#uint64.decimal.half'
-  - 'contract/key-cast-vectors.json#uint64.float.half'
-  - 'contract/key-cast-vectors.json#uint64.mixed.int-half'
-  - 'contract/key-cast-vectors.json#uint64.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#uint64.text.hex'
-  - 'contract/key-cast-vectors.json#uint8.bytes.digit'
-  - 'contract/key-cast-vectors.json#uint8.decimal.half'
-  - 'contract/key-cast-vectors.json#uint8.float.half'
-  - 'contract/key-cast-vectors.json#uint8.mixed.int-half'
-  - 'contract/key-cast-vectors.json#uint8.numpy.float64-half'
-  - 'contract/key-cast-vectors.json#uint8.text.hex'
-  - 'contract/key-cast-vectors.json#utf8.bytes.digit'
+  - 'contract/key-cast-vectors.json#*.bytes.digit success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#*.decimal.half success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#*.float.half success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#*.mixed.bool-int success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#*.mixed.int-half success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#*.numpy.float64-half success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#*.text.hex success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#int64.time.timestamp-1us success -> refusal INVALID_REQUEST'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3035,9 +2846,9 @@ entries:
     int64 entities for a decimal key.
   cases: [T1.32a]
   refs:
-  - 'contract/key-cast-vectors.json#*.mixed.float-text'
-  - 'contract/key-cast-vectors.json#*.mixed.int-text'
-  - 'contract/key-cast-vectors.json#decimal128-18-0.numpy.int64'
+  - 'contract/key-cast-vectors.json#*.mixed.float-text refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#*.mixed.int-text refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#*.numpy.int64 refusal INVALID_REQUEST -> success'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3046,6 +2857,39 @@ entries:
     approve; never self-approved. The core sees only the column the host
     hands over, so it cannot tell a mixed list from the same values given
     as text.
+
+- id: P1B-36
+  title: A decimal or text entity of a float key is rounded once, at the key's width, where the reference rounds it twice
+  kind: change
+  old_behavior: >-
+    The reference's pandas cast reads a Decimal entity of a FLOAT key
+    through a double first, then rounds that to 32 bits, so a value just
+    past the midpoint between two float32s can land on the lower one
+    (1.000000059604644775390625000001 as 1.0); for a DOUBLE key a Decimal
+    past 2**53 likewise lands on its double's neighbour.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    decimal or a text entity of a float key is read as the nearest float
+    of the key's width, rounded once from its exact value, ties to even
+    (sdm_engine::keys::read_float; design, "The entities' cast to the
+    key's type"), so the entity is the float its value is nearest. The
+    default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route, a FLOAT or DOUBLE key, and Decimal entities whose
+    nearest float of the key's width the double between differs from.
+  cases: [T1.32a]
+  refs:
+  - 'contract/key-cast-vectors.json#float32-large.* success -> success'
+  - 'contract/key-cast-vectors.json#float32-near-one.* success -> success'
+  - 'contract/key-cast-vectors.json#float64-past-2pow53.* success -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
+  notes: >-
+    Found by T1.32a's review of part 1 (Codex P1); the test author's
+    midpoint vectors derive each expected float exactly. It changes an
+    accepted answer's value, so it is for the owner; never self-approved.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 

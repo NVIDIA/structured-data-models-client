@@ -13,7 +13,7 @@
     "key.varchar",
     "null.some-foreign-keys"
   ],
-  "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. From T1.32a the core casts the entities to the key's type (sdm_engine::keys::cast) and samples decimal keys: the integer, unsigned and text keys, DECIMAL(18, 0) and HUGEINT reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-6), the decimal keys where the reference fails (P1B-28); DECIMAL(38, 10), whose key the payload names float64, is refused by name when the result reads its entities back (id_type, part 2); the uint64 keys past int64 are refused as the reference refuses them, when the payload is written.",
+  "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. From T1.32a the core casts the entities to the key's type (sdm_engine::keys::cast) and samples decimal keys: the integer, unsigned, text and decimal keys reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-6), the decimal keys where the reference fails (P1B-33), a decimal key with a scale written as its exact text; the uint64 keys past int64 are refused as the reference refuses them, when the payload is written.",
   "gaps": [],
   "entries": [
     {
@@ -23,7 +23,7 @@
       "owner": "T1.32a",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-request/src/payload.rs:252",
+      "where": "rust/crates/sdm-request/src/payload.rs:282",
       "holds": "a value is outside the range int64 holds",
       "why": "The reference's own refusal of uint64 keys past int64's maximum in stage, class and code, on both runners, but not in its message or details: the core says only that the request is not one it accepts, with the column in its details, where the reference names the column, row and value and gives the remedy (send the column as strings) with no details. T1.32a keeps the core's details (no value, H17), the remedy being the host's to word",
       "observed": {
@@ -38,30 +38,6 @@
           "code": "INVALID_REQUEST",
           "operation": null,
           "rule": null
-        }
-      }
-    },
-    {
-      "id": "predict/id_type",
-      "operation": "predict",
-      "rule": "id_type",
-      "owner": "T1.32a",
-      "register": "P1B-4",
-      "where": "rust/crates/sdm-request/src/predict.rs:1403",
-      "holds": "_ => Err(not_yet(\"id_type\")),",
-      "why": "The result reads an answer's entity back as the key's dtype, and takes an integer or a text key; a decimal key with a scale, which the payload names float64 as the reference names such a decimal (key_dtype), is refused by name when the result is read. T1.32a's part 2 takes it before the case is admitted; the reference fails at materialize (P1B-28)",
-      "observed": {
-        "python-core": {
-          "stage": "predict",
-          "error": "UnsupportedRequestError",
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "predict",
-          "rule": "id_type"
-        },
-        "rust-host": {
-          "code": "UNSUPPORTED_REQUEST",
-          "operation": "predict",
-          "rule": "id_type"
         }
       }
     }
@@ -210,7 +186,7 @@
             "anchor_time": "2024-03-01"
           }
         },
-        "expect": "predict/id_type"
+        "expect": "success"
       },
       "rust-host": {
         "derive": {
@@ -266,7 +242,7 @@
           }
         },
         "until": "predict",
-        "expect": "predict/id_type"
+        "expect": "success"
       }
     },
     {
