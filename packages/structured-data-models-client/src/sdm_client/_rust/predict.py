@@ -4,8 +4,8 @@
 # Bridge code: the transport and the result's objects stay the host's
 # (design, "Host-held semantics": the model call's errors mapped, the answer
 # re-encoded, the request id drawn); the rule rows T1.28b moved into the
-# core are gone. Deleted in Phase 5 with the old route. Frozen meanwhile
-# (E50).
+# core are gone, and the bridge is deleted in Phase 5 with the old route.
+# Frozen meanwhile (E50).
 
 r"""``predict`` on the core: the model call and its answer (T1.11d).
 

@@ -1,996 +1,293 @@
 {
-  "format": "sdm-bridge-freeze/2",
-  "about": "The bridge freeze (decision E50): per covered function of the core route's Python bridge, its fingerprint, its rule sites and what it calls. Regenerate with scripts/rust_core/bridge_freeze.py --write; a change against the merge base is declared in bridge_changes.json.",
+  "format": "sdm-bridge-freeze/3",
+  "about": "The bridge freeze (decision E50): per covered function of the core route's Python bridge, and per frozen file's skeleton, its fingerprint. Regenerate with scripts/rust_core/bridge_freeze.py --write; a change against the merge base is declared in bridge_changes.json.",
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "8da5bc5cebeeccb2a0f1e76ce921a9e4b86d1cf97912dba0b75c1eab9430ef39",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "8da5bc5cebeeccb2a0f1e76ce921a9e4b86d1cf97912dba0b75c1eab9430ef39"
       },
       "build": {
-        "fingerprint": "11fa0297f63b6f8a068b46d118d50505516bf6a21e7115d3a212b30ce99bf660",
-        "raise": 1,
-        "warn": 0,
-        "branch": 7,
-        "calls": [
-          ".__setattr__",
-          "sdm_client._rust.codec.decode_scalar",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.materializers.sources.EngineTables",
-          "sdm_client.materializers.sources.wire_dtype",
-          "sdm_client.schema.Column",
-          "sdm_client.schema.Relationship",
-          "sdm_client.schema.SourceTable"
-        ]
+        "fingerprint": "11fa0297f63b6f8a068b46d118d50505516bf6a21e7115d3a212b30ce99bf660"
       },
       "from_source": {
-        "fingerprint": "dad0b41ae490a671cff338cb104b7f75444339e934c37c5beeddd341247292e6",
-        "raise": 1,
-        "warn": 0,
-        "branch": 7,
-        "calls": [
-          ".items",
-          ".take",
-          "sdm_client._rust.codec.attachment",
-          "sdm_client._rust.providers.duckdb.DuckDBProvider",
-          "sdm_client._rust.run.run",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "dad0b41ae490a671cff338cb104b7f75444339e934c37c5beeddd341247292e6"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "122ec77e97934d423c91bb2321aec2fdd00049b622bbd48f175a186a03c6efd6",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "122ec77e97934d423c91bb2321aec2fdd00049b622bbd48f175a186a03c6efd6"
       },
       "_anchor": {
-        "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f",
-        "raise": 1,
-        "warn": 0,
-        "branch": 5,
-        "calls": [
-          ".as_unit",
-          "sdm_client._rust.codec.timestamp",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
       },
       "_indices": {
-        "fingerprint": "658f8de413023137a45da2f3af263e11d4f381c78538b7d3583a8929310c5540",
-        "raise": 3,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".get",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "658f8de413023137a45da2f3af263e11d4f381c78538b7d3583a8929310c5540"
       },
       "_not_taken": {
-        "fingerprint": "598f82876807adb55c4c77a1d0f88c166fd23eae2c884d2841f48922de37575f",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "598f82876807adb55c4c77a1d0f88c166fd23eae2c884d2841f48922de37575f"
       },
       "description": {
-        "fingerprint": "46970a104391a3525c759f021bd8dc29df124cca4f834dca9c191ac386f06281",
-        "raise": 1,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".append",
-          ".items",
-          "sdm_client._routing.RouteError",
-          "sdm_client.schema._as_key_tuple"
-        ]
+        "fingerprint": "46970a104391a3525c759f021bd8dc29df124cca4f834dca9c191ac386f06281"
       },
       "gather": {
-        "fingerprint": "10a8342d3dd327b8ea62e66a842f66338ae2c57a01a2598073a787943fcd9595",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          ".get",
-          ".take",
-          ".to_string",
-          "predictive_query.validator.utils.table_name",
-          "sdm_client._rust.codec.attachment",
-          "sdm_client._rust.codec.seed",
-          "sdm_client._rust.providers.duckdb.DuckDBProvider",
-          "sdm_client._rust.run.run"
-        ]
+        "fingerprint": "10a8342d3dd327b8ea62e66a842f66338ae2c57a01a2598073a787943fcd9595"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "888c9dad2f96df9eb4e866a1ab5bb5cafc19b2394b2fdc152bb6675b7f16c759",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "07304c1ea4a75f7dbe3230c9b73918d95e8ebb6c01e40edfd85a395860628ddd"
+      },
+      "_adapter": {
+        "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
       },
       "_copied": {
-        "fingerprint": "58e3fda97077418be3f92af5a1a8e1b816bd21d54d146f4951a4490bd45b8cbb",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".append",
-          ".items",
-          ".pop"
-        ]
+        "fingerprint": "58e3fda97077418be3f92af5a1a8e1b816bd21d54d146f4951a4490bd45b8cbb"
       },
       "_encoded": {
-        "fingerprint": "f6bc6bcb2531586a957eb581aeaf812de9a73bc4e0759cb561e8c99ea0dc8cd3",
-        "raise": 0,
-        "warn": 0,
-        "branch": 13,
-        "calls": [
-          ".append",
-          ".encode",
-          ".items",
-          ".join",
-          ".pop"
-        ]
+        "fingerprint": "f6bc6bcb2531586a957eb581aeaf812de9a73bc4e0759cb561e8c99ea0dc8cd3"
       },
       "_payload": {
-        "fingerprint": "d9061a285f7423ab88ce87416e10788d5cc95ec3f6ff8387d64ace6f55f15016",
-        "raise": 1,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          ".encode",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "d9061a285f7423ab88ce87416e10788d5cc95ec3f6ff8387d64ace6f55f15016"
       },
       "_refusal": {
-        "fingerprint": "e77c413784f97bb64785920923f9bfa9ccf2cf43293f9997ead0fef5bfa46a4d",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "e77c413784f97bb64785920923f9bfa9ccf2cf43293f9997ead0fef5bfa46a4d"
       },
       "_rows": {
-        "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": [
-          ".__arrow_c_stream__",
-          ".read_all",
-          ".to_pylist"
-        ]
+        "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
       },
       "predict": {
-        "fingerprint": "5a3809db8d93cc50ca1ec6bc940cb9ec1d5f4a604eebdd6c56d6d2bf8a32acf2",
-        "raise": 4,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          "._payloads",
-          "._preflight",
-          "._send_body",
-          ".append",
-          ".get",
-          ".take",
-          "sdm_api.generated.tfm_api.PredictionItem",
-          "sdm_client._routing.RouteError",
-          "sdm_client._rust.codec.attachment",
-          "sdm_client._rust.run.run",
-          "sdm_client.adapters.relational._request_id",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.result.PredictionResult"
-        ]
+        "fingerprint": "fbfcf621583f9513625b29504c7e671bb1a2606f9a2cd7748eb763a71bcd9955"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {
       "<module>": {
-        "fingerprint": "301277152498f22ea483543e16973cf9914d393a771a6aeb77395916eb6ccc01",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": []
+        "fingerprint": "301277152498f22ea483543e16973cf9914d393a771a6aeb77395916eb6ccc01"
       },
       "SDMClient._answer_in_parts": {
-        "fingerprint": "3bdd0d4dd9531e91e14272b0d498931c8b990fa16f32f512864a9c2177116cc0",
-        "raise": 2,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".append",
-          "sdm_client.client.SDMClient._candidates_no_context_teaches",
-          "sdm_client.client._by_step",
-          "sdm_client.client._ranked",
-          "sdm_client.client._refuse_outputs_a_ranking_cannot_give",
-          "sdm_client.client._warn_of_steps_that_carry_no_explanation",
-          "sdm_client.decompose.about_the_part",
-          "sdm_client.models.spec_for"
-        ]
+        "fingerprint": "3bdd0d4dd9531e91e14272b0d498931c8b990fa16f32f512864a9c2177116cc0"
       },
       "SDMClient._prepare": {
-        "fingerprint": "7445da483034ad0cfce45c8edde75798bddf6e3c8ce1aad2c98082ad91e0bcea",
-        "raise": 2,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".default_output",
-          ".get",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "7445da483034ad0cfce45c8edde75798bddf6e3c8ce1aad2c98082ad91e0bcea"
       },
       "SDMClient._send": {
-        "fingerprint": "f518762d3b8ae98f80aafaa61656fc29577cec4b664d1c09f69d06105ed5130a",
-        "raise": 2,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          ".explain_error",
-          ".predict"
-        ]
+        "fingerprint": "f518762d3b8ae98f80aafaa61656fc29577cec4b664d1c09f69d06105ed5130a"
       },
       "SDMClient._spec": {
-        "fingerprint": "62fe113482328f15994f51ec540612a5ab68502bbb3e81f7eb2c476391a35a75",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": [
-          "sdm_client.models.spec_for"
-        ]
+        "fingerprint": "62fe113482328f15994f51ec540612a5ab68502bbb3e81f7eb2c476391a35a75"
       },
       "SDMClient.predict": {
-        "fingerprint": "b262c3595b3f80c298ec300497300c3c7a350c4e7c258a8727e5d778af191bb4",
-        "raise": 1,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".normalize",
-          ".predict",
-          ".prediction_plan",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.request.warn_of_rows_scored_from_their_own_answers"
-        ]
+        "fingerprint": "5a14baa4d1be23747b07864e4231a5dcf079965fb9dc983448cd8a9f41763533"
       },
       "_adapter_for": {
-        "fingerprint": "f3b57aa4d20ec3127f462227dd6e1df818233b7162fce794c1ddf12149f71f08",
-        "raise": 1,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          "sdm_client.adapters.relational.RelationalAdapter",
-          "sdm_client.adapters.tabular.TabularAdapter",
-          "sdm_client.errors.UnknownModelError"
-        ]
+        "fingerprint": "f3b57aa4d20ec3127f462227dd6e1df818233b7162fce794c1ddf12149f71f08"
       },
       "_empty_answer": {
-        "fingerprint": "a4d6ad43fb50873018222d82d3f81ec1cd58eeef249ed77a19d4c5153be28ec0",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          "sdm_client.result.PredictionResult"
-        ]
+        "fingerprint": "a4d6ad43fb50873018222d82d3f81ec1cd58eeef249ed77a19d4c5153be28ec0"
       },
       "_names_its_rows": {
-        "fingerprint": "f60a6fbd6593842710266ca6f3f0fc2ef5221168fcad6127839be1646da10de4",
-        "raise": 0,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          "sdm_client.schema._as_key_tuple"
-        ]
+        "fingerprint": "f60a6fbd6593842710266ca6f3f0fc2ef5221168fcad6127839be1646da10de4"
       },
       "_predicts_on_the_core": {
-        "fingerprint": "8caca51104a4bf9350e3c660a90b53a65999d28e2c3240aba7bc4f1e8bfa809a",
-        "raise": 0,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          "sdm_client._routing.route"
-        ]
+        "fingerprint": "8caca51104a4bf9350e3c660a90b53a65999d28e2c3240aba7bc4f1e8bfa809a"
       },
       "_report_absent": {
-        "fingerprint": "32743ca4adf52b5a9b0d4fb14a51653ad63afc3c921880713183178f826195a8",
-        "raise": 0,
-        "warn": 1,
-        "branch": 2,
-        "calls": [
-          ".absent",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "32743ca4adf52b5a9b0d4fb14a51653ad63afc3c921880713183178f826195a8"
       },
       "_require_a_request": {
-        "fingerprint": "c6e85d5f0f7b97832bce8492aaa1f609b17cc481abcc1798e9b085e2e8078a33",
-        "raise": 1,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "c6e85d5f0f7b97832bce8492aaa1f609b17cc481abcc1798e9b085e2e8078a33"
       },
       "_require_output_names": {
-        "fingerprint": "5e05ccb451f3e5caf4525bcd1e28ffc383408e848cfdad9394f0f91d30574a7a",
-        "raise": 2,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "5e05ccb451f3e5caf4525bcd1e28ffc383408e848cfdad9394f0f91d30574a7a"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
-        "fingerprint": "607a9a0a246904eebc3e91be022ad62edbcf0ba03ea6a403d670d7b98661aaf6",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "607a9a0a246904eebc3e91be022ad62edbcf0ba03ea6a403d670d7b98661aaf6"
       },
       "PredictiveQuery._in_parts": {
-        "fingerprint": "417ff604e4f7a51b550f2e1926a7ec203409f766cb789ff0f738a72e8384b46d",
-        "raise": 2,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".append",
-          ".items",
-          ".materialize",
-          ".pop",
-          "sdm_client.decompose.about_the_part",
-          "sdm_client.query.PredictiveQuery"
-        ]
+        "fingerprint": "417ff604e4f7a51b550f2e1926a7ec203409f766cb789ff0f738a72e8384b46d"
       },
       "PredictiveQuery._refusal": {
-        "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          ".join",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.query.PredictiveQuery._how_to_resolve_an_ambiguous_link",
-          "sdm_client.query.PredictiveQuery._why_the_target_is_text",
-          "sdm_client.query._without_a_remedy_this_caller_cannot_run",
-          "sdm_client.query._without_the_validator_trace"
-        ]
+        "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e"
       },
       "PredictiveQuery._resolve": {
-        "fingerprint": "71b3daf900c3cbb024a7f55a3ab125a0593f307fe3c8682be7171f48efcaf574",
-        "raise": 2,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          "predictive_query.validate",
-          "sdm_client._routing.route",
-          "sdm_client._rust.s0.shadow",
-          "sdm_client._rust.s0.validate",
-          "sdm_client.schema.to_schema_definition"
-        ]
+        "fingerprint": "71b3daf900c3cbb024a7f55a3ab125a0593f307fe3c8682be7171f48efcaf574"
       },
       "PredictiveQuery._validate_materialize_args": {
-        "fingerprint": "53b6ffb85f7d3f3f909709f14e3c82765e9043f6c179c43f2573ae8f828c0718",
-        "raise": 12,
-        "warn": 0,
-        "branch": 26,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "53b6ffb85f7d3f3f909709f14e3c82765e9043f6c179c43f2573ae8f828c0718"
       },
       "PredictiveQuery.materialize": {
-        "fingerprint": "d8722e739f997b79ce1faf56042ed164e54a11e52dba705ab1525a9505f44031",
-        "raise": 4,
-        "warn": 0,
-        "branch": 20,
-        "calls": [
-          ".capitalize",
-          ".indices",
-          ".materialize",
-          ".table",
-          "sdm_client._routing.route",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.models.spec_for"
-        ]
+        "fingerprint": "d8722e739f997b79ce1faf56042ed164e54a11e52dba705ab1525a9505f44031"
       },
       "_is_hashable": {
-        "fingerprint": "6da4282552697131d888acedeef58b444c5e0618d9dfa64aa63505b79497d0d5",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "6da4282552697131d888acedeef58b444c5e0618d9dfa64aa63505b79497d0d5"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py": {
       "<module>": {
-        "fingerprint": "7f646f170162cd94dc7fe5275b6b2f6d2afab35979c909408bd114cc680fc50a",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "7f646f170162cd94dc7fe5275b6b2f6d2afab35979c909408bd114cc680fc50a"
       },
       "RelationalMaterializer.__init__": {
-        "fingerprint": "b8acd9ec661ff4d7b255782d879dddc5222d4e261886ecc99dd9ffab1c37a612",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": []
+        "fingerprint": "b8acd9ec661ff4d7b255782d879dddc5222d4e261886ecc99dd9ffab1c37a612"
       },
       "RelationalMaterializer._check_entity_count": {
-        "fingerprint": "08f520c5b1c9b43542f195ecabb4ef668c7917883379052a7065a5f565a42a49",
-        "raise": 1,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "08f520c5b1c9b43542f195ecabb4ef668c7917883379052a7065a5f565a42a49"
       },
       "RelationalMaterializer._check_limits": {
-        "fingerprint": "0fb065947f3d0870dfbec78271a01ad1f3e3bd10b26750cc7c51165b35951e5c",
-        "raise": 2,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".get",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "0fb065947f3d0870dfbec78271a01ad1f3e3bd10b26750cc7c51165b35951e5c"
       },
       "RelationalMaterializer._check_shape": {
-        "fingerprint": "a5f2d5c45e4bf85b07837e00037b54bedc82dc256ebd629cf1df4564c5c322b0",
-        "raise": 6,
-        "warn": 0,
-        "branch": 17,
-        "calls": [
-          ".get",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "a5f2d5c45e4bf85b07837e00037b54bedc82dc256ebd629cf1df4564c5c322b0"
       },
       "RelationalMaterializer._gather": {
-        "fingerprint": "04b5366f7735117bd260a32a17f45086558dbe8ac6db1e09ac5f050aa025e451",
-        "raise": 2,
-        "warn": 0,
-        "branch": 5,
-        "calls": [
-          "._get_task_table",
-          ".materialize_task",
-          ".to_string",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.materializers.relational.RelationalMaterializer._engine_errors",
-          "sdm_client.materializers.relational.RelationalMaterializer._get_model",
-          "sdm_client.materializers.relational.RelationalMaterializer._narrow_context",
-          "sdm_client.materializers.relational._candidates_to_rank",
-          "sdm_client.materializers.relational._warn_rows_the_graph_dropped"
-        ]
+        "fingerprint": "04b5366f7735117bd260a32a17f45086558dbe8ac6db1e09ac5f050aa025e451"
       },
       "RelationalMaterializer._refuse_a_name_the_wire_reserves": {
-        "fingerprint": "1773fc00d7291ca543635ca669ff685a29a86810b9aeae0e5cf27d94cd5f413a",
-        "raise": 1,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".items",
-          ".join",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema._and_list"
-        ]
+        "fingerprint": "1773fc00d7291ca543635ca669ff685a29a86810b9aeae0e5cf27d94cd5f413a"
       },
       "RelationalMaterializer._run_mode_for": {
-        "fingerprint": "4ec3bf9246f7f8dfe19277873fdf01fd1f99513bbf7b21947f1150af06031995",
-        "raise": 1,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "4ec3bf9246f7f8dfe19277873fdf01fd1f99513bbf7b21947f1150af06031995"
       },
       "RelationalMaterializer._unreserved": {
-        "fingerprint": "2bbe9f520da12579222c69933e685cfcf585dc2c715d00162ad0455438b39e6b",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": [
-          ".lstrip"
-        ]
+        "fingerprint": "2bbe9f520da12579222c69933e685cfcf585dc2c715d00162ad0455438b39e6b"
       },
       "RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities": {
-        "fingerprint": "7a3b675295cec2a304c9ad6877d2c3e27bebd5830012bb67c9c8855054fddf4b",
-        "raise": 0,
-        "warn": 1,
-        "branch": 6,
-        "calls": [
-          ".partition",
-          "sdm_client.core.warnings.caller_stacklevel",
-          "sdm_client.materializers.tabular._holds_two_whole_numbers"
-        ]
+        "fingerprint": "7a3b675295cec2a304c9ad6877d2c3e27bebd5830012bb67c9c8855054fddf4b"
       },
       "RelationalMaterializer.materialize": {
-        "fingerprint": "514041653492541fbfe9647aff53942c08a5f84efea9c4996f12334f952303e4",
-        "raise": 3,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".get",
-          ".snapshot",
-          ".to_string",
-          "predictive_query.validator.utils.table_name",
-          "sdm_client._routing.route",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.request.Request.materialized"
-        ]
+        "fingerprint": "514041653492541fbfe9647aff53942c08a5f84efea9c4996f12334f952303e4"
       },
       "_columns_to_leave_out": {
-        "fingerprint": "240620380b764dc9dc6e03d98aa7e2e1097f9579a0a5fb90918818ece008cd94",
-        "raise": 2,
-        "warn": 0,
-        "branch": 7,
-        "calls": [
-          ".extend",
-          ".get",
-          ".get_exclude_cols_dict",
-          ".items",
-          ".setdefault",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "240620380b764dc9dc6e03d98aa7e2e1097f9579a0a5fb90918818ece008cd94"
       },
       "_drop_context_that_answers_the_question": {
-        "fingerprint": "a17be6f01a2b2726fb809a2d9671ee57d9919da28af1618891800d62df00a648",
-        "raise": 0,
-        "warn": 1,
-        "branch": 12,
-        "calls": [
-          ".get",
-          ".setdefault",
-          ".update",
-          ".values",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "a17be6f01a2b2726fb809a2d9671ee57d9919da28af1618891800d62df00a648"
       },
       "_entities_at_anchors": {
-        "fingerprint": "d767a401ab44dd253b79124387ed1bd6dad20fdcc4651e1046ad85b97fcc4ebb",
-        "raise": 0,
-        "warn": 0,
-        "branch": 7,
-        "calls": []
+        "fingerprint": "d767a401ab44dd253b79124387ed1bd6dad20fdcc4651e1046ad85b97fcc4ebb"
       },
       "_instances_matching": {
-        "fingerprint": "e85de6299e6797a3b9bbc516c0544706a8bfac16d2c083041936d3f4efad96e4",
-        "raise": 0,
-        "warn": 0,
-        "branch": 9,
-        "calls": [
-          ".index"
-        ]
+        "fingerprint": "e85de6299e6797a3b9bbc516c0544706a8bfac16d2c083041936d3f4efad96e4"
       },
       "_joins_nothing": {
-        "fingerprint": "ae7a06545da2a379ece892f31fe11aa29fb399b604d81f33a949e3a6c249662f",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".any",
-          ".dropna",
-          ".isin",
-          ".unique"
-        ]
+        "fingerprint": "ae7a06545da2a379ece892f31fe11aa29fb399b604d81f33a949e3a6c249662f"
       },
       "_positions": {
-        "fingerprint": "50f3431cc872372b1ed9bdf5cc1078f21af1374b9bb6487ffda2e39b939d9adf",
-        "raise": 0,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".get",
-          ".index",
-          ".startswith"
-        ]
+        "fingerprint": "50f3431cc872372b1ed9bdf5cc1078f21af1374b9bb6487ffda2e39b939d9adf"
       },
       "_record_the_statistic": {
-        "fingerprint": "942d28674ef5019f7d60089935146f313a9944bd60ea719dab954dc7170328f4",
-        "raise": 1,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          ".get",
-          ".setdefault",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "942d28674ef5019f7d60089935146f313a9944bd60ea719dab954dc7170328f4"
       },
       "_remove_instances": {
-        "fingerprint": "02bc1fbe6a18fdc72b303cacabae6211fa616c862604acf5336b46fa6c3f1012",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".get",
-          ".index"
-        ]
+        "fingerprint": "02bc1fbe6a18fdc72b303cacabae6211fa616c862604acf5336b46fa6c3f1012"
       },
       "_statistic_asked_for": {
-        "fingerprint": "a5d7b761e07df4a9b8c5983d583a9bffed1112da846b086ea2496ba217aae8f3",
-        "raise": 1,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          ".join",
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "a5d7b761e07df4a9b8c5983d583a9bffed1112da846b086ea2496ba217aae8f3"
       },
       "_tables_linked_to": {
-        "fingerprint": "4fdf1b6b3eaefb88ca07bcd632b617d828cae0118384cff30dccc53429f2b83b",
-        "raise": 0,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".add",
-          ".append",
-          ".get",
-          ".pop",
-          ".setdefault"
-        ]
+        "fingerprint": "4fdf1b6b3eaefb88ca07bcd632b617d828cae0118384cff30dccc53429f2b83b"
       },
       "_tables_sent": {
-        "fingerprint": "cb46b3d89715289e8eb1245495e2929e0873cb9e74c4deb1e299157be09a994e",
-        "raise": 0,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          ".get",
-          ".update"
-        ]
+        "fingerprint": "cb46b3d89715289e8eb1245495e2929e0873cb9e74c4deb1e299157be09a994e"
       },
       "_warn_of_a_context_the_default_mode_capped": {
-        "fingerprint": "568fad028a4875f5bcc21160c4f0125ea8eb56e14ef0c21b02405bd6f4ed2069",
-        "raise": 0,
-        "warn": 1,
-        "branch": 2,
-        "calls": [
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "568fad028a4875f5bcc21160c4f0125ea8eb56e14ef0c21b02405bd6f4ed2069"
       },
       "_warn_of_columns_the_model_does_not_read": {
-        "fingerprint": "44d6920aaffb41293e6ac57436f83ad856efb51c526645b97cd9521d142901b3",
-        "raise": 0,
-        "warn": 1,
-        "branch": 8,
-        "calls": [
-          ".get",
-          ".items",
-          ".join",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "44d6920aaffb41293e6ac57436f83ad856efb51c526645b97cd9521d142901b3"
       },
       "_warn_of_relationships_that_join_nothing": {
-        "fingerprint": "6c7464105f6992b09ee65fcd6cd39a47a2de79ecac3b936a85ea4931a1eb5f07",
-        "raise": 0,
-        "warn": 1,
-        "branch": 4,
-        "calls": [
-          ".join",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "6c7464105f6992b09ee65fcd6cd39a47a2de79ecac3b936a85ea4931a1eb5f07"
       },
       "_warn_of_tables_left_out": {
-        "fingerprint": "d3c71e8c365f99e29f71e2787ffb4a7d3a136ad0aae10c0f87b5165bcb30eca2",
-        "raise": 0,
-        "warn": 2,
-        "branch": 16,
-        "calls": [
-          ".join",
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "d3c71e8c365f99e29f71e2787ffb4a7d3a136ad0aae10c0f87b5165bcb30eca2"
       },
       "_warn_the_filter_chose_only_the_examples": {
-        "fingerprint": "4ffa637a0a74da15e5dea45b96d10fced8b493e91384f446994c4bcaddc3c9ed",
-        "raise": 0,
-        "warn": 1,
-        "branch": 2,
-        "calls": [
-          "sdm_client.core.warnings.caller_stacklevel"
-        ]
+        "fingerprint": "4ffa637a0a74da15e5dea45b96d10fced8b493e91384f446994c4bcaddc3c9ed"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py": {
       "<module>": {
-        "fingerprint": "dd24484314a6db7b998fb0bd9b1a5f5dff68a858dec36e5e688a15ac1c684653",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "dd24484314a6db7b998fb0bd9b1a5f5dff68a858dec36e5e688a15ac1c684653"
       },
       "Column.__setattr__": {
-        "fingerprint": "b3b807b8a585be4796f3f696e7dc74286f11bef636274c56da7ce8b2037ea239",
-        "raise": 1,
-        "warn": 0,
-        "branch": 11,
-        "calls": [
-          ".__setattr__",
-          "sdm_client._rust.edits.column",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema.Column._adopt_as_time_column",
-          "sdm_client.schema.Column._check_stype",
-          "sdm_client.schema.Column._check_supports_dtype",
-          "sdm_client.schema.Column._stay_a_key_if_the_schema_joins_on_this"
-        ]
+        "fingerprint": "b3b807b8a585be4796f3f696e7dc74286f11bef636274c56da7ce8b2037ea239"
       },
       "Schema.__setattr__": {
-        "fingerprint": "2e3fd3001b9fdd83fcb1b34cbc24c00e063fa25371417129613be2faea6cbab5",
-        "raise": 0,
-        "warn": 0,
-        "branch": 5,
-        "calls": [
-          ".__setattr__",
-          "sdm_client._rust.edits.relationships",
-          "sdm_client.schema._Links"
-        ]
+        "fingerprint": "2e3fd3001b9fdd83fcb1b34cbc24c00e063fa25371417129613be2faea6cbab5"
       },
       "Schema._check_relationships": {
-        "fingerprint": "0c06d607dacc5e86b7d925b6b2c5379000b759ff13083daaca579c79c03ead17",
-        "raise": 1,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema._require_column"
-        ]
+        "fingerprint": "0c06d607dacc5e86b7d925b6b2c5379000b759ff13083daaca579c79c03ead17"
       },
       "Schema._mark_key_columns": {
-        "fingerprint": "5886e0ee34af1ac5354e334c9684726d1aa8a56096abcbfec3e24601409bd4af",
-        "raise": 0,
-        "warn": 0,
-        "branch": 8,
-        "calls": [
-          ".__setattr__",
-          "._mark_as_key",
-          "._release_as_key",
-          ".add",
-          ".get",
-          ".items",
-          "sdm_client.schema.Schema._own_tables",
-          "sdm_client.schema._as_key_tuple"
-        ]
+        "fingerprint": "5886e0ee34af1ac5354e334c9684726d1aa8a56096abcbfec3e24601409bd4af"
       },
       "Schema._settle": {
-        "fingerprint": "a8c808e3731c980c32d33316608a537d220aaf3924766765e8f46ea4d5ae7a7f",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": [
-          "sdm_client.schema._each_link_once"
-        ]
+        "fingerprint": "a8c808e3731c980c32d33316608a537d220aaf3924766765e8f46ea4d5ae7a7f"
       },
       "Schema.check_consistent": {
-        "fingerprint": "9f85ce317e6a058bb8b9cafc843533a09da7c62cab927f1aa88edb39682232cd",
-        "raise": 0,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          ".check_consistent",
-          ".values"
-        ]
+        "fingerprint": "9f85ce317e6a058bb8b9cafc843533a09da7c62cab927f1aa88edb39682232cd"
       },
       "Schema.from_source": {
-        "fingerprint": "a2f7dc2824930c06e1e67d66e9129f5b5fd571c2b20b0db4805303d6b9fc4bd4",
-        "raise": 1,
-        "warn": 0,
-        "branch": 15,
-        "calls": [
-          ".__setattr__",
-          "._mark_key_columns",
-          ".items",
-          ".keep",
-          ".values",
-          "sdm_client._routing.route",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.materializers.sources.EngineTables",
-          "sdm_client.materializers.sources.engine_graph",
-          "sdm_client.materializers.sources.is_semantic_model",
-          "sdm_client.materializers.sources.semantic_model_graph",
-          "sdm_client.schema._apply_keys_and_times",
-          "sdm_client.schema._as_key_tuple",
-          "sdm_client.schema._check_source_keys",
-          "sdm_client.schema._checked_links",
-          "sdm_client.schema._declared_links",
-          "sdm_client.schema._describe_source_table",
-          "sdm_client.schema._infer_relationships",
-          "sdm_client.schema._joinable_inferred_links",
-          "sdm_client.schema._key_by_the_referenced_column",
-          "sdm_client.schema._model_links",
-          "sdm_client.schema._require_a_source",
-          "sdm_client.schema._require_table_names",
-          "sdm_client.schema._settle_edit_stamps",
-          "sdm_client.schema._warn_how_time_columns_were_inferred"
-        ]
+        "fingerprint": "a2f7dc2824930c06e1e67d66e9129f5b5fd571c2b20b0db4805303d6b9fc4bd4"
       },
       "_TableShape.__setattr__": {
-        "fingerprint": "02f519b42555f7ddd7cc732860689258c6adc03438ded31e3c031eff19d3d949",
-        "raise": 0,
-        "warn": 0,
-        "branch": 11,
-        "calls": [
-          ".__setattr__",
-          "sdm_client._rust.edits.table",
-          "sdm_client.schema._TableShape._own_columns",
-          "sdm_client.schema._as_key_tuple"
-        ]
+        "fingerprint": "02f519b42555f7ddd7cc732860689258c6adc03438ded31e3c031eff19d3d949"
       },
       "_TableShape._adopt_key": {
-        "fingerprint": "91d49153a954976826b704f5e67105a3c868641c9f521b3a8333de776b5f08da",
-        "raise": 0,
-        "warn": 0,
-        "branch": 9,
-        "calls": [
-          ".__setattr__",
-          "._mark_as_key",
-          ".join",
-          "sdm_client.schema._TableShape._could_hold_a_key",
-          "sdm_client.schema._and_list",
-          "sdm_client.schema._as_key_tuple",
-          "sdm_client.schema._key_quality",
-          "sdm_client.schema._warn_a_key_repeats"
-        ]
+        "fingerprint": "91d49153a954976826b704f5e67105a3c868641c9f521b3a8333de776b5f08da"
       },
       "_TableShape._check_key": {
-        "fingerprint": "380509cfc7bbb9bb665b8cc7959a4c20e5d7856cdf8122be039c9fca6066c787",
-        "raise": 5,
-        "warn": 0,
-        "branch": 11,
-        "calls": [
-          ".any",
-          ".isna",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema._TableShape._check_column",
-          "sdm_client.schema._a_key_missing_values",
-          "sdm_client.schema._key_quality",
-          "sdm_client.schema._not_unique_enough",
-          "sdm_client.schema._too_many_repeats",
-          "sdm_client.schema.supports_dtype"
-        ]
+        "fingerprint": "380509cfc7bbb9bb665b8cc7959a4c20e5d7856cdf8122be039c9fca6066c787"
       },
       "_TableShape._check_time_column": {
-        "fingerprint": "9eceb431e2dbbaac9387f892b452e2b15f1ecd5bc6630b1b3d08ae83093963f3",
-        "raise": 1,
-        "warn": 0,
-        "branch": 2,
-        "calls": [
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema._TableShape._check_column",
-          "sdm_client.schema._as_key_tuple"
-        ]
+        "fingerprint": "9eceb431e2dbbaac9387f892b452e2b15f1ecd5bc6630b1b3d08ae83093963f3"
       },
       "_TableShape._re_derive_key_columns": {
-        "fingerprint": "db19c7e9f5078d8749c2f2b049b23481247a08d6a9572bf2dca38a918dbe28bc",
-        "raise": 0,
-        "warn": 0,
-        "branch": 3,
-        "calls": [
-          "._mark_key_columns",
-          "._release_as_key",
-          ".items",
-          "sdm_client.schema._as_key_tuple"
-        ]
+        "fingerprint": "db19c7e9f5078d8749c2f2b049b23481247a08d6a9572bf2dca38a918dbe28bc"
       },
       "_require_joinable": {
-        "fingerprint": "21ffbfd2221ff6ceba7bb938d58bf7a6551ef49c53712e3ba7803280ff54bb3f",
-        "raise": 3,
-        "warn": 0,
-        "branch": 4,
-        "calls": [
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.schema._as_key_tuple",
-          "sdm_client.schema._join_family"
-        ]
+        "fingerprint": "21ffbfd2221ff6ceba7bb938d58bf7a6551ef49c53712e3ba7803280ff54bb3f"
       },
       "_warn_two_ways_to_reach_one_table": {
-        "fingerprint": "5237086a63f221d1d83369f1b52ae31c360ae45e3bbf723c106bf4d2e2ded0ae",
-        "raise": 0,
-        "warn": 1,
-        "branch": 4,
-        "calls": [
-          ".append",
-          ".items",
-          ".setdefault",
-          "sdm_client.core.warnings.caller_stacklevel",
-          "sdm_client.schema._and_list",
-          "sdm_client.schema._warn_of_a_pair_joined_both_ways"
-        ]
+        "fingerprint": "5237086a63f221d1d83369f1b52ae31c360ae45e3bbf723c106bf4d2e2ded0ae"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/adapters/relational.py": {
       "<module>": {
-        "fingerprint": "37d32c3983ca361220247526cd3f89876f94bbb3a3926075082705a01f4b9dec",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": []
+        "fingerprint": "37d32c3983ca361220247526cd3f89876f94bbb3a3926075082705a01f4b9dec"
       },
       "RelationalAdapter._preflight": {
-        "fingerprint": "a36203c27758b2b4499af351313b464a0c586e8cc6c1ca1d50f667f554003bb8",
-        "raise": 2,
-        "warn": 0,
-        "branch": 6,
-        "calls": [
-          ".get",
-          "sdm_client.adapters.relational.RelationalAdapter._check_class_count",
-          "sdm_client.adapters.relational.RelationalAdapter._check_context_is_not_empty",
-          "sdm_client.adapters.relational.RelationalAdapter._check_target_varies",
-          "sdm_client.adapters.relational._asks_for_the_larger_context",
-          "sdm_client.errors.UnsupportedRequestError"
-        ]
+        "fingerprint": "a36203c27758b2b4499af351313b464a0c586e8cc6c1ca1d50f667f554003bb8"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/base.py": {
       "<module>": {
-        "fingerprint": "cb1c414bc8d34ee6244916837c480d127a0b41cd4ccbb6a1e667b637ebdf18f9",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "cb1c414bc8d34ee6244916837c480d127a0b41cd4ccbb6a1e667b637ebdf18f9"
       },
       "check_request_against_model": {
-        "fingerprint": "f7940600a6623e618a5b81dc88dda09585165fb8a4e7b54d461ca809e086e37e",
-        "raise": 4,
-        "warn": 0,
-        "branch": 9,
-        "calls": [
-          ".get",
-          ".join",
-          "sdm_client.base.required_capabilities",
-          "sdm_client.errors.UnsupportedRequestError"
-        ]
+        "fingerprint": "f7940600a6623e618a5b81dc88dda09585165fb8a4e7b54d461ca809e086e37e"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/result.py": {
       "<module>": {
-        "fingerprint": "3b0f42183e7491c7226e8d12405babf926c98aed3828c3d0ab7d76f9fe94e28c",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": []
+        "fingerprint": "3b0f42183e7491c7226e8d12405babf926c98aed3828c3d0ab7d76f9fe94e28c"
       },
       "PredictionResult.merge": {
-        "fingerprint": "c4071c48eb024087824a1a826f17940b245b4402bdffc30df4c9b39fba175166",
-        "raise": 3,
-        "warn": 0,
-        "branch": 7,
-        "calls": [
-          "sdm_client.errors.StructuredDataError"
-        ]
+        "fingerprint": "c4071c48eb024087824a1a826f17940b245b4402bdffc30df4c9b39fba175166"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py": {
       "<module>": {
-        "fingerprint": "d3151af4f29e256f66b74696da512268a532c5574f02afdd77109c7d7b1758f0",
-        "raise": 0,
-        "warn": 0,
-        "branch": 1,
-        "calls": []
+        "fingerprint": "d3151af4f29e256f66b74696da512268a532c5574f02afdd77109c7d7b1758f0"
       },
       "parts_of": {
-        "fingerprint": "ef9830a6433b6ec0f59a39cd7c831d796596d5b69c28aeee195b6956b66d98c4",
-        "raise": 3,
-        "warn": 0,
-        "branch": 5,
-        "calls": [
-          ".endswith",
-          "sdm_client.decompose.Decomposition",
-          "sdm_client.decompose._per_candidate",
-          "sdm_client.decompose._per_step",
-          "sdm_client.errors.StructuredDataError",
-          "sdm_client.materializers.relational._candidates_to_rank"
-        ]
+        "fingerprint": "ef9830a6433b6ec0f59a39cd7c831d796596d5b69c28aeee195b6956b66d98c4"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/__init__.py": {
       "<module>": {
-        "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-        "raise": 0,
-        "warn": 0,
-        "branch": 0,
-        "calls": []
+        "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
       }
     }
   }

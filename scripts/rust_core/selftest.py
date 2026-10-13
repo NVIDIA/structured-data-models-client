@@ -731,6 +731,20 @@ def freeze_cases(results: list[Result]) -> None:
         change(data)
         path.write_text(json.dumps(data))
 
+    def as_format_2(data: dict[str, Any]) -> None:
+        r"""The baseline in the format before E56(d), each entry with the
+        counts that format held, retired."""
+        data['format'] = bridge_freeze.FORMAT_2
+        for functions in data['files'].values():
+            for name, entry in functions.items():
+                functions[name] = {
+                    'fingerprint': entry['fingerprint'],
+                    'raise': 0,
+                    'warn': 0,
+                    'branch': 0,
+                    'calls': [],
+                }
+
     @contextmanager
     def covering(changed: dict[Path, tuple[str, ...] | None]) -> Iterator[None]:
         saved = dict(bridge_freeze.COVERED)
@@ -1212,8 +1226,11 @@ def freeze_cases(results: list[Result]) -> None:
         "control: a format 2 baseline's retired counts changed",
         lambda r: baseline(
             r,
-            lambda d: d['files'][key_of['schema']]['from_source'].update(
-                {'raise': 9, 'calls': []}
+            lambda d: (
+                as_format_2(d),
+                d['files'][key_of['schema']]['from_source'].update(
+                    {'raise': 9, 'calls': ['x.y']}
+                ),
             ),
         ),
         None,
@@ -1553,7 +1570,7 @@ def freeze_cases(results: list[Result]) -> None:
         declare=landed,
     )
     case(
-        'control: the tree as landed, written in format 3, against its format 2 self',
+        'control: the tree as landed, written again, against itself',
         lambda r: None,
         None,
         on=based(spent=landed),
@@ -1611,30 +1628,24 @@ def freeze_cases(results: list[Result]) -> None:
         'a format 2 entry without its counts',
         lambda r: baseline(
             r,
-            lambda d: d['files'][key_of['schema']]['from_source'].pop('raise'),
+            lambda d: (
+                as_format_2(d),
+                d['files'][key_of['schema']]['from_source'].pop('raise'),
+            ),
         ),
         'an entry holds exactly branch, calls, fingerprint, raise, warn in '
         'sdm-bridge-freeze/2',
     )
 
-    def as_format_3(data: dict[str, Any]) -> None:
-        data['format'] = bridge_freeze.FORMAT
-        for functions in data['files'].values():
-            for name, entry in functions.items():
-                functions[name] = {'fingerprint': entry['fingerprint']}
-
     case(
-        'control: a format 3 baseline', lambda r: baseline(r, as_format_3), None
+        'control: a format 2 baseline', lambda r: baseline(r, as_format_2), None
     )
     case(
         'a format 3 entry holding the retired counts',
         lambda r: baseline(
             r,
-            lambda d: (
-                as_format_3(d),
-                d['files'][key_of['schema']]['from_source'].update(
-                    {'raise': 1}
-                ),
+            lambda d: d['files'][key_of['schema']]['from_source'].update(
+                {'raise': 1}
             ),
         ),
         'an entry holds exactly fingerprint in sdm-bridge-freeze/3',
@@ -1662,7 +1673,7 @@ def freeze_cases(results: list[Result]) -> None:
                 'fingerprint'
             ),
         ),
-        'an entry holds exactly branch, calls, fingerprint, raise, warn',
+        'an entry holds exactly fingerprint in sdm-bridge-freeze/3',
     )
     case(
         "a frozen file's entry missing",

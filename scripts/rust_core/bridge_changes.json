@@ -1,96 +1,18 @@
 {
   "format": "sdm-bridge-changes/1",
-  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), allowance (an owner-approved ALLOWANCES row), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
+  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
-    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "moved": "T1.23 (E59): the schema's assembly in sdm-schema decides each table's source name and the time column inference took before the links or the caller settled another (time_column_inferred, in place of edit_stamp_refused); build presents them as the description gives them"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_infer_relationships": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: links inferred by name, no longer reached on the core route"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_joinable_inferred_links": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: inferred links kept joinable, no longer reached on the core route"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_key_by_the_referenced_column": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: a keyless table keyed by the referenced column, no longer reached on the core route"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_settle_edit_stamps": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: a lone edit stamp settled by the links, no longer reached on the core route"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_warn_how_time_columns_were_inferred": {
-      "moved": "T1.21d (E50, E55): the ledger's schema rows moved into sdm-schema: the time-column warning, given by the core, no longer reached on the core route"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema._check_relationships": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema._settle": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._adopt_key": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._check_key": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._check_time_column": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape._re_derive_key_columns": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::_require_joinable": {
-      "refactor": "T1.23 (checkpoint 5, subagent P2-2): newly covered, unchanged: the live object's edit semantics, the ledger's row reassigned to T1.24, frozen until it moves"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor": {
-      "moved": "T1.25: the ledger's zoned anchor time moved into sdm-core's materialize, which reads a zoned ts scalar at its UTC instant; the bridge sends the instant with its zone"
-    },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T1.24 (E61): the outputs refusal moved into the core; _not_taken, which only it called, removed"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_not_taken": {
-      "moved": "T1.24 (E61): the outputs refusal moved into the core, its only caller"
+      "moved": "T1.28b: the adapter's _preflight, the model and output checks, the empty answer, the merge and the absent-output notice moved into the core; the bridge's docstring and header say so and it imports Sequence for the outputs it passes"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T1.28a (E76): the refusal of an inference option the caller set that the model does not read moved into the core's predict; the host passes the keys the caller set; the core's call bytes, counted against the limit there (PD-2), sent as the core wrote them (SDMClient._send_body)"
+      "moved": "T1.28b: the core runs _prepare's checks and default outputs, the empty answer, _preflight, the merge and the absent-output notice; the bridge passes the model's id, the outputs as named or that none were, and the state's one payload, and builds the result from the core's rows"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "moved": "T1.24 (E61): the option refusals moved into the core; from_source takes the call's tables named, which pass through to describe_source with its other arguments"
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_adapter": {
+      "moved": "T1.28b: the client's adapter of the model the core checked, which explains the endpoint's refusals (E47), found as _prepare found it, which the core route no longer runs"
     },
-    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "moved": "T1.24 (E61): the relationships and time_column_cleared refusals moved into the core, which takes both (contract version 13 says a time column cleared); the tables named, keys, time columns and relationships pass through as the contract's SourceSpec; a relationship that is not a Relationship is refused as the reference refuses it, the host's conversion of its own value, which the contract cannot carry"
-    },
-    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
-      "moved": "T1.24 (E61): a call naming its tables routes to the core (schema.from-source/tables/duckdb), the tables passed to the schema bridge"
-    },
-    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.__init__": {
-      "moved": "T1.26b (E52): the index once-flag gone; the materializer holds the core's sampler state value, opaque, which the core reads"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T1.28a (E76): the bridge's T1.28a rules moved into the core; it passes the call's values as the caller gave them (VALUED), the core holding their types and bounds"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
-      "moved": "T1.24b (E67): the schema_edited refusal and the reading of the schema beside the description (each column's meaning over what the source said of it) moved into the core's read_held; description sends the description the core last answered and the schema as it stands (HeldSchema), which the edit bridge sends edit_schema too"
-    },
-    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T1.28a (E76): the run mode, entity count, shape, limits and capped-context notice moved into the core; the call's values, the seed among them, passed as the caller gave them, their types and bounds the core's"
-    },
-    "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "moved": "T1.28a (E76): num_context_samples' lower bound moved into the core on its route (_validate_materialize_args' bounded_by_the_core)"
-    },
-    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._validate_materialize_args": {
-      "moved": "T1.28a (E76): num_context_samples' lower bound moved into the core on its route"
-    },
-    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
-      "moved": "T1.28a (E76): num_context_samples' lower bound moved into the core on its route, which the routing seam says"
-    },
-    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
-      "moved": "T1.28a (E76): the rules around the gathering (the empty and reserved-name refusals, the statistic, the notices, the context drop) moved into the core; on the core route this gathers through the core's bridge and builds the Request of its payload, the old route's rules in its other branch"
-    },
-    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._gather": {
-      "moved": "T1.28a (E76): the core route's branch moved to RelationalMaterializer.materialize, which leaves for the core's bridge; the old route's own gathering is unchanged"
-    },
-    "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
-      "moved": "T1.28a (E76): the request's size limit counted by the core on the call bytes it writes (PD-2); SDMClient._send_body sends those bytes unchanged through the transport, the old route's sending unchanged"
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
+      "moved": "T1.28b: on the core route the call goes to the core's bridge after the argument type checks, before _prepare, the empty answer, the merge and _report_absent, which are the core's; the old route's body is as before T1.11d"
     }
   }
 }

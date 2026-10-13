@@ -71,8 +71,10 @@ judges what a declared change adds, as it judged the allowances' rows.
 The baseline's format 3 holds the fingerprints alone; format 2, which also
 held the counts, is still read, its counts ignored, since the gate judges
 a candidate with its checkpoint's copy of this file, which reads the
-candidate's baseline in its own format: T1.28b lands in two parts, part 1
-this file alone over a format 2 baseline, part 2 the baseline rewritten.
+candidate's baseline in its own format: T1.28b landed in two parts, part 1
+this file alone over a format 2 baseline and the ``ALLOWANCES`` literal
+the copy before it read, part 2 the baseline rewritten and the literal
+deleted.
 
 Missing or malformed evidence fails: no baseline or declarations, either in
 another format, a field missing or retyped, an unreadable base, no merge
@@ -268,38 +270,6 @@ COVERED: dict[Path, tuple[str, ...]] = {
 }
 LISTED = tuple(COVERED)
 FROZEN = WHOLE + LISTED
-
-#: Read by no rule of this copy (E56(d) retired the allowances). Kept, as
-#: it stood, only while the checkpoint judging this file is a copy from
-#: before E56(d), which refuses a tree whose copy holds no ``ALLOWANCES``
-#: literal: T1.28b's part 2 deletes it.
-ALLOWANCES: dict[str, dict[str, dict[str, Any]]] = {
-    # T1.24b: the owner's allowance of 2026-10-11 for the glue in the frozen
-    # setters that passes a core-built schema's edit to the core's
-    # edit_schema and stores its answer (the branch that finds a core-built
-    # schema, and the call of the bridge that passes the edit on), nothing
-    # that decides an edit itself.
-    'E66': {
-        'packages/structured-data-models-client/src/sdm_client/schema.py::Column.__setattr__': {
-            'raise': 1,
-            'warn': 0,
-            'branch': 11,
-            'calls': ['sdm_client._rust.edits.column'],
-        },
-        'packages/structured-data-models-client/src/sdm_client/schema.py::Schema.__setattr__': {
-            'raise': 0,
-            'warn': 0,
-            'branch': 5,
-            'calls': ['sdm_client._rust.edits.relationships'],
-        },
-        'packages/structured-data-models-client/src/sdm_client/schema.py::_TableShape.__setattr__': {
-            'raise': 0,
-            'warn': 0,
-            'branch': 11,
-            'calls': ['sdm_client._rust.edits.table'],
-        },
-    },
-}
 
 MODULE = '<module>'
 _FINGERPRINT = re.compile(r'[0-9a-f]{64}')
