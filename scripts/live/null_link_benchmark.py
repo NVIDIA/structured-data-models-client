@@ -129,8 +129,7 @@ NULL_KEYS, NULL_FOREIGN_KEYS = 0.08, 0.12
 ANCHOR = '2024-03-01'
 #: AdventureWorks' anchor time, inside its order dates (2022-06 to 2025-06).
 AW_ANCHOR = '2025-03-01'
-#: The core routes forced on the core route: every route a case of this
-#: benchmark's shape takes (base.regression's and base.adventureworks').
+#: Where AdventureWorks' case, whose input the benchmark reuses, lives.
 CASES = ROOT / 'contract/cases/s1'
 
 
@@ -156,10 +155,23 @@ def _runner() -> ModuleType:
 
 
 def core_routes() -> list[str]:
-    routes: set[str] = set()
-    for name in ('base.regression.json', 'base.adventureworks.json'):
-        routes |= set(json.loads((CASES / name).read_text())['routes'])
-    return sorted(routes)
+    r"""The paths the core route forces: every DuckDB path of
+    ``Schema.from_source`` (every table, or tables named, with the catalog's
+    keys), ``materialize`` with indices and ``predict``, as the client's
+    own route groups name them (``sdm_client._routing``). Declared here,
+    not read from the cases, whose routes follow their admission (T1.29
+    review of part 1: AdventureWorks, diagnostic in part 1, forces no
+    route)."""
+    from sdm_client import _routing
+
+    return sorted(
+        {
+            *_routing.FROM_SOURCE_DUCKDB,
+            *_routing.FROM_SOURCE_DUCKDB_TABLES,
+            *_routing.MATERIALIZE_DUCKDB,
+            *_routing.PREDICT_DUCKDB,
+        }
+    )
 
 
 # --- the data -----------------------------------------------------------------
