@@ -84,6 +84,13 @@ class Capabilities:
             logical operation instead of a single column?
         link_prediction: *Task.* May a target rank a foreign key?
         forecasting: *Task.* May a query carry a ``FORECAST`` clause?
+        series_forecasting: *Task.* May ``FORECAST`` take a bare column, so
+            that the model forecasts a series' own next values rather than a
+            windowed aggregate? A model that forecasts an aggregate answers
+            only the windowed form.
+        anomaly_detection: *Task.* May a query carry a ``DETECT ANOMALY``
+            clause? The model scores each row instead of predicting a label
+            the data defines.
     """
 
     model: str = 'this model'
@@ -100,6 +107,8 @@ class Capabilities:
     # task
     link_prediction: bool = True
     forecasting: bool = True
+    series_forecasting: bool = True
+    anomaly_detection: bool = True
 
     # deployment. Not a property of the language nor of a model, but of the
     # stack serving it: one deployment could not serve key columns at all.
@@ -126,6 +135,8 @@ class Capabilities:
             derived_targets=False,
             link_prediction=False,
             forecasting=False,
+            series_forecasting=False,
+            anomaly_detection=False,
             key_columns_in_filters=False,
             timestamp_columns_in_filters=False,
         )
@@ -166,7 +177,12 @@ FINE_TUNING = Profile(
 
 #: A pretrained relational model: many tables, relationships, link prediction.
 RELATIONAL = Profile(
-    mode=Mode.INFERENCE, capabilities=Capabilities(model='a relational model')
+    mode=Mode.INFERENCE,
+    capabilities=Capabilities(
+        model='a relational model',
+        series_forecasting=False,
+        anomaly_detection=False,
+    ),
 )
 
 #: A single-table model. It scores one column of one table as it stands, so
@@ -183,22 +199,36 @@ TABULAR = Profile(
         derived_targets=False,
         link_prediction=False,
         forecasting=False,
+        series_forecasting=False,
+        anomaly_detection=False,
     ),
 )
 
-#: A forecasting model. One table, and a target that must carry a window.
+#: A forecasting model. One table, and a target that is a column of it. The
+#: model forecasts the series as given and cannot resample, so a windowed
+#: aggregation is refused here rather than silently computed.
 TIMESERIES = Profile(
     mode=Mode.INFERENCE,
     capabilities=Capabilities(
         model='a time-series model',
         relationships=False,
         multiple_tables=False,
-        static=False,
+        temporal=False,
+        static=True,
+        entity_filters=False,
+        counterfactuals=False,
+        derived_targets=False,
         link_prediction=False,
+        forecasting=True,
+        series_forecasting=True,
+        anomaly_detection=False,
+        key_columns_in_filters=False,
+        timestamp_columns_in_filters=False,
     ),
 )
 
-#: An anomaly-detection model. One table, no window, nothing to rank.
+#: An anomaly-detection model. One table, no window, nothing to rank, and a
+#: score rather than a label read from the data.
 ANOMALY = Profile(
     mode=Mode.INFERENCE,
     capabilities=Capabilities(
@@ -206,8 +236,16 @@ ANOMALY = Profile(
         relationships=False,
         multiple_tables=False,
         temporal=False,
+        static=True,
+        entity_filters=False,
+        counterfactuals=False,
+        derived_targets=False,
         link_prediction=False,
         forecasting=False,
+        series_forecasting=False,
+        anomaly_detection=True,
+        key_columns_in_filters=False,
+        timestamp_columns_in_filters=False,
     ),
 )
 

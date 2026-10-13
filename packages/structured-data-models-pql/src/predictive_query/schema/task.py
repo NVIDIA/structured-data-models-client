@@ -21,6 +21,7 @@ class TaskType(StrEnum):
     TEMPORAL_LINK_PREDICTION = 'temporal_link_prediction'
     STATIC_LINK_PREDICTION = 'static_link_prediction'
     FORECASTING = 'forecasting'
+    ANOMALY_DETECTION = 'anomaly_detection'
 
     LINK_PREDICTION = 'link_prediction'  # Deprecated.
 
