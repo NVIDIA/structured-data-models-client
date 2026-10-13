@@ -39,6 +39,7 @@ fn start_message(operation: TestOperation) -> Vec<u8> {
                 os: "linux".into(),
                 strftime_pads_year: false,
             },
+            date_literal_range: None,
         },
         operation: sdm_contract::ops::Operation::Test(operation),
     })))

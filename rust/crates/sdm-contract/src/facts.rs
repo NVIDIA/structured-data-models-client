@@ -22,6 +22,22 @@ pub struct HostFacts {
     /// searches them; the core falls back to its bundled database.
     pub zone_roots: Vec<ZoneRootFact>,
     pub platform: PlatformFacts,
+    /// The instants the host can hold a PQL date literal as, when it holds
+    /// fewer than the core reads (years 0 to 9999); none when it holds them
+    /// all. A literal outside them is refused as one that cannot be read
+    /// (`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a
+    /// host: pandas 2 holds a literal as a nanosecond `Timestamp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_literal_range: Option<InstantRange>,
+}
+
+/// Instants, inclusive at both ends, as nanoseconds from the Unix epoch on
+/// a literal's own wall clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InstantRange {
+    pub min_ns: i64,
+    pub max_ns: i64,
 }
 
 /// The host's local zone, as the host's own platform names it: an IANA

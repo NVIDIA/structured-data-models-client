@@ -14,7 +14,7 @@ use std::cell::RefCell;
 
 use crate::ast::{self, BuildError, ConstValue, Location, NodeDtype, NodeRef};
 use crate::codes;
-use crate::dates::{DayFirst, Reader};
+use crate::dates::{DayFirst, Held, Reader};
 use crate::dor::DateOffsetRange;
 use crate::lexer::{self, Kind, Token};
 use crate::names;
@@ -91,8 +91,19 @@ pub fn parse_query(
     mode: Mode,
     reader: Reader,
 ) -> (Visited<ParsedQuery>, Vec<DateWarning>) {
+    parse_query_held(query, mode, reader, None)
+}
+
+/// [`parse_query`], refusing a date literal the host cannot hold (`held`)
+/// as a literal that cannot be read, where its node is built.
+pub fn parse_query_held(
+    query: &str,
+    mode: Mode,
+    reader: Reader,
+    held: Option<Held>,
+) -> (Visited<ParsedQuery>, Vec<DateWarning>) {
     let warned = RefCell::new(Vec::new());
-    let parsed = visit(query, mode, reader, &warned);
+    let parsed = visit(query, mode, reader, held, &warned);
     (parsed, warned.into_inner())
 }
 
@@ -100,6 +111,7 @@ fn visit(
     query: &str,
     mode: Mode,
     reader: Reader,
+    held: Option<Held>,
     warned: &RefCell<Vec<DateWarning>>,
 ) -> Visited<ParsedQuery> {
     // `EXPLAIN` and `EVALUATE` are flags, stripped before the grammar sees
@@ -156,6 +168,7 @@ fn visit(
     let visitor = Visitor {
         tokens: &tokens,
         reader,
+        held,
         warned,
     };
     visitor.prog(&prog, mode, evaluate, explain)
@@ -164,6 +177,9 @@ fn visit(
 struct Visitor<'a> {
     tokens: &'a [Token],
     reader: Reader,
+    /// The instants the host can hold a date literal as, if it cannot hold
+    /// every one the reader reads.
+    held: Option<Held>,
     warned: &'a RefCell<Vec<DateWarning>>,
 }
 
@@ -406,11 +422,28 @@ impl Visitor<'_> {
                     text.push_str(self.text(*time));
                 }
                 let node = ast::constant(
-                    ConstValue::Text(text),
+                    ConstValue::Text(text.clone()),
                     Some(NodeDtype::Plain(Dtype::Time)),
                     location,
                     self.reader,
                 )?;
+                // A literal the host cannot hold is one it cannot read, as
+                // the reference's pandas 2 refuses it: D9's refusal, decided
+                // here, where its node is built.
+                if let (
+                    Some(held),
+                    ast::Kind::Constant {
+                        time: Some(stamp), ..
+                    },
+                ) = (self.held, &node.borrow().kind)
+                    && !held.holds(stamp)
+                {
+                    return Err(ast::BuildError::Literal(format!(
+                        "{text} is not a valid instance of {}",
+                        ast::dtype_text(Some(NodeDtype::Plain(Dtype::Time)))
+                    ))
+                    .into());
+                }
                 if let ast::Kind::Constant {
                     day_first: Some(day_first),
                     ..

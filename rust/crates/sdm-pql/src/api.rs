@@ -13,13 +13,13 @@
 
 use crate::ast;
 use crate::codes;
-use crate::dates::Reader;
+use crate::dates::{Held, Reader};
 use crate::profiles::{Filters, Mode};
 use crate::query::{ParsedQuery, ValidatedQuery};
 use crate::response::{ValidationError, ValidationResponse};
 use crate::schema::SchemaDefinition;
 use crate::validator::predictive_query::PredictiveQueryValidator;
-use crate::visitor::{ParseError, parse_query};
+use crate::visitor::{ParseError, parse_query_held};
 
 pub use crate::visitor::DateWarning;
 
@@ -71,7 +71,14 @@ pub enum Unparsed {
 
 /// `text` parsed for `mode`, date literals read with `reader`.
 pub fn parse(text: &str, mode: Mode, reader: Reader) -> Parse {
-    let (parsed, warnings) = parse_query(text, mode, reader);
+    parse_held(text, mode, reader, None)
+}
+
+/// [`parse`], a date literal the host cannot hold (`held`, the host's
+/// `date_literal_range`) refused as one that cannot be read
+/// (`PQL_VALUE_INVALID_LITERAL`, no span), where its node is built.
+pub fn parse_held(text: &str, mode: Mode, reader: Reader, held: Option<Held>) -> Parse {
+    let (parsed, warnings) = parse_query_held(text, mode, reader, held);
     let outcome = match parsed {
         Ok(query) => Ok(Parsed { query }),
         Err(ParseError::Failure(failure)) => Err(Unparsed::Refused(ValidationResponse::error(

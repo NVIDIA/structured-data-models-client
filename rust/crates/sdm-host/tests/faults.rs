@@ -56,6 +56,7 @@ fn start_message(operation: Operation) -> Vec<u8> {
                 os: "linux".into(),
                 strftime_pads_year: false,
             },
+            date_literal_range: None,
         },
         operation,
     })))
@@ -834,6 +835,7 @@ fn a_test_only_panic_s_payload_is_the_canary() {
                     os: "linux".into(),
                     strftime_pads_year: false,
                 },
+                date_literal_range: None,
             },
             operation: Operation::Test(TestOperation::Panic {
                 at: PanicAt::Body,

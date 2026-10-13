@@ -88,6 +88,43 @@ impl fmt::Display for Stamp {
     }
 }
 
+/// The instants a host can hold a date literal as, inclusive at both ends,
+/// as nanoseconds from the Unix epoch on the literal's own wall clock
+/// (`HostFacts.date_literal_range`): pandas 2 holds a literal as a
+/// nanosecond `Timestamp`, so the reference refuses one outside them as a
+/// literal it cannot read (D9's refusal), where pandas 3 reads every year.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Held {
+    pub min_ns: i64,
+    pub max_ns: i64,
+}
+
+impl Held {
+    /// Whether the host can hold `stamp`, read on its own wall clock.
+    pub fn holds(&self, stamp: &Stamp) -> bool {
+        let at = stamp.at;
+        let days = days_from_civil(i64::from(at.year), i64::from(at.month), i64::from(at.day));
+        let seconds = days * 86_400
+            + i64::from(at.hour) * 3_600
+            + i64::from(at.minute) * 60
+            + i64::from(at.second);
+        let ns = i128::from(seconds) * 1_000_000_000;
+        i128::from(self.min_ns) <= ns && ns <= i128::from(self.max_ns)
+    }
+}
+
+/// Days from 1970-01-01 to a proleptic Gregorian date (Hinnant's
+/// `days_from_civil`), for any year the reader gives (0 to 9999).
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
 /// D4's warning: a day-first reading of a literal whose format can be
 /// named, in its own separator and with its time of day if it has one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

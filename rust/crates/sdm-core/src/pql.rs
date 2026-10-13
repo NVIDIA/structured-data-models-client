@@ -150,7 +150,11 @@ fn resolve_here(
         Mode::Training => parser::Mode::Training,
         Mode::Inference => parser::Mode::Inference,
     };
-    let parse = parser::parse(query, mode, reader);
+    let held = facts.date_literal_range.map(|range| parser::dates::Held {
+        min_ns: range.min_ns,
+        max_ns: range.max_ns,
+    });
+    let parse = parser::parse_held(query, mode, reader, held);
     let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
     let parsed = match parse.outcome {
         Ok(parsed) => parsed,
@@ -789,6 +793,7 @@ mod tests {
                 os: "linux".into(),
                 strftime_pads_year: false,
             },
+            date_literal_range: None,
         }
     }
 

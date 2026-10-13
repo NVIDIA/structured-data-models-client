@@ -14,7 +14,10 @@ in (contract ``HostFacts``):
   library, :mod:`zoneinfo`, searches them (``zoneinfo.TZPATH``, then the
   ``tzdata`` package), each with the database version read there;
 - ``platform``: the operating system, and whether its ``strftime`` pads a
-  year below 1000 to four digits (``date-rules.md``).
+  year below 1000 to four digits (``date-rules.md``);
+- ``date_literal_range``: the instants this host's pandas can hold a PQL
+  date literal as, when it cannot hold every year (pandas 2's nanosecond
+  ``Timestamp``); left out when it can (pandas 3).
 """
 
 from __future__ import annotations
@@ -133,6 +136,28 @@ def platform() -> dict[str, Any]:
     return {'os': name, 'strftime_pads_year': pads}
 
 
+def date_literal_range() -> dict[str, int] | None:
+    r"""The instants pandas can hold a PQL date literal as, if not every year.
+
+    The reference reads a date literal with ``pandas.to_datetime``; pandas
+    2 holds it as a nanosecond ``Timestamp``, so it refuses one outside
+    ``Timestamp.min`` to ``Timestamp.max`` as a literal it cannot read,
+    where pandas 3 reads every year. The core refuses such a literal alike
+    when the host declares the range (contract ``HostFacts``), in
+    nanoseconds from the epoch, inclusive.
+    """
+    import pandas
+
+    try:
+        pandas.to_datetime('0001-01-01')
+    except pandas.errors.OutOfBoundsDatetime:
+        return {
+            'min_ns': int(pandas.Timestamp.min.value),
+            'max_ns': int(pandas.Timestamp.max.value),
+        }
+    return None
+
+
 def host_facts(is_posix: Callable[[str], bool]) -> dict[str, Any]:
     r"""The facts of a run starting now, as the contract's ``HostFacts``.
 
@@ -140,9 +165,13 @@ def host_facts(is_posix: Callable[[str], bool]) -> dict[str, Any]:
     (:func:`local_zone`).
     """
     roots = zone_roots()
-    return {
+    facts: dict[str, Any] = {
         'now': codec.timestamp(time.time_ns() // 1000, 'us', 'UTC'),
         'local_zone': local_zone(roots, is_posix),
         'zone_roots': roots,
         'platform': platform(),
     }
+    held = date_literal_range()
+    if held is not None:
+        facts['date_literal_range'] = held
+    return facts

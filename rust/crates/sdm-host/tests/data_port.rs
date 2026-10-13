@@ -76,6 +76,7 @@ fn start_message(operation: Operation, roots: &[&Path]) -> Vec<u8> {
                 os: "linux".into(),
                 strftime_pads_year: false,
             },
+            date_literal_range: None,
         },
         operation,
     })))

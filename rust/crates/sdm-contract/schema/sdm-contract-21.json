@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/20",
+  "$id": "sdm-contract/21",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -2624,6 +2624,17 @@
         },
         "platform": {
           "$ref": "#/$defs/PlatformFacts"
+        },
+        "date_literal_range": {
+          "description": "The instants the host can hold a PQL date literal as, when it holds\nfewer than the core reads (years 0 to 9999); none when it holds them\nall. A literal outside them is refused as one that cannot be read\n(`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a\nhost: pandas 2 holds a literal as a nanosecond `Timestamp`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InstantRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -2700,6 +2711,25 @@
       "required": [
         "os",
         "strftime_pads_year"
+      ]
+    },
+    "InstantRange": {
+      "description": "Instants, inclusive at both ends, as nanoseconds from the Unix epoch on\na literal's own wall clock.",
+      "type": "object",
+      "properties": {
+        "min_ns": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "max_ns": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "min_ns",
+        "max_ns"
       ]
     },
     "Operation": {

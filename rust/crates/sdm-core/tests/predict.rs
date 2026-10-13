@@ -62,6 +62,7 @@ fn facts() -> HostFacts {
             os: "linux".into(),
             strftime_pads_year: false,
         },
+        date_literal_range: None,
     }
 }
 

@@ -133,6 +133,7 @@ pub fn facts() -> Result<HostFacts> {
             os: os().into(),
             strftime_pads_year: cfg!(target_os = "macos"),
         },
+        date_literal_range: None,
     })
 }
 
