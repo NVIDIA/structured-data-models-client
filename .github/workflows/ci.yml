@@ -240,6 +240,16 @@ jobs:
           [ -n "$where" ] || { echo 'gate: no ratchet off the phase branch'; exit 0; }
           scripts/rust_core/gate.sh $where --run rust-host
         working-directory: .
+      # rust-host's observations, made above by this candidate's host, for
+      # the cross-host job (T1.29), which holds them to python-core's on
+      # the core rule: uploaded whether or not the gate passed, so that
+      # comparison reports for itself.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: observations-rust-host
+          path: rust-host.jsonl
+          if-no-files-found: error
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
@@ -693,6 +703,82 @@ jobs:
           print(f'every observation in {cell}')
           EOF
           exit $status
+      # python-core's observations in the reference's cell, made by this
+      # candidate's runner as rust-host's are by its host, for the
+      # cross-host job (T1.29), whether or not the gate passed.
+      - if: ${{ !cancelled() }}
+        name: python-core's observations for the cross-host comparison
+        run: |
+          mkdir -p cross-host
+          python -I contract/runners/run_python.py --mode python-core \
+            --out cross-host/python-core.jsonl contract/cases
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: observations-python-core
+          path: cross-host/python-core.jsonl
+          if-no-files-found: error
+
+  # The two core hosts on core fields (design, "Observations and
+  # comparator"; T1.29): python-core's observations from
+  # contract-python (ref-pandas3) and rust-host's from rust-test, compared
+  # by compare.py in one run, so its core rule (the same operations, inputs,
+  # fetches, description, request state, call and result) gates a
+  # difference between the two hosts on every acceptance case in CI. It
+  # compares two executions of one core, so a change both make alike is
+  # not its to catch: contract/pinned/base.regression.core.json, the fixed
+  # expectation both hosts are held to, stays for that (E81(c)). It fails
+  # when either side's file is missing, empty or not that runner's, and
+  # judges outcomes against the effective expectations on the phase branch
+  # and its lanes, as the gate does. contract/tests/test_cross_host.py runs
+  # this step's text.
+  cross-host:
+    name: cross-host (python-core, rust-host)
+    runs-on: ubuntu-latest
+    needs: [rust-test, contract-python-ref-pandas3]
+    if: ${{ !cancelled() }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: observations-python-core
+          path: cross-host
+      - uses: actions/download-artifact@v8
+        with:
+          name: observations-rust-host
+          path: cross-host
+      - name: compare (python-core, rust-host)
+        run: |
+          pip install pyyaml jsonschema
+          python - <<'EOF' || exit 1
+          import json, pathlib, sys
+          for runner in ('python-core', 'rust-host'):
+              path = pathlib.Path('cross-host') / f'{runner}.jsonl'
+              lines = path.read_text().splitlines() if path.is_file() else []
+              if not lines:
+                  sys.exit(f'cross-host: no observations of {runner}')
+              try:
+                  seen = {json.loads(line)['identity']['runner'] for line in lines}
+              except (ValueError, RecursionError, KeyError, TypeError):
+                  sys.exit(f'cross-host: an observation of {runner} names no runner')
+              if seen != {runner}:
+                  sys.exit(f'cross-host: {path} holds {sorted(map(str, seen))}, not {runner}')
+          print('cross-host: python-core and rust-host observed')
+          EOF
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'cross-host: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out cross-host/effective.json || exit 1
+            expect=(--expect cross-host/effective.json)
+          fi
+          python scripts/rust_core/compare.py --cases contract/cases \
+            --reference contract/reference/*.jsonl ${expect[@]+"${expect[@]}"} \
+            cross-host/python-core.jsonl cross-host/rust-host.jsonl
 
   contract-python-dbr17-pandas2:
     name: contract-python (dbr17-pandas2)
