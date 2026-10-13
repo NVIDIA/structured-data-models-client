@@ -267,9 +267,9 @@ def generated_rows(nulls: bool) -> dict[str, list[tuple[Any, ...]]]:
             )
         )
     # Fewer orders than the core's preview of a table (sdm-schema's
-    # PREVIEW_ROWS, 1,000): past it the core refuses to choose a time column
-    # by the whole table (time_whole_table, register P1B-11), which this
-    # build does not port.
+    # PREVIEW_ROWS, 1,000), as the protocol fixed them on 2026-10-12, when
+    # the core refused to choose a time column by the whole table; from
+    # T1.32e it reads the whole table as the reference does.
     if len(orders) >= 1_000:
         raise ValueError('the generated orders reach the core preview')
     return {'users': users, 'items': items, 'orders': orders}
