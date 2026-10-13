@@ -652,7 +652,9 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 }
             observation['core'] = {
                 'inputs': inputs,
-                'fetches': [],
+                # A description is built from fetched rows: from T1.29 the
+                # core rule fails one with no fetch recorded.
+                'fetches': [{'request': {}, 'plan': {}}],
                 'accepted': None,
                 'described': described,
                 'materialized': materialized,
