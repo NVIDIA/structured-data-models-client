@@ -18,6 +18,7 @@ sdm-contract = { path = "../sdm-contract" }
 
 [dev-dependencies]
 arrow-schema.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

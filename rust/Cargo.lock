@@ -1469,6 +1469,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "sdm-contract",
+ "serde_json",
 ]
 
 [[package]]
