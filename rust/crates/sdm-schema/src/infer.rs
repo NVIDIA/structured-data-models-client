@@ -428,15 +428,15 @@ pub fn table(
 
 /// A column's data type from the Arrow type its preview returned, as the
 /// reference's reading of the catalog's types gives it for the plain types,
-/// binary, a duration and the lists of them; any other is refused by name
-/// (`column_type`).
-///
+/// binary and the lists of them; a duration is `timedelta`, which the
+/// reference's `_WIRE_DTYPE` has no wire dtype for, so it is left out (no
+/// DuckDB type hands one over). Any other is refused by name (`column_type`).
 /// A list is read as the reference reads a catalog type ending `[]`: of
-/// integers, floats or text (binary being text to it, so a list of binary
-/// is a list of text), and refused otherwise, where the reference fails
-/// unnamed (register P1B-37). Admission hands every list over as a
-/// `list`, so a fixed-size list (P1B-9) and a list view (P1B-36) are read
-/// as lists too. A struct and a map are refused (P1B-10).
+/// integers, floats or text (binary is text to it, so a list of binary is
+/// a list of text), refused otherwise where the reference fails unnamed
+/// (P1B-51). Admission hands every list over as a `list`, so a fixed-size
+/// list (P1B-9) and a list view (P1B-50) are read as lists too. A struct
+/// and a map are refused (P1B-10).
 fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
     Ok(match data_type {
         DataType::Boolean => Dtype::Bool,

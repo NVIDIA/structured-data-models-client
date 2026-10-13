@@ -1387,7 +1387,7 @@ entries:
     only on the paths it ports and refuses every other input with
     UNSUPPORTED_REQUEST naming the rule, never a value (fields operation and
     rule): column_type (a struct or a map, P1B-10, and a list of other
-    than integers, floats or text, P1B-37; from T1.32c binary and a
+    than integers, floats or text, P1B-51; from T1.32c binary and a
     duration are left out with the reference's warning, as the reference
     leaves them out), float_nan, float_signed_zero,
     text_time, multicategorical, key_type, key_name_order, key_tie,
@@ -1828,7 +1828,7 @@ entries:
     route is unchanged.
   affected_inputs: >-
     A DuckDB source holding an INTERVAL column, under a forced core route.
-  cases: [time.feature-interval, T1.21e, T1.32e]
+  cases: [time.feature-interval, T1.21e, T1.32c, T1.32e]
   refs:
   - 'contract/nested-type-vectors.json#scalar.interval* refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   - 'contract/nested-type-vectors.json#orders.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
@@ -1840,7 +1840,7 @@ entries:
     contract/cases/s1/time.feature-interval.json, and the entry
     admission/interval of contract/refusal-maps/time.json, on python-core and
     rust-host. Both refuse; the class and code change. T1.32e resolves it
-    when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+    when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32c its refs name the nested family's interval vectors (scalar.interval*, orders.interval), the same transition; T1.32e, which admits time.feature-interval, should know they exist.
 
 - id: P1B-9
   title: nested.fixed-array is described on the core route where the reference fails with an unnamed RuntimeError
@@ -1850,7 +1850,10 @@ entries:
     list feature (BIGINT[2]) raises an unnamed RuntimeError: its reading of
     DuckDB's catalog type takes BIGINT[2] for an integer (only a type
     ending [] is a list to it), and the stype inference then fails on the
-    list values, naming the wrong type.
+    list values, naming the wrong type. Under a name that reads as a key
+    (id_x_0 BIGINT[2]) it fails earlier with pyarrow's unnamed
+    ArrowNotImplementedError ("Function 'unique' has no kernel matching
+    input types (fixed_size_list<: int64>[2])").
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     column is left out of its table with the reference's warning for a
@@ -1864,7 +1867,7 @@ entries:
     rust-host. From T1.32c, a fixed-size list of binary is left out too,
     named a list of text (stringlist), as the reference names a list of
     binary; a fixed-size list of any other item (booleans, a list, a
-    fixed-size list) is refused as a list of it is (P1B-37). The default
+    fixed-size list) is refused as a list of it is (P1B-51). The default
     route is unchanged.
   affected_inputs: >-
     A DuckDB source holding a fixed-size list column (an ARRAY type) of
@@ -1884,9 +1887,8 @@ entries:
     Measured at T1.23: the reference observation of the diagnostic case
     contract/cases/s1/nested.fixed-array.json (from_source, RuntimeError)
     and the case's probe in contract/refusal-maps/nested.json, which now
-    expects success on both runners. A new success, which a reviewer may
-    approve (P1B-1's process); T1.32c resolves it when it admits the nested
-    family. Never self-approved. At T1.32c: the vectors it covers are named
+    expects success on both runners. This changes the reference's refusal into success and requires individual owner approval under E66(b) and E73(b); never self-approved. T1.32c resolves it when it admits
+    the nested family. At T1.32c: the vectors it covers are named
     in refs, each a transition from the reference's unnamed failure to a
     success, held on both hosts by contract/tests/test_t132c_nested_types.py
     and sdm-testkit's tests/t132c_nested_types.rs; the old-against-core
@@ -2541,7 +2543,7 @@ entries:
     author's recorded case numeric-text.kawi-digits on both hosts, which
     the reference reads on 3.12 and later and refuses on 3.10 and 3.11.
 
-- id: P1B-36
+- id: P1B-50
   title: A list column DuckDB hands over as a list view is left out as a list where the reference fails unnamed
   kind: change
   old_behavior: >-
@@ -2566,17 +2568,16 @@ entries:
   - 'contract/nested-type-vectors.json#list.integer-view refusal UNNAMED -> success'
   status: proposed
   approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E90}
   notes: >-
     Measured at T1.32c: the test author's vector list.integer-view
     (contract/nested-type-vectors.json), held on both hosts by
     contract/tests/test_t132c_nested_types.py and sdm-testkit's
-    tests/t132c_nested_types.rs. A new success, which a reviewer may
-    approve (P1B-1's process), as P1B-9's fixed-size list; the alternative,
-    a named refusal, would answer the same list two ways by how the driver
-    hands it over. Never self-approved.
+    tests/t132c_nested_types.rs. A new success, as P1B-9's fixed-size
+    list; the alternative, a named refusal, would answer the same list two
+    ways by how the driver hands it over. This changes the reference's refusal into success and requires individual owner approval under E66(b) and E73(b); never self-approved.
 
-- id: P1B-37
+- id: P1B-51
   title: A list column the reference cannot read is refused by name on the core route where the reference fails unnamed
   kind: change
   old_behavior: >-
@@ -2617,7 +2618,7 @@ entries:
   - 'contract/nested-type-vectors.json#list.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   status: proposed
   approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E90}
   notes: >-
     Measured at T1.32c: the test author's vectors named in refs
     (contract/nested-type-vectors.json), held on both hosts by
@@ -2628,7 +2629,7 @@ entries:
     rather than INVALID_REQUEST: the caller's request is valid, and it is
     the core that does not describe such a column, as P1B-10 (owner
     approved) has it for a struct or a map. The alternative, leaving such
-    a list out as P1B-9 and P1B-36 leave a list out, is a product choice
+    a list out as P1B-9 and P1B-50 leave a list out, is a product choice
     for the owner; it would make every list column a success.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
