@@ -1488,8 +1488,9 @@ entries:
     rule). In the core: composite_key, evaluate, explain, problem_type,
     assuming, entity_ids, entity_filter, static_target, aggregation,
     target_filter, open_window, month_window, entity_key, parent_table,
-    key_type, target_type, indices_type, keyless_neighbors, wire_dtype and
-    seed_size; from T1.26b the subgraph is walked as the reference walks
+    key_type, target_type, keyless_neighbors, wire_dtype and seed_size
+    (indices_type lifted at T1.32a, the core casting the entities); from
+    T1.26b the subgraph is walked as the reference walks
     it, hops past the first and a second table referring to an entity
     included (deeper_hop and parent_lookup lifted), a text feature is sent
     as the reference's words (text_column lifted), the coverage warning is
@@ -2137,7 +2138,6 @@ entries:
     both routes. The implementer's recommendation to the owner is in the
     tracker's Journey row.
 
-
 - id: P1B-15
   title: A key of one column given as a sequence is read as the column's name on the core route
   kind: change
@@ -2631,6 +2631,208 @@ entries:
     approved) has it for a struct or a map. The alternative, leaving such
     a list out as P1B-9 and P1B-50 leave a list out, is a product choice
     for the owner; it would make every list column a success.
+
+# --- The keys family (T1.32a) ------------------------------------------------
+
+- id: P1B-26
+  title: The entities reach the core as the host's own values, and the key cases' core inputs say so
+  kind: change
+  old_behavior: >-
+    Before T1.32a the Python bridge cast the entities to the key's type with
+    pandas before the core saw them, so the key cases' core inputs named
+    them in the key's type (key.declared-int32 as i32, key.uint8 as u8,
+    key.uint64-small and key.uint64-above-int64-max as u64), and the decimal
+    key cases had none: the bridge refused their key type (key_type) and the
+    case format carried no decimal entity.
+  new_behavior: >-
+    The host hands the core the entities as one Arrow column of its own
+    values' type and the core casts them (sdm_engine::keys::cast; design,
+    "The entities' cast to the key's type"): a Python integer is i64, an
+    integer past int64 is its text (pyarrow infers no type for it), a
+    Decimal is the decimal pyarrow infers. The cases' core inputs are what
+    both hosts now send: i64 for key.declared-int32, key.uint8,
+    key.uint64-small and key.hugeint, utf8 text for
+    key.uint64-above-int64-max, and decimal128(1, 0) and decimal128(2, 1)
+    for key.decimal-18-0 and key.decimal-38-10, which gain materialize and
+    predict inputs. No public outcome changes by this entry; each case's
+    python-ref line is re-recorded, identity only.
+  affected_inputs: >-
+    The core inputs of the seven key cases named; no public call.
+  cases:
+  - key.declared-int32
+  - key.uint8
+  - key.uint64-small
+  - key.uint64-above-int64-max
+  - key.hugeint
+  - key.decimal-18-0
+  - key.decimal-38-10
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    T1.32a part 1, an input change of the diagnostic cases with no outcome
+    of its own, for the reviewers (H19), never self-approved; the ratchet's
+    cases rule holds the changed files until it is approved. The outcomes
+    the core's cast changes are P1B-27 to P1B-30.
+
+- id: P1B-27
+  title: An entity the key's type cannot hold is the caller's error, INVALID_REQUEST, where the reference fails with INTERNAL_ERROR
+  kind: change
+  old_behavior: >-
+    The reference casts the entities to the key's type with pandas
+    (pd.Series(indices, dtype=train_pkey.dtype)). An integer past the
+    key's width or past int64, a negative integer for an unsigned key, or a
+    date or timestamp for a number key raises something other than the
+    TypeError or ValueError its engine handles (OverflowError,
+    ArrowNotImplementedError), which the client reports as
+    StructuredDataError, code INTERNAL_ERROR, at materialize.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core casts the entities under its rule table (sdm_engine::keys::cast;
+    design, "The entities' cast to the key's type") and refuses each such
+    entity as the caller's error: StructuredDataError, code INVALID_REQUEST,
+    at materialize, with field indices, the entity's position, the reason
+    (out_of_range or type) and the key's type, never its value (H17,
+    E41(l)); an integer past int64 the host hands over as its text reads as
+    the number it is, so where the key's type holds it and the table does
+    not, it is refused as an entity the table does not hold. The default
+    route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route, whose integer, unsigned, float or text key cannot
+    hold an entity given: an integer outside its range or past int64, a
+    negative one for an unsigned key, a date or a timestamp.
+  cases: [T1.32a]
+  refs:
+  - 'contract/key-cast-vectors.json#*.int.2pow63'
+  - 'contract/key-cast-vectors.json#*.int.2pow64'
+  - 'contract/key-cast-vectors.json#*.int.minus-2pow63-minus-1'
+  - 'contract/key-cast-vectors.json#*.int.negative'
+  - 'contract/key-cast-vectors.json#*.time.*'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
+  notes: >-
+    Measured at T1.32a on both hosts over the test author's vectors
+    (contract/key-cast-vectors.json, recorded from the reference): every
+    vector these refs name that differs from the reference is this class.
+    A refusal in place of a failure, both refusing (E66(b)'s class), for
+    the reviewers, never self-approved. The client test
+    test_entities_that_do_not_cast_are_the_caller_s_error_on_the_core holds
+    it beside the old route.
+
+- id: P1B-28
+  title: Decimal keys and keys handed over as large text are sampled, where the reference fails on every entity
+  kind: change
+  old_behavior: >-
+    The reference's engine fails with INTERNAL_ERROR at materialize for any
+    entity of a decimal key (DuckDB DECIMAL(18, 0), DECIMAL(38, 10), HUGEINT
+    as decimal128(38, 0)) or a text key DuckDB hands over as large_string
+    ("unsupported data type ... for column 'ENTITY'"), present or not,
+    castable or not.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core samples such a key as any other: its sampler compares keys by
+    value (sdm_engine::keys::read), the payload names a decimal key's column
+    as the reference names a decimal by what it holds (int64 up to 18
+    digits or where every value fits, string past that, float64 with a
+    scale; sdm_request::payload::key_dtype), and the entities are cast
+    under the core's rule table: a request where they cast and the table
+    holds them, otherwise INVALID_REQUEST at materialize (P1B-27's fields).
+    The default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route whose entity key is a decimal of no negative scale,
+    or text DuckDB hands over as large_string (arrow_large_buffer_size).
+  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint]
+  refs:
+  - 'contract/key-cast-vectors.json#decimal128-18-0.*'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.*'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.*'
+  - 'contract/key-cast-vectors.json#large-utf8.*'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
+  notes: >-
+    A new success where the reference fails, which a reviewer may approve
+    (P1B-1's process); never self-approved. key.varchar-large-buffers is
+    P1B-6's case. Decimal features keep wire_dtype's refusal (T1.32b): no
+    question sums a key, so the declared precision a decimal sum is held to
+    does not arise for one. Until T1.32a's part 2, predict refuses by name
+    (id_type, P1B-4) to read back the entities of a decimal key with a
+    scale, which the payload names float64 (key.decimal-38-10).
+
+- id: P1B-29
+  title: An entity pandas coerces to the key's type is refused, where the reference accepts it changed
+  kind: change
+  old_behavior: >-
+    The reference's pandas cast accepts entities by changing them: a float
+    or decimal with a fraction truncated to an integer key (1.5 as 1), hex
+    text read as a number ('0x1' as 1), bytes read as a number (b'1' as 1),
+    a timestamp read as its count of microseconds by an int64 key, and
+    [True, 1] read as [1, 1].
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core's rule table rounds and coerces nothing into an exact key: each is
+    refused, StructuredDataError, code INVALID_REQUEST, at materialize,
+    with field indices, the position and the reason (inexact,
+    not_a_number or type). A float key still takes the nearest float of a
+    number. The default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route, an entity a float or decimal with a fraction for an
+    integer or whole-decimal key, hex text, bytes, a timestamp, or booleans
+    mixed with integers.
+  cases: [T1.32a]
+  refs:
+  - 'contract/key-cast-vectors.json#*.float.half'
+  - 'contract/key-cast-vectors.json#*.decimal.half'
+  - 'contract/key-cast-vectors.json#*.mixed.int-half'
+  - 'contract/key-cast-vectors.json#*.numpy.float64-half'
+  - 'contract/key-cast-vectors.json#*.text.hex'
+  - 'contract/key-cast-vectors.json#*.bytes.digit'
+  - 'contract/key-cast-vectors.json#*.time.timestamp-1us'
+  - 'contract/key-cast-vectors.json#*.mixed.bool-int'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
+  notes: >-
+    Refuses inputs the reference accepts, so it needs the owner (checkpoint
+    8's direction: no pandas coercion quirks, clear errors); never
+    self-approved. A truncated entity predicts for another entity than the
+    one given, which is why the core refuses it.
+
+- id: P1B-30
+  title: Integers mixed with text are cast as their text, where the reference refuses the mix
+  kind: change
+  old_behavior: >-
+    The reference's pandas cast refuses a list mixing integers and text
+    ([1, '2']) with an ArrowInvalid its engine handles, INVALID_REQUEST at
+    materialize, whatever the key; and refuses NumPy int64 entities for a
+    DECIMAL(18, 0) key, which it takes as Python integers.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host hands a list pyarrow infers no one type for as each value's text
+    (design, "The entities' cast to the key's type"), and the core casts
+    the text to the key's type: [1, '2'] is entities 1 and 2 of an integer
+    key and '1' and '2' of a text key; a NumPy int64 is an integer like any
+    other. The default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route, the entities mixing integers and text, or NumPy
+    int64 entities for a decimal key.
+  cases: [T1.32a]
+  refs:
+  - 'contract/key-cast-vectors.json#*.mixed.int-text'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.numpy.int64'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
+  notes: >-
+    A new success where the reference refuses, which a reviewer may
+    approve; never self-approved. The core sees only the column the host
+    hands over, so it cannot tell a mixed list from the same values given
+    as text.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
