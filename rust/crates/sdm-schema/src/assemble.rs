@@ -55,6 +55,10 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
         &[
             "taken_earliest",
             "taken_edit_stamp",
+            "taken_unchecked_empty",
+            "taken_unchecked_sparse",
+            "taken_unchecked_constant",
+            "taken_unchecked_constant_where_held",
             "refused_empty",
             "refused_sparse",
             "refused_constant",
@@ -878,6 +882,55 @@ fn cannot_join(tables: &[DescribedTable], link: &[ColumnRef], why: Unjoinable) -
 /// hold none, `refused_constant_where_held`). Each names its `table` and
 /// `column`. Only where something could be windowed: two tables or more,
 /// or a link; never for a table whose time column the caller named.
+/// The lines saying `column`, taken, was among the columns the rows read
+/// would pass over, kept because the whole table's answer failed
+/// (`taken_unchecked`), each with the reason the rows read give.
+fn unchecked(
+    choice: &TimeChoice,
+    column: &str,
+    at: &dyn Fn(&str) -> Vec<(&'static str, Detail)>,
+) -> Vec<CoreWarning> {
+    let message = "a time column was taken, or refused, on a guess about what a column holds";
+    choice
+        .unconfirmed
+        .iter()
+        .filter(|(name, _)| name == column)
+        .map(|(_, why)| {
+            let mut fields = at(column);
+            let variant = match why {
+                PassedOver::Constant {
+                    value,
+                    missing,
+                    rows,
+                } => {
+                    fields.push(("missing", count(*missing)));
+                    fields.push(("rows", count(*rows)));
+                    match value {
+                        None => "taken_unchecked_empty",
+                        Some(value) => {
+                            fields.push(("value", Detail::Scalar(value.clone())));
+                            if *missing > 0 {
+                                "taken_unchecked_constant_where_held"
+                            } else {
+                                "taken_unchecked_constant"
+                            }
+                        }
+                    }
+                }
+                PassedOver::Sparse { missing, rows } => {
+                    fields.push(("missing", count(*missing)));
+                    fields.push(("rows", count(*rows)));
+                    "taken_unchecked_sparse"
+                }
+                // Only a reason of the values is unconfirmed.
+                _ => "taken_unchecked_empty",
+            };
+            fields.push(("variant", Detail::text(variant)));
+            warning(TIME_COLUMNS_GUESSED, message, fields)
+        })
+        .collect()
+}
+
 fn guessed_time_columns(
     description: &SourceDescription,
     choices: &[TimeChoice],
@@ -911,13 +964,15 @@ fn guessed_time_columns(
                     fields.push(("among", texts(&choice.among)));
                     fields.push(("other", Detail::text(other.map_or("", String::as_str))));
                     said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
+                    said.extend(unchecked(choice, column, &at));
                 }
                 Some(Taken::EditStamp) => {
                     let mut fields = at(column);
                     fields.push(("variant", Detail::text("taken_edit_stamp")));
                     said.push(warning(TIME_COLUMNS_GUESSED, message, fields));
+                    said.extend(unchecked(choice, column, &at));
                 }
-                _ => {}
+                _ => said.extend(unchecked(choice, column, &at)),
             },
             Some(_) => {}
             None => {

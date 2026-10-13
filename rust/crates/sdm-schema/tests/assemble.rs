@@ -306,6 +306,7 @@ fn plans() -> InferredTable {
             ("_loaded_at".into(), PassedOver::LoadStamp),
         ],
         fallback: Some("modified_at".into()),
+        unconfirmed: vec![],
     }
     .for_links(false);
     plans.time_column.clone_from(&plans.time.column);
@@ -848,8 +849,64 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
         among: vec!["x".into(), "y".into()],
         refused: vec![],
         fallback: None,
+        unconfirmed: vec![],
     };
     earliest.time_column = Some("x".into());
+    // One taken unchecked, the whole table's read having failed, with each
+    // reason the rows read can give.
+    let mut unchecked = table(
+        "unchecked",
+        vec![column("unchecked_id", Dtype::Int, Stype::Id), stamp("x")],
+        Some("unchecked_id"),
+    );
+    let value = || {
+        Some(Scalar::Timestamp {
+            unit: sdm_contract::Unit::Us,
+            zone: None,
+            value: 0,
+        })
+    };
+    unchecked.time = TimeChoice {
+        column: Some("x".into()),
+        how: Some(Taken::Only),
+        among: vec!["x".into()],
+        refused: vec![],
+        fallback: None,
+        unconfirmed: vec![
+            (
+                "x".into(),
+                PassedOver::Constant {
+                    value: None,
+                    missing: 1_000,
+                    rows: 1_000,
+                },
+            ),
+            (
+                "x".into(),
+                PassedOver::Sparse {
+                    missing: 600,
+                    rows: 1_000,
+                },
+            ),
+            (
+                "x".into(),
+                PassedOver::Constant {
+                    value: value(),
+                    missing: 0,
+                    rows: 1_000,
+                },
+            ),
+            (
+                "x".into(),
+                PassedOver::Constant {
+                    value: value(),
+                    missing: 3,
+                    rows: 1_000,
+                },
+            ),
+        ],
+    };
+    unchecked.time_column = Some("x".into());
     // Links that cannot join, two ways to a table, two naming each other.
     let keyless = table(
         "keyless",
@@ -872,6 +929,7 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     let mut given = Vec::new();
     for made in [
         made_of(vec![refused.clone(), earliest, plans(), users()], vec![]),
+        made_of(vec![unchecked, users()], vec![]),
         made_of(
             vec![keyless, pointing.clone(), users(), orders(Dtype::String)],
             vec![

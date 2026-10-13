@@ -142,6 +142,11 @@ pub struct TimeChoice {
     pub refused: Vec<(String, PassedOver)>,
     /// The lone edit stamp left, when no other timestamp was.
     pub fallback: Option<String>,
+    /// Where the whole table was asked about and its answer failed, each
+    /// timestamp the preview's rows would pass over for its values, kept
+    /// (behind every column they do not) and named, its counts the rows
+    /// read (`TimeColumnChoice.unconfirmed`).
+    pub unconfirmed: Vec<(String, PassedOver)>,
 }
 
 impl TimeChoice {
@@ -163,6 +168,7 @@ impl TimeChoice {
             },
             refused: self.refused.clone(),
             fallback: self.fallback.clone(),
+            unconfirmed: self.unconfirmed.clone(),
         }
     }
 
@@ -313,9 +319,28 @@ pub fn finish(
     previewed: Previewed,
     whole: Option<&WholeTable>,
 ) -> Result<InferredTable, CoreError> {
+    choose(previewed, whole, false)
+}
+
+/// Chooses the time column of a table inferred from its preview where the
+/// whole table was asked about ([`Previewed::whole_table_columns`]) and
+/// its answer failed, as the reference's choice does when its `full_range`
+/// raises: from the preview's rows, a column they would pass over for its
+/// values kept, behind every column they do not, and named in
+/// [`TimeChoice::unconfirmed`]. Where nothing was asked it is [`finish`].
+pub fn finish_unchecked(previewed: Previewed) -> Result<InferredTable, CoreError> {
+    let failed = !previewed.whole_table_columns().is_empty();
+    choose(previewed, None, failed)
+}
+
+fn choose(
+    previewed: Previewed,
+    whole: Option<&WholeTable>,
+    failed: bool,
+) -> Result<InferredTable, CoreError> {
     let asked = previewed.whole_table_columns();
     let whole = match whole {
-        None if asked.is_empty() => None,
+        None if asked.is_empty() || failed => None,
         Some(read)
             if !asked.is_empty() && read.columns.iter().map(|(name, _)| name).eq(asked.iter()) =>
         {
@@ -346,6 +371,7 @@ pub fn finish(
         rows,
         table.primary_key.as_deref(),
         whole,
+        failed,
     )?;
     table.time_column = time.column.clone();
     table.time = time;
@@ -1044,13 +1070,16 @@ fn choose_time_column(
     rows: usize,
     key: Option<&str>,
     whole: Option<&WholeTable>,
+    failed: bool,
 ) -> Result<TimeChoice, CoreError> {
     let candidates = candidates(columns, key);
     if candidates.is_empty() {
         return Ok(TimeChoice::default());
     }
     let mut refused = Vec::new();
+    let mut unconfirmed = Vec::new();
     let mut plain = Vec::new();
+    let mut doubted = Vec::new();
     let mut edited = Vec::new();
     for &i in &candidates {
         let name = &columns[i].name;
@@ -1063,18 +1092,28 @@ fn choose_time_column(
             continue;
         }
         let over = whole.and_then(|w| w.range(name).map(|r| (w.rows, r)));
-        if let Some(why) =
-            refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over)
-        {
-            refused.push((name.clone(), why));
-            continue;
+        let why = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over);
+        if let Some(why) = &why {
+            if !failed {
+                refused.push((name.clone(), why.clone()));
+                continue;
+            }
+            // The whole table's answer failed: what the rows read say is
+            // kept and named, not refused.
+            unconfirmed.push((name.clone(), why.clone()));
         }
         if names::is_edit_stamp(name) {
             refused.push((name.clone(), PassedOver::EditStamp));
             edited.push(name.clone());
+        } else if why.is_some() {
+            doubted.push(i);
         } else {
             plain.push(i);
         }
+    }
+    // A column the rows read cast doubt on is taken only when no other is.
+    if plain.is_empty() {
+        plain = doubted;
     }
     let chosen = |column: Option<String>, how: Option<Taken>, among: Vec<String>| TimeChoice {
         column,
@@ -1082,6 +1121,7 @@ fn choose_time_column(
         among,
         refused: refused.clone(),
         fallback: None,
+        unconfirmed: unconfirmed.clone(),
     };
     let names_of = |indices: &[usize]| -> Vec<String> {
         indices.iter().map(|&i| columns[i].name.clone()).collect()

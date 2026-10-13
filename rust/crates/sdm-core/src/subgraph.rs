@@ -37,9 +37,9 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, RecordBatch, UInt32Array};
 use arrow_schema::{Field, Schema};
-use sdm_contract::CoreError;
 use sdm_contract::data::NullOrder;
 use sdm_contract::ops::Stype;
+use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
 use sdm_engine::sample::{self, SEED_TIME};
@@ -469,15 +469,50 @@ impl Walk<'_> {
     /// The tables and links the payload takes, from what the walk reached.
     fn walked(&self, visits: Vec<Visit>, edges: Vec<Edge>) -> Result<Walked, CoreError> {
         let mut tables = Vec::new();
+        // Each table whose rows reached were cut, each kept row's new place
+        // by its place among the rows reached.
+        let mut cut: BTreeMap<String, Vec<Option<usize>>> = BTreeMap::new();
         for visit in visits {
-            let batch: Vec<usize> = visit.batches.concat();
+            let mut batch: Vec<usize> = visit.batches.concat();
             if batch.is_empty() {
                 continue;
             }
             let table = table_named(self.graph, &visit.name)?;
             let mut frame = concat(&visit.frames)?;
             if let Some(key) = &table.primary_key {
-                null_key_sortable(&frame, &table.name, key)?;
+                if let Some(kept) = null_keys_beside_values(&frame, key)? {
+                    let left_out = kept.iter().filter(|k| !**k).count();
+                    let rows: Vec<usize> = (0..kept.len()).filter(|&i| kept[i]).collect();
+                    frame = take(&frame, &rows)?;
+                    batch = rows.iter().map(|&i| batch[i]).collect();
+                    let mut place = 0;
+                    cut.insert(
+                        table.name.clone(),
+                        kept.iter()
+                            .map(|&k| {
+                                k.then(|| {
+                                    place += 1;
+                                    place - 1
+                                })
+                            })
+                            .collect(),
+                    );
+                    self.asker.warn(CoreWarning {
+                        code: NULL_KEYS_LEFT_OUT.to_owned(),
+                        message: "rows reached with no value for their table's key were left out"
+                            .to_owned(),
+                        fields: [
+                            ("table".to_owned(), Detail::text(&table.name)),
+                            ("column".to_owned(), Detail::text(key)),
+                            (
+                                "rows".to_owned(),
+                                Detail::Scalar(Scalar::UInt64(left_out as u64)),
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    });
+                }
                 frame = first_of_each_key(frame, key)?;
             }
             let entity = table.name == self.entity.name;
@@ -516,18 +551,31 @@ impl Walk<'_> {
                 stypes: features,
             });
         }
+        // A pair naming a row left out goes with it; the rest are renumbered.
+        let renumber = |table: &str, row: usize| -> Option<usize> {
+            match cut.get(table) {
+                Some(places) => places.get(row).copied().flatten(),
+                None => Some(row),
+            }
+        };
         let links = edges
             .into_iter()
             .filter(|e| !e.rows.is_empty())
-            .map(|e| SampledLink {
-                pairs: if e.reversed {
+            .map(|e| {
+                let pairs: Vec<(usize, usize)> = if e.reversed {
                     e.cols.into_iter().zip(e.rows).collect()
                 } else {
                     e.rows.into_iter().zip(e.cols).collect()
-                },
-                src: e.src,
-                fkey: e.fkey,
-                dst: e.dst,
+                };
+                SampledLink {
+                    pairs: pairs
+                        .into_iter()
+                        .filter_map(|(s, d)| Some((renumber(&e.src, s)?, renumber(&e.dst, d)?)))
+                        .collect(),
+                    src: e.src,
+                    fkey: e.fkey,
+                    dst: e.dst,
+                }
             })
             .collect();
         Ok(Walked { tables, links })
@@ -595,17 +643,22 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
         .map_err(|_| internal("rows could not be taken"))
 }
 
-/// Refuses a table whose rows reached hold a null key of text or of a
-/// decimal type beside a key that is not null, `INVALID_REQUEST` naming
-/// the table and column (rule `null_key`): the reference sorts every keyed
-/// table's keys reached (`np.unique` in `_sample_subgraph`), which fails
-/// comparing a null with a text value (an unnamed error its client reports
-/// as `INVALID_REQUEST`) or with a decimal (`INTERNAL_ERROR`, register
-/// P1B-40), so no request it would send exists to build. Keys reached that
-/// are all null sort, as one null alone does (measured on the reference
-/// at b413e9ad: one null, two nulls), and are read; so does a null integer
-/// or float key.
-fn null_key_sortable(frame: &RecordBatch, table: &str, key: &str) -> Result<(), CoreError> {
+/// The warning that rows a walk reached were left out for a null key
+/// beside keys that are not null (register P1B-40, the owner's option (b)
+/// of 2026-10-13).
+pub const NULL_KEYS_LEFT_OUT: &str = "NULL_KEYS_LEFT_OUT";
+
+/// Which rows of a keyed table's rows reached to keep, where they hold a
+/// null key of text or of a decimal type beside a key that is not null:
+/// the reference sorts every keyed table's keys reached (`np.unique` in
+/// `_sample_subgraph`), which fails comparing a null with a text value
+/// (an unnamed error its client reports as `INVALID_REQUEST`) or with a
+/// decimal (`INTERNAL_ERROR`), so no request of it exists to match; the
+/// core leaves the rows with a null key out and says so (P1B-40, approved
+/// by the owner). `None` where nothing is left out: keys reached that are
+/// all null sort, as one null alone does (measured on the reference at
+/// b413e9ad), and a null integer or float key sorts.
+fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<bool>>, CoreError> {
     let column = named(frame, key)?;
     let unsortable = matches!(
         column.data_type(),
@@ -616,18 +669,12 @@ fn null_key_sortable(frame: &RecordBatch, table: &str, key: &str) -> Result<(), 
             | arrow_schema::DataType::Decimal256(_, _)
     );
     let nulls = column.null_count();
-    if unsortable && nulls > 0 && nulls < column.len() {
-        return Err(CoreError::new(
-            sdm_contract::ErrorKind::InvalidRequest,
-            sdm_contract::ErrorCode::InvalidRequest,
-            "a table's rows reached hold no value for its text or decimal key, which cannot be ordered",
-        )
-        .with_field("operation", sdm_contract::Detail::text("materialize"))
-        .with_field("rule", sdm_contract::Detail::text("null_key"))
-        .with_field("table", sdm_contract::Detail::text(table))
-        .with_field("column", sdm_contract::Detail::text(key)));
+    if !unsortable || nulls == 0 || nulls == column.len() {
+        return Ok(None);
     }
-    Ok(())
+    Ok(Some(
+        (0..column.len()).map(|i| column.is_valid(i)).collect(),
+    ))
 }
 
 /// `frame`, its rows repeating a key past 1.05 times its distinct keys
@@ -676,9 +723,9 @@ mod null_key_tests {
     use std::sync::Arc;
 
     use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
-    use arrow_schema::{DataType, Field, Schema};
+    use arrow_schema::{Field, Schema};
 
-    use super::null_key_sortable;
+    use super::null_keys_beside_values;
 
     fn frame(keys: ArrayRef) -> RecordBatch {
         let field = Field::new("k", keys.data_type().clone(), true);
@@ -686,23 +733,35 @@ mod null_key_tests {
     }
 
     #[test]
-    fn only_a_null_beside_a_value_fails_the_reference_s_sort() {
+    fn only_a_null_beside_a_value_is_left_out() {
         // Measured on the reference at b413e9ad: one null alone and two
         // nulls sort; a null beside text, or beside a decimal, does not.
         let text = |values: Vec<Option<&str>>| frame(Arc::new(StringArray::from(values)));
-        assert!(null_key_sortable(&text(vec![None]), "t", "k").is_ok());
-        assert!(null_key_sortable(&text(vec![None, None]), "t", "k").is_ok());
-        assert!(null_key_sortable(&text(vec![Some("a"), Some("b")]), "t", "k").is_ok());
-        let err = null_key_sortable(&text(vec![None, Some("a")]), "t", "k").unwrap_err();
-        assert_eq!(err.code, sdm_contract::ErrorCode::InvalidRequest);
-        assert_eq!(err.fields["rule"], sdm_contract::Detail::text("null_key"));
+        assert_eq!(
+            null_keys_beside_values(&text(vec![None]), "k").unwrap(),
+            None
+        );
+        assert_eq!(
+            null_keys_beside_values(&text(vec![None, None]), "k").unwrap(),
+            None
+        );
+        assert_eq!(
+            null_keys_beside_values(&text(vec![Some("a"), Some("b")]), "k").unwrap(),
+            None
+        );
+        assert_eq!(
+            null_keys_beside_values(&text(vec![None, Some("a"), None]), "k").unwrap(),
+            Some(vec![false, true, false])
+        );
         let decimal = arrow_array::Decimal128Array::from(vec![Some(1), None])
             .with_precision_and_scale(18, 0)
             .unwrap();
-        assert!(null_key_sortable(&frame(Arc::new(decimal)), "t", "k").is_err());
-        // An integer key with a null sorts.
+        assert_eq!(
+            null_keys_beside_values(&frame(Arc::new(decimal)), "k").unwrap(),
+            Some(vec![true, false])
+        );
+        // An integer key with a null sorts, and is read.
         let ints = frame(Arc::new(Int64Array::from(vec![Some(1), None])));
-        assert!(null_key_sortable(&ints, "t", "k").is_ok());
-        assert_eq!(ints.column(0).data_type(), &DataType::Int64);
+        assert_eq!(null_keys_beside_values(&ints, "k").unwrap(), None);
     }
 }

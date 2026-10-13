@@ -189,17 +189,25 @@ pub(crate) async fn run(
         let inferred = if asked.is_empty() {
             infer::finish(previewed, None)?
         } else {
-            let read = ask(
-                &asker,
-                DataRequest::ColumnRanges {
-                    table: table.source.clone(),
-                    columns: asked.clone(),
-                },
-            )
-            .await?;
-            check_ranges(&read, &asked, &preview)?;
-            let whole = infer::whole_table(&asked, &read.batches, &reader)?;
-            infer::finish(previewed, Some(&whole))?
+            let asking = DataRequest::ColumnRanges {
+                table: table.source.clone(),
+                columns: asked.clone(),
+            };
+            // The reference reads the rows of its preview when its one
+            // query over the whole table raises, whatever the error (a
+            // timeout on a large view, most often), and says so of a column
+            // it then takes unchecked; so does the core, where the provider
+            // fails the request or does not answer it (P1B-38 rejected by
+            // the owner, 2026-10-13). An answer of another shape stays the
+            // core's error.
+            match ask(&asker, asking).await {
+                Ok(read) => {
+                    check_ranges(&read, &asked, &preview)?;
+                    let whole = infer::whole_table(&asked, &read.batches, &reader)?;
+                    infer::finish(previewed, Some(&whole))?
+                }
+                Err(_) => infer::finish_unchecked(previewed)?,
+            }
         };
         // The engine says what it dropped as it reads each table, and the
         // day-first formats it guessed as it typed its columns, before

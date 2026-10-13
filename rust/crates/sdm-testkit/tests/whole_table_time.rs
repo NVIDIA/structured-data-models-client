@@ -5,9 +5,8 @@
 //! T1.32e part 1, the implementer's own checks on `rust-host` (the test
 //! author's acceptance tests are `t132e_time_inference.rs`): the time
 //! column chosen over the whole table, asked of DuckDB in the reference's
-//! one statement, and register P1B-38's diagnostic, a whole-table read the
-//! source fails refused with the provider's error where the reference
-//! falls back to its preview.
+//! one statement, and a whole-table read the source fails falling back to
+//! the preview, as the reference falls back (P1B-38 rejected).
 
 use std::path::PathBuf;
 
@@ -97,18 +96,21 @@ fn a_full_preview_asks_the_whole_table_in_the_reference_s_statement() {
 }
 
 #[test]
-fn a_whole_table_read_the_source_fails_is_its_error() {
-    // Register P1B-38 (proposed), diagnostic: a view whose rows past the
-    // preview fail. The reference catches the failure and chooses from its
-    // preview (`happened_at`, measured at b413e9ad in ref-pandas3); the
-    // core refuses with the provider's error.
+fn a_whole_table_read_the_source_fails_falls_back_to_the_preview() {
+    // Register P1B-38, rejected by the owner (2026-10-13): a view whose
+    // rows past the preview fail. The reference catches the failure and
+    // chooses from its preview (`happened_at`, measured at b413e9ad in
+    // ref-pandas3); so does the core, which asked the source once.
     let observed = described(&[
         "CREATE VIEW events AS SELECT i::BIGINT AS event_id, (i % 7)::DOUBLE AS amount, \
          CASE WHEN i >= 9000 THEN error('past the preview') ELSE TIMESTAMP '2023-01-01' \
          + to_minutes(i::INTEGER) END AS happened_at FROM range(10000) t(i)",
     ]);
-    let Answer::Error { code, .. } = &observed.answer else {
-        panic!("{:?}", observed.answer);
-    };
-    assert_eq!(code, "PROVIDER_ERROR");
+    assert_eq!(time_column(&observed), json!("happened_at"));
+    let asked = observed
+        .fetches
+        .iter()
+        .filter(|f| f["request"]["request"] == "column_ranges")
+        .count();
+    assert_eq!(asked, 1, "{:?}", observed.fetches);
 }

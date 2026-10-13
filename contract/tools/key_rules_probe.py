@@ -201,7 +201,21 @@ def main() -> int:
     for name, source in sources.items():
         old, core = probe(source, 'old'), probe(source, 'core')
         kind = 'agree' if old == core else 'DIFFER'
-        if old != core and core['outcome'][2:] == ['wire_dtype']:
+        nulls_beside_values = (
+            old['outcome'] != 'success'
+            and old['outcome'][1] in ('INVALID_REQUEST', 'INTERNAL_ERROR')
+            and old['stage'] == 'materialize'
+            and core['outcome'] == 'success'
+            and any(
+                kind in ' '.join(source['statements'])
+                for kind in ('VARCHAR', 'DECIMAL')
+            )
+        )
+        if old != core and nulls_beside_values:
+            # The reference's sort fails on a null text or decimal key
+            # beside a value; the core leaves those rows out (P1B-40).
+            kind = 'P1B-40: rows with a null key left out'
+        elif old != core and core['outcome'][2:] == ['wire_dtype']:
             # A key declined leaves a decimal column a feature, which the
             # core does not send yet (wire_dtype, the decimals family's,
             # T1.32b; register P1B-3).

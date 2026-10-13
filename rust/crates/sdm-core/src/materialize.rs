@@ -131,6 +131,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     (TABLES_UNREACHED, &["one", "several"]),
     (COLUMNS_UNREAD, &["one", "several"]),
     (CONTEXT_ANSWERS, &["windowed", "static"]),
+    (crate::subgraph::NULL_KEYS_LEFT_OUT, &[]),
 ];
 /// The notice that the default run mode gathered as many context examples
 /// as it takes (the client's `_warn_of_a_context_the_default_mode_capped`).

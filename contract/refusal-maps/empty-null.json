@@ -24,7 +24,7 @@
       "rule": "empty_table",
       "owner": "T1.32d",
       "register": "P1B-11",
-      "where": "rust/crates/sdm-schema/src/infer.rs:373",
+      "where": "rust/crates/sdm-schema/src/infer.rs:399",
       "why": "An empty table, which the reference refuses with an unnamed RuntimeError (\"Table 'orders' is empty\", P1B-1): kept refused by name at T1.23 (P1B-11), its code and class for the owner, settled when T1.32d admits the case",
       "observed": {
         "python-core": {
@@ -48,7 +48,7 @@
       "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-core/src/materialize.rs:1532",
+      "where": "rust/crates/sdm-core/src/materialize.rs:1533",
       "holds": "the entities to predict for are none",
       "why": "The reference's own refusal, which the core makes from T1.28a (the ledger's row moved into the core: python-core hands the empty indices to it), INVALID_REQUEST as the reference's; rust-host cannot carry the call (gap), owned by the package that admits the case",
       "observed": {

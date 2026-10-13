@@ -1339,8 +1339,8 @@ entries:
     float32: measured on RelBench H&M's full tables (15,453,651
     transactions), the 30-day SUM(price) per customer.
   cases: [T1.32e]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
   notes: >-
     ORD-2's notes foresaw this entry. Measured by
@@ -1351,7 +1351,8 @@ entries:
     0.1676271186440672), and two runs of the same route differ from each
     other as much; the H&M sample and full-size AdventureWorks send one
     request on both routes. A real-data comparison reads these labels as
-    noise. Settling an order belongs with ORD-2 (Phase 4, S3).
+    noise. Settling an order belongs with ORD-2 (Phase 4, S3). Approved by the owner on 2026-10-13, relayed by the orchestrator (E85).
+
 
 # --- Phase 1b ------------------------------------------------------------------
 
@@ -2637,12 +2638,18 @@ entries:
     fails; or through a host provider that does not declare
     column_ranges.
   cases: [T1.32e]
-  status: proposed
-  approved_by: null
+  status: rejected
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
   notes: >-
-    Diagnostic: sdm-testkit's tests/whole_table_time.rs,
-    a_whole_table_read_the_source_fails_is_its_error, on the view above.
+    Rejected by the owner on 2026-10-13, relayed by the orchestrator
+    (E85): match the reference. From then the core falls back to the
+    preview when column_ranges fails or is not answered, keeping a column
+    the rows read would pass over, behind every other, and naming it as the
+    reference names it (TIME_COLUMNS_GUESSED, variants taken_unchecked_*,
+    worded by the Python host as the reference's taken_unchecked line);
+    sdm-testkit's tests/whole_table_time.rs holds the view above described
+    with happened_at, as the reference describes it. Formerly:
     The reference's success turns into a refusal, so this needs the owner
     individually (E66(b) and E73(b)); never self-approved. The
     alternative, for part 2 if the owner prefers it: port the fallback
@@ -2681,8 +2688,8 @@ entries:
     a time column candidate, compared with the reference run without
     pytz.
   cases: [T1.32e]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
   notes: >-
     Measured by contract/tools/whole_table_time_probe.py (seed 32, 50
@@ -2693,46 +2700,53 @@ entries:
     every row) agree either way. The core reads what the reference's code
     asks for; the difference is the reference's environment. Owner to
     approve (a different success, not E66(b)'s class); never
-    self-approved.
+    self-approved. Approved by the owner on 2026-10-13, relayed by the orchestrator (E85).
 
 - id: P1B-40
-  title: A null decimal key among the rows a walk reaches is refused by name on the core route where the reference fails with INTERNAL_ERROR
+  title: Rows a walk reaches with a null text or decimal key beside keys that are not null are left out, with a warning, where the reference fails
   kind: change
   old_behavior: >-
     The reference's materialize sorts the keys of every keyed table its
-    sampler reached (np.unique in _sample_subgraph). A null among a
-    DECIMAL key's values fails that sort, which its client reports as
-    INTERNAL_ERROR; among text keys the same failure is reported as an
-    unnamed INVALID_REQUEST. Such a key is kept where its table is 99%
+    sampler reached (np.unique in _sample_subgraph). A null beside a text
+    key's values fails that sort, which its client reports as an unnamed
+    INVALID_REQUEST; beside a DECIMAL key's values it is reported as
+    INTERNAL_ERROR. One null alone, or keys that are all null, sort, and
+    the request is built. Such a key is kept where its table is 99%
     distinct (T1.32e's key rules), so one null in 200 rows reaches it.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build,
-    materialize refuses a keyed table whose rows reached hold a null text
-    or decimal key beside one that is not null (the reference's sort fails
-    comparing them; keys reached that are all null sort, as one null alone
-    does) with INVALID_REQUEST, fields operation materialize,
-    rule null_key, the table and the column (sdm-core's subgraph.rs,
-    null_key_sortable), naming no value. For text that is the reference's
-    code, named; for a decimal it replaces the reference's INTERNAL_ERROR.
-    A null integer or float key sorts and is read. The default route is
+    materialize leaves out of the request the rows of a keyed table whose
+    rows reached hold a null text or decimal key beside keys that are not
+    null, the links naming them dropped and the rest renumbered, and warns
+    once per such table, NULL_KEYS_LEFT_OUT with the table, the column and
+    the rows left out (sdm-core's subgraph.rs, null_keys_beside_values);
+    the request is built. One null alone, keys that are all null, and a
+    null integer or float key are read as before. The default route is
     unchanged.
   affected_inputs: >-
     materialize under a forced core route over a source whose keyed
-    table, reached by the walk, holds a null DECIMAL or text key in the
-    rows reached, its key kept by inference.
+    table, reached by the walk, holds in the rows reached a null DECIMAL or
+    text key beside keys that are not null, its key kept by inference.
   cases: [T1.32e]
   refs:
-  - 'contract/key-inference-vectors.json#nulls-1-decimal.200 refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E84}
+  - 'contract/sampled-null-key-vectors.json#mixed-null-text refusal INVALID_REQUEST -> success'
+  - 'contract/sampled-null-key-vectors.json#mixed-null-decimal refusal INTERNAL_ERROR -> success'
+  - 'contract/key-inference-vectors.json#nulls-1-text.200 refusal INVALID_REQUEST -> success'
+  - 'contract/key-inference-vectors.json#nulls-1-decimal.200 refusal INTERNAL_ERROR -> success'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E85}
   notes: >-
-    Measured on the test author's vector nulls-1-decimal.200 (marked
-    register-required by the recorder) and by
-    contract/tools/key_rules_probe.py. E66(b)'s class (a reference crash
-    or internal error answered by a named refusal or a clearer code); never
-    self-approved. The text case, nulls-1-text.200, keeps the reference's
-    INVALID_REQUEST, so it needs no entry.
+    The owner's option (b) of 2026-10-13, relayed by the orchestrator
+    (E85): drop the rows with a warning, no refusal. Measured on the test
+    author's vectors (contract/sampled-null-key-vectors.json,
+    contract/key-inference-vectors.json) and by
+    contract/tools/key_rules_probe.py. nulls-1-text.200 (the reference's
+    unnamed INVALID_REQUEST) is under option (b) too, the orchestrator's
+    reading: the same text key mixing nulls with values. The test author's
+    vectors hold the request equal to the not-sampled twin's and the
+    warnings to the twin's plus this one. Formerly proposed as a refusal by
+    name (null_key) at T1.32e's first push.
 
 - id: P1B-50
   title: A list column DuckDB hands over as a list view is left out as a list where the reference fails unnamed

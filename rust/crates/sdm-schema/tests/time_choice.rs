@@ -981,3 +981,62 @@ fn an_order_the_values_leave_open_is_refused_where_it_decides_the_score() {
     coded.push(Some("code"));
     assert_eq!(of(vec![("ts", texts(&coded))]).unwrap_err(), "text_time");
 }
+
+#[test]
+fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
+    // P1B-38 rejected by the owner: as the reference's choice when its
+    // `full_range` raises. A column the preview passes over for its values
+    // is kept, named unconfirmed, and taken only when no other is.
+    let table = infer::finish_unchecked(previewed(&["happened"], 1_000, true)).unwrap();
+    assert_eq!(table.time_column.as_deref(), Some("happened"));
+    assert!(table.time.refused.is_empty());
+    assert_eq!(
+        table.time.unconfirmed,
+        [(
+            "happened".to_owned(),
+            PassedOver::Constant {
+                value: Some(Scalar::Timestamp {
+                    unit: sdm_contract::Unit::Us,
+                    zone: None,
+                    value: day(0),
+                }),
+                missing: 0,
+                rows: 1_000,
+            }
+        )]
+    );
+    // Beside a column the preview does not doubt, the doubted one is not
+    // taken.
+    let mut fields = vec![Field::new("thing_id", DataType::Int64, true)];
+    let mut arrays: Vec<ArrayRef> = vec![Arc::new(Int64Array::from_iter_values(0..1_000))];
+    for (name, constant) in [("happened", true), ("shipped", false)] {
+        fields.push(Field::new(
+            name,
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            true,
+        ));
+        arrays.push(Arc::new(TimestampMicrosecondArray::from_iter_values(
+            (0..1_000).map(|i| day(if constant { 0 } else { i })),
+        )));
+    }
+    let schema = Arc::new(Schema::new(fields));
+    let batch = RecordBatch::try_new(Arc::clone(&schema), arrays).unwrap();
+    let catalog: Vec<CatalogColumn> = schema
+        .fields()
+        .iter()
+        .map(|f| CatalogColumn {
+            name: f.name().clone(),
+            declared_type: String::new(),
+            not_null: false,
+            primary_key: false,
+        })
+        .collect();
+    let both = infer::preview("things", "things", &catalog, &[], &schema, &[batch], &Days).unwrap();
+    let table = infer::finish_unchecked(both).unwrap();
+    assert_eq!(table.time_column.as_deref(), Some("shipped"));
+    assert_eq!(table.time.unconfirmed.len(), 1);
+    // Under a full preview nothing was asked: as `finish` with no reading.
+    let small = infer::finish_unchecked(previewed(&["happened"], 999, true)).unwrap();
+    assert_eq!(small.time_column, None);
+    assert!(small.time.unconfirmed.is_empty());
+}

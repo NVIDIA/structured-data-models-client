@@ -195,6 +195,31 @@ SAID: dict[str, dict[str | None, str]] = {
             'true, name it: time_columns={{{table!r}: {other!r}}}. If none '
             'does, clear it: time_columns={{{table!r}: None}}.'
         ),
+        **{
+            f'taken_unchecked_{reason}': (
+                '{table}.{column} was taken as the time column although '
+                + why
+                + ', because the query over the whole table failed and the '
+                'rows past them were not checked. If the whole table is like '
+                'that, clear it: time_columns={{{table!r}: None}}.'
+            )
+            for reason, why in (
+                ('empty', 'none of the {rows:,} rows read holds a value'),
+                (
+                    'sparse',
+                    '{missing:,} of the {rows:,} rows read hold no value',
+                ),
+                (
+                    'constant_where_held',
+                    'every one of the {rows:,} rows read that holds a value '
+                    'holds {value!t}',
+                ),
+                (
+                    'constant',
+                    'every one of the {rows:,} rows read holds {value!t}',
+                ),
+            )
+        },
         'taken_edit_stamp': (
             '{table}.{column} was taken as the time column although it looks '
             'like when a row was last changed, because the table has no other '
@@ -236,6 +261,17 @@ SAID: dict[str, dict[str | None, str]] = {
     'COLUMNS_LEFT_OUT': {None: '{column} ({dtype})'},
     # The key rules (T1.32e): the reference's `_warn_a_key_has_no_value`,
     # `_warn_a_key_repeats` and `_warn_a_key_was_declined`.
+    # Rows a walk reached left out for a null text or decimal key beside
+    # keys that are not null (T1.32e, register P1B-40), where the reference
+    # fails; this client's own words.
+    'NULL_KEYS_LEFT_OUT': {
+        None: (
+            '{table}.{column} has no value in {rows:,} of the rows sampled, '
+            'beside rows that do, so those rows were left out of the request: '
+            'a row with no key cannot be told apart. Fill or drop them, or '
+            'name a different primary key.'
+        )
+    },
     'KEY_NO_VALUE': {
         None: (
             '{table}.{column} identifies a row, but {missing:,} row(s) have '
