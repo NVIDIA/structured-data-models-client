@@ -1,0 +1,1902 @@
+{
+ "format": "sdm-nested-type-vectors/1",
+ "recorded_by": "contract/tools/nested_type_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "template": "contract/cases/s1/nested.list-int.json",
+ "register_ref": "contract/nested-type-vectors.json#",
+ "vectors": [
+  {
+   "id": "list.boolean",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id % 2 = 0, NULL]::BOOLEAN[] AS f FROM users"
+   ],
+   "typeof": "BOOLEAN[]",
+   "duckdb_arrow": "list<l: bool>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.tinyint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::TINYINT[] AS f FROM users"
+   ],
+   "typeof": "TINYINT[]",
+   "duckdb_arrow": "list<l: int8>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.smallint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::SMALLINT[] AS f FROM users"
+   ],
+   "typeof": "SMALLINT[]",
+   "duckdb_arrow": "list<l: int16>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.integer",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.bigint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[] AS f FROM users"
+   ],
+   "typeof": "BIGINT[]",
+   "duckdb_arrow": "list<l: int64>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.hugeint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::HUGEINT[] AS f FROM users"
+   ],
+   "typeof": "HUGEINT[]",
+   "duckdb_arrow": "list<l: decimal128(38, 0)>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.utinyint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::UTINYINT[] AS f FROM users"
+   ],
+   "typeof": "UTINYINT[]",
+   "duckdb_arrow": "list<l: uint8>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.usmallint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::USMALLINT[] AS f FROM users"
+   ],
+   "typeof": "USMALLINT[]",
+   "duckdb_arrow": "list<l: uint16>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.uinteger",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::UINTEGER[] AS f FROM users"
+   ],
+   "typeof": "UINTEGER[]",
+   "duckdb_arrow": "list<l: uint32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.ubigint",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::UBIGINT[] AS f FROM users"
+   ],
+   "typeof": "UBIGINT[]",
+   "duckdb_arrow": "list<l: uint64>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.float",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id + 0.5, user_id + 1]::FLOAT[] AS f FROM users"
+   ],
+   "typeof": "FLOAT[]",
+   "duckdb_arrow": "list<l: float>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.double",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id + 0.5, user_id + 1]::DOUBLE[] AS f FROM users"
+   ],
+   "typeof": "DOUBLE[]",
+   "duckdb_arrow": "list<l: double>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.decimal-18-2",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id + 0.25, user_id + 1]::DECIMAL(18, 2)[] AS f FROM users"
+   ],
+   "typeof": "DECIMAL(18,2)[]",
+   "duckdb_arrow": "list<l: decimal128(18, 2)>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.decimal-38-10",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id + 0.25, user_id + 1]::DECIMAL(38, 10)[] AS f FROM users"
+   ],
+   "typeof": "DECIMAL(38,10)[]",
+   "duckdb_arrow": "list<l: decimal128(38, 10)>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ['a' || user_id, NULL]::VARCHAR[] AS f FROM users"
+   ],
+   "typeof": "VARCHAR[]",
+   "duckdb_arrow": "list<l: string>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.uuid",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [('00000000-0000-0000-0000-' || lpad(user_id::VARCHAR, 12, '0'))::UUID] AS f FROM users"
+   ],
+   "typeof": "UUID[]",
+   "duckdb_arrow": "list<l: string>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.date",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [DATE '2024-01-01' + user_id::INTEGER] AS f FROM users"
+   ],
+   "typeof": "DATE[]",
+   "duckdb_arrow": "list<l: date32[day]>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.timestamp",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER)] AS f FROM users"
+   ],
+   "typeof": "TIMESTAMP[]",
+   "duckdb_arrow": "list<l: timestamp[us]>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.timestamptz",
+   "table": "users",
+   "setup": [
+    "SET TimeZone = 'UTC'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, [TIMESTAMPTZ '2024-01-01 00:00:00+00' + to_days(user_id::INTEGER)] AS f FROM users"
+   ],
+   "typeof": "TIMESTAMP WITH TIME ZONE[]",
+   "duckdb_arrow": "list<l: timestamp[us, tz=UTC]>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.time",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [TIME '10:00:00' + to_minutes(user_id::INTEGER)] AS f FROM users"
+   ],
+   "typeof": "TIME[]",
+   "duckdb_arrow": "list<l: time64[us]>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.interval",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [to_days(user_id::INTEGER)] AS f FROM users"
+   ],
+   "typeof": "INTERVAL[]",
+   "duckdb_arrow": "list<l: month_day_nano_interval>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.blob",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [('x' || user_id)::BLOB] AS f FROM users"
+   ],
+   "typeof": "BLOB[]",
+   "duckdb_arrow": "list<l: binary>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.mixed-empty-null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (CASE user_id % 4 WHEN 0 THEN [1, 2] WHEN 1 THEN [] WHEN 2 THEN NULL ELSE [3] END)::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.all-empty",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, []::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.all-null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, NULL::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.null-items",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [NULL, user_id]::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.only-null-items",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [NULL]::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.all-empty-varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, []::VARCHAR[] AS f FROM users"
+   ],
+   "typeof": "VARCHAR[]",
+   "duckdb_arrow": "list<l: string>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.integer-large",
+   "table": "users",
+   "setup": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "large_list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.varchar-large",
+   "table": "users",
+   "setup": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ['a' || user_id]::VARCHAR[] AS f FROM users"
+   ],
+   "typeof": "VARCHAR[]",
+   "duckdb_arrow": "large_list<l: large_string>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "list.integer-view",
+   "table": "users",
+   "setup": [
+    "SET arrow_output_list_view = true",
+    "SET arrow_output_version = '1.4'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::INTEGER[] AS f FROM users"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list_view<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.list-integer",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [[user_id], [user_id + 1, 2]]::INTEGER[][] AS f FROM users"
+   ],
+   "typeof": "INTEGER[][]",
+   "duckdb_arrow": "list<l: list<l: int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.list-varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [['a' || user_id]]::VARCHAR[][] AS f FROM users"
+   ],
+   "typeof": "VARCHAR[][]",
+   "duckdb_arrow": "list<l: list<l: string>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.list-empty",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [[]]::INTEGER[][] AS f FROM users"
+   ],
+   "typeof": "INTEGER[][]",
+   "duckdb_arrow": "list<l: list<l: int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed ValueError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.struct",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [{'a': user_id::INTEGER}] AS f FROM users"
+   ],
+   "typeof": "STRUCT(a INTEGER)[]",
+   "duckdb_arrow": "list<l: struct<a: int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "list.map",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [map(['k'], [user_id::INTEGER])] AS f FROM users"
+   ],
+   "typeof": "MAP(VARCHAR, INTEGER)[]",
+   "duckdb_arrow": "list<l: map<string, int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.bigint-2",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1]::BIGINT[2] AS f FROM users"
+   ],
+   "typeof": "BIGINT[2]",
+   "duckdb_arrow": "fixed_size_list<: int64>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.integer-3",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, user_id + 1, 0]::INTEGER[3] AS f FROM users"
+   ],
+   "typeof": "INTEGER[3]",
+   "duckdb_arrow": "fixed_size_list<: int32>[3]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.double-2",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id + 0.5, 1.5]::DOUBLE[2] AS f FROM users"
+   ],
+   "typeof": "DOUBLE[2]",
+   "duckdb_arrow": "fixed_size_list<: double>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.varchar-2",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ['a' || user_id, 'b']::VARCHAR[2] AS f FROM users"
+   ],
+   "typeof": "VARCHAR[2]",
+   "duckdb_arrow": "fixed_size_list<: string>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.boolean-2",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, [true, user_id % 2 = 0]::BOOLEAN[2] AS f FROM users"
+   ],
+   "typeof": "BOOLEAN[2]",
+   "duckdb_arrow": "fixed_size_list<: bool>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, NULL::INTEGER[2] AS f FROM users"
+   ],
+   "typeof": "INTEGER[2]",
+   "duckdb_arrow": "fixed_size_list<: int32>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.array",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, array_value(array_value(user_id::INTEGER, 1::INTEGER), array_value(2::INTEGER, 3::INTEGER)) AS f FROM users"
+   ],
+   "typeof": "INTEGER[2][2]",
+   "duckdb_arrow": "fixed_size_list<: fixed_size_list<: int32>[2]>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "array.list",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, array_value([user_id::INTEGER], []::INTEGER[]) AS f FROM users"
+   ],
+   "typeof": "INTEGER[][2]",
+   "duckdb_arrow": "fixed_size_list<: list<l: int32>>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.integer-varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a INTEGER, b VARCHAR)",
+   "duckdb_arrow": "struct<a: int32, b: string>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.integer",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a INTEGER)",
+   "duckdb_arrow": "struct<a: int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 'x' || user_id} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a VARCHAR)",
+   "duckdb_arrow": "struct<a: string>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.double",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': (user_id + 0.5)::DOUBLE} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a DOUBLE)",
+   "duckdb_arrow": "struct<a: double>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.nested",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': {'b': user_id::INTEGER}} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a STRUCT(b INTEGER))",
+   "duckdb_arrow": "struct<a: struct<b: int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.list",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': [user_id::INTEGER]} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a INTEGER[])",
+   "duckdb_arrow": "struct<a: list<l: int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, NULL::STRUCT(a INTEGER) AS f FROM users"
+   ],
+   "typeof": "STRUCT(a INTEGER)",
+   "duckdb_arrow": "struct<a: int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "struct.null-fields",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': NULL::INTEGER} AS f FROM users"
+   ],
+   "typeof": "STRUCT(a INTEGER)",
+   "duckdb_arrow": "struct<a: int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "map.varchar-integer",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [user_id::INTEGER]) AS f FROM users"
+   ],
+   "typeof": "MAP(VARCHAR, INTEGER)",
+   "duckdb_arrow": "map<string, int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "map.integer-varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, map([user_id::INTEGER], ['x']) AS f FROM users"
+   ],
+   "typeof": "MAP(INTEGER, VARCHAR)",
+   "duckdb_arrow": "map<int32, string>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "map.varchar-list",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, map(['k'], [[user_id::INTEGER]]) AS f FROM users"
+   ],
+   "typeof": "MAP(VARCHAR, INTEGER[])",
+   "duckdb_arrow": "map<string, list<l: int32>>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "map.empty",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, map([], [])::MAP(VARCHAR, INTEGER) AS f FROM users"
+   ],
+   "typeof": "MAP(VARCHAR, INTEGER)",
+   "duckdb_arrow": "map<string, int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "map.null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, NULL::MAP(VARCHAR, INTEGER) AS f FROM users"
+   ],
+   "typeof": "MAP(VARCHAR, INTEGER)",
+   "duckdb_arrow": "map<string, int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "union.integer-varchar",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+   ],
+   "typeof": "UNION(n INTEGER, s VARCHAR)",
+   "duckdb_arrow": "sparse_union<n: int32=0, s: string=1>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "scalar.blob",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ('x' || user_id)::BLOB AS f FROM users"
+   ],
+   "typeof": "BLOB",
+   "duckdb_arrow": "binary",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "scalar.blob-null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, NULL::BLOB AS f FROM users"
+   ],
+   "typeof": "BLOB",
+   "duckdb_arrow": "binary",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "scalar.interval",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, to_days(user_id::INTEGER) AS f FROM users"
+   ],
+   "typeof": "INTERVAL",
+   "duckdb_arrow": "month_day_nano_interval",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "scalar.interval-null",
+   "table": "users",
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, NULL::INTERVAL AS f FROM users"
+   ],
+   "typeof": "INTERVAL",
+   "duckdb_arrow": "month_day_nano_interval",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "orders.list-integer",
+   "table": "orders",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, [order_id::INTEGER] AS f FROM orders"
+   ],
+   "typeof": "INTEGER[]",
+   "duckdb_arrow": "list<l: int32>",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "orders.array-integer-2",
+   "table": "orders",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, [order_id::INTEGER, 1]::INTEGER[2] AS f FROM orders"
+   ],
+   "typeof": "INTEGER[2]",
+   "duckdb_arrow": "fixed_size_list<: int32>[2]",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "orders.struct",
+   "table": "orders",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, {'a': order_id::INTEGER} AS f FROM orders"
+   ],
+   "typeof": "STRUCT(a INTEGER)",
+   "duckdb_arrow": "struct<a: int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "orders.map",
+   "table": "orders",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, map(['k'], [order_id::INTEGER]) AS f FROM orders"
+   ],
+   "typeof": "MAP(VARCHAR, INTEGER)",
+   "duckdb_arrow": "map<string, int32>",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "orders.blob",
+   "table": "orders",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, ('x' || order_id)::BLOB AS f FROM orders"
+   ],
+   "typeof": "BLOB",
+   "duckdb_arrow": "binary",
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out",
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ],
+    "payload": {
+     "schema": null,
+     "cells": null
+    }
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "orders.interval",
+   "table": "orders",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, to_days(order_id::INTEGER) AS f FROM orders"
+   ],
+   "typeof": "INTERVAL",
+   "duckdb_arrow": "month_day_nano_interval",
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null,
+    "warnings": [],
+    "payload": null
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with an unnamed RuntimeError at from_source (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  }
+ ]
+}
