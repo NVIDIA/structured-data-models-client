@@ -10,6 +10,11 @@
 //! read as a literal of a query's filter: the date and offset the reference
 //! reads, or `PQL_VALUE_INVALID_LITERAL` where it refuses, and D4's warning
 //! by format.
+//!
+//! From T1.6c a row whose date literal has a run of five digits or more
+//! (D8) is held to the core's refusal by name (`date_literal_packed`)
+//! instead, whatever the reference read; its recorded reading stays in the
+//! table as evidence of the old behaviour.
 
 #![allow(
     clippy::disallowed_methods,
@@ -21,7 +26,9 @@ mod pql_compare;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use pql_compare::{NoZones, differences, facts, profile, query_schema};
+use pql_compare::{
+    NoZones, differences, facts, holds_packed_date, is_packed_refusal, profile, query_schema,
+};
 use sdm_contract::Detail;
 use sdm_contract::pql::{NodeKind, PqlLiteral, PqlNode};
 use sdm_core::pql::resolve;
@@ -56,17 +63,33 @@ fn every_quirk_has_a_row() {
     assert_eq!(rows(&table, "dates").len(), 55);
 }
 
+/// Every query row as the reference answers it, except the one whose date
+/// literal is D8 (`date-digit-counts/long-year`, `12345-1-1`, which the
+/// reference refuses as `PQL_VALUE_INVALID_LITERAL`): from T1.6c the core
+/// refuses it by name (brief: "update the quirk expectations for D8
+/// literals from read to refused").
 #[test]
 fn every_query_row_answers_as_the_reference_does() {
     let table = table();
     let mut failures = Vec::new();
+    let mut packed = Vec::new();
     for row in rows(&table, "queries") {
         let schema = query_schema(&table["schemas"][row["schema"].as_str().unwrap()]);
         let profile = profile(row["profile"].as_str().unwrap());
+        let query = row["query"].as_str().unwrap();
+        if holds_packed_date(query) {
+            packed.push(row["id"].as_str().unwrap());
+            match resolve(query, &schema, &profile, &facts(), &NoZones) {
+                Err(error) if is_packed_refusal(&error) => {}
+                other => failures.push(format!("{}: not refused as packed: {other:?}", row["id"])),
+            }
+            continue;
+        }
         for (part, how) in differences(row, &schema, &profile) {
             failures.push(format!("{}: {part}: {how}", row["id"]));
         }
     }
+    assert_eq!(packed, ["date-digit-counts/long-year"]);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
@@ -83,18 +106,32 @@ fn time_of(node: &PqlNode) -> Option<(String, Option<i32>)> {
     }
 }
 
+/// Every date row as the reference reads it, except the four with a run of
+/// five digits or more (`10000-01-01`, `230203-06-09`, `20240101-01-01`,
+/// `1-1-20240101`), which from T1.6c the core refuses by name, where the
+/// reference read two and refused two: no reading, no diagnostic, no
+/// warning (brief: "update the quirk expectations for D8 literals").
 #[test]
 fn every_date_row_reads_as_the_reference_reads_it() {
     let table = table();
     let schema = query_schema(&table["schemas"]["shop"]);
     let relational = profile("RELATIONAL");
     let mut failures = Vec::new();
+    let mut packed = Vec::new();
     for row in rows(&table, "dates") {
         let literal = row["literal"].as_str().unwrap();
         let query = format!(
             "PREDICT COUNT(orders.* WHERE orders.ordered_at > {literal}, 0, 30, days) FOR EACH \
              users.user_id"
         );
+        if holds_packed_date(&query) {
+            packed.push(literal);
+            match resolve(&query, &schema, &relational, &facts(), &NoZones) {
+                Err(error) if is_packed_refusal(&error) => {}
+                other => failures.push(format!("{literal}: not refused as packed: {other:?}")),
+            }
+            continue;
+        }
         let got = resolve(&query, &schema, &relational, &facts(), &NoZones).unwrap();
         let read = match &got.query {
             Some(query) => time_of(&query.target),
@@ -132,5 +169,14 @@ fn every_date_row_reads_as_the_reference_reads_it() {
             ));
         }
     }
+    assert_eq!(
+        packed,
+        [
+            "10000-01-01",
+            "230203-06-09",
+            "20240101-01-01",
+            "1-1-20240101"
+        ]
+    );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

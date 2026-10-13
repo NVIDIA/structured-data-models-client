@@ -769,6 +769,11 @@ fn a_day_first_date_literal_warns_on_the_run_s_warnings_channel() {
     assert!(sdm_core::warning_codes().contains(&("DATE_LITERAL_DAY_FIRST", &[][..])));
 }
 
+/// T1.6c: a packed date (D8) is refused by name, not read, so it never
+/// needs the current year: with a zone the run cannot resolve, a six-digit
+/// packed date (which D5 would have placed) and an eight-digit one are
+/// refused as packed, never for the zone; a two-digit year still is, and
+/// whichever literal is built first decides.
 #[test]
 fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
     // The current year is read only for a two-digit year (D5): with a zone
@@ -780,7 +785,6 @@ fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
         "PREDICT t.c FOR EACH t.id",
         "PREDICT t.c FOR EACH t.id WHERE t.ts > 2024-01-13",
         "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024",
-        "PREDICT t.c FOR EACH t.id WHERE t.ts > 20240101-01-01",
     ] {
         let Step::Done {
             result: OperationResult::ValidateQuery(validation),
@@ -792,7 +796,7 @@ fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
     }
     for query in [
         "PREDICT t.c FOR EACH t.id WHERE t.ts > 1/2/76",
-        "PREDICT t.c FOR EACH t.id WHERE t.ts > 760101-01-01",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 1/2/76 AND t.ts < 760101-01-01",
     ] {
         let err = validate_run(query, facts.clone())
             .unwrap()
@@ -804,5 +808,86 @@ fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
             "{query}"
         );
         assert_eq!(named(&err, "field"), "facts.local_zone", "{query}");
+    }
+    for query in [
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 760101-01-01",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 20240101-01-01",
+        "PREDICT t.c FOR EACH t.id WHERE t.ts > 760101-01-01 AND t.ts < 1/2/76",
+    ] {
+        let err = validate_run(query, facts.clone())
+            .unwrap()
+            .next()
+            .unwrap_err();
+        assert_eq!(
+            (err.kind, err.code),
+            (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest),
+            "{query}"
+        );
+        assert_eq!(named(&err, "rule"), "date_literal_packed", "{query}");
+        assert!(!err.fields.contains_key("field"), "{query}: {err:?}");
+    }
+}
+
+/// T1.6c brief, Tests: "a D8 literal is refused by name" on the
+/// `validate_query` operation, as a host runs it: the run ends with the
+/// core's error, `INVALID_REQUEST`, naming `operation` `validate_query` and
+/// `rule` `date_literal_packed`, with the literal's place and never its
+/// text; a literal with no run of five digits or more in the same place is
+/// answered as before, and D9's still with the diagnostic.
+#[test]
+fn a_packed_date_literal_ends_validate_query_with_the_core_s_error() {
+    for literal in [
+        "230203-06-09",
+        "20240101/00/123456",
+        "2024-01-01 00000:00:00",
+        "10000-01-01",
+    ] {
+        let query = format!("PREDICT t.c FOR EACH t.id WHERE t.ts > {literal}");
+        let mut run = validate_run(&query, facts()).unwrap();
+        let err = run.next().unwrap_err();
+        assert_eq!(
+            (err.kind, err.code),
+            (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest),
+            "{literal}"
+        );
+        assert_eq!(named(&err, "operation"), "validate_query", "{literal}");
+        assert_eq!(named(&err, "rule"), "date_literal_packed", "{literal}");
+        for name in ["start_row", "start_col", "end_row", "end_col"] {
+            assert!(
+                matches!(
+                    err.fields.get(name),
+                    Some(sdm_contract::Detail::Scalar(Scalar::UInt64(_)))
+                ),
+                "{literal}: no {name} in {err:?}"
+            );
+        }
+        assert_eq!(
+            err.fields["start_col"],
+            sdm_contract::Detail::Scalar(Scalar::UInt64(39)),
+            "{literal}"
+        );
+        let written = serde_json::to_string(&err).unwrap();
+        assert!(!written.contains(literal), "{written}");
+    }
+    for (literal, accepted) in [("2023-02-03", true), ("2023-02-29", false)] {
+        let query = format!("PREDICT t.c FOR EACH t.id WHERE t.ts > {literal}");
+        let Step::Done {
+            result: OperationResult::ValidateQuery(validation),
+        } = validate_run(&query, facts()).unwrap().next().unwrap()
+        else {
+            panic!("{literal}: no answer");
+        };
+        assert_eq!(validation.accepted, accepted, "{literal}");
+        let codes: Vec<&str> = validation
+            .diagnostics
+            .iter()
+            .map(|d| d.code.as_str())
+            .collect();
+        let want: &[&str] = if accepted {
+            &[]
+        } else {
+            &["PQL_VALUE_INVALID_LITERAL"]
+        };
+        assert_eq!(codes, want, "{literal}");
     }
 }

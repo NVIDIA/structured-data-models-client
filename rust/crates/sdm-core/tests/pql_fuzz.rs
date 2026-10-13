@@ -214,9 +214,12 @@ fn the_parser_answers_every_fuzzed_input_without_a_panic() {
     assert!(took < BOUND, "{took:?}");
     assert_eq!(inputs.len(), MUTATED + TOKENS + DATES);
     // Every kind of answer is reached, so the inputs are not all refused at
-    // the first character.
+    // the first character. From T1.6c a date literal with a run of five
+    // digits or more (D8) is refused by name, a `CoreError`, where it was
+    // read or refused with a diagnostic: about 4,800 inputs, most of them
+    // date inputs, end so, and are counted among the errors.
     assert!(
-        accepted > 150 && refused > 10_000,
-        "{accepted} accepted, {refused} refused"
+        accepted > 150 && refused > 8_000 && errors > 2_000,
+        "{accepted} accepted, {refused} refused, {errors} errors"
     );
 }

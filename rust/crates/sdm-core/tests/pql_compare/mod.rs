@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{ColumnRef, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Severity};
-use sdm_contract::{Detail, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve};
 use sdm_core::profiles::Profile;
 use serde_json::{Map, Value, json};
@@ -341,6 +341,43 @@ pub fn reference_format(message: &str) -> String {
         .split_once(" format when dayfirst=False")
         .unwrap_or_else(|| panic!("not a day-first warning: {message}"));
     format.to_owned()
+}
+
+/// Whether `query` holds a date literal with a run of five digits or more
+/// (D8), which the core refuses by name from T1.6c: a `DATE` token, three
+/// runs of digits joined by one of `/`, `-` or `.`, with such a run, or
+/// followed by a `TIME` token, three runs joined by `:`, with one.
+pub fn holds_packed_date(query: &str) -> bool {
+    let words: Vec<&str> = query
+        .split(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | ','))
+        .collect();
+    let runs = |word: &str, separators: &[char]| -> Option<Vec<usize>> {
+        let sep = word.chars().find(|c| separators.contains(c))?;
+        let parts: Vec<&str> = word.split(sep).collect();
+        let digits = |p: &&str| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit());
+        (parts.len() == 3 && parts.iter().all(digits))
+            .then(|| parts.iter().map(|p| p.len()).collect())
+    };
+    words.iter().enumerate().any(|(i, word)| {
+        let Some(date) = runs(word, &['/', '-', '.']) else {
+            return false;
+        };
+        let time = words.get(i + 1).and_then(|next| runs(next, &[':']));
+        date.iter().chain(time.iter().flatten()).any(|n| *n >= 5)
+    })
+}
+
+/// Whether `error` is the core's refusal by name of a D8 literal (T1.6c):
+/// `INVALID_REQUEST` for `validate_query`'s rule `date_literal_packed`.
+pub fn is_packed_refusal(error: &CoreError) -> bool {
+    let text = |name: &str| match error.fields.get(name) {
+        Some(Detail::Scalar(Scalar::Utf8(text))) => Some(text.as_str()),
+        _ => None,
+    };
+    error.kind == ErrorKind::InvalidRequest
+        && error.code == ErrorCode::InvalidRequest
+        && text("operation") == Some("validate_query")
+        && text("rule") == Some("date_literal_packed")
 }
 
 /// Error codes the reference gives in the order of a Python set.

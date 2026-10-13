@@ -4,9 +4,10 @@
 
 //! The adapter's own rules: a model that cannot answer a time range refuses
 //! before resolution; the two filter capabilities reach resolution; date
-//! literals are read by D1 to D9, packed dates and long fields included,
-//! and a day-first one warns (D4); and an accepted query is handed on in
-//! the validated-query format.
+//! literals are read by D1 to D7 and D9, and a day-first one warns (D4),
+//! while one with a run of five digits or more (D8) is refused by name
+//! (T1.6c); and an accepted query is handed on in the validated-query
+//! format.
 
 #![allow(
     clippy::disallowed_methods,
@@ -19,7 +20,7 @@ use std::collections::BTreeMap;
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{Capability, ProfileName, ProfileSpec, QuerySchema};
 use sdm_contract::pql::{Aggregation, EntityClause, NodeKind, PqlLiteral, QueryMode};
-use sdm_contract::{CoreWarning, Detail, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_core::pql::{DATE_LITERAL_DAY_FIRST, resolve, validate};
 use sdm_core::profiles::Profile;
 use serde_json::json;
@@ -176,29 +177,211 @@ fn read_literal(literal: &str) -> (Option<(String, Option<i32>)>, Vec<CoreWarnin
     (found, validation.warnings)
 }
 
+/// `PREDICT COUNT(orders.* WHERE <condition>, 0, 30, days) FOR EACH
+/// users.user_id`.
+fn filtered(condition: &str) -> String {
+    format!("PREDICT COUNT(orders.* WHERE {condition}, 0, 30, days) FOR EACH users.user_id")
+}
+
+/// The core's refusal of `query`, which must refuse rather than answer.
+fn refusal_of(query: &str, facts: &HostFacts) -> CoreError {
+    resolve(
+        query,
+        &shop(),
+        &profile(ProfileName::Relational, &[]),
+        facts,
+        &NoZones,
+    )
+    .expect_err(query)
+}
+
+/// A text field of `error`.
+fn text_field(error: &CoreError, name: &str) -> Option<String> {
+    match error.fields.get(name) {
+        Some(Detail::Scalar(Scalar::Utf8(text))) => Some(text.clone()),
+        _ => None,
+    }
+}
+
+/// T1.6c's refusal by name of a D8 literal: `INVALID_REQUEST`, kind
+/// invalid request, naming `operation` `validate_query` and `rule`
+/// `date_literal_packed`, with the literal's place as D4's warning gives
+/// it (`start_row`, `start_col`, `end_row`, `end_col`), and never the
+/// literal's text, in its message or any field.
+fn assert_refused_as_packed(error: &CoreError, literal: &str) {
+    assert_eq!(
+        (error.kind, error.code),
+        (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest),
+        "{literal}: {error:?}"
+    );
+    assert_eq!(
+        text_field(error, "operation").as_deref(),
+        Some("validate_query"),
+        "{literal}: {error:?}"
+    );
+    assert_eq!(
+        text_field(error, "rule").as_deref(),
+        Some("date_literal_packed"),
+        "{literal}: {error:?}"
+    );
+    for name in ["start_row", "start_col", "end_row", "end_col"] {
+        assert!(
+            matches!(
+                error.fields.get(name),
+                Some(Detail::Scalar(Scalar::UInt64(_)))
+            ),
+            "{literal}: no {name} in {error:?}"
+        );
+    }
+    let written = serde_json::to_string(error).unwrap();
+    assert!(!written.contains(literal), "{literal}: {written}");
+    for run in literal
+        .split([' ', '/', '-', '.', ':'])
+        .filter(|r| r.len() >= 5)
+    {
+        assert!(!written.contains(run), "{literal}: {written}");
+    }
+}
+
+/// The D8 literals the T1.6c tests refuse: a packed first field of six,
+/// eight, twelve and fourteen digits, a long field in the time of day, a
+/// long zero-padded field, and ones the reference refuses (a year past
+/// 9999, an offset of a day, a long last field). Register DT-9's two
+/// queries are the second and fourth.
+const PACKED: &[&str] = &[
+    "230203-06-09",
+    "20240101-01-01",
+    "202401011230-1-1",
+    "20240101123456-1-1",
+    "20240101/00/123456",
+    "2024-01-01 00000:00:00",
+    "00001/1/2",
+    "10000-01-01",
+    "12345-1-1",
+    "20240101-01-24",
+    "1-1-20240101",
+];
+
+/// T1.6c brief, Scope: "a D8 literal is refused with a named code and rule
+/// ... naming `date_literal_packed`", through `resolve` and `validate`, the
+/// adapter behind `validate_query` and `materialize`: each shape is
+/// refused by name, those the reference reads and those it refuses alike,
+/// never read and never `PQL_VALUE_INVALID_LITERAL`.
 #[test]
-fn packed_dates_and_long_fields_are_read_by_d8() {
-    // Register DT-9's two queries, refused as unsupported before T1.6b,
-    // and D8's examples, each as the reference reads it (b413e9a).
-    for (literal, value, offset) in [
-        ("20240101-01-01", "2024-01-01T01:00:00", Some(-3600)),
-        ("2024-01-01 00000:00:00", "2024-01-01T00:00:00", None),
-        ("20240101/00/123456", "2024-01-01T12:34:56", None),
-        ("230203-06-09", "2003-02-23T06:00:00", Some(-32_400)),
-        ("00001/1/2", "0001-01-02T00:00:00", None),
+fn a_packed_date_or_long_field_is_refused_by_name() {
+    for literal in PACKED {
+        let query = filtered(&format!("orders.ts > {literal}"));
+        assert_refused_as_packed(&refusal_of(&query, &facts()), literal);
+        let validated = validate(
+            &query,
+            &shop(),
+            &profile(ProfileName::Relational, &[]),
+            &facts(),
+            &NoZones,
+        );
+        assert_refused_as_packed(&validated.expect_err(literal), literal);
+    }
+}
+
+/// T1.6c: the refusal names the literal's place as D4's warning names a
+/// literal written at the same place with as many characters, the first
+/// row's 41st column after the filter's `orders.ts > `.
+#[test]
+fn the_packed_refusal_names_the_literal_s_place_as_d4_s_warning_does() {
+    let error = refusal_of(&filtered("orders.ts > 13/1/20240"), &facts());
+    assert_refused_as_packed(&error, "13/1/20240");
+    let (found, warnings) = read_literal("13/01/2024");
+    assert_eq!(found, Some(("2024-01-13T00:00:00".to_owned(), None)));
+    let [warning] = &warnings[..] else {
+        panic!("one warning: {warnings:?}");
+    };
+    for name in ["start_row", "start_col", "end_row", "end_col"] {
+        assert_eq!(error.fields.get(name), warning.fields.get(name), "{name}");
+    }
+    let at = |n: u64| Detail::Scalar(Scalar::UInt64(n));
+    assert_eq!(error.fields["start_row"], at(1));
+    assert_eq!(error.fields["start_col"], at(41));
+}
+
+/// T1.6c: a D8 literal in an array (`IN (...)`) is refused by name too.
+#[test]
+fn a_packed_date_in_an_array_is_refused_by_name() {
+    let plain = filtered("orders.ts IN (2024-01-01, 2024-02-01)");
+    assert!(
+        resolve(
+            &plain,
+            &shop(),
+            &profile(ProfileName::Relational, &[]),
+            &facts(),
+            &NoZones,
+        )
+        .is_ok(),
+        "an array of dates is answered"
+    );
+    for literal in ["20240101-01-01", "2024-01-01 00000:00:00"] {
+        let query = filtered(&format!("orders.ts IN (2024-01-01, {literal})"));
+        assert_refused_as_packed(&refusal_of(&query, &facts()), literal);
+    }
+}
+
+/// T1.6c brief: "keep everything else in D1 to D9 unchanged". Literals
+/// whose every run has four digits or fewer read as before (a date, a time
+/// of day, a two-digit year, the year 0, four-digit runs where five would
+/// be D8), a day-first one still warns (D4), and D9's still give the
+/// diagnostic `PQL_VALUE_INVALID_LITERAL`, never the named rule. Each value
+/// is the reference's (`pd.to_datetime`, pandas 3.0.6).
+#[test]
+fn a_literal_with_no_run_of_five_digits_reads_as_before() {
+    for (literal, value) in [
+        ("2024-01-31", "2024-01-31T00:00:00"),
+        ("2024-01-31 23:59:59", "2024-01-31T23:59:59"),
+        ("1/2/24", "2024-01-02T00:00:00"),
+        ("0000-01-01", "0000-01-01T00:00:00"),
+        ("0001/1/2", "0001-01-02T00:00:00"),
+        ("2024-01-01 0000:00:00", "2024-01-01T00:00:00"),
+        ("01.02.2024", "2024-01-02T00:00:00"),
     ] {
         let (found, warnings) = read_literal(literal);
-        assert_eq!(found, Some((value.to_owned(), offset)), "{literal}");
+        assert_eq!(found, Some((value.to_owned(), None)), "{literal}");
         assert!(warnings.is_empty(), "{literal}");
     }
-    // A long field that names no date is refused as the reference refuses
-    // it: PQL_VALUE_INVALID_LITERAL, never unsupported.
-    let refused = codes_of(
-        "PREDICT COUNT(orders.* WHERE orders.ts > 20240101-01-24, 0, 30, days) FOR EACH \
-         users.user_id",
-        &profile(ProfileName::Relational, &[]),
+    let (found, warnings) = read_literal("31/12/2024");
+    assert_eq!(found, Some(("2024-12-31T00:00:00".to_owned(), None)));
+    let codes: Vec<&str> = warnings.iter().map(|w| w.code.as_str()).collect();
+    assert_eq!(codes, [DATE_LITERAL_DAY_FIRST]);
+    for literal in ["2023-02-29", "123-4-567", "2024-01-01 24:00:00"] {
+        let refused = codes_of(
+            &filtered(&format!("orders.ts > {literal}")),
+            &profile(ProfileName::Relational, &[]),
+        );
+        assert_eq!(refused, ["PQL_VALUE_INVALID_LITERAL"], "{literal}");
+    }
+}
+
+/// T1.6c: node order decides, as for any refusal of a node. A syntax
+/// error, which the grammar finds before any node is built, and a D9
+/// literal built before the D8 one still give their diagnostic; a D8
+/// literal built first ends the parse, so a D9 literal after it gives none.
+#[test]
+fn an_earlier_refusal_wins_and_the_first_packed_literal_ends_the_parse() {
+    let relational = profile(ProfileName::Relational, &[]);
+    let syntax = format!("{} )", filtered("orders.ts > 20240101-01-01"));
+    assert_eq!(codes_of(&syntax, &relational), ["PQL_PARSE_SYNTAX"]);
+    let d9_first = filtered("orders.ts > 2023-02-29 AND orders.ts < 20240101-01-01");
+    assert_eq!(
+        codes_of(&d9_first, &relational),
+        ["PQL_VALUE_INVALID_LITERAL"]
     );
-    assert_eq!(refused, ["PQL_VALUE_INVALID_LITERAL"]);
+    let d8_first = filtered("orders.ts > 20240101-01-01 AND orders.ts < 2023-02-29");
+    assert_refused_as_packed(&refusal_of(&d8_first, &facts()), "20240101-01-01");
+    let two = filtered("orders.ts > 230203-06-09 AND orders.ts < 20240101-01-01");
+    assert_refused_as_packed(&refusal_of(&two, &facts()), "230203-06-09");
+    // The first one's place.
+    let error = refusal_of(&two, &facts());
+    assert_eq!(
+        error.fields["start_col"],
+        Detail::Scalar(Scalar::UInt64(41))
+    );
 }
 
 #[test]
@@ -546,12 +729,30 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
     let rows = local["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 8);
     let mut moved = 0;
+    let mut packed = 0;
     for row in rows {
         let literal = row[0].as_str().unwrap();
         let query = format!(
             "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH \
              users.user_id"
         );
+        // From T1.6c a packed date (`760101-01-01`) is refused by name in
+        // either year; the reference's reading stays in the row.
+        if literal.split(['/', '-', '.']).any(|run| run.len() >= 5) {
+            packed += 1;
+            for facts in [&new_york, &at(None)] {
+                let error = resolve(
+                    &query,
+                    &shop(),
+                    &profile(ProfileName::Relational, &[]),
+                    facts,
+                    &Bundled,
+                )
+                .expect_err(literal);
+                assert_refused_as_packed(&error, literal);
+            }
+            continue;
+        }
         let read = |facts: &HostFacts| {
             let validation = resolve(
                 &query,
@@ -570,4 +771,5 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
     }
     // In UTC's year, 76 is 2076, not 1976: the zone decides.
     assert!(moved >= 1, "no literal reads otherwise in UTC's year");
+    assert_eq!(packed, 1, "the one packed date of the rows");
 }
