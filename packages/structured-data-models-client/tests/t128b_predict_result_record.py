@@ -88,8 +88,12 @@ CARRY = (
 SIZE = 'carry-forward: the size refusal explains the limit, as the reference'
 
 #: The register entries a boundary answer's outcome on the core may differ
-#: from the reference's by, once the owner approves them (never before).
+#: from the reference's by, once the owner approves them (never before):
+#: a non-finite number (proposed), an answer nested past the core's reader
+#: (approved), a regression's prediction that is not a number (approved).
 NOT_FINITE = 'P1B-4'
+TOO_DEEP = 'P1B-22'
+NOT_A_NUMBER = 'P1B-23'
 
 
 def shop() -> list[str]:
@@ -621,16 +625,20 @@ case(
 # The boundary-vector matrix, each answering base.regression's call.
 BOUNDARIES = [
     ('deep.metadata-100', 'deep-metadata:100', None),
-    ('deep.metadata-200', 'deep-metadata:200', None),
-    ('deep.metadata-5000', 'deep-metadata:5000', None),
-    ('deep.item-5000', 'deep-item:5000', None),
+    ('deep.metadata-200', 'deep-metadata:200', TOO_DEEP),
+    ('deep.metadata-5000', 'deep-metadata:5000', TOO_DEEP),
+    ('deep.item-5000', 'deep-item:5000', TOO_DEEP),
     ('wide.metadata-20000', 'wide-metadata:20000', None),
     ('wide.item-members-20000', 'wide-predictions:20000', None),
     ('finite.max-double', 'token:1.7976931348623157e308', None),
     ('finite.min-subnormal', 'token:5e-324', None),
     ('finite.negative-zero', 'token:-0.0', None),
-    ('finite.integer-past-int64', 'token:123456789012345678901234567890', None),
-    ('finite.integer-past-double', 'token:' + '9' * 400, None),
+    (
+        'finite.integer-past-int64',
+        'token:123456789012345678901234567890',
+        NOT_A_NUMBER,
+    ),
+    ('finite.integer-past-double', 'token:' + '9' * 400, NOT_A_NUMBER),
     (
         'finite.long-mantissa',
         'token:0.1000000000000000055511151231257827',
@@ -692,7 +700,15 @@ for how in (
     'prediction-list',
     'item-not-object',
 ):
-    BOUNDARIES.append((f'evidence.{how}', f'mutate:{how}', None))
+    BOUNDARIES.append(
+        (
+            f'evidence.{how}',
+            f'mutate:{how}',
+            NOT_A_NUMBER
+            if how in ('prediction-text', 'prediction-bool', 'prediction-list')
+            else None,
+        )
+    )
 for name, script, divergence in BOUNDARIES:
     base_case(
         'base.regression',

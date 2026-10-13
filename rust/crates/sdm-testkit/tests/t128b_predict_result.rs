@@ -33,8 +33,10 @@
 //!   (its provenance) and a local error carrying none. An answer the
 //!   reference's transport could not decode (`TRANSPORT_ERROR` there) may be
 //!   `INVALID_RESPONSE` here, this host having no transport of its own
-//!   (decision E46); a vector an approved register entry lists may end as
-//!   that entry says.
+//!   (decision E46); a vector whose `divergence` names a register entry the
+//!   owner approved (P1B-22, P1B-23) may be refused `INVALID_RESPONSE` as a
+//!   local error, as that entry says; one naming a proposed entry (P1B-4)
+//!   is held to the reference.
 //!
 //! Before T1.28b the core refuses a classification's outputs (`outputs`)
 //! or answer (`problem_type`), a prediction not a float (`prediction_type`)
@@ -45,7 +47,7 @@
     reason = "test code: reads the recorded vectors"
 )]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use duckdb::arrow::array::{
@@ -91,20 +93,35 @@ fn the_case(id: &str) -> (Case, bases::Bases) {
     (found, bases::load(&contract.join("bases.yaml")).unwrap())
 }
 
-/// The cases every approved register entry lists.
-fn approved_cases() -> BTreeSet<String> {
+/// Whether register entry `entry` is approved by the owner, read from its
+/// own block, anchored: its `- id:` line is exactly `entry`, its `status`
+/// exactly `approved` and its `approved_by` exactly `owner` (`register.py`'s
+/// owner approval). A proposed entry, a reviewer's approval, or an entry not
+/// there approves nothing.
+fn owner_approved(entry: Option<&str>) -> bool {
+    let Some(entry) = entry.filter(|e| !e.is_empty()) else {
+        return false;
+    };
     let text = std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
-    let mut out = BTreeSet::new();
     for block in text.split("\n- id: ").skip(1) {
-        if !block.lines().any(|l| l.trim_end() == "  status: approved") {
+        let mut lines = block.split('\n');
+        if lines.next().map(str::trim) != Some(entry) {
             continue;
         }
-        if let Some(line) = block.lines().find(|l| l.starts_with("  cases: [")) {
-            let inner = line.trim_start_matches("  cases: [").trim_end_matches(']');
-            out.extend(inner.split(',').map(|c| c.trim().to_owned()));
-        }
+        let field = |name: &str| -> Option<String> {
+            block
+                .split('\n')
+                .skip(1)
+                .filter(|l| l.starts_with("  ") && !l.starts_with("   "))
+                .find_map(|l| {
+                    let (key, value) = l[2..].split_once(':')?;
+                    (key == name).then(|| value.trim().to_owned())
+                })
+        };
+        return field("status").as_deref() == Some("approved")
+            && field("approved_by").as_deref() == Some("owner");
     }
-    out
+    false
 }
 
 /// What `rust-host`'s predict ended with.
@@ -440,7 +457,6 @@ fn the_model_and_output_checks_and_the_absent_output_are_the_reference_s() {
 #[test]
 fn each_boundary_answer_ends_as_on_the_reference() {
     // Exit: the boundary-vector matrix, run on rust-host.
-    let approved = approved_cases();
     let outputs = outputs_of(
         recorded()["cases"]
             .as_array()
@@ -463,8 +479,16 @@ fn each_boundary_answer_ends_as_on_the_reference() {
             vector["body"].as_str().unwrap(),
         );
         let outcome = std::panic::catch_unwind(|| match got {
-            Ended::Refused { code, .. }
-                if approved.contains(&name) && code == "INVALID_RESPONSE" => {}
+            Ended::Refused { code, fields }
+                if owner_approved(vector["divergence"].as_str()) && code == "INVALID_RESPONSE" =>
+            {
+                // A divergence the owner approved (the vector names the
+                // register entry): refused as a local error, by name.
+                assert!(
+                    fields.get("status").is_none(),
+                    "{name}: given a status: {fields}"
+                );
+            }
             Ended::Result(_) if reference["outcome"] == "result" => {
                 assert_result(&name, got, &reference);
             }

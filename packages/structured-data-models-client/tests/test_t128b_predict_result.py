@@ -31,8 +31,10 @@ must equal the reference's. Each case names the exit it covers:
   local error's provenance, and missing or retyped evidence": the vectors
   are ``contract/response-vectors.json``'s ``boundaries``, each answer
   replayed as recorded. A vector the reference reads and the core refuses
-  (a non-finite number, register P1B-4, proposed) may end so only once an
-  approved register entry lists the vector by name;
+  may end so (INVALID_RESPONSE, a local error) only when its ``divergence``
+  names a register entry the owner approved (P1B-22, an answer nested past
+  the core's reader; P1B-23, a regression's prediction not a number); one
+  naming a proposed entry (P1B-4) is held to the reference;
 - ``CARRY``, the brief's carry-forward: ``np.longdouble`` options and a
   NumPy array of ``target_transforms`` end as on the reference;
 - ``SIZE``, the carry-forward "size refusals on the core route ... make the
@@ -93,20 +95,34 @@ BOUNDARIES = VECTORS['boundaries']
 CODE_PREFIX = re.compile(r'^\[[A-Z_]+\] ')
 
 
-def _approved_cases() -> set[str]:
-    r"""The cases every approved register entry lists: a vector named there
-    may end on the core as the entry says, not as the reference does."""
+def _owner_approved(entry: str | None) -> bool:
+    r"""Whether register entry ``entry`` is approved by the owner, read from
+    its own block, anchored: its ``- id:`` line is exactly ``entry``, its
+    ``status`` exactly ``approved`` and its ``approved_by`` exactly
+    ``owner`` (``register.py``'s owner approval). A proposed entry, a
+    reviewer's approval, or an entry not there approves nothing."""
+    if not entry:
+        return False
     text = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
         encoding='utf-8'
     )
-    approved: set[str] = set()
     for block in re.split(r'\n- id: ', text)[1:]:
-        if not re.search(r'^  status: approved\s*$', block, re.M):
+        lines = block.split('\n')
+        if lines[0].strip() != entry:
             continue
-        listed = re.search(r'^  cases: \[(.*?)\]', block, re.M | re.S)
-        if listed:
-            approved |= {c.strip() for c in listed.group(1).split(',')}
-    return approved
+        fields = {
+            key: value.strip()
+            for key, _, value in (
+                line[2:].partition(':')
+                for line in lines[1:]
+                if line.startswith('  ') and not line.startswith('   ')
+            )
+        }
+        return (
+            fields.get('status') == 'approved'
+            and fields.get('approved_by') == 'owner'
+        )
+    return False
 
 
 def _on_the_core(
@@ -263,12 +279,12 @@ def test_the_core_reads_each_boundary_answer_as_the_reference(
         'calls': RECORDED_CALLS[vector['answers']],
     }
     if (
-        vector['name'] in _approved_cases()
+        _owner_approved(vector['divergence'])
         and got['outcome'] == 'refused'
         and got['code'] == 'INVALID_RESPONSE'
     ):
-        # An approved divergence (the register lists this vector): the core
-        # refuses it as a local error, by name.
+        # A divergence the owner approved (the vector names the register
+        # entry): the core refuses it as a local error, by name.
         assert 'endpoint' not in got and got['status_code'] is None
         return
     _held(got, expected, vector['name'])
