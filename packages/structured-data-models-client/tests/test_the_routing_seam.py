@@ -315,11 +315,18 @@ def test_the_core_s_own_refusal_is_not_a_refusal_of_the_query(
     assert raised.value.__suppress_context__
 
 
+#: The old validator holds a date as a pandas Timestamp. pandas 3 holds any
+#: year; pandas 2 (on Python 3.10, which pandas 3 does not support) only
+#: 1677 to 2262, so there the old route refuses a date in year 0 or 1 as a
+#: query (OutOfBoundsDatetime), where the core reads it.
+PANDAS_3 = int(pd.__version__.split('.')[0]) >= 3
+
 #: Date literals with a run of five digits or more (D8), which the
 #: reference reads through dateutil or refuses: a packed first field of
 #: six, eight, twelve and fourteen digits, a long field in the time of day
 #: (register DT-9's two queries are the second and the sixth), a long
-#: zero-padded field, and two the reference refuses.
+#: zero-padded field read as year 1 (on pandas 3 only), and two the
+#: reference refuses.
 PACKED_READ = (
     '230203-06-09',
     '20240101-01-01',
@@ -327,8 +334,8 @@ PACKED_READ = (
     '20240101123456-1-1',
     '20240101/00/123456',
     '2024-01-01 00000:00:00',
-    '00001/1/2',
 )
+PACKED_READ_ON_PANDAS_3 = ('00001/1/2',)
 PACKED_REFUSED = ('10000-01-01', '12345-1-1')
 
 
@@ -355,7 +362,9 @@ def _assert_refused_as_packed(
     assert literal not in repr(refused.details)
 
 
-@pytest.mark.parametrize('literal', PACKED_READ + PACKED_REFUSED)
+@pytest.mark.parametrize(
+    'literal', PACKED_READ + PACKED_READ_ON_PANDAS_3 + PACKED_REFUSED
+)
 def test_a_packed_date_literal_is_refused_by_name_on_the_core(
     core: list[str], literal: str
 ) -> None:
@@ -390,7 +399,8 @@ def test_the_old_route_still_reads_a_packed_date_literal(
 ) -> None:
     # T1.6c: python-old is unchanged. Its validator reads every D8 literal
     # the reference reads and refuses the others as a query, never by the
-    # core's rule; two of them it materializes. Gathering them takes the
+    # core's rule (a year-1 literal too, on pandas 2, which cannot hold
+    # it); two of them it materializes. Gathering them takes the
     # relational engine, an extra the test and installed-wheel jobs lack:
     # there, materialize must get past validation and reach the gathering,
     # which then names the missing extra; with the engine (the engine job)
@@ -417,7 +427,15 @@ def test_the_old_route_still_reads_a_packed_date_literal(
         PredictiveQuery(_filtered(f'orders.ts > {literal}'), schema)._resolve(
             RELATIONAL
         )
-    for literal in PACKED_REFUSED:
+    refused_as_a_query: tuple[str, ...] = PACKED_REFUSED
+    if PANDAS_3:
+        for literal in PACKED_READ_ON_PANDAS_3:
+            PredictiveQuery(
+                _filtered(f'orders.ts > {literal}'), schema
+            )._resolve(RELATIONAL)
+    else:
+        refused_as_a_query += PACKED_READ_ON_PANDAS_3
+    for literal in refused_as_a_query:
         with pytest.raises(StructuredDataError) as refused:
             PredictiveQuery(
                 _filtered(f'orders.ts > {literal}'), schema
@@ -446,8 +464,8 @@ def test_the_old_route_still_reads_a_packed_date_literal(
         ('2024-01-31', True),
         ('2024-01-31 23:59:59', True),
         ('1/2/24', True),
-        ('0000-01-01', True),
-        ('0001/1/2', True),
+        ('0000-01-01', PANDAS_3),
+        ('0001/1/2', PANDAS_3),
         ('2024-01-01 0000:00:00', True),
         ('13/01/2024', True),
         ('2023-02-29', False),
@@ -462,7 +480,10 @@ def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
 ) -> None:
     # T1.6c brief: D1 to D7 and D9 unchanged. Each answers on the core as
     # on the old route: read and accepted, or (D9) refused as a query,
-    # INVALID_REQUEST with no rule named.
+    # INVALID_REQUEST with no rule named. On pandas 2 the old route refuses
+    # a date in year 0 or 1 as a query; the core reads it, and its shadow
+    # check, which runs the old validator, reports the disagreement as
+    # INTERNAL_ERROR.
     text = _filtered(f'orders.ts > {literal}')
     schema = _orders_schema()
     answers = []
@@ -478,7 +499,12 @@ def test_a_literal_with_no_run_of_five_digits_answers_as_on_the_old_route(
                 assert 'rule' not in refused.details, refused.details
                 answers.append(refused.code)
     assert core == [text]
-    want = [None, None] if accepted else ['INVALID_REQUEST', 'INVALID_REQUEST']
+    if accepted:
+        want = [None, None]
+    elif literal.startswith(('0000-', '0001/')):
+        want = ['INTERNAL_ERROR', 'INVALID_REQUEST']
+    else:
+        want = ['INVALID_REQUEST', 'INVALID_REQUEST']
     assert answers == want
 
 
