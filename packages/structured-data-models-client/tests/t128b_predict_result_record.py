@@ -252,11 +252,12 @@ def _ordered(items: list[Any], order: str) -> list[Any]:
     return items
 
 
-def _nested(depth: int) -> Any:
-    value: Any = 'bottom'
-    for _ in range(depth):
-        value = {'d': value}
-    return value
+def _deep(text: str, depth: int) -> str:
+    r"""``text`` with its placeholder replaced by ``depth`` nested objects,
+    ``{"d": {"d": ... "bottom"}}``, as ``json.dumps`` writes them, built as
+    text: Python 3.10's and 3.11's encoder cannot write 5,000 levels."""
+    nested = '{"d": ' * depth + '"bottom"' + '}' * depth
+    return text.replace('"__t128b_nested__"', nested)
 
 
 def _text(value: Any) -> str:
@@ -282,11 +283,11 @@ def answer(script: str, body: bytes) -> tuple[int, str]:
         return 200, _text(_envelope(_items(call, probabilities=False)))
     if kind == 'deep-metadata':
         envelope = _envelope(_ordered(items, 'reversed'))
-        envelope['metadata'] = _nested(int(arg))
-        return 200, _text(envelope)
+        envelope['metadata'] = '__t128b_nested__'
+        return 200, _deep(_text(envelope), int(arg))
     if kind == 'deep-item':
-        items[0]['other'] = _nested(int(arg))
-        return 200, _text(_envelope(items))
+        items[0]['other'] = '__t128b_nested__'
+        return 200, _deep(_text(_envelope(items)), int(arg))
     if kind == 'wide-metadata':
         envelope = _envelope(items)
         envelope['metadata'] = {f'k{i:06d}': i for i in range(int(arg))}
@@ -419,6 +420,7 @@ def case(
     divergence: str | None = None,
     items: bool = False,
     core_outcome: dict[str, Any] | None = None,
+    transport: str | None = None,
     **materialize: Any,
 ) -> None:
     CASES.append(
@@ -437,6 +439,9 @@ def case(
             # The outcome the core gives where it is a policy, not the
             # reference's (a registered difference).
             **({'core_outcome': core_outcome} if core_outcome else {}),
+            # 'databricks': the call made through SDMClient.for_databricks_
+            # serving and a fake workspace client, in place of HTTP.
+            **({'transport': transport} if transport else {}),
         }
     )
 
@@ -878,6 +883,46 @@ base_case(
 )
 
 
+# The Databricks serving route (SDMClient.for_databricks_serving with a
+# fake workspace client, no endpoint): an answer nested 5,000 levels in its
+# response_json is P1B-22's refusal on the core on every interpreter
+# (INVALID_RESPONSE, field response, reason too_deep), as over HTTP; the
+# reference reads it from Python 3.12 and fails its transport before. The
+# controls, a response_json that is not JSON and one that is cut short,
+# and an ordinary answer, keep the reference's outcome.
+DATABRICKS = (
+    "the Databricks serving route: P1B-22's depth refusal as over HTTP, and "
+    "a response_json that is not JSON as the reference's"
+)
+TOO_DEEP_POLICY = {
+    'outcome': 'refused',
+    'code': 'INVALID_RESPONSE',
+    'field': 'response',
+    'reason': 'too_deep',
+}
+spec = contract_case('base.regression')
+for name, script, policy in (
+    ('deep.metadata-5000', 'deep-metadata:5000', TOO_DEEP_POLICY),
+    ('deep.item-5000', 'deep-item:5000', TOO_DEEP_POLICY),
+    ('malformed.not-json', 'raw:text', None),
+    ('malformed.truncated', 'raw:truncated', None),
+    ('malformed.empty', 'raw:empty', None),
+    ('layout.reversed', 'order:reversed', None),
+):
+    case(
+        f'databricks.{name}',
+        DATABRICKS,
+        spec['query'],
+        shop(),
+        script=script,
+        divergence='P1B-22' if policy else None,
+        core_outcome=policy,
+        transport='databricks',
+        **spec['materialize'],
+    )
+del spec
+
+
 # The carry-forward: option values the reference accepts.
 def _carry_cases() -> None:
     import numpy as np
@@ -957,6 +1002,28 @@ def endpoint(script: str) -> Iterator[tuple[str, list[dict[str, Any]]]]:
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+@contextmanager
+def databricks_workspace(
+    script: str,
+) -> Iterator[tuple[Any, list[dict[str, Any]]]]:
+    r"""A fake ``WorkspaceClient`` whose serving endpoint answers each
+    call by ``script``, in one ``response_json`` row, as Model Serving
+    does; it records each call and its answer."""
+    calls: list[dict[str, Any]] = []
+
+    class Endpoints:
+        def query(self, *, name: str, **kwargs: Any) -> Any:
+            body = kwargs['dataframe_records'][0]['request_json'].encode()
+            status, text = answer(script, body)
+            calls.append({'body': body, 'status': status, 'answer': text})
+            return {'predictions': [{'response_json': text}]}
+
+    class Workspace:
+        serving_endpoints = Endpoints()
+
+    yield Workspace(), calls
 
 
 def _cell(value: Any) -> Any:
@@ -1043,11 +1110,23 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
     if predict.pop('request', None) is not None:
         request = 'not-a-request'
     notices: list[str] = []
-    with endpoint(spec['script']) as (url, calls):
+    databricks = spec.get('transport') == 'databricks'
+    opened = (
+        databricks_workspace(spec['script'])
+        if databricks
+        else endpoint(spec['script'])
+    )
+    with opened as (where, calls):
         try:
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter('always')
-                with SDMClient(url, max_retries=0) as client:
+                with (
+                    SDMClient.for_databricks_serving(
+                        't128b-serving', workspace_client=where
+                    )
+                    if databricks
+                    else SDMClient(where, max_retries=0)
+                ) as client:
                     result = client.predict(request, model=model, **predict)
             notices = sorted(
                 str(w.message)
@@ -1058,6 +1137,11 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
             out = {'stage': 'predict', **_refusal(error)}
         except Exception as error:  # noqa: BLE001 - the outcome is compared
             out = {'stage': 'predict', **_refusal(error)}
+            if spec.get('core_outcome'):
+                # What a policy names of the refusal: its field and reason.
+                details = getattr(error, 'details', None)
+                details = details if isinstance(details, dict) else {}
+                out['fields'] = {k: details.get(k) for k in ('field', 'reason')}
         else:
             out = {
                 'stage': 'predict',

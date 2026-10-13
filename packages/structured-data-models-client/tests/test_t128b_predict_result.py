@@ -42,6 +42,12 @@ must equal the reference's. Each case names the exit it covers:
   ``dtypes_pandas2``); a probability in Kawi digits is the orchestrator's
   Unicode policy, refused INVALID_RESPONSE on the core on every
   interpreter (``core_outcome``), registered where the reference reads it;
+- the Databricks serving route (``SDMClient.for_databricks_serving`` with a
+  fake workspace client, no endpoint): a ``response_json`` nested 5,000
+  levels, in the metadata or an item, refused on the core on every
+  interpreter as P1B-22 says (INVALID_RESPONSE, field ``response``, reason
+  ``too_deep``, ``core_outcome``); a ``response_json`` that is not JSON,
+  cut short or empty, and an ordinary answer, as the reference's;
 - ``INTEGERS``, ``ABSENT_VALUES`` and ``NUMERIC_TEXT`` (the review of
   part 2): a regression's integer predictions kept exact past 2**53 in an
   int64 column, a column mixing integers and floats as float64; a missing
@@ -313,6 +319,20 @@ def test_the_recording_is_the_reference_s() -> None:
         'str',
         'object',
     )
+    # The Databricks serving route: the deep answers read on 3.12 and a
+    # transport failure before, and a response_json that is not JSON the
+    # transport's failure everywhere.
+    for name in ('databricks.deep.metadata-5000', 'databricks.deep.item-5000'):
+        assert by_name[name]['outcome'] == 'result'
+        assert {
+            p: o['code'] for p, o in by_name[name]['by_python'].items()
+        } == {'3.10': 'TRANSPORT_ERROR', '3.11': 'TRANSPORT_ERROR'}
+    for name in ('not-json', 'truncated', 'empty'):
+        control = by_name[f'databricks.malformed.{name}']
+        assert (
+            control['code'] == 'TRANSPORT_ERROR' and 'by_python' not in control
+        )
+    assert by_name['databricks.layout.reversed']['outcome'] == 'result'
     deep = vectors['boundary.deep.metadata-5000']['reference']
     assert {p: o['code'] for p, o in deep['by_python'].items()} == {
         '3.10': 'TRANSPORT_ERROR',
@@ -328,23 +348,36 @@ def test_the_core_s_predict_is_the_reference_s(
     expected = _here(spec['expected'])
     got = _on_the_core(spec, monkeypatch)
     if 'core_outcome' in spec:
-        # A policy, not the reference's outcome (the Unicode policy across
-        # cells): Kawi digits refused INVALID_RESPONSE as a local error on
-        # every interpreter; where this interpreter's reference reads them
-        # (3.12+), the difference is registered.
+        # A policy, not the reference's outcome, on every interpreter: Kawi
+        # digits refused INVALID_RESPONSE (the Unicode policy across cells),
+        # and on the Databricks serving route an answer nested 5,000 levels
+        # refused as P1B-22 says, field response and reason too_deep, as
+        # over HTTP; each a local error. Where this interpreter's reference
+        # gives another outcome, the difference is the approved entry the
+        # case names, or one the register names it in.
         policy = spec['core_outcome']
         assert (got['outcome'], got.get('code')) == (
             policy['outcome'],
             policy['code'],
         ), f'{spec["name"]}: {got.get("code")}: {got.get("message")}'
         assert 'endpoint' not in got and got['status_code'] is None, got
-        if expected['outcome'] != policy['outcome']:
-            assert _registered(spec['name']), (
-                f'{spec["name"]}: the reference here gives '
-                f'{expected["outcome"]}, and no register entry names it'
-            )
-        else:
-            assert expected['code'] == policy['code'], expected
+        for key in ('field', 'reason'):
+            if key in policy:
+                assert got['fields'][key] == policy[key], (
+                    f'{spec["name"]}: {key} {got["fields"][key]!r}, where '
+                    f'the policy names {policy[key]!r}'
+                )
+        if (expected['outcome'], expected.get('code')) != (
+            policy['outcome'],
+            policy['code'],
+        ):
+            if spec.get('divergence'):
+                assert _owner_approved(spec['divergence']), spec['divergence']
+            else:
+                assert _registered(spec['name']), (
+                    f'{spec["name"]}: the reference here gives '
+                    f'{expected["outcome"]}, and no register entry names it'
+                )
         return
     if spec['covers'] == R.SIZE:
         # The reference's code, and a message that explains the limit as

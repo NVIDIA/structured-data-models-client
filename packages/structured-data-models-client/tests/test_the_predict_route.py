@@ -519,9 +519,11 @@ def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
     # Python's reader takes nesting the core refuses: the host writes it
     # without recursion, and the core refuses it as too deep. 126 arrays in
     # the metadata nest 128 deep in all, the deepest the core reads. Past
-    # what Python's own reader takes (about a thousand levels on 3.10 and
-    # 3.11), the transport refuses the answer itself, TRANSPORT_ERROR, as
-    # on the old route; either way nothing raises a bare RecursionError.
+    # that the core refuses it INVALID_RESPONSE, reason too_deep, on every
+    # interpreter (register P1B-22, approved by the owner), also where
+    # Python's own reader cannot take it (about a thousand levels on 3.10
+    # and 3.11) and the old route's transport fails, TRANSPORT_ERROR;
+    # either way nothing raises a bare RecursionError.
     request = _materialized(monkeypatch)
     for depth in (126, 300, 960, 5000):
         answer = (
@@ -540,15 +542,11 @@ def test_an_answer_nested_past_the_core_s_depth_is_refused_not_raised(
             continue
         assert isinstance(core, StructuredDataError), depth
         if isinstance(old, StructuredDataError):
-            # The transport could not read it, on either route.
-            assert (core.code, old.code) == (
-                'TRANSPORT_ERROR',
-                'TRANSPORT_ERROR',
-            )
-        else:
-            assert core.code == 'INVALID_RESPONSE', depth
-            assert core.details['reason'] == 'too_deep', depth
-        assert depth != 300 or core.code == 'INVALID_RESPONSE'
+            # The old route's transport could not read it; the core refuses
+            # it as too deep all the same (P1B-22).
+            assert old.code == 'TRANSPORT_ERROR', (depth, old.code)
+        assert core.code == 'INVALID_RESPONSE', (depth, core.code)
+        assert core.details['reason'] == 'too_deep', depth
 
 
 def test_a_payload_json_cannot_hold_is_refused_as_the_transport_refuses_it(
