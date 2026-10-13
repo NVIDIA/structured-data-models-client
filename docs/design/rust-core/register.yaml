@@ -1829,10 +1829,11 @@ entries:
     route is unchanged.
   affected_inputs: >-
     A DuckDB source holding an INTERVAL column, under a forced core route.
-  cases: [time.feature-interval, T1.21e, T1.32c, T1.32e]
+  cases: [time.feature-interval, T1.21e, T1.32c, T1.32d, T1.32e]
   refs:
   - 'contract/nested-type-vectors.json#scalar.interval* refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   - 'contract/nested-type-vectors.json#orders.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/empty-null-vectors.json#null.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
@@ -1841,7 +1842,7 @@ entries:
     contract/cases/s1/time.feature-interval.json, and the entry
     admission/interval of contract/refusal-maps/time.json, on python-core and
     rust-host. Both refuse; the class and code change. T1.32e resolves it
-    when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32c its refs name the nested family's interval vectors (scalar.interval*, orders.interval), the same transition; T1.32e, which admits time.feature-interval, should know they exist.
+    when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32c its refs name the nested family's interval vectors (scalar.interval*, orders.interval), the same transition; T1.32e, which admits time.feature-interval, should know they exist. From T1.32d also the empty-null family's null.interval, an INTERVAL column all null on the entity table, the same transition: for a reviewer to hold to the approved meaning.
 
 - id: P1B-9
   title: nested.fixed-array is described on the core route where the reference fails with an unnamed RuntimeError
@@ -1966,6 +1967,15 @@ entries:
     fails with its RuntimeError (pinned by the client's
     tests/test_the_schema_route.py).
   cases: [empty.fact-table, T1.21e, T1.23, T1.24, T1.32d]
+  refs:
+  - 'contract/empty-null-vectors.json#empty.orders refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.users refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.both refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.third-table refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.third-table-named refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.orders-named refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.orders-filtered-out refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#edge.no-entities-empty-orders refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
@@ -1978,7 +1988,7 @@ entries:
     INVALID_REQUEST, which the reference gives a table it cannot read,
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
     T1.32d. The two-fault outcome is pinned, both routes', by the client's
-    tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+    tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32d its refs name the family's vectors whose source holds an empty table (the fact table, the entity table, both, a third table named or not, the fact table named, emptied by a filter, and with no entities asked for), each the same transition, the reference's unnamed RuntimeError to this entry's UNSUPPORTED_REQUEST: for a reviewer to hold to the approved meaning. The code is kept: the recommendation above, INVALID_REQUEST, would change this approved entry, so T1.32d leaves it to the owner (E91).
 
 - id: P1B-12
   title: Schema.from_source's keys and time columns of the wrong type are read otherwise on the core route than by the reference

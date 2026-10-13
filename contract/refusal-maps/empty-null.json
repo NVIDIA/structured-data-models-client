@@ -13,7 +13,7 @@
   "gaps": [
     {
       "input": "an empty indices (empty.indices)",
-      "contract": "materialize's indices hold at least one entity in the case format (case.schema.json), so the case's core is describe_source alone, which succeeds on rust-host; the core refuses empty indices (T1.28a), which python-core reaches",
+      "contract": "the case's core is describe_source alone, which succeeds on rust-host; the core refuses empty indices (T1.28a), which python-core reaches. From T1.32d the case format carries an empty list (case.schema.json) and rust-host sends it, so the case's materialize, added when T1.32d admits it, reaches the same refusal on both hosts",
       "owner": "T1.32d"
     }
   ],
