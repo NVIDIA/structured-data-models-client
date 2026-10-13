@@ -323,10 +323,16 @@ jobs:
           # include assets this run did not build. The artifact `build` handed
           # over is the authority for what may be published, so the asset list
           # is filtered down to exactly its filenames.
-          # The digest comes with the listing, so the script can refuse an
-          # asset whose bytes are not the ones it is about to publish.
+          # `browser_download_url`, not `url`: in the REST response `url` is
+          # the API metadata endpoint, and fetching it without an
+          # `Accept: application/octet-stream` header returns JSON about the
+          # asset rather than the asset. Kitmaker is given only the URL.
+          # (`gh release view --json assets` maps its `.url` to the download
+          # URL, which is why this reads differently from it. The digest is
+          # only in the REST response, which is why this uses it.)
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
-            --jq '.assets[] | "\(.name)\t\(.url)\t\(.digest // "")"' > assets.tsv
+            --jq '.assets[] | "\(.name)\t\(.browser_download_url)\t\(.digest // "")"' \
+            > assets.tsv
           test -s assets.tsv
           python3 .github/workflows/kitmaker_release.py
 

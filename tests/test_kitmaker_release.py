@@ -596,3 +596,18 @@ def test_an_asset_with_no_digest_is_refused(kitmaker, release, tmp_path):
 
     with pytest.raises(SystemExit, match='no digest'):
         kitmaker.main()
+
+
+def test_kitmaker_is_given_a_url_that_serves_the_file(release_job):
+    """In the REST response `url` is the API metadata endpoint, which answers
+    with JSON about the asset unless asked for octet-stream. Kitmaker is handed
+    only the URL, so it has to be the download one."""
+    commands = ' '.join(
+        line
+        for step in release_job['steps']
+        for line in step.get('run', '').splitlines()
+        if not line.strip().startswith('#')
+    )
+    assert 'assets.tsv' in commands
+    assert '.browser_download_url' in commands
+    assert '\\(.url)' not in commands
