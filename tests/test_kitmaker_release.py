@@ -274,39 +274,36 @@ def test_a_clean_release_reports_every_project_once(kitmaker, release):
     what is live is what a half-finished release is read for."""
     summary = release()
     kitmaker.main()
-    lines = summary.read_text().strip().splitlines()
-    assert sorted(lines) == sorted(
-        f'published: {name}' for name in kitmaker.PROJECTS.values()
-    )
+    assert states(summary, kitmaker) == {
+        name: 'published' for name in kitmaker.PROJECTS.values()
+    }
 
 
 def test_a_release_already_published_still_writes_a_summary(kitmaker, release):
     summary = release(already_on_pypi=set(kitmaker.PROJECTS.values()))
     kitmaker.main()
-    lines = summary.read_text().strip().splitlines()
-    assert sorted(lines) == sorted(
-        f'already published: {name}' for name in kitmaker.PROJECTS.values()
-    )
+    assert states(summary, kitmaker) == {
+        name: 'already published before this run'
+        for name in kitmaker.PROJECTS.values()
+    }
 
 
 def test_a_project_live_but_unverified_is_not_reported_as_unpublished(
     kitmaker, release, monkeypatch
 ):
-    """Kitmaker reported success, so the files are on PyPI whatever
-    verification finds. Calling that 'NOT published' would send the next person
-    to republish something that is already there."""
+    """Portal reported success, so the files are on PyPI whatever verification
+    finds. Saying otherwise would send the next person to republish something
+    that is already there."""
     summary = release()
     monkeypatch.setattr(
         kitmaker,
         'verify',
         lambda *a: (_ for _ in ()).throw(SystemExit('bad bytes')),
     )
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit, match='bad bytes'):
         kitmaker.main()
-    lines = summary.read_text()
     first = next(iter(kitmaker.PROJECTS.values()))
-    assert f'published but NOT verified: {first}' in lines
-    assert f'NOT published: {first}' not in lines
+    assert states(summary, kitmaker)[first] == 'published'
 
 
 def states(summary, kitmaker):
@@ -314,7 +311,7 @@ def states(summary, kitmaker):
     each project once and names nothing else. A count of lines does not say
     that: five lines naming one project would satisfy it."""
     lines = summary.read_text().strip().splitlines()
-    parsed = dict(line.rsplit(': ', 1)[::-1] for line in lines)
+    parsed = dict(line.split(': ', 1) for line in lines)
     assert len(parsed) == len(lines), f'a project is named twice: {lines}'
     assert set(parsed) == set(kitmaker.PROJECTS.values())
     return parsed
@@ -324,8 +321,7 @@ def test_a_failure_in_pass_one_still_records_what_happened(
     kitmaker, release, monkeypatch
 ):
     """A release that stopped before publishing is exactly when the summary is
-    read, and a project nothing reached is said to be unreached rather than
-    being left to look like it was already published."""
+    read, and nothing was asked of PyPI, so nothing is claimed about it."""
     summary = release()
     names = list(kitmaker.PROJECTS.values())
 
@@ -339,10 +335,22 @@ def test_a_failure_in_pass_one_still_records_what_happened(
     with pytest.raises(SystemExit, match='not'):
         kitmaker.main()
 
+    assert states(summary, kitmaker) == {name: 'not reached' for name in names}
+
+
+def test_a_preflight_failure_still_writes_a_summary(
+    kitmaker, release, tmp_path
+):
+    """The checks that run before anything is submitted used to exit without
+    one, so a release that stopped there said nothing at all."""
+    summary = release()
+    (tmp_path / 'dist' / 'structured_data_models_api-9.9.9.tar.gz').write_bytes(
+        b'x'
+    )
+    with pytest.raises(SystemExit, match='disagree on the version'):
+        kitmaker.main()
     assert states(summary, kitmaker) == {
-        names[0]: 'NOT published',
-        names[1]: 'NOT published',
-        **{name: 'not reached' for name in names[2:]},
+        name: 'not reached' for name in kitmaker.PROJECTS.values()
     }
 
 
@@ -352,70 +360,85 @@ def test_every_project_is_accounted_for_exactly_once(kitmaker, release):
     summary = release(already_on_pypi={names[0], names[2]})
     kitmaker.main()
     assert states(summary, kitmaker) == {
-        names[0]: 'already published',
-        names[2]: 'already published',
+        names[0]: 'already published before this run',
+        names[2]: 'already published before this run',
         **{name: 'published' for name in (names[1], names[3], names[4])},
     }
 
 
-def test_an_upload_with_no_answer_is_not_called_unpublished(
-    kitmaker, release, monkeypatch
+@pytest.mark.parametrize('status', ['failed', 'cancelled', 'error'])
+def test_a_portal_failure_after_the_files_landed_says_they_are_live(
+    kitmaker, release, monkeypatch, status
 ):
-    """Portal may have accepted the upload before the connection died, so the
-    files may be live. Reporting that as NOT published sends the next person to
-    republish something that is already there."""
+    """Portal's batches are not atomic, so a failure can follow files that
+    already published. The summary asks PyPI rather than repeating the status,
+    which is what stops the next person republishing something that is there."""
     names = list(kitmaker.PROJECTS.values())
     summary = release()
-    real = kitmaker.submit
+    real = kitmaker.wait_for
 
-    def lose_the_answer(project_id, name, urls, upload):
-        if upload and name == names[1]:
-            raise SystemExit('POST /releases failed: connection reset')
-        return real(project_id, name, urls, upload)
+    def fail_after_publishing(uuid, what):
+        if what == names[1]:
+            raise SystemExit(f'{what} finished as {status} (uuid)')
+        return real(uuid, what)
 
-    monkeypatch.setattr(kitmaker, 'submit', lose_the_answer)
-    with pytest.raises(SystemExit, match='connection reset'):
+    monkeypatch.setattr(kitmaker, 'wait_for', fail_after_publishing)
+    with pytest.raises(SystemExit, match=status):
         kitmaker.main()
 
-    assert states(summary, kitmaker) == {
-        names[0]: 'published',
-        names[1]: 'MAY be published, no answer from Portal',
-        **{name: 'NOT published' for name in names[2:]},
-    }
+    assert states(summary, kitmaker)[names[1]] == 'published'
+
+
+def test_an_upload_that_published_nothing_says_so(
+    kitmaker, release, monkeypatch
+):
+    """The other direction: Portal refused, PyPI has nothing, and the summary
+    should not leave it ambiguous."""
+    names = list(kitmaker.PROJECTS.values())
+    summary = release()
+
+    real = kitmaker.submit
+
+    def refuse(project_id, name, urls, upload):
+        if upload and name == names[1]:
+            raise SystemExit('POST /releases returned 400: rejected')
+        return real(project_id, name, urls, upload)
+
+    monkeypatch.setattr(kitmaker, 'submit', refuse)
+    with pytest.raises(SystemExit, match='400'):
+        kitmaker.main()
+
+    assert states(summary, kitmaker)[names[1]] == 'not on PyPI'
+
+
+def test_a_partly_published_project_is_reported_as_partial(
+    kitmaker, release, monkeypatch
+):
+    names = list(kitmaker.PROJECTS.values())
+    summary = release()
+    monkeypatch.setattr(kitmaker, 'verify', lambda *a: None)
+    original = kitmaker.on_pypi
+
+    def half(name, version):
+        held = original(name, version)
+        if held and name == names[1]:
+            return {}
+        return held
+
+    monkeypatch.setattr(kitmaker, 'on_pypi', half)
+    kitmaker.main()
+    state = states(summary, kitmaker)[names[1]]
+    assert state.startswith('PARTLY on PyPI, missing ')
 
 
 def test_distributions_that_disagree_on_the_version_are_refused(
     kitmaker, release, tmp_path
 ):
-    """The workflow gate reads the wheels; this is what submits, so it reads
-    every file."""
+    """The workflow gate reads the wheels and the sdists; this is what submits,
+    so it reads every file too."""
     release()
     (tmp_path / 'dist' / 'structured_data_models_api-9.9.9.tar.gz').write_bytes(
         b'x'
     )
     with pytest.raises(SystemExit, match='disagree on the version'):
         kitmaker.main()
-
-
-def test_a_portal_rejection_is_not_reported_as_uncertain(
-    kitmaker, release, monkeypatch
-):
-    """Portal answered, so the upload did not happen. Saying it may be live
-    sends someone to check PyPI for something that was never offered to it."""
-    names = list(kitmaker.PROJECTS.values())
-    summary = release()
-    calls = {'n': 0}
-
-    def reject_the_second(uuid, what):
-        if what == names[1]:
-            raise kitmaker.Rejected(f'{what} finished as rejected (uuid)')
-        calls['n'] += 1
-
-    monkeypatch.setattr(kitmaker, 'wait_for', reject_the_second)
-    with pytest.raises(SystemExit, match='finished as rejected'):
-        kitmaker.main()
-
-    assert states(summary, kitmaker) == {
-        names[0]: 'published',
-        **{name: 'NOT published' for name in names[1:]},
-    }

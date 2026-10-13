@@ -90,11 +90,6 @@ VERIFY_ATTEMPTS = 20
 VERIFY_SECONDS = 15
 
 
-class Rejected(SystemExit):
-    r"""Portal gave a terminal answer. Unlike a lost connection, this says the
-    upload did not happen, which the summary has to keep apart."""
-
-
 TOKEN = os.environ['KITMAKER_API_TOKEN']
 PIC = os.environ['PIC']
 
@@ -197,7 +192,7 @@ def wait_for(uuid: str, what: str) -> None:
             print(f'  {what}: {status}')
             return
         if status in TERMINAL_BAD:
-            raise Rejected(f'{what} finished as {status} ({uuid})')
+            raise SystemExit(f'{what} finished as {status} ({uuid})')
         if status not in PENDING:
             raise SystemExit(
                 f'{what} reported an unrecognised status {status!r} ({uuid}). '
@@ -306,115 +301,128 @@ def verify(name: str, version: str, expected: dict[str, str]) -> None:
     )
 
 
+def pypi_state(name: str, version: str, expected: dict[str, str]) -> str:
+    r"""What PyPI says about this project, in a phrase.
+
+    Portal's own answer is not used here, and deliberately. Its batches are not
+    atomic, so a failure can follow files that already landed, and a rejection
+    is not proof that nothing did. Only the index knows, so the summary asks it
+    rather than repeating what Portal said.
+    """
+    try:
+        held = on_pypi(name, version)
+    except SystemExit as error:
+        return f'UNKNOWN, could not ask PyPI ({error})'
+    if held is None:
+        return 'not on PyPI'
+    wrong = sorted(
+        filename
+        for filename, digest in expected.items()
+        if filename in held and held[filename] != digest
+    )
+    if wrong:
+        return f'on PyPI with UNEXPECTED bytes for {wrong}'
+    unknown = sorted(set(held) - set(expected))
+    if unknown:
+        return f'on PyPI with files this run did not build: {unknown}'
+    absent = sorted(set(expected) - set(held))
+    if absent:
+        return f'PARTLY on PyPI, missing {absent}'
+    return 'published'
+
+
 def write_summary(
-    published: list[str],
-    unverified: list[str],
-    in_flight: list[str],
-    attempted: list[str],
+    version: str,
+    digests: dict[str, dict[str, str]],
+    requested: list[str],
     skipped: list[str],
 ) -> None:
-    r"""What is live and what is not. Written whatever happens, including a
-    failure in pass one, because a release that stopped early is exactly when
-    this file is read.
+    r"""What is live and what is not, written whatever happens.
 
-    Every project appears once, and the three states that are not plainly good
-    are distinguished, because each asks something different of whoever reads
-    it: files that are live but wrong, files that may or may not be live, and
-    files that were never offered to Portal at all.
+    A project whose upload was asked for is described by what PyPI holds now,
+    however that request ended. One nothing asked for is reported from what this
+    run did, since the index has nothing to say about it.
     """
-    lines = [f'published: {name}' for name in published]
-    lines += [f'published but NOT verified: {name}' for name in unverified]
-    lines += [
-        f'MAY be published, no answer from Portal: {name}' for name in in_flight
-    ]
-    lines += [
-        f'NOT published: {name}'
-        for name in attempted
-        if name not in published
-        and name not in unverified
-        and name not in in_flight
-    ]
-    lines += [f'already published: {name}' for name in skipped]
-    lines += [
-        f'not reached: {name}'
-        for name in PROJECTS.values()
-        if name not in attempted and name not in skipped
-    ]
+    lines = []
+    for name in PROJECTS.values():
+        if name in skipped:
+            state = 'already published before this run'
+        elif name in requested:
+            state = pypi_state(name, version, digests[name])
+        else:
+            state = 'not reached'
+        lines.append(f'{name}: {state}')
     pathlib.Path('kitmaker-summary.txt').write_text('\n'.join(lines) + '\n')
     print('\n'.join(lines))
 
 
 def main() -> None:
-    dist = pathlib.Path('dist')
-    built = {
-        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in dist.iterdir()
-        if path.name.endswith(('.whl', '.tar.gz'))
-    }
-    if not built:
-        raise SystemExit('dist/ holds no distributions')
-    # The workflow checks this too, but only across the wheels, and this is
-    # what submits: one version here is the version every file is published
-    # under.
-    versions = {version_of(filename) for filename in built}
-    if len(versions) != 1:
-        raise SystemExit(
-            f'distributions disagree on the version: {sorted(versions)}'
-        )
-    version = versions.pop()
-
-    # Only files this run built may be published. A rerun against an existing
-    # release can see assets left by an earlier one, so the release listing
-    # alone is not a safe description of what belongs to this release.
-    assets: dict[str, str] = {}
-    for line in pathlib.Path('assets.tsv').read_text().splitlines():
-        if not line.strip():
-            continue
-        filename, url = line.split('\t')
-        if filename in built:
-            assets[filename] = url
-
-    missing = set(built) - assets.keys()
-    if missing:
-        raise SystemExit(f'not attached to the release: {sorted(missing)}')
-
-    urls: dict[int, dict[str, str]] = {}
-    digests: dict[int, dict[str, str]] = {}
-    for project_id, name in PROJECTS.items():
-        mine = {
-            filename: url
-            for filename, url in assets.items()
-            if canonical(distribution_of(filename)) == canonical(name)
-        }
-        if not mine:
-            raise SystemExit(f'nothing in this release belongs to {name}')
-        urls[project_id] = mine
-        digests[project_id] = {filename: built[filename] for filename in mine}
-
-    claimed = sum(len(mine) for mine in urls.values())
-    if claimed != len(assets):
-        raise SystemExit(
-            f'{len(assets) - claimed} built file(s) match no Portal project'
-        )
-
-    print(
-        f'{len(assets)} distributions at {version} '
-        f'across {len(PROJECTS)} projects'
-    )
-
-    todo: dict[int, tuple[str, list[str], dict[str, str]]] = {}
-    attempted: list[str] = []
+    version = ''
+    by_name: dict[str, dict[str, str]] = {}
+    requested: list[str] = []
     skipped: list[str] = []
-    published: list[str] = []
-    unverified: list[str] = []
-    in_flight: list[str] = []
     try:
+        built = {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in pathlib.Path('dist').iterdir()
+            if path.name.endswith(('.whl', '.tar.gz'))
+        }
+        if not built:
+            raise SystemExit('dist/ holds no distributions')
+        # The workflow gate checks this too. This is the thing that submits, so
+        # it refuses as well: one version here is the version every file is
+        # published under.
+        versions = {version_of(filename) for filename in built}
+        if len(versions) != 1:
+            raise SystemExit(
+                f'distributions disagree on the version: {sorted(versions)}'
+            )
+        version = versions.pop()
+
+        # Only files this run built may be published. A rerun against an
+        # existing release can see assets left by an earlier one, so the
+        # release listing alone is not a safe description of this release.
+        assets: dict[str, str] = {}
+        for line in pathlib.Path('assets.tsv').read_text().splitlines():
+            if not line.strip():
+                continue
+            filename, url = line.split('\t')
+            if filename in built:
+                assets[filename] = url
+
+        absent = set(built) - assets.keys()
+        if absent:
+            raise SystemExit(f'not attached to the release: {sorted(absent)}')
+
+        urls: dict[int, dict[str, str]] = {}
+        for project_id, name in PROJECTS.items():
+            mine = {
+                filename: url
+                for filename, url in assets.items()
+                if canonical(distribution_of(filename)) == canonical(name)
+            }
+            if not mine:
+                raise SystemExit(f'nothing in this release belongs to {name}')
+            urls[project_id] = mine
+            by_name[name] = {filename: built[filename] for filename in mine}
+
+        claimed = sum(len(mine) for mine in urls.values())
+        if claimed != len(assets):
+            raise SystemExit(
+                f'{len(assets) - claimed} built file(s) match no Portal project'
+            )
+
+        print(
+            f'{len(assets)} distributions at {version} '
+            f'across {len(PROJECTS)} projects'
+        )
+
         # Pass one: nothing publishes until every project has validated and
         # every dry run has finished. A project already on PyPI at this version
-        # is left alone, and a part-published one is reduced to the files still
-        # missing.
+        # is left alone, and a part-published one is reduced to what is missing.
+        todo: dict[int, tuple[str, list[str]]] = {}
         for project_id, name in PROJECTS.items():
-            pending = outstanding(name, version, digests[project_id])
+            pending = outstanding(name, version, by_name[name])
             if not pending:
                 print(f'already on PyPI, skipping: {name} {version}')
                 skipped.append(name)
@@ -426,9 +434,7 @@ def main() -> None:
                     for filename, url in urls[project_id].items()
                     if filename in pending
                 ),
-                digests[project_id],
             )
-            attempted.append(name)
             actual = call('GET', f'/projects/{project_id}').get('name')
             if actual != name:
                 raise SystemExit(
@@ -446,29 +452,15 @@ def main() -> None:
 
         # Pass two: from here a failure can leave part of the release live,
         # which is why the whole of pass one had to pass first.
-        for project_id, (name, project_urls, expected) in todo.items():
+        for project_id, (name, project_urls) in todo.items():
             print(f'publishing: {name}')
-            # From here the files may be live whatever happens next. A lost
-            # response, or a submission that never reaches a terminal state,
-            # says nothing about whether Portal accepted the upload, so the
-            # project is recorded as uncertain before it is asked for.
-            in_flight.append(name)
-            try:
-                wait_for(submit(project_id, name, project_urls, True), name)
-            except Rejected:
-                # Portal answered: nothing was uploaded, so this is not
-                # uncertain, it is simply not published.
-                in_flight.remove(name)
-                raise
-            # Portal has reported success, so the files are live whatever
-            # verification then finds.
-            in_flight.remove(name)
-            unverified.append(name)
-            verify(name, version, expected)
-            unverified.remove(name)
-            published.append(name)
+            # Recorded before it is asked for, because from this line on the
+            # files may be live whatever Portal goes on to say.
+            requested.append(name)
+            wait_for(submit(project_id, name, project_urls, True), name)
+            verify(name, version, by_name[name])
     finally:
-        write_summary(published, unverified, in_flight, attempted, skipped)
+        write_summary(version, by_name, requested, skipped)
 
 
 if __name__ == '__main__':

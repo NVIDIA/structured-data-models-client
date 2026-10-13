@@ -120,19 +120,34 @@ new ones, and the publish step fails rather than publishing something the
 GitHub Release does not match. "Re-run failed jobs" reuses the original
 `distributions` artifact, which is what you want.
 
-A re-run is usually safe to repeat, with one exception: read
-`kitmaker-summary.txt` first. A line saying **MAY be published** means the
-upload was asked for and no answer came back, so Portal may have accepted it.
-PyPI can still answer 404 for a few minutes after a publish, so re-running
-straight away can submit that project a second time. Check the project on
-pypi.org by hand before re-running, and if it is there, nothing more is needed
-for it.
+`kitmaker-summary.txt`, printed at the end of the job, is the record to read
+before doing anything else. It names each of the five projects and says what
+**PyPI** holds for this version, not what Portal reported: Portal's batches are
+not atomic, so a failure can follow files that already published, and a refusal
+is not proof that nothing did. Only the index knows.
 
-Otherwise, before each project is submitted, PyPI is asked what it already
-holds at that version. A project fully published with the
-artifact's bytes is skipped, and one that is part-published is reduced to the
-files still missing, since PyPI takes files into a version one at a time. A
-re-run after a partial publish therefore finishes what did not land.
+| The summary says | What it means |
+| --- | --- |
+| `published` | Every file is on PyPI with the bytes this run built. Nothing to do. |
+| `already published before this run` | It was there before this run started. |
+| `not reached` | Nothing was submitted for it. |
+| `not on PyPI` | The upload was asked for and nothing landed. |
+| `PARTLY on PyPI, missing [...]` | Some files landed. A re-run finishes the rest. |
+| `on PyPI with UNEXPECTED bytes` | Needs a person. |
+| `UNKNOWN, could not ask PyPI` | The summary could not reach PyPI. Look by hand. |
+
+A re-run is safe for every state except the last two, and PyPI's JSON endpoint
+is cached, so a project published in the last few minutes can still read as
+`not on PyPI`. **If the summary surprises you, check the project page on
+pypi.org before re-running**, or you may submit the same files twice. Confirm
+every expected file, not just that the version exists: a batch that stopped
+halfway leaves some of them.
+
+Before each project is submitted, PyPI is asked what it already holds at that
+version. A project fully published with the artifact's bytes is skipped, and one
+that is part-published is reduced to the files still missing, since PyPI takes
+files into a version one at a time. A re-run after a partial publish therefore
+finishes what did not land.
 
 Two states it refuses to guess at, both needing a hand:
 
@@ -141,9 +156,6 @@ Two states it refuses to guess at, both needing a hand:
   re-run; work out what was published first, then yank and release a patch.
 - **PyPI holds files this run did not build.** Same reasoning: the version on
   PyPI is not the one in `dist/`.
-
-`kitmaker-summary.txt`, printed at the end of the job, is the record of what
-is live. Read it before re-running.
 
 ## After
 
