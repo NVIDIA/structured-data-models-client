@@ -318,24 +318,24 @@ def pypi_state(name: str, version: str, expected: dict[str, str]) -> str:
     """
     try:
         held = on_pypi(name, version)
+        if held is None:
+            return 'not on PyPI'
+        wrong = sorted(
+            filename
+            for filename, digest in expected.items()
+            if filename in held and held[filename] != digest
+        )
+        if wrong:
+            return f'on PyPI with UNEXPECTED bytes for {wrong}'
+        unknown = sorted(map(str, set(held) - set(expected)))
+        if unknown:
+            return f'on PyPI with files this run did not build: {unknown}'
+        absent = sorted(set(expected) - set(held))
+        if absent:
+            return f'PARTLY on PyPI, missing {absent}'
+        return 'published'
     except (Exception, SystemExit) as error:  # noqa: BLE001 - see docstring
         return f'UNKNOWN, could not ask PyPI ({error})'
-    if held is None:
-        return 'not on PyPI'
-    wrong = sorted(
-        filename
-        for filename, digest in expected.items()
-        if filename in held and held[filename] != digest
-    )
-    if wrong:
-        return f'on PyPI with UNEXPECTED bytes for {wrong}'
-    unknown = sorted(set(held) - set(expected))
-    if unknown:
-        return f'on PyPI with files this run did not build: {unknown}'
-    absent = sorted(set(expected) - set(held))
-    if absent:
-        return f'PARTLY on PyPI, missing {absent}'
-    return 'published'
 
 
 def write_summary(
@@ -394,12 +394,30 @@ def main() -> None:
         # existing release can see assets left by an earlier one, so the
         # release listing alone is not a safe description of this release.
         assets: dict[str, str] = {}
+        stale: list[str] = []
         for line in pathlib.Path('assets.tsv').read_text().splitlines():
             if not line.strip():
                 continue
-            filename, url = line.split('\t')
-            if filename in built:
-                assets[filename] = url
+            filename, url, digest = (line.split('\t') + ['', ''])[:3]
+            if filename not in built:
+                continue
+            # Kitmaker fetches the asset, not the local file, and a published
+            # file cannot be recalled. An asset left by an earlier run that
+            # built different bytes would be published as this release and only
+            # then fail verification, which is far too late. The digest comes
+            # from the release listing, so this costs nothing.
+            if digest.removeprefix('sha256:') != built[filename]:
+                stale.append(
+                    f'{filename} (release has {digest or "no digest"})'
+                )
+                continue
+            assets[filename] = url
+        if stale:
+            raise SystemExit(
+                'release assets are not the bytes this run built: '
+                f'{sorted(stale)}. Re-run failed jobs rather than all jobs, '
+                'so the original artifact is reused.'
+            )
 
         absent = set(built) - assets.keys()
         if absent:

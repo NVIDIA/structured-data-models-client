@@ -90,8 +90,8 @@ One Portal project exists per distribution, because Kitmaker matches the
 project name against the distribution name parsed from each filename. Their
 ids are in `.github/workflows/kitmaker_release.py`, and each is checked against
 the name it should carry before anything is sent, so a renamed or reassigned id
-fails early rather than being trusted. Every project is validated and dry-run
-to a terminal state before *any* of them publishes, because the five
+fails early rather than being trusted. Every project that has something left to publish is validated
+and dry-run to a terminal state before *any* of them publishes, because the five
 distributions pin each other by exact version and a client live without its
 engine is worse than a release that never started. Kitmaker batches are
 sequential and not atomic, and a published file cannot be recalled.
@@ -115,10 +115,12 @@ repository. SECURITY.md tells consumers what they can check instead.
 **Use "Re-run failed jobs", never "Re-run all jobs."** These builds are not
 byte reproducible, so rebuilding produces a different wheel and sdist for the
 same version. The workflow will not clobber an already-attached asset, so a
-full re-run leaves the release holding the original bytes while `dist/` holds
-new ones, and the publish step fails rather than publishing something the
-GitHub Release does not match. "Re-run failed jobs" reuses the original
-`distributions` artifact, which is what you want.
+full re-run would leave the release holding the original bytes while `dist/`
+holds new ones. The publish step compares each attached asset's digest against
+what this run built and refuses before submitting anything, since Kitmaker
+fetches the asset rather than the local file and a published file cannot be
+recalled. "Re-run failed jobs" reuses the original `distributions` artifact,
+which is what you want.
 
 `kitmaker-summary.txt`, printed at the end of the job, is the record to read
 before doing anything else. It names each of the five projects. For any whose upload was requested it says

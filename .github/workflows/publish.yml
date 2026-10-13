@@ -44,12 +44,12 @@ permissions: {}
 jobs:
   build:
     runs-on: ubuntu-latest
-    # workflow_dispatch can be started from any ref, and everything below reads
-    # GITHUB_REF_NAME as if it were a tag. A branch called v1.2.0 would have
-    # satisfied the version check and published from it; --verify-tag only runs
-    # afterwards, in attach-sbom, which is too late to stop an upload. Refuse
-    # here, where nothing has been built yet.
-    if: github.ref_type == 'tag'
+    # workflow_dispatch can be started from any ref, and everything below
+    # reads GITHUB_REF_NAME as if it were a release tag. A branch called
+    # v1.2.0 would have satisfied the version check and published from it.
+    # Refused here, where nothing has been built yet; the shape of the tag is
+    # checked again with the versions, since this only tests the prefix.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     permissions:
       contents: read
       # The gate below asks the API whether CI passed on this commit, which
@@ -152,9 +152,14 @@ jobs:
       - name: The tag must match what the distributions declare
         run: |
           python - <<'EOF'
-          import os, pathlib, sys
+          import os, pathlib, re, sys
 
-          tag = os.environ['GITHUB_REF_NAME'].lstrip('v')
+          ref = os.environ['GITHUB_REF_NAME']
+          # `lstrip` would also have accepted `vv1.0.0`, and a dispatch can be
+          # aimed at a tag called `1.0.0`.
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', ref):
+              sys.exit(f'{ref} is not a release tag of the form v1.2.3')
+          tag = ref.removeprefix('v')
           wheels = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
           sdists = sorted(p.name for p in pathlib.Path('dist').glob('*.tar.gz'))
           built = wheels + sdists
@@ -241,7 +246,8 @@ jobs:
   # Together, declining means nothing was created at all. A publish that is
   # approved and then fails does leave the release standing, which is
   # deliberate: Kitmaker may already have fetched some of those assets, and
-  # `kitmaker-summary.txt` records what PyPI holds for each project. The cost is the Kitmaker token
+  # `kitmaker-summary.txt` records, for each project an upload was requested
+  # for, what PyPI holds. The cost is the Kitmaker token
   # sharing a job with `contents: write`.
   release:
     needs: build
@@ -317,8 +323,10 @@ jobs:
           # include assets this run did not build. The artifact `build` handed
           # over is the authority for what may be published, so the asset list
           # is filtered down to exactly its filenames.
-          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[] | "\(.name)\t\(.url)"' > assets.tsv
+          # The digest comes with the listing, so the script can refuse an
+          # asset whose bytes are not the ones it is about to publish.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+            --jq '.assets[] | "\(.name)\t\(.url)\t\(.digest // "")"' > assets.tsv
           test -s assets.tsv
           python3 .github/workflows/kitmaker_release.py
 

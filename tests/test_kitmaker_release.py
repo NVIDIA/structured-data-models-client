@@ -237,7 +237,10 @@ def release(kitmaker, tmp_path, monkeypatch):
         for name in kitmaker.PROJECTS.values():
             filename = f'{name.replace("-", "_")}-1.0.0-py3-none-any.whl'
             (dist / filename).write_bytes(name.encode())
-            lines.append(f'{filename}\thttps://example.invalid/{filename}')
+            digest = hashlib.sha256(name.encode()).hexdigest()
+            lines.append(
+                f'{filename}\thttps://example.invalid/{filename}\tsha256:{digest}'
+            )
         (tmp_path / 'assets.tsv').write_text('\n'.join(lines) + '\n')
 
         live = set(already_on_pypi)
@@ -538,27 +541,58 @@ def test_every_state_the_summary_can_print_is_documented():
     documented = documented_states()
     assert len(emitted) >= 8, f'only found {emitted}: the reader is broken'
 
-    def normalise(phrase):
-        """The fixed part of a state, with whatever punctuation introduces its
-        variable tail removed."""
-        return (
-            phrase.rstrip().rstrip(':(,').rstrip().removesuffix(' for').rstrip()
-        )
+    def normalise(phrases):
+        """The fixed part of each state, with the punctuation that introduces
+        its variable tail removed. Compared as sets rather than by substring:
+        `published` is inside `already published before this run`, which let a
+        missing row pass."""
+        return {
+            phrase.rstrip()
+            .removesuffix('[...]')
+            .rstrip()
+            .rstrip(':(,')
+            .rstrip()
+            .removesuffix(' for')
+            .rstrip()
+            for phrase in phrases
+        }
 
-    undocumented = {
-        state
-        for state in emitted
-        if not any(normalise(state) in row for row in documented)
-    }
+    undocumented = normalise(emitted) - normalise(documented)
     assert not undocumented, (
         f'states RELEASING.md does not explain: {undocumented}'
     )
 
-    unreachable = {
-        row
-        for row in documented
-        if not any(normalise(state) in row for state in emitted)
-    }
+    unreachable = normalise(documented) - normalise(emitted)
     assert not unreachable, (
         f'RELEASING.md documents states that cannot happen: {unreachable}'
     )
+
+
+def test_an_asset_that_is_not_what_this_run_built_is_refused(
+    kitmaker, release, tmp_path
+):
+    """Kitmaker fetches the asset, not the local file, and a published file
+    cannot be recalled. An asset left by an earlier run that built different
+    bytes would be published as this release and only then fail verification,
+    which is after the part that cannot be undone."""
+    release()
+    tsv = tmp_path / 'assets.tsv'
+    rows = [line.split('\t') for line in tsv.read_text().strip().splitlines()]
+    rows[1][2] = 'sha256:' + '0' * 64
+    tsv.write_text('\n'.join('\t'.join(row) for row in rows) + '\n')
+
+    with pytest.raises(SystemExit, match='not the bytes this run built'):
+        kitmaker.main()
+
+
+def test_an_asset_with_no_digest_is_refused(kitmaker, release, tmp_path):
+    """An asset the API cannot vouch for is the dangerous case, not the safe
+    one."""
+    release()
+    tsv = tmp_path / 'assets.tsv'
+    rows = [line.split('\t') for line in tsv.read_text().strip().splitlines()]
+    rows[1][2] = ''
+    tsv.write_text('\n'.join('\t'.join(row) for row in rows) + '\n')
+
+    with pytest.raises(SystemExit, match='no digest'):
+        kitmaker.main()
