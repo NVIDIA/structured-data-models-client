@@ -67,7 +67,9 @@ together. ``--commit SHA`` holds each wheel to the identity
 ``native_wheel.py`` wrote beside it (:func:`provenance`), a build
 record, not an attestation: it names SHA, a clean tree, the file's own
 hash and the build, so a wheel recorded as another commit's cannot stand
-in for the candidate's by mistake.
+in for the candidate's by mistake; and the inputs tree to that commit,
+clean under what the smoke takes from it (:func:`inputs_clean`), whose
+files are then taken as the commit holds them (:func:`exported`).
 
 ``environment.json`` in the output directory records the lane, the image,
 the interpreter, the wheels' SHA-256, the versions resolved, each report's
@@ -85,6 +87,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
+import io
 import json
 import os
 import pathlib
@@ -92,6 +95,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import xml.etree.ElementTree as ElementTree
 import zipfile
@@ -299,6 +303,79 @@ def suite(
         (into / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(inputs / name, into / name)
     return tests
+
+
+def inputs_clean(inputs: pathlib.Path, commit: str) -> None:
+    """Holds the inputs tree to the commit the wheels were built from: a
+    git checkout whose ``HEAD`` is `commit`, with nothing modified, staged
+    or untracked (ignored files aside) under what the smoke takes from it,
+    the sibling distributions and :data:`INPUTS`, so a file the commit
+    does not hold never reaches a wheel or the suite; refused by name."""
+    taken = [*(f'packages/{name}' for name in SIBLINGS), *INPUTS]
+    try:
+        head = subprocess.run(
+            ['git', '-C', str(inputs), 'rev-parse', 'HEAD'],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        changed = subprocess.run(
+            [
+                'git',
+                '-C',
+                str(inputs),
+                'status',
+                '--porcelain',
+                '--untracked-files=all',
+                '--',
+                *taken,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise SmokeFailed(
+            f'the inputs {inputs}: not a git checkout ({error})'
+        ) from error
+    if head != commit:
+        raise SmokeFailed(f'the inputs {inputs} are at {head}, not {commit}')
+    if changed:
+        raise SmokeFailed(
+            f'the inputs {inputs} differ from {commit} under what the smoke '
+            f'takes: {[line[3:] for line in changed]}'
+        )  # fmt: skip
+
+
+def exported(
+    inputs: pathlib.Path, commit: str, into: pathlib.Path
+) -> pathlib.Path:
+    """What the smoke takes from the inputs (the sibling distributions and
+    :data:`INPUTS`) as `commit` holds them, from ``git archive``, into
+    `into`, so nothing the commit does not hold, an ignored file included,
+    reaches a wheel or the suite. Returns `into`."""
+    taken = [*(f'packages/{name}' for name in SIBLINGS), *INPUTS]
+    archive = subprocess.run(
+        [
+            'git',
+            '-C',
+            str(inputs),
+            'archive',
+            '--format=tar',
+            commit,
+            '--',
+            *taken,
+        ],
+        capture_output=True,
+    )
+    if archive.returncode != 0:
+        raise SmokeFailed(
+            f'the inputs {inputs}: git archive {commit} failed '
+            f'({archive.stderr.decode(errors="replace").strip()})'
+        )
+    with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
+        tar.extractall(into, filter='data')
+    return into
 
 
 def provenance(wheel: pathlib.Path, commit: str, test_ops: bool) -> None:
@@ -683,7 +760,14 @@ def smoke(
     python: str,
     image: str | None,
     inputs: pathlib.Path = REPO,
+    commit: str | None = None,
 ) -> int:
+    """The lane's run; given `commit`, on the inputs as that commit holds
+    them (:func:`exported`)."""
+    if commit is not None:
+        with tempfile.TemporaryDirectory(prefix='wheel-smoke-inputs-') as tree:
+            held = exported(inputs, commit, pathlib.Path(tree))
+            return smoke(lane_name, wheels, out, python, image, held)
     lane = LANES[lane_name]
     out.mkdir(parents=True, exist_ok=True)
     record: dict[str, Any] = {
@@ -777,10 +861,16 @@ def in_container(
     wheels: dict[str, pathlib.Path],
     out: pathlib.Path,
     inputs: pathlib.Path = REPO,
+    commit: str | None = None,
 ) -> int:
     """Runs this script in the lane's image, the checkout, the inputs and
     the wheels mounted read-only, as the caller's user, writing only to
-    `out`."""
+    `out`; given `commit`, the inputs as that commit holds them
+    (:func:`exported`)."""
+    if commit is not None:
+        with tempfile.TemporaryDirectory(prefix='wheel-smoke-inputs-') as tree:
+            held = exported(inputs, commit, pathlib.Path(tree))
+            return in_container(lane_name, wheels, out, held)
     lane = LANES[lane_name]
     platforms = {_docker_platform(w) for w in wheels.values()}
     if len(platforms) != 1:
@@ -838,11 +928,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.commit is not None:
             for build, wheel in wheels.items():
                 provenance(wheel, args.commit, build == 'test-ops')
+            inputs_clean(args.inputs, args.commit)
         if args.container:
-            return in_container(args.lane, wheels, args.out, args.inputs)
+            return in_container(
+                args.lane, wheels, args.out, args.inputs, commit=args.commit
+            )
         return smoke(
-            args.lane, wheels, args.out, args.python, args.image, args.inputs
-        )
+            args.lane, wheels, args.out, args.python, args.image, args.inputs,
+            commit=args.commit,
+        )  # fmt: skip
     except SmokeFailed as failure:
         print(f'wheel-smoke ({args.lane}): FAILED: {failure}', file=sys.stderr)
         return 1

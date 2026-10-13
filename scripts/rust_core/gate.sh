@@ -11,7 +11,7 @@
 #       [--protected-paths TEXT] [--run RUNNERS] [--observations FILE]...
 #       [--out DIR] [--no-l0]
 #       [--only CHECK | --locked 1a|1b [--evidence DIR]
-#        [--wheel FILE --test-ops-wheel FILE]]
+#        [--wheel FILE --test-ops-wheel FILE [--wheel-run ID]]]
 #
 # --base is the phase-branch tip recorded at package start (or, in CI on a
 # topic branch, the tip at run time); --phase-push BEFORE is CI on a push to
@@ -87,9 +87,13 @@
 #                                identity file, built from the candidate's
 #                                commit (--commit), and the checkpoint's
 #                                binding tests run on the candidate's
-#                                contract inputs (--inputs: its message
-#                                builder, contract version, error codes,
-#                                stub and sibling distributions);
+#                                contract inputs (--inputs: its contract
+#                                version, which sets the checkpoint's own
+#                                message builder's, its error codes, stub
+#                                and sibling distributions, as the
+#                                commit holds them); the evidence records
+#                                each wheel's name, SHA-256 and identity
+#                                commit, and the CI run --wheel-run names;
 #                   inventory    (1b) the 40 cases of the Phase 1b
 #                                inventory and base.adventureworks are
 #                                acceptance cases.
@@ -122,6 +126,7 @@ locked=''
 evidence=''
 wheel=''
 test_ops_wheel=''
+wheel_run=''
 harness=0
 candidate=''
 for_harness=()
@@ -148,6 +153,9 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       if [ "$1" = --only ]; then only=$2; else locked=$2; fi
       for_harness+=("$1" "$2"); shift 2 ;;
+    --wheel-run)
+      [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
+      wheel_run=$2; for_harness+=("$1" "$2"); shift 2 ;;
     --evidence | --wheel | --test-ops-wheel)
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       case "$2" in /*) given_path=$2 ;; *) given_path=$PWD/$2 ;; esac
@@ -177,8 +185,8 @@ if [ -n "$only" ] && [ -n "$locked" ]; then
   echo 'gate.sh: --only runs one check and --locked the locked ones; give one' >&2
   exit 2
 fi
-if [ -z "$locked" ] && [ -n "$evidence$wheel$test_ops_wheel" ]; then
-  echo 'gate.sh: --evidence, --wheel and --test-ops-wheel are --locked'"'"'s' >&2
+if [ -z "$locked" ] && [ -n "$evidence$wheel$test_ops_wheel$wheel_run" ]; then
+  echo 'gate.sh: --evidence, --wheel, --test-ops-wheel and --wheel-run are --locked'"'"'s' >&2
   exit 2
 fi
 
@@ -556,6 +564,7 @@ if [ -n "$locked" ]; then
   steps=()
   for i in "${!names[@]}"; do steps+=("${names[$i]}=${results[$i]}"); done
   mkdir -p "$evidence/gate" &&
+    SDM_GATE_WHEEL=$wheel SDM_GATE_TEST_OPS_WHEEL=$test_ops_wheel SDM_GATE_WHEEL_RUN=$wheel_run \
     "$PYTHON" - "$evidence/gate/$head.json" "$head" "$locked" "$checkpoint" "$base" \
       "$cell" "$failed" "${#steps[@]}" "${steps[@]}" "${table[@]}" <<'EOF'
 import json, os, sys
@@ -565,6 +574,28 @@ checks = {}
 for item in sys.argv[9 + int(count):]:
     number, verdict, names = item.split('=', 2)
     checks[number] = {'result': verdict, 'steps': names.split()}
+# Check 3's wheels, as given: each file's name and SHA-256, the commit its
+# identity file (a build record, not an attestation) names, and the CI run
+# the operator says they came from.
+if '3' in checks:
+    import hashlib
+    def wheel(given):
+        if not given or not os.path.isfile(given):
+            return None
+        with open(given, 'rb') as file:
+            digest = hashlib.sha256(file.read()).hexdigest()
+        try:
+            with open(given + '.json', encoding='utf-8') as file:
+                commit = json.load(file).get('commit')
+        except (OSError, ValueError, RecursionError, AttributeError):
+            commit = None
+        return {'name': os.path.basename(given), 'sha256': digest,
+                'commit': commit if isinstance(commit, str) else None}
+    checks['3']['wheels'] = {
+        'production': wheel(os.environ.get('SDM_GATE_WHEEL')),
+        'test-ops': wheel(os.environ.get('SDM_GATE_TEST_OPS_WHEEL')),
+        'run': os.environ.get('SDM_GATE_WHEEL_RUN') or None,
+    }
 found = {'sha': head, 'halves': {}}
 if os.path.exists(path):
     try:
