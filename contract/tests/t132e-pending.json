@@ -3,13 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_core_refusal_over_the_floor_is_no_pass_in_the_unit",
-   "py:test_a_core_refusal_under_the_floor_is_inconclusive_in_the_unit",
-   "py:test_a_unit_with_no_refusal_is_operationally_ok",
-   "py:test_an_old_route_refusal_is_inconclusive_and_operational",
-   "py:test_run_keeps_the_floor_when_the_core_refuses"
-  ],
+  "exits": [],
   "key-python-core": [
    "nulls-1-decimal.200"
   ],
@@ -17,10 +11,7 @@
    "nulls-1-decimal.200"
   ],
   "sampled-python-core": [
-   "mixed-null-decimal",
-   "singleton-null-decimal",
-   "singleton-null-text",
-   "two-nulls-text"
+   "mixed-null-decimal"
   ]
  },
  "authored": {

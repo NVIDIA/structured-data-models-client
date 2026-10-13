@@ -2122,7 +2122,9 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route whose sampled tables hold a null foreign key reached
     at the second hop or a null key in a table referring to a sampled one.
-  cases: [T1.26b]
+  cases: [T1.26b, T1.32e]
+  refs:
+  - 'contract/sampled-null-key-vectors.json#two-nulls-text success -> success'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E94}
@@ -2142,7 +2144,7 @@ entries:
     foreign key, which is correct. E73(a)'s benchmark on generated data
     is set aside as having no signal; a real-data parity benchmark
     (AdventureWorks and RelBench H&M) runs after the time_whole_table fix
-    as a sanity check, not a gate.
+    as a sanity check, not a gate. From T1.32e the vector two-nulls-text (contract/sampled-null-key-vectors.json, two null text keys of one example reached, which the reference numbers as one row and the core as two) is named in refs with its transition; the entry is owner-approved, for the reviewers to hold the ref to its approved meaning.
 
 - id: P1B-14
   title: A schema's keys, links or time column edited between two materialize calls is followed on the core route
@@ -2706,7 +2708,9 @@ entries:
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build,
     materialize refuses a keyed table whose rows reached hold a null text
-    or decimal key with INVALID_REQUEST, fields operation materialize,
+    or decimal key beside one that is not null (the reference's sort fails
+    comparing them; keys reached that are all null sort, as one null alone
+    does) with INVALID_REQUEST, fields operation materialize,
     rule null_key, the table and the column (sdm-core's subgraph.rs,
     null_key_sortable), naming no value. For text that is the reference's
     code, named; for a decimal it replaces the reference's INTERNAL_ERROR.

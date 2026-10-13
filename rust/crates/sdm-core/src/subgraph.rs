@@ -596,12 +596,15 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
 }
 
 /// Refuses a table whose rows reached hold a null key of text or of a
-/// decimal type, `INVALID_REQUEST` naming the table and column (rule
-/// `null_key`): the reference sorts every keyed table's keys reached
-/// (`np.unique` in `_sample_subgraph`), which fails on a null among text
-/// (an unnamed error its client reports as `INVALID_REQUEST`) or among
-/// decimals (`INTERNAL_ERROR`, register P1B-40), so no request it would
-/// send exists to build. A null integer or float key sorts, and is read.
+/// decimal type beside a key that is not null, `INVALID_REQUEST` naming
+/// the table and column (rule `null_key`): the reference sorts every keyed
+/// table's keys reached (`np.unique` in `_sample_subgraph`), which fails
+/// comparing a null with a text value (an unnamed error its client reports
+/// as `INVALID_REQUEST`) or with a decimal (`INTERNAL_ERROR`, register
+/// P1B-40), so no request it would send exists to build. Keys reached that
+/// are all null sort, as one null alone does (measured on the reference
+/// at b413e9ad: one null, two nulls), and are read; so does a null integer
+/// or float key.
 fn null_key_sortable(frame: &RecordBatch, table: &str, key: &str) -> Result<(), CoreError> {
     let column = named(frame, key)?;
     let unsortable = matches!(
@@ -612,7 +615,8 @@ fn null_key_sortable(frame: &RecordBatch, table: &str, key: &str) -> Result<(), 
             | arrow_schema::DataType::Decimal128(_, _)
             | arrow_schema::DataType::Decimal256(_, _)
     );
-    if unsortable && column.null_count() > 0 {
+    let nulls = column.null_count();
+    if unsortable && nulls > 0 && nulls < column.len() {
         return Err(CoreError::new(
             sdm_contract::ErrorKind::InvalidRequest,
             sdm_contract::ErrorCode::InvalidRequest,
@@ -665,4 +669,40 @@ fn words(array: &ArrayRef) -> Result<Vec<Vec<String>>, CoreError> {
     Ok((0..text.len())
         .map(|i| sdm_engine::words::normalize((!text.is_null(i)).then(|| text.value(i))))
         .collect())
+}
+
+#[cfg(test)]
+mod null_key_tests {
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
+    use arrow_schema::{DataType, Field, Schema};
+
+    use super::null_key_sortable;
+
+    fn frame(keys: ArrayRef) -> RecordBatch {
+        let field = Field::new("k", keys.data_type().clone(), true);
+        RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![keys]).unwrap()
+    }
+
+    #[test]
+    fn only_a_null_beside_a_value_fails_the_reference_s_sort() {
+        // Measured on the reference at b413e9ad: one null alone and two
+        // nulls sort; a null beside text, or beside a decimal, does not.
+        let text = |values: Vec<Option<&str>>| frame(Arc::new(StringArray::from(values)));
+        assert!(null_key_sortable(&text(vec![None]), "t", "k").is_ok());
+        assert!(null_key_sortable(&text(vec![None, None]), "t", "k").is_ok());
+        assert!(null_key_sortable(&text(vec![Some("a"), Some("b")]), "t", "k").is_ok());
+        let err = null_key_sortable(&text(vec![None, Some("a")]), "t", "k").unwrap_err();
+        assert_eq!(err.code, sdm_contract::ErrorCode::InvalidRequest);
+        assert_eq!(err.fields["rule"], sdm_contract::Detail::text("null_key"));
+        let decimal = arrow_array::Decimal128Array::from(vec![Some(1), None])
+            .with_precision_and_scale(18, 0)
+            .unwrap();
+        assert!(null_key_sortable(&frame(Arc::new(decimal)), "t", "k").is_err());
+        // An integer key with a null sorts.
+        let ints = frame(Arc::new(Int64Array::from(vec![Some(1), None])));
+        assert!(null_key_sortable(&ints, "t", "k").is_ok());
+        assert_eq!(ints.column(0).data_type(), &DataType::Int64);
+    }
 }

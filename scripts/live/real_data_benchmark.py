@@ -64,9 +64,10 @@ whether the core answers as well as the old route.
   core answered; otherwise FAIL when the core is more than
   :data:`TOLERANCE` worse, relative, and the paired difference's interval
   lies wholly on the worse side, or its metric is undefined; PASS
-  otherwise. A route that refuses a task is reported with the refusal's
-  class, code and rule: FAIL where only the core refuses, INCONCLUSIVE
-  where the old route does.
+  otherwise. The floor reads the old route's evidence first. A route that
+  refuses a task is reported with the refusal's class, code and rule as an
+  operational error, which fails the run, and its unit is INCONCLUSIVE:
+  never an accuracy verdict.
 - **Budget and safety**: calls and predictions are counted before any data
   is read (:func:`plan`), and a plan over ``--max-predictions`` (default
   and most :data:`PREDICTION_CEILING`, 500) is refused; the requests are
@@ -90,8 +91,10 @@ writes each call's predictions beside their labels under ``--raw-dir``
 (``calls.jsonl``), and the summary (``sdm-t132e-real-data-benchmark/1``)
 to ``--summary``.
 
-Exit status: 0 when every unit passes or is inconclusive (a dry run when
-it completes), 1 when a unit fails or a call fails, 2 for bad usage.
+Exit status: 0 when every unit passes or is inconclusive and no route
+refused (a dry run when it completes with no refusal), 1 when a unit fails,
+a route refuses (an operational error, recorded apart from the verdicts) or
+a call fails, 2 for bad usage.
 """
 
 from __future__ import annotations
@@ -698,16 +701,30 @@ def unit(
     refused: dict[str, dict[str, Any]],
     digests: dict[str, list[str]],
 ) -> dict[str, Any]:
-    r"""One unit's numbers and verdict."""
+    r"""One unit's numbers and verdict. The verdict is of quality alone:
+    the sanity floor reads the old route's evidence first, so a unit whose
+    old route is near random (or refused, or undefined) is INCONCLUSIVE
+    whatever the core did; a unit a route refused is never judged on
+    accuracy either. A refusal is an operational failure, ``operational``
+    ``'FAIL'`` beside the verdict (``'OK'`` with none), its reasons in
+    ``operational_errors``, which fails the run as an error (:func:`main`),
+    never as an accuracy verdict."""
     kind = task.kind
     old, core = answers['old'], answers['core']
     scored = not refused
-    if 'old' in refused:
+    old_mean = (
+        _per_seed(kind, truth, old)
+        if old and all(len(a) == len(truth) for a in old)
+        else None
+    )
+    near_random = old_mean is None or under_floor(kind, truth, old_mean)
+    if near_random or not scored:
         verdict = 'INCONCLUSIVE'
-    elif 'core' in refused:
-        verdict = 'FAIL'
     else:
         verdict = judge(kind, truth, old, core)
+    errors = [
+        f'the {route} route refused: {why}' for route, why in refused.items()
+    ]
     return {
         'dataset': dataset,
         'task': task.name,
@@ -736,6 +753,9 @@ def unit(
             for o, c in zip(digests['old'], digests['core'], strict=False)
         ],
         'refused': refused,
+        'near_random': near_random,
+        'operational': 'FAIL' if errors else 'OK',
+        'operational_errors': errors,
         'verdict': verdict,
     }
 
@@ -923,6 +943,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if wire is not None:
             wire.uninstall()
     failed_units = [u for u in units if u['verdict'] == 'FAIL']
+    # A route's refusal fails the run as an error, apart from the verdicts.
+    errors = [
+        f'{u["dataset"]}/{u["task"]}: {why}'
+        for u in units
+        for why in u['operational_errors']
+    ]
     summary = {
         'format': FORMAT,
         'brief': 'T1.32e part 1, scope 2: a sanity check, not a gate',
@@ -940,6 +966,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         'requests_sent': None if wire is None else wire.sent,
         'datasets': described,
         'units': units,
+        'errors': errors,
         'verdicts': {
             verdict: sum(u['verdict'] == verdict for u in units)
             for verdict in ('PASS', 'FAIL', 'INCONCLUSIVE')
@@ -949,16 +976,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.summary is not None:
         arguments.summary.parent.mkdir(parents=True, exist_ok=True)
         arguments.summary.write_text(text, encoding='utf-8')
+    for error in errors:
+        say(f'benchmark error: {error}', file=sys.stderr)
     if arguments.dry_run:
         say(
             'dry run done: the scripted answers say nothing of a model; '
             f'verdicts {summary["verdicts"]}'
         )
-        return 0
+        return 1 if errors else 0
     for u in failed_units:
         say(f'unit failed: {u["dataset"]}/{u["task"]}', file=sys.stderr)
     say(f'benchmark done: verdicts {summary["verdicts"]}')
-    return 1 if failed_units else 0
+    return 1 if failed_units or errors else 0
 
 
 if __name__ == '__main__':
