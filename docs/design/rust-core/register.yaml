@@ -1654,7 +1654,8 @@ entries:
     an integer or as plain digits, or string), instance_id_type,
     response_field (an answer carrying scores, rankings, embeddings,
     quantiles, an explanation or item metadata, named in field),
-    prediction_type (a classification's answer not of its target's type)
+    prediction_type (a classification's answer not of its target's type
+    and not a non-finite number)
     and target_type (a classification of a float target, which
     materialize does not write). An answer nested past 128 levels (P1B-22)
     and a regression's prediction that is not a number (P1B-23) are
@@ -1674,9 +1675,14 @@ entries:
   notes: >-
     Rewritten at T1.28b, which lifted outputs, the classification's
     layout, the prediction types a regression's number and a class take,
-    and the non-finite numbers (owner, 2026-10-12, E78(h)); what remains
-    is the forecast, ranking, tabular and extra-output work of later
-    packages.
+    and the non-finite numbers (owner, 2026-10-12, E78(h)): from fix
+    round 1 a class written as a non-finite number is passed through too,
+    as the reference passes it; what remains is the forecast, ranking,
+    tabular and extra-output work of later packages. rust-host's Arrow
+    result carries columns the reference's frame does not (answer_index,
+    and prediction_as_answered where the prediction column changed an
+    answer), which python-core reads into its items and leaves out of
+    to_pandas().
     Proposed by the implementer of T1.11d (Phase 1 decisions row E45), for
     the owner: each is a refusal of an input or answer the reference
     accepts, so it waits for the owner (P1B-1 process) and is never
@@ -2400,10 +2406,13 @@ entries:
     OverflowError.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, a
-    regression's prediction is a number: a JSON number (an integer token
-    within int64, read as the double it is; a float token, a token past a
-    double's range read as an infinity; NaN and Infinity read as
-    Python's reader reads them, P1B-4) or null; any other (text, a
+    regression's prediction is a number: a JSON number (an integer within
+    int64 kept as the integer it is, its column int64 where every answer
+    is one and float64 where it is mixed with doubles or missing ones, as
+    pandas infers it, the result's items keeping each integer exact,
+    T1.28b fix round 1; a float token, a token past a double's range read
+    as an infinity; NaN and Infinity read as Python's reader reads them,
+    P1B-4) or null; any other (text, a
     boolean, an array, an object, an integer past int64) refuses the
     answer: StructuredDataError, code INVALID_RESPONSE, fields field
     prediction.prediction and reason not_a_number, a local error, on
@@ -2429,6 +2438,38 @@ entries:
     corpus cases, task IDs and inventory cases. A classification's answer that is
     not of its target's type stays refused by name (prediction_type,
     P1B-4).
+
+- id: P1B-24
+  title: An answer holding a lone surrogate escape is refused INVALID_RESPONSE where the reference reads it
+  kind: change
+  old_behavior: >-
+    The reference's client decodes an answer with Python's JSON reader,
+    which takes a lone surrogate escape in text (\ud800) as that code
+    point, and passes the text on (in the metadata, an item's id or a
+    class).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the core's reader (sdm_wire::json, serde_json's) holds text as UTF-8
+    and refuses such an answer: StructuredDataError, code
+    INVALID_RESPONSE, field response, a local error, on every host. So
+    since sdm-wire's reader was added at T1.11d, not from T1.28b. The
+    default route is unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a request materialized on the core over a DuckDB
+    source, under a forced core route, answered with JSON text holding a
+    lone surrogate escape.
+  cases: [T1.11d, T1.28b]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T1.28b's review (the subagent, round 1). Pinned by the
+    client's tests/test_the_predict_route.py,
+    test_a_lone_surrogate_in_an_answer_is_refused_on_the_core
+    (diagnostic). A refusal of an answer the reference reads, so for the
+    owner, never self-approved. Reading it would need text that is not
+    UTF-8 (a replacement character would differ too); a named refusal is
+    the recommendation.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
