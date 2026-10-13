@@ -6,6 +6,10 @@
 a test report and on what resolved fails closed, its lanes are decision
 E16's, and CI runs both of them.
 
+Since T1.20, the tree it takes the candidate's contract inputs from
+(``--inputs``), judged by its own checkout's tests, and the wheels'
+provenance (``--commit``).
+
 The smoke itself runs in CI's ``wheel-smoke`` job, against the wheels."""
 
 from __future__ import annotations
@@ -436,3 +440,372 @@ def test_the_tests_run_with_nothing_of_the_caller_s_pytest(
     assert (tmp_path / 'guard' / 'pytest.ini').read_text() == '[pytest]\n'
     assert command[command.index('-p') + 1] == 'smoke_guard'
     assert (tmp_path / 'guard' / 'smoke_guard.py').read_text() == smoke._GUARD
+
+
+# --- T1.20: the candidate's contract inputs, the checkpoint's judges ----------
+
+BINDING_TESTS = 'rust/bindings/sdm-py/tests'
+#: The contract inputs ``suite()`` takes from the inputs tree, at their
+#: repository paths.
+INPUTS = (
+    f'{BINDING_TESTS}/messages.py',
+    'rust/crates/sdm-contract/src/lib.rs',
+    'rust/crates/sdm-contract/src/error.rs',
+    'packages/structured-data-models-client/src/sdm_client/_native.pyi',
+)
+#: The binding's test files ``suite()`` takes from its own checkout: every
+#: file of the tests directory but ``messages.py``.
+JUDGES = (
+    'test_binding.py',
+    'test_arrow_lifetimes.py',
+    'test_test_ops.py',
+    'conftest.py',
+    'getenv_shim.c',
+)
+
+
+def _tree(root: pathlib.Path, version: int) -> pathlib.Path:
+    """A fake checkout at contract version `version`: the contract inputs,
+    the binding's test files (each naming the tree it is of), and the two
+    sibling distributions."""
+    label = root.name
+    files = {
+        f'{BINDING_TESTS}/messages.py': f'CONTRACT = {version}\n',
+        'rust/crates/sdm-contract/src/lib.rs': (
+            f'pub const CONTRACT_VERSION: u32 = {version};\n'
+        ),
+        'rust/crates/sdm-contract/src/error.rs': (
+            f'// the error codes of {label}, at {version}\n'
+        ),
+        'packages/structured-data-models-client/src/sdm_client/_native.pyi': (
+            f'# the stub of {label}, at {version}\n'
+        ),
+        f'{BINDING_TESTS}/conftest.py': f'# the conftest of {label}\n',
+        f'{BINDING_TESTS}/getenv_shim.c': f'/* the shim of {label} */\n',
+        'packages/structured-data-models-api/pyproject.toml': '[project]\n',
+        'packages/structured-data-models-pql/pyproject.toml': '[project]\n',
+    }
+    for name in (
+        'test_binding.py',
+        'test_arrow_lifetimes.py',
+        'test_test_ops.py',
+    ):
+        files[f'{BINDING_TESTS}/{name}'] = (
+            f'# {name} of {label}\ndef test_one() -> None:\n    pass\n'
+        )  # fmt: skip
+    for path, text in files.items():
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_text(text)
+    return root
+
+
+def _scratch(tmp_path: pathlib.Path) -> pathlib.Path:
+    into = tmp_path / 'scratch'
+    into.mkdir()
+    return into
+
+
+def test_the_suite_is_the_inputs_contract_and_its_own_tests(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The inputs' four contract files at their repository paths, the own
+    tree's test files, conftest and shim beside them, and nothing of the
+    inputs' tests: an extra test in the inputs' ``test_binding.py`` and a
+    test file only the inputs hold stay out."""
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    binding = inputs / BINDING_TESTS / 'test_binding.py'
+    binding.write_text(
+        binding.read_text() + 'def test_extra() -> None:\n    pass\n'
+    )
+    (inputs / BINDING_TESTS / 'test_extra.py').write_text(
+        'def test_extra() -> None:\n    pass\n'
+    )
+    into = _scratch(tmp_path)
+    tests = smoke.suite(own, inputs, into)
+    assert tests.is_dir()
+    assert tests.resolve().is_relative_to(into.resolve())
+    root = tests.parents[3]
+    assert tests == root / BINDING_TESTS
+    for path in INPUTS:
+        assert (root / path).read_text() == (inputs / path).read_text(), path
+    for name in JUDGES:
+        assert (tests / name).read_text() == (
+            own / BINDING_TESTS / name
+        ).read_text(), name
+    assert {p.name for p in tests.iterdir() if p.is_file()} == {
+        *JUDGES,
+        'messages.py',
+    }
+
+
+def test_the_own_tree_s_messages_py_is_replaced_by_the_inputs(
+    tmp_path: pathlib.Path,
+) -> None:
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    (inputs / BINDING_TESTS / 'messages.py').write_text(
+        "CONTRACT = 20\n# the inputs' builder\n"
+    )
+    tests = smoke.suite(own, inputs, _scratch(tmp_path))
+    assert (tests / 'messages.py').read_text() == (
+        "CONTRACT = 20\n# the inputs' builder\n"
+    )
+    # The own tree is left as it was.
+    assert (
+        own / BINDING_TESTS / 'messages.py'
+    ).read_text() == 'CONTRACT = 19\n'
+
+
+@pytest.mark.parametrize('missing', INPUTS)
+def test_an_input_missing_from_the_inputs_is_refused_by_name(
+    tmp_path: pathlib.Path, missing: str
+) -> None:
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    (inputs / missing).unlink()
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.suite(own, inputs, _scratch(tmp_path))
+    assert pathlib.PurePosixPath(missing).name in str(refused.value)
+
+
+def test_a_suite_at_n_judges_inputs_at_n_plus_1(tmp_path: pathlib.Path) -> None:
+    """The control: the own tree at contract version N, the inputs at N+1.
+    Where the binding's test reads the repository (``parents[4]`` of its
+    own file), the suite says N+1, and the test is the own tree's."""
+    own = _tree(tmp_path / 'own', 19)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    tests = smoke.suite(own, inputs, _scratch(tmp_path))
+    test = tests / 'test_binding.py'
+    repo = test.resolve().parents[4]
+    assert repo not in (own.resolve(), inputs.resolve())
+    lib = (repo / 'rust/crates/sdm-contract/src/lib.rs').read_text()
+    assert 'pub const CONTRACT_VERSION: u32 = 20;' in lib
+    assert (tests / 'messages.py').read_text() == 'CONTRACT = 20\n'
+    assert (
+        test.read_text()
+        == (own / BINDING_TESTS / 'test_binding.py').read_text()
+    )
+    assert '# test_binding.py of own' in test.read_text()
+
+
+def test_the_checkout_s_own_tests_judge_another_tree_s_inputs(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The smoke's own checkout as the judge: its binding tests, byte for
+    byte, beside a fake tree's contract inputs."""
+    inputs = _tree(tmp_path / 'inputs', 20)
+    tests = smoke.suite(smoke.REPO, inputs, _scratch(tmp_path))
+    own = smoke.REPO / BINDING_TESTS
+    judges = [
+        p.name
+        for p in own.iterdir()
+        if p.is_file() and p.name != 'messages.py'
+        and (p.name.startswith('test_') or p.suffix == '.c'
+             or p.name == 'conftest.py')
+    ]  # fmt: skip
+    assert set(JUDGES) <= set(judges)
+    for name in judges:
+        assert (tests / name).read_bytes() == (own / name).read_bytes(), name
+    root = tests.parents[3]
+    for path in INPUTS:
+        assert (root / path).read_text() == (inputs / path).read_text(), path
+
+
+SHA = '0123456789abcdef0123456789abcdef01234567'
+OTHER = 'fedcba9876543210fedcba9876543210fedcba98'
+#: A field an identity is written without.
+DROP = object()
+
+
+def _built(
+    tmp_path: pathlib.Path, test_ops: bool, **changes: Any
+) -> pathlib.Path:
+    """A fake wheel of the build named, with its identity beside it as
+    ``native_wheel.py`` writes it, changed by `changes`."""
+    where = tmp_path / ('test-ops' if test_ops else 'shipped')
+    where.mkdir(exist_ok=True)
+    wheel = where / (
+        'structured_data_models_client-1.0.0-cp310-abi3-'
+        'manylinux_2_17_x86_64.manylinux2014_x86_64.whl'
+    )
+    wheel.write_bytes(b'a wheel of ' + where.name.encode())
+    identity = {
+        'wheel': wheel.name,
+        'sha256': smoke.sha256(wheel),
+        'native_sha256': '0' * 64,
+        'commit': SHA,
+        'tree_clean': True,
+        'features': ['test-ops'] if test_ops else [],
+        'maturin': '1.0.0',
+    } | changes
+    record = {k: v for k, v in identity.items() if v is not DROP}
+    (where / f'{wheel.name}.json').write_text(json.dumps(record, indent=2))
+    return wheel
+
+
+@pytest.mark.parametrize('test_ops', [False, True])
+def test_a_wheel_of_the_commit_passes_its_provenance(
+    tmp_path: pathlib.Path, test_ops: bool
+) -> None:
+    smoke.provenance(_built(tmp_path, test_ops), SHA, test_ops)
+
+
+#: Each identity refused, and the field its refusal names (None: the
+#: identity as a whole, named by the wheel).
+PROVENANCE_FAULTS: dict[str, tuple[Any, str | None]] = {
+    'no identity': (None, None),
+    'unreadable JSON': ('{"commit": ', None),
+    'not an object': (json.dumps([SHA]), None),
+    'another commit': ({'commit': OTHER}, 'commit'),
+    'a short commit': ({'commit': SHA[:12]}, 'commit'),
+    'no commit': ({'commit': DROP}, 'commit'),
+    'a dirty tree': ({'tree_clean': False}, 'tree_clean'),
+    'tree_clean as text': ({'tree_clean': 'true'}, 'tree_clean'),
+    'no tree_clean': ({'tree_clean': DROP}, 'tree_clean'),
+    'another hash': ({'sha256': 'f' * 64}, 'sha256'),
+    'no hash': ({'sha256': DROP}, 'sha256'),
+    'the other build s features': ('swapped', 'features'),
+    'a feature more': ('more', 'features'),
+    'no features': ({'features': DROP}, 'features'),
+}
+
+
+@pytest.mark.parametrize('test_ops', [False, True])
+@pytest.mark.parametrize('fault', list(PROVENANCE_FAULTS))
+def test_a_wheel_s_provenance_is_refused_naming_the_field(
+    tmp_path: pathlib.Path, fault: str, test_ops: bool
+) -> None:
+    change, field = PROVENANCE_FAULTS[fault]
+    if change == 'swapped':
+        change = {'features': [] if test_ops else ['test-ops']}
+    elif change == 'more':
+        change = {'features': ['test-ops', 'other'] if test_ops else ['other']}
+    wheel = _built(
+        tmp_path, test_ops, **(change if isinstance(change, dict) else {})
+    )
+    identity = wheel.parent / f'{wheel.name}.json'
+    if change is None:
+        identity.unlink()
+    elif isinstance(change, str):
+        identity.write_text(change)
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.provenance(wheel, SHA, test_ops)
+    assert wheel.name in str(refused.value)
+    if field is not None:
+        assert field in str(refused.value)
+
+
+def test_a_short_commit_asked_for_is_refused(tmp_path: pathlib.Path) -> None:
+    """The identity and the commit asked for agree, on 12 characters: the
+    commit is the full 40, so it is refused."""
+    wheel = _built(tmp_path, False, commit=SHA[:12])
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.provenance(wheel, SHA[:12], False)
+    assert 'commit' in str(refused.value)
+
+
+def _main_arguments(
+    tmp_path: pathlib.Path, shipped: pathlib.Path, test_ops: pathlib.Path
+) -> list[str]:
+    return [
+        '--lane', 'floor', '--wheel', str(shipped),
+        '--test-ops-wheel', str(test_ops), '--out', str(tmp_path / 'out'),
+        '--python', sys.executable,
+    ]  # fmt: skip
+
+
+def _no_environment(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Stands in for the smoke's environments: records that one was built."""
+    built: list[str] = []
+
+    def smoke_run(*arguments: Any, **keywords: Any) -> int:
+        built.append('smoke')
+        return 0
+
+    def container(*arguments: Any, **keywords: Any) -> int:
+        built.append('container')
+        return 0
+
+    monkeypatch.setattr(smoke, 'smoke', smoke_run)
+    monkeypatch.setattr(smoke, 'in_container', container)
+    return built
+
+
+def test_the_wheels_provenance_is_held_before_any_environment(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = _no_environment(monkeypatch)
+    shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
+    arguments = _main_arguments(tmp_path, shipped, test_ops)
+    assert smoke.main([*arguments, '--commit', SHA]) == 0
+    assert built == ['smoke']
+    built.clear()
+    # Another commit's wheels: refused, and no environment built.
+    assert smoke.main([*arguments, '--commit', OTHER]) != 0
+    assert built == []
+    # The builds swapped: refused, and no environment built.
+    swapped = _main_arguments(tmp_path, test_ops, shipped)
+    assert smoke.main([*swapped, '--commit', SHA]) != 0
+    assert built == []
+
+
+def test_without_a_commit_no_provenance_is_asked(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    built = _no_environment(monkeypatch)
+    shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
+    for wheel in (shipped, test_ops):
+        (wheel.parent / f'{wheel.name}.json').unlink()
+    assert smoke.main(_main_arguments(tmp_path, shipped, test_ops)) == 0
+    assert built == ['smoke']
+
+
+def _option(argv: list[str], name: str) -> str:
+    """The value of `name` in `argv`, given as ``NAME VALUE`` or
+    ``NAME=VALUE``; exactly once."""
+    found = [
+        argv[i + 1] for i, word in enumerate(argv[:-1]) if word == name
+    ] + [word.split('=', 1)[1] for word in argv if word.startswith(name + '=')]
+    assert len(found) == 1, (name, argv)
+    return found[0]
+
+
+def test_the_container_mounts_the_inputs_read_only(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With ``--container``, the inputs tree is mounted read-only at
+    ``/inputs``, as the checkout is at ``/repo``, and the run inside takes
+    its inputs from there."""
+    seen: list[list[str]] = []
+
+    class Done:
+        returncode = 0
+
+    def run(command: list[str], **keywords: Any) -> Done:
+        seen.append(command)
+        return Done()
+
+    monkeypatch.setattr(smoke, '_run', run)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
+    assert (
+        smoke.main([
+            '--lane', 'floor', '--wheel', str(shipped),
+            '--test-ops-wheel', str(test_ops), '--out', str(tmp_path / 'out'),
+            '--container', '--inputs', str(inputs),
+        ])
+        == 0
+    )  # fmt: skip
+    docker = [c for c in seen if c[:1] == ['docker']]
+    assert len(docker) == 1, seen
+    command = docker[0]
+    mounts = [command[i + 1] for i, x in enumerate(command[:-1]) if x == '-v']
+    at_inputs = [m for m in mounts if m.endswith(':/inputs:ro')]
+    assert len(at_inputs) == 1, mounts
+    assert pathlib.Path(at_inputs[0][: -len(':/inputs:ro')]).resolve() == (
+        inputs.resolve()
+    )
+    assert any(m.endswith(':/repo:ro') for m in mounts), mounts
+    inside = command[command.index('/repo/scripts/rust_core/wheel_smoke.py') :]
+    assert _option(inside, '--inputs') == '/inputs'
