@@ -546,12 +546,30 @@ def approved(register: Any) -> list[dict[str, Any]]:
 
 
 def _this_change(
-    entries: list[dict[str, Any]], checkpoint: Tree
+    report: Report,
+    entries: list[dict[str, Any]],
+    checkpoint: Tree,
+    bootstrap: bool,
 ) -> list[dict[str, Any]]:
-    r""":func:`in_this_change` against the checkpoint's register; none when
-    that register cannot be read, which the register rule fails."""
+    r""":func:`in_this_change` against the checkpoint's register. None
+    authorizes when that register cannot be read, which the register rule
+    fails, or is absent outside the bootstrap, which fails the register
+    rule here (T1.29 part 1's review): a checkpoint missing its register
+    would otherwise make every approved entry new. At the bootstrap, a
+    checkpoint before the ratchet, no register is held, so every entry
+    counts."""
     try:
-        theirs = _yaml(checkpoint.read(REGISTER), REGISTER)
+        text = checkpoint.read(REGISTER)
+        if text is None:
+            if bootstrap:
+                return in_this_change(entries, None)
+            report.fail(
+                'register',
+                'the checkpoint has no register: no entry authorizes a case '
+                'or base change against it',
+            )
+            return []
+        theirs = _yaml(text, REGISTER)
     except Unreadable:
         return []
     return in_this_change(entries, theirs)
@@ -562,8 +580,9 @@ def in_this_change(
 ) -> list[dict[str, Any]]:
     r"""The approved ``entries`` this change adds or changes: those the
     checkpoint's register does not hold as they are now, by ID (an entry
-    approved here that was proposed there is changed). A checkpoint with
-    no register (the bootstrap) holds none, so every entry counts."""
+    approved here that was proposed there is changed). ``None``, a
+    checkpoint with no register, holds none, so every entry counts: only
+    :func:`_this_change` passes it, and only at the bootstrap."""
     before: dict[Any, Any] = {}
     if isinstance(checkpoint_register, dict) and isinstance(
         checkpoint_register.get('entries'), list
@@ -1250,7 +1269,7 @@ def check(
             report,
             checkpoint,
             candidate,
-            _this_change(entries, checkpoint),
+            _this_change(report, entries, checkpoint, bootstrap),
             held,
         )
         check_protected(
