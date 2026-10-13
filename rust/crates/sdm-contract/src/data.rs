@@ -212,6 +212,15 @@ pub enum DataRequest {
     TimeBounds {
         columns: Vec<TableColumn>,
     },
+    /// One row: the rows of `table`, then, for each of `columns` in order,
+    /// its smallest and largest value, each of the column's own type and
+    /// null when no row holds one, and the rows holding a value, read over
+    /// every row in one statement, as the reference's time column choice
+    /// reads a table its preview may not hold whole (`_full_range`).
+    ColumnRanges {
+        table: String,
+        columns: Vec<String>,
+    },
     /// A seeded sample of `n` entities of `table` by `key`: `columns` in
     /// order, from the rows meeting every filter.
     SampleEntities {
@@ -258,6 +267,7 @@ impl DataRequest {
             DataRequest::CountRows { .. } => "count_rows",
             DataRequest::KeyCounts { .. } => "key_counts",
             DataRequest::TimeBounds { .. } => "time_bounds",
+            DataRequest::ColumnRanges { .. } => "column_ranges",
             DataRequest::SampleEntities { .. } => "sample_entities",
             DataRequest::Neighbors { .. } => "neighbors",
             DataRequest::Lookup { .. } => "lookup",
@@ -273,6 +283,7 @@ impl DataRequest {
             DataRequest::CountRows { .. } => Some(OptionalRequest::CountRows),
             DataRequest::KeyCounts { .. } => Some(OptionalRequest::KeyCounts),
             DataRequest::TimeBounds { .. } => Some(OptionalRequest::TimeBounds),
+            DataRequest::ColumnRanges { .. } => Some(OptionalRequest::ColumnRanges),
             DataRequest::SampleEntities { .. } => Some(OptionalRequest::SampleEntities),
             DataRequest::Neighbors { .. } => Some(OptionalRequest::Neighbors),
             DataRequest::Lookup { .. } => Some(OptionalRequest::Lookup),
@@ -294,6 +305,9 @@ impl DataRequest {
             }
             DataRequest::TimeBounds { columns } if columns.is_empty() => {
                 return Err(refused(self, "columns", "no time column is named"));
+            }
+            DataRequest::ColumnRanges { columns, .. } if columns.is_empty() => {
+                return Err(refused(self, "columns", "no column is named"));
             }
             DataRequest::Neighbors {
                 seeds,
@@ -389,6 +403,7 @@ pub enum OptionalRequest {
     CountRows,
     KeyCounts,
     TimeBounds,
+    ColumnRanges,
     SampleEntities,
     Neighbors,
     Lookup,
@@ -402,6 +417,7 @@ impl OptionalRequest {
             OptionalRequest::CountRows => "count_rows",
             OptionalRequest::KeyCounts => "key_counts",
             OptionalRequest::TimeBounds => "time_bounds",
+            OptionalRequest::ColumnRanges => "column_ranges",
             OptionalRequest::SampleEntities => "sample_entities",
             OptionalRequest::Neighbors => "neighbors",
             OptionalRequest::Lookup => "lookup",
@@ -678,8 +694,9 @@ impl DataRequest {
     /// fixed for the requests whose answer the contract shapes ([`results`],
     /// and [`catalog_columns`] for a `describe`), a discovery marker for
     /// those whose columns are the source's own (a preview, a scan, a
-    /// sample, neighbors, a lookup) and for a count no provider renders
-    /// yet. A SQL dialect's plan expects the same, but for a `describe`,
+    /// sample, neighbors, a lookup, the column ranges, whose smallest and
+    /// largest values are of each column's type, which the core checks the
+    /// shape of itself) and for a count no provider renders yet. A SQL dialect's plan expects the same, but for a `describe`,
     /// whose answer is its own catalog's (decision E54).
     pub fn expected(&self) -> ExpectedSchema {
         use ColumnType::{Bool, Int32, Int64, Utf8};
@@ -729,6 +746,7 @@ impl DataRequest {
             DataRequest::Scan { .. }
             | DataRequest::Preview { .. }
             | DataRequest::CountRows { .. }
+            | DataRequest::ColumnRanges { .. }
             | DataRequest::SampleEntities { .. }
             | DataRequest::Neighbors { .. }
             | DataRequest::Lookup { .. } => return ExpectedSchema::Discover {},

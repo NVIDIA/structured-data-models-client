@@ -8,7 +8,10 @@
 //! declares none, from names and values, and the time column among the
 //! timestamps, those named as a load, an edit or a birth passed over
 //! (T1.21d), and from T1.23 those whose values say nothing, then the one
-//! left, the creation stamp or the earliest; a list column left out.
+//! left, the creation stamp or the earliest; a list column left out. From
+//! T1.32e a preview that may not hold every row has the timestamps' values
+//! read over the whole table ([`Previewed::whole_table_columns`],
+//! [`whole_table`], [`finish`]), as the reference asks its source.
 //! Every path these rules take that this build does not port is refused
 //! by name ([`crate::not_yet`]).
 
@@ -17,7 +20,7 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
 use sdm_contract::ops::{Dtype, Stype};
-use sdm_contract::{ColumnType, CoreError, Scalar};
+use sdm_contract::{ColumnType, CoreError, ErrorCode, ErrorKind, Scalar};
 
 use crate::names;
 use crate::not_yet;
@@ -243,9 +246,11 @@ impl InferredTable {
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
 /// admitted), which holds the catalog's columns in order, reading text as
-/// times by `times`. Inference reads the table by the name the schema
-/// gives it, as the reference's engine does (its key's guess is by that
-/// name).
+/// times by `times`: [`preview`], then [`finish`] with no whole-table read,
+/// for a preview that holds every row. A preview of [`PREVIEW_ROWS`] rows
+/// that leaves the choice of the time column to the whole table
+/// ([`Previewed::whole_table_columns`]) is an internal error here: the
+/// caller asks the source and calls [`finish`].
 pub fn table(
     name: &str,
     source: &str,
@@ -255,6 +260,113 @@ pub fn table(
     batches: &[RecordBatch],
     times: &dyn TextTimes,
 ) -> Result<InferredTable, CoreError> {
+    finish(
+        preview(name, source, catalog, constraints, schema, batches, times)?,
+        None,
+    )
+}
+
+/// A table inferred from its preview, its time column not chosen yet, with
+/// what the choice reads of the preview.
+#[derive(Debug, Clone)]
+pub struct Previewed {
+    table: InferredTable,
+    rows: usize,
+    instants: Vec<Result<Vec<Option<i128>>, TextUnread>>,
+    presence: Vec<Vec<Option<Value>>>,
+    firsts: Vec<Option<Scalar>>,
+}
+
+impl Previewed {
+    /// The table as inferred so far: its columns, key and what the engine
+    /// said of its values, with no time column.
+    pub fn table(&self) -> &InferredTable {
+        &self.table
+    }
+
+    /// The columns the time column's choice reads over every row of the
+    /// table, as the reference's choice asks its source (`full_range`,
+    /// asked only of a preview that returned [`PREVIEW_ROWS`] rows, which
+    /// may have left rows unread): each timestamp that is not the key and
+    /// is not passed over by its name as a load stamp or a date of birth,
+    /// in table order. Empty where the preview holds every row or no
+    /// column is such a timestamp, and nothing is asked.
+    pub fn whole_table_columns(&self) -> Vec<String> {
+        if (self.rows as u64) < PREVIEW_ROWS {
+            return vec![];
+        }
+        candidates(&self.table.columns, self.table.primary_key.as_deref())
+            .into_iter()
+            .map(|i| &self.table.columns[i].name)
+            .filter(|name| !names::is_load_stamp(name) && !names::is_birth_date(name))
+            .cloned()
+            .collect()
+    }
+}
+
+/// Chooses the time column of a table inferred from its preview
+/// ([`choose_time_column`]), reading `whole`, the answer to the source
+/// about [`Previewed::whole_table_columns`], where those are not empty. A
+/// `whole` missing where they are, or naming other columns, is an internal
+/// error: the caller asked the source otherwise than the choice reads it.
+pub fn finish(
+    previewed: Previewed,
+    whole: Option<&WholeTable>,
+) -> Result<InferredTable, CoreError> {
+    let asked = previewed.whole_table_columns();
+    let whole = match whole {
+        None if asked.is_empty() => None,
+        Some(read)
+            if !asked.is_empty() && read.columns.iter().map(|(name, _)| name).eq(asked.iter()) =>
+        {
+            Some(read)
+        }
+        _ => {
+            return Err(CoreError::new(
+                ErrorKind::Internal,
+                ErrorCode::InternalError,
+                "the time column's choice was given another reading of the whole table than it asks",
+            ));
+        }
+    };
+    let Previewed {
+        mut table,
+        rows,
+        instants,
+        presence,
+        firsts,
+    } = previewed;
+    let time = choose_time_column(
+        &table.columns,
+        &Read {
+            instants: &instants,
+            presence: &presence,
+            firsts: &firsts,
+        },
+        rows,
+        table.primary_key.as_deref(),
+        whole,
+    )?;
+    table.time_column = time.column.clone();
+    table.time = time;
+    Ok(table)
+}
+
+/// Infers table `name`, read as `source` in the source, from its catalog
+/// columns and constraints and its preview (`schema` and `batches`, as
+/// admitted), which holds the catalog's columns in order, reading text as
+/// times by `times`, all but its time column ([`finish`] chooses it).
+/// Inference reads the table by the name the schema gives it, as the
+/// reference's engine does (its key's guess is by that name).
+pub fn preview(
+    name: &str,
+    source: &str,
+    catalog: &[CatalogColumn],
+    constraints: &[CatalogKey],
+    schema: &Schema,
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+) -> Result<Previewed, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
         // The reference refuses an empty table as a RuntimeError.
@@ -402,27 +514,23 @@ pub fn table(
         column.stype = Stype::Id;
     }
 
-    let time = choose_time_column(
-        &columns,
-        &Read {
-            instants: &instants,
-            presence: &presence,
-            firsts: &firsts,
+    Ok(Previewed {
+        table: InferredTable {
+            name: name.to_owned(),
+            source: source.to_owned(),
+            columns,
+            left_out,
+            unread_times,
+            day_first,
+            primary_key: key,
+            time: TimeChoice::default(),
+            time_column: None,
+            unique,
         },
         rows,
-        key.as_deref(),
-    )?;
-    Ok(InferredTable {
-        name: name.to_owned(),
-        source: source.to_owned(),
-        columns,
-        left_out,
-        unread_times,
-        day_first,
-        primary_key: key,
-        time_column: time.column.clone(),
-        time,
-        unique,
+        instants,
+        presence,
+        firsts,
     })
 }
 
@@ -792,34 +900,154 @@ struct Read<'a> {
 /// nanoseconds since the epoch.
 const FIRST_REAL_DAY: i128 = -2_177_452_800 * 1_000_000_000;
 
+/// The timestamps a table's time column is chosen among, in table order:
+/// every column of a timestamp's meaning but the key.
+fn candidates(columns: &[InferredColumn], key: Option<&str>) -> Vec<usize> {
+    (0..columns.len())
+        .filter(|&i| columns[i].stype == Stype::Timestamp && Some(columns[i].name.as_str()) != key)
+        .collect()
+}
+
+/// What one query over every row of a table read for its time column's
+/// choice (the reference's `TableRange`): the table's rows, and the range
+/// of each column asked, in the order asked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WholeTable {
+    pub rows: usize,
+    pub columns: Vec<(String, ColumnRange)>,
+}
+
+impl WholeTable {
+    fn range(&self, name: &str) -> Option<&ColumnRange> {
+        self.columns.iter().find(|(n, _)| n == name).map(|(_, r)| r)
+    }
+}
+
+/// One column's `MIN`, `MAX` and `COUNT` over every row of its table (the
+/// reference's `ColumnRange`), as the choice reads them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColumnRange {
+    /// The rows holding a value.
+    pub held: usize,
+    /// Whether the smallest value is the largest: text compared as it is
+    /// written, any other value as itself.
+    pub same: bool,
+    /// The smallest value, as the contract's scalar: a date, a timestamp
+    /// with its zone, a time of day or text; `None` when no row holds one.
+    pub low: Option<Scalar>,
+    /// The smallest value as an instant, in nanoseconds since the epoch in
+    /// UTC (a timestamp without a zone read as UTC, a date at its
+    /// midnight, text as the choice reads text): where the reference reads
+    /// the column's start (`_as_instant`); `None` for a time of day, text
+    /// that does not read, or no value.
+    pub start: Option<i128>,
+}
+
+/// The answer to a `column_ranges` request asking `columns`, as admitted:
+/// one row, the table's rows, then each column's smallest value, largest
+/// value and rows holding one, in the order asked, each value of the
+/// column's own type (the caller has held the answer to that shape). Text
+/// is read as a time by `times`, to UTC, as the choice reads it.
+pub fn whole_table(
+    columns: &[String],
+    batches: &[RecordBatch],
+    times: &dyn TextTimes,
+) -> Result<WholeTable, CoreError> {
+    let internal = |message: &'static str| {
+        CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+    };
+    let batch = batches
+        .iter()
+        .find(|b| b.num_rows() > 0)
+        .ok_or_else(|| internal("the whole table's reading holds no row"))?;
+    if batch.num_rows() != 1
+        || batches.iter().map(RecordBatch::num_rows).sum::<usize>() != 1
+        || batch.num_columns() != 1 + 3 * columns.len()
+    {
+        return Err(internal(
+            "the whole table's reading is not of the shape asked",
+        ));
+    }
+    let one = std::slice::from_ref(batch);
+    let count = |index: usize| -> Result<usize, CoreError> {
+        match values::column(one, index)?.first() {
+            Some(Some(Value::Int(n))) => usize::try_from(*n)
+                .map_err(|_| internal("a count of the whole table's reading is negative")),
+            _ => Err(internal("a count of the whole table's reading is not one")),
+        }
+    };
+    let rows = count(0)?;
+    let mut read = Vec::with_capacity(columns.len());
+    for (at, name) in columns.iter().enumerate() {
+        let (low, high, held) = (1 + 3 * at, 2 + 3 * at, 3 + 3 * at);
+        let lows = values::column(one, low)?;
+        let highs = values::column(one, high)?;
+        let data_type = batch.column(low).data_type();
+        let (scalar, start) = match (data_type, lows.first()) {
+            (_, Some(None) | None) => (None, None),
+            (DataType::Utf8, Some(Some(Value::Text(text)))) => (
+                Some(Scalar::Utf8(text.clone())),
+                times
+                    .read(&[Some(text.as_str())], true)
+                    .ok()
+                    .and_then(|read| read.first().copied().flatten()),
+            ),
+            (DataType::Time64(_), _) => {
+                (values::times_of_day(one, low, 1).into_iter().next(), None)
+            }
+            _ => (
+                values::first_temporal(one, low),
+                values::instants(one, low).first().copied().flatten(),
+            ),
+        };
+        read.push((
+            name.clone(),
+            ColumnRange {
+                held: count(held)?,
+                same: lows.first() == highs.first(),
+                low: scalar,
+                start,
+            },
+        ));
+    }
+    Ok(WholeTable {
+        rows,
+        columns: read,
+    })
+}
+
 /// The time column among the timestamps, as the reference chooses it
-/// (`predictive_query.time_columns.choose_time_column`), over a preview
-/// that holds every row: a stamp of a load or a date of birth is passed
-/// over by its name; any other timestamp held in no row, or in fewer than
-/// half the rows, or holding one value in every row of a table of more
-/// than one, is passed over for its values; a stamp of the last edit is
-/// passed over too, and taken only when it is the one timestamp left
-/// (settled by the links, [`TimeChoice::for_links`]); of the rest, the one
-/// left is taken, else the one creation stamp, else the one whose values
-/// start earliest, placeholders left out, the first in table order on a
-/// tie. A time of day holds no value the engine reads, so it is passed
-/// over as holding none. The key is never the time column. A preview that
-/// may not hold every row is refused (`time_whole_table`): the reference
-/// then asks the whole table, which this build does not port.
+/// (`predictive_query.time_columns.choose_time_column`): a stamp of a load
+/// or a date of birth is passed over by its name; any other timestamp held
+/// in no row, or in fewer than half the rows, or holding one value in every
+/// row of a table of more than one, is passed over for its values; a stamp
+/// of the last edit is passed over too, and taken only when it is the one
+/// timestamp left (settled by the links, [`TimeChoice::for_links`]); of the
+/// rest, the one left is taken, else the one creation stamp, else the one
+/// whose values start earliest, placeholders left out, the first in table
+/// order on a tie. A time of day holds no value the engine's preview
+/// reads, so the preview passes it over as holding none. The key is never
+/// the time column.
+///
+/// Where the preview may not hold every row, the values are read over the
+/// whole table, `whole` (the reference's `full_range`): its rows, and each
+/// column's count of values held and whether its smallest value is its
+/// largest, decide whether it is passed over (a time of day included,
+/// whose values the source counts), the value named for one held in every
+/// row being the preview's first, else the smallest; and where a column
+/// starts is its smallest value, unless that reads as no instant or is a
+/// placeholder, when it is the preview's earliest real value, as the
+/// reference reads it.
 fn choose_time_column(
     columns: &[InferredColumn],
     read: &Read<'_>,
     rows: usize,
     key: Option<&str>,
+    whole: Option<&WholeTable>,
 ) -> Result<TimeChoice, CoreError> {
-    let candidates: Vec<usize> = (0..columns.len())
-        .filter(|&i| columns[i].stype == Stype::Timestamp && Some(columns[i].name.as_str()) != key)
-        .collect();
+    let candidates = candidates(columns, key);
     if candidates.is_empty() {
         return Ok(TimeChoice::default());
-    }
-    if rows as u64 >= PREVIEW_ROWS {
-        return Err(not_yet("time_whole_table"));
     }
     let mut refused = Vec::new();
     let mut plain = Vec::new();
@@ -834,7 +1062,10 @@ fn choose_time_column(
             refused.push((name.clone(), PassedOver::BirthDate));
             continue;
         }
-        if let Some(why) = refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows) {
+        let over = whole.and_then(|w| w.range(name).map(|r| (w.rows, r)));
+        if let Some(why) =
+            refused_for_values(&read.presence[i], read.firsts[i].as_ref(), rows, over)
+        {
             refused.push((name.clone(), why));
             continue;
         }
@@ -890,7 +1121,7 @@ fn choose_time_column(
             names_of(&among),
         ));
     }
-    let earliest = earliest(&among, read)?;
+    let earliest = earliest(&among, columns, read, whole)?;
     Ok(chosen(
         Some(columns[earliest].name.clone()),
         Some(Taken::Earliest),
@@ -898,19 +1129,36 @@ fn choose_time_column(
     ))
 }
 
-/// Why a column is passed over for its values (`_refused_for_values`),
-/// read over every row: none held; more than half missing; or, in a table
-/// of more than one row, one value in every row that holds one, which is
-/// named. Text is compared as it is written, as the reference compares the
-/// rows it read.
+/// Why a column is passed over for its values (`_refused_for_values`):
+/// none held; more than half missing; or, in a table of more than one row,
+/// one value in every row that holds one, which is named. Read over the
+/// preview's `rows` rows, or, where the whole table was read, `whole`'s
+/// rows and the column's range there, the value named the preview's first
+/// held, else the smallest. Text is compared as it is written, as the
+/// reference compares the rows it read.
 fn refused_for_values(
     presence: &[Option<Value>],
     first: Option<&Scalar>,
     rows: usize,
+    whole: Option<(usize, &ColumnRange)>,
 ) -> Option<PassedOver> {
     let held: Vec<&Value> = presence.iter().flatten().collect();
-    let missing = rows - held.len();
-    if held.is_empty() {
+    let (rows, held, same, first) = match whole {
+        Some((rows, range)) => (
+            rows,
+            range.held,
+            range.held > 0 && range.same,
+            first.cloned().or_else(|| range.low.clone()),
+        ),
+        None => (
+            rows,
+            held.len(),
+            !held.is_empty() && held.iter().all(|v| *v == held[0]),
+            first.cloned(),
+        ),
+    };
+    let missing = rows.saturating_sub(held);
+    if held == 0 {
         return Some(PassedOver::Constant {
             value: None,
             missing,
@@ -920,9 +1168,9 @@ fn refused_for_values(
     if 2 * missing > rows {
         return Some(PassedOver::Sparse { missing, rows });
     }
-    if rows > 1 && held.iter().all(|v| *v == held[0]) {
+    if rows > 1 && same {
         return Some(PassedOver::Constant {
-            value: first.cloned(),
+            value: first,
             missing,
             rows,
         });
@@ -930,24 +1178,46 @@ fn refused_for_values(
     None
 }
 
+/// Whether an instant is a real start: not before 1901 and not the epoch's
+/// midnight, which stand for no date.
+fn real(instant: i128) -> bool {
+    instant >= FIRST_REAL_DAY && instant != 0
+}
+
 /// The column of `among` whose values start earliest (`_earliest`), the
 /// first in table order on a tie or when none holds a real value: a value
-/// before 1901 or the epoch's midnight is a placeholder, no start. Text
-/// whose reading does not decide is refused (`text_time`, or
-/// `text_time_order` for an order of day and month left open).
-fn earliest(among: &[usize], read: &Read<'_>) -> Result<usize, CoreError> {
+/// before 1901 or the epoch's midnight is a placeholder, no start. Where
+/// the whole table was read, a column starts at its smallest value when
+/// that is a real instant, and otherwise at the preview's earliest real
+/// value, as the reference reads it. Text the preview holds whose reading
+/// does not decide is refused there (`text_time`, or `text_time_order` for
+/// an order of day and month left open).
+fn earliest(
+    among: &[usize],
+    columns: &[InferredColumn],
+    read: &Read<'_>,
+    whole: Option<&WholeTable>,
+) -> Result<usize, CoreError> {
     let mut best: Option<(i128, usize)> = None;
     for &i in among {
-        let instants = read.instants[i].as_ref().map_err(|unread| match unread {
-            TextUnread::Order => not_yet("text_time_order"),
-            _ => not_yet("text_time"),
-        })?;
-        let start = instants
-            .iter()
-            .flatten()
-            .copied()
-            .filter(|&v| v >= FIRST_REAL_DAY && v != 0)
-            .min();
+        let over = whole
+            .and_then(|w| w.range(&columns[i].name))
+            .and_then(|r| r.start)
+            .filter(|&start| real(start));
+        let start = match over {
+            Some(start) => Some(start),
+            None => read.instants[i]
+                .as_ref()
+                .map_err(|unread| match unread {
+                    TextUnread::Order => not_yet("text_time_order"),
+                    _ => not_yet("text_time"),
+                })?
+                .iter()
+                .flatten()
+                .copied()
+                .filter(|&v| real(v))
+                .min(),
+        };
         if let Some(start) = start
             && best.is_none_or(|(low, _)| start < low)
         {

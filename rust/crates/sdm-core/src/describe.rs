@@ -7,7 +7,9 @@
 //!
 //! The steps are the reference's, in its order, one data request for each
 //! statement it runs (design, T1.11a row): the table list; for each table,
-//! its columns and constraints (one step), then its first 1,000 rows; the
+//! its columns and constraints (one step), then its first 1,000 rows, and,
+//! where those may not be every row and the table has timestamps to choose
+//! its time column among, their ranges over every row (from T1.32e); the
 //! declared foreign keys of every table (one step); and, when keys are
 //! checked, one count over every key the source does not enforce. Each
 //! catalog answer is read by the run's data layer, in no dialect's shape
@@ -171,7 +173,7 @@ pub(crate) async fn run(
                 "a preview's columns are not the ones it asked for",
             ));
         }
-        let inferred = infer::table(
+        let previewed = infer::preview(
             &table.name,
             &table.source,
             &declared,
@@ -180,6 +182,25 @@ pub(crate) async fn run(
             &preview.batches,
             &reader,
         )?;
+        // A preview that may have left rows unread: the time column's
+        // choice reads its timestamps over every row, as the reference's
+        // asks its source (`full_range`), in one statement.
+        let asked = previewed.whole_table_columns();
+        let inferred = if asked.is_empty() {
+            infer::finish(previewed, None)?
+        } else {
+            let read = ask(
+                &asker,
+                DataRequest::ColumnRanges {
+                    table: table.source.clone(),
+                    columns: asked.clone(),
+                },
+            )
+            .await?;
+            check_ranges(&read, &asked, &preview)?;
+            let whole = infer::whole_table(&asked, &read.batches, &reader)?;
+            infer::finish(previewed, Some(&whole))?
+        };
         // The engine says what it dropped as it reads each table, and the
         // day-first formats it guessed as it typed its columns, before
         // anything later can refuse.
@@ -253,6 +274,61 @@ pub(crate) async fn run(
     Ok(OperationResult::DescribeSource(DescribedSource {
         description: id,
     }))
+}
+
+/// Holds the answer to a `column_ranges` request over `asked` to its
+/// shape, which the contract leaves the columns' own types to (`Discover`):
+/// one row; the table's rows, then each column's smallest value, largest
+/// value and rows holding one, each count a non-null 64-bit integer and
+/// each value of the type the column's preview returned.
+fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Result<(), CoreError> {
+    let fields = read.schema.fields();
+    if fields.len() != 1 + 3 * asked.len() {
+        return Err(schema_mismatch(
+            "expected",
+            None,
+            "the column ranges hold another number of columns than asked",
+        ));
+    }
+    if read.batches.iter().map(|b| b.num_rows()).sum::<usize>() != 1 {
+        return Err(schema_mismatch(
+            "expected",
+            None,
+            "the column ranges are not one row",
+        ));
+    }
+    let counts = std::iter::once(0).chain((0..asked.len()).map(|at| 3 + 3 * at));
+    for index in counts {
+        let nulls: usize = read
+            .batches
+            .iter()
+            .map(|b| b.column(index).null_count())
+            .sum();
+        if *fields[index].data_type() != arrow_schema::DataType::Int64 || nulls > 0 {
+            return Err(schema_mismatch(
+                "expected",
+                None,
+                "a count of the column ranges is not a 64-bit integer",
+            ));
+        }
+    }
+    for (at, name) in asked.iter().enumerate() {
+        let previewed = preview
+            .schema
+            .field_with_name(name)
+            .map_err(|_| internal("a column asked over the whole table is not the preview's"))?
+            .data_type();
+        for index in [1 + 3 * at, 2 + 3 * at] {
+            if fields[index].data_type() != previewed {
+                return Err(schema_mismatch(
+                    "expected",
+                    Some(name),
+                    "a column's range is not of the type its preview returned",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The refusal of a table to describe that the source does not hold, or
@@ -550,5 +626,87 @@ impl Future for Together {
             return Poll::Pending;
         }
         Poll::Ready(this.answers.iter_mut().filter_map(Option::take).collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray};
+    use arrow_schema::{DataType, Field, Schema, TimeUnit};
+    use sdm_contract::ErrorCode;
+
+    use super::{ArrowData, check_ranges};
+
+    fn stamp() -> DataType {
+        DataType::Timestamp(TimeUnit::Microsecond, None)
+    }
+
+    /// Data of one row (or `rows` rows), each column given as its type
+    /// and a value of it.
+    fn data(columns: &[(&str, DataType)], rows: usize, null_count: bool) -> ArrowData {
+        let schema = Arc::new(Schema::new(
+            columns
+                .iter()
+                .map(|(name, t)| Field::new(*name, t.clone(), true))
+                .collect::<Vec<_>>(),
+        ));
+        let arrays: Vec<ArrayRef> = columns
+            .iter()
+            .enumerate()
+            .map(|(at, (_, t))| -> ArrayRef {
+                match t {
+                    DataType::Int64 if null_count && at == 0 => {
+                        Arc::new(Int64Array::from(vec![None::<i64>; rows]))
+                    }
+                    DataType::Int64 => Arc::new(Int64Array::from(vec![3; rows])),
+                    DataType::Utf8 => Arc::new(StringArray::from(vec!["x"; rows])),
+                    _ => Arc::new(TimestampMicrosecondArray::from(vec![0; rows])),
+                }
+            })
+            .collect();
+        let batch = RecordBatch::try_new(Arc::clone(&schema), arrays).unwrap();
+        ArrowData::new(schema, vec![batch])
+    }
+
+    fn preview() -> ArrowData {
+        data(&[("id", DataType::Int64), ("ts", stamp())], 2, false)
+    }
+
+    fn mismatch(read: &ArrowData) -> bool {
+        check_ranges(read, &["ts".to_owned()], &preview())
+            .is_err_and(|err| err.code == ErrorCode::ProviderSchemaMismatch)
+    }
+
+    #[test]
+    fn the_column_ranges_are_held_to_their_shape() {
+        // The control: the rows, then the column's low, high and count.
+        let good = [
+            ("n", DataType::Int64),
+            ("lo", stamp()),
+            ("hi", stamp()),
+            ("c", DataType::Int64),
+        ];
+        assert!(check_ranges(&data(&good, 1, false), &["ts".to_owned()], &preview()).is_ok());
+        // Seeded faults, each refused: no row or two; a column missing or
+        // one more; a count null or of another type; a range of another
+        // type than the preview's.
+        assert!(mismatch(&data(&good, 0, false)));
+        assert!(mismatch(&data(&good, 2, false)));
+        assert!(mismatch(&data(&good[..3], 1, false)));
+        let mut more = good.to_vec();
+        more.push(("x", DataType::Int64));
+        assert!(mismatch(&data(&more, 1, false)));
+        assert!(mismatch(&data(&good, 1, true)));
+        let mut retyped = good.to_vec();
+        retyped[3] = ("c", DataType::Utf8);
+        assert!(mismatch(&data(&retyped, 1, false)));
+        let mut retyped = good.to_vec();
+        retyped[0] = ("n", stamp());
+        assert!(mismatch(&data(&retyped, 1, false)));
+        let mut text = good.to_vec();
+        text[1] = ("lo", DataType::Utf8);
+        assert!(mismatch(&data(&text, 1, false)));
     }
 }

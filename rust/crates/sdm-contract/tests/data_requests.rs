@@ -11,8 +11,8 @@ mod corpus;
 
 use corpus::seeds;
 use sdm_contract::data::{
-    DataRequest, DescribePart, OptionalRequest, SeedBound, TableColumn, TableKey, TieBreak,
-    TieTerm, Window,
+    DataRequest, DescribePart, ExpectedSchema, OptionalRequest, SeedBound, TableColumn, TableKey,
+    TieBreak, TieTerm, Window,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -204,6 +204,24 @@ fn the_reference_s_union_reads_name_what_they_read() {
     };
     bounds.check().unwrap();
     refused(&DataRequest::TimeBounds { columns: vec![] }, "columns");
+    let ranges = DataRequest::ColumnRanges {
+        table: "orders".into(),
+        columns: vec!["ts".into()],
+    };
+    ranges.check().unwrap();
+    assert_eq!(ranges.name(), "column_ranges");
+    assert_eq!(
+        ranges.optional().map(OptionalRequest::name),
+        Some("column_ranges")
+    );
+    assert_eq!(ranges.expected(), ExpectedSchema::Discover {});
+    refused(
+        &DataRequest::ColumnRanges {
+            table: "orders".into(),
+            columns: vec![],
+        },
+        "columns",
+    );
 }
 
 #[test]

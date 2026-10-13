@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/21",
+  "$id": "sdm-contract/22",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -3181,6 +3181,7 @@
         "count_rows",
         "key_counts",
         "time_bounds",
+        "column_ranges",
         "sample_entities",
         "neighbors",
         "lookup"
@@ -3650,6 +3651,31 @@
           "additionalProperties": false,
           "required": [
             "request",
+            "columns"
+          ]
+        },
+        {
+          "description": "One row: the rows of `table`, then, for each of `columns` in order,\nits smallest and largest value, each of the column's own type and\nnull when no row holds one, and the rows holding a value, read over\nevery row in one statement, as the reference's time column choice\nreads a table its preview may not hold whole (`_full_range`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "column_ranges"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
             "columns"
           ]
         },

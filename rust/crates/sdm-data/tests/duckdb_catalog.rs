@@ -188,6 +188,35 @@ fn several_time_columns_are_one_union() {
 }
 
 #[test]
+fn the_column_ranges_are_the_reference_s_whole_table_query() {
+    // T1.32e: the statement the reference ran at b413e9ad for the time
+    // column's choice over a DuckDB table of 3,000 rows whose preview may
+    // not hold every row (`Table._full_range`), its candidates a timestamp
+    // named with a double quote, a date, a time of day and text read as
+    // times; a load stamp is never asked.
+    let text = rendered(&DataRequest::ColumnRanges {
+        table: "evs".into(),
+        columns: ["happ\"ened", "due_on", "at_time", "created_at"]
+            .map(String::from)
+            .into(),
+    });
+    assert_eq!(
+        text,
+        "SELECT COUNT(*), MIN(\"happ\"\"ened\"), MAX(\"happ\"\"ened\"), COUNT(\"happ\"\"ened\"), MIN(\"due_on\"), MAX(\"due_on\"), COUNT(\"due_on\"), MIN(\"at_time\"), MAX(\"at_time\"), COUNT(\"at_time\"), MIN(\"created_at\"), MAX(\"created_at\"), COUNT(\"created_at\")\nFROM \"evs\""
+    );
+    let err = Data::new()
+        .plan(
+            &DataRequest::ColumnRanges {
+                table: "evs".into(),
+                columns: vec![],
+            },
+            &duckdb(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+}
+
+#[test]
 fn a_part_read_per_table_or_whole_is_refused_otherwise() {
     for part in [
         DescribePart::Columns,

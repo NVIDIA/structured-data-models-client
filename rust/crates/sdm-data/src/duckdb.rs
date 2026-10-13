@@ -30,6 +30,9 @@
 //! reference statement's result, its helper columns under the reference's
 //! names (decision H9 gates on the results, not the text).
 //!
+//! From T1.32e it renders `column_ranges`, the reference's one query over
+//! every row of a table for its time column's choice, in its text.
+//!
 //! From T1.21c it reads its catalog's answers too ([`read`], decision E54):
 //! the columns of `PRAGMA table_info`, `duckdb_tables()`,
 //! `duckdb_constraints()` and `duckdb_indexes()`, which its plans expect
@@ -87,6 +90,7 @@ const RENDERED: &[OptionalRequest] = &[
     OptionalRequest::Preview,
     OptionalRequest::KeyCounts,
     OptionalRequest::TimeBounds,
+    OptionalRequest::ColumnRanges,
     OptionalRequest::SampleEntities,
     OptionalRequest::Neighbors,
     OptionalRequest::Lookup,
@@ -168,6 +172,16 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
         }
         DataRequest::KeyCounts { keys } => key_counts(keys),
         DataRequest::TimeBounds { columns } => time_bounds(columns),
+        DataRequest::ColumnRanges { table, columns } => {
+            if columns.is_empty() {
+                return Err(sdm_contract::data::refused(
+                    request,
+                    "columns",
+                    "the column ranges name no columns",
+                ));
+            }
+            column_ranges(table, columns)
+        }
         DataRequest::SampleEntities {
             table,
             key,
@@ -780,6 +794,18 @@ fn time_bounds(columns: &[TableColumn]) -> String {
 }
 
 /// `name` as an identifier: in double quotes, each one in it doubled.
+/// The reference's one query over every row of a table for its time
+/// column's choice (`Table._full_range`): `COUNT(*)`, then each column's
+/// `MIN`, `MAX` and `COUNT`, in its text.
+fn column_ranges(table: &str, columns: &[String]) -> String {
+    let mut selects = vec!["COUNT(*)".to_owned()];
+    for column in columns {
+        let quoted = identifier(column);
+        selects.push(format!("MIN({quoted}), MAX({quoted}), COUNT({quoted})"));
+    }
+    format!("SELECT {}\nFROM {}", selects.join(", "), identifier(table))
+}
+
 fn identifier(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }

@@ -27,7 +27,10 @@
 //! `materialize` is handed. From T1.23 (decision E59) it holds the rest of
 //! the time column's choice, a list column left out, and the keys, time
 //! columns and relationships a caller names; its warnings are codes and
-//! fields, which each host words.
+//! fields, which each host words. From T1.32e (decision E83) a preview of a
+//! whole 1,000 rows no longer refuses: the time column's choice reads its
+//! candidates over every row, in the answer to the one request the core
+//! asks the source, as the reference's choice reads them.
 //!
 //! - [`catalog`] reads the key counts.
 //! - [`infer`] infers one table: each column's data and semantic types,

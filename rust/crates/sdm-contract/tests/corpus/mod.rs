@@ -305,6 +305,16 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                 },
+                FetchStep {
+                    id: ReplyId(8),
+                    request: DataRequest::ColumnRanges {
+                        table: "orders".into(),
+                        columns: vec!["ts".into()],
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
             ],
         }),
         ControlMessage::FetchReply(FetchReply {

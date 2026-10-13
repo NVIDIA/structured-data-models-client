@@ -10,7 +10,8 @@
 //! timestamp passed over for its values (`time_values`), the one creation
 //! stamp or the earliest of several (`time_several`), a time of day passed
 //! over as holding no time (`time_of_day`), and a list column left out
-//! (`column_type`).
+//! (`column_type`). From T1.32e, a preview that may not hold every row
+//! reads the timestamps over the whole table (`time_whole_table`).
 
 use std::sync::Arc;
 
@@ -505,13 +506,299 @@ fn binary_a_duration_and_a_list_of_binary_are_left_out_and_other_lists_refused()
     );
 }
 
+/// A preview of table `things`: `thing_id`, then each named timestamp
+/// (`rows` rows, a day apart, or one value in every row when `constant`).
+fn previewed(stamps: &[&str], rows: i64, constant: bool) -> infer::Previewed {
+    let mut fields = vec![Field::new("thing_id", DataType::Int64, true)];
+    let mut arrays: Vec<ArrayRef> = vec![Arc::new(Int64Array::from_iter_values(0..rows))];
+    for name in stamps {
+        fields.push(Field::new(
+            *name,
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            true,
+        ));
+        arrays.push(Arc::new(TimestampMicrosecondArray::from_iter_values(
+            (0..rows).map(|i| day(if constant { 0 } else { i })),
+        )));
+    }
+    let schema = Arc::new(Schema::new(fields));
+    let batch = RecordBatch::try_new(Arc::clone(&schema), arrays).unwrap();
+    let catalog: Vec<CatalogColumn> = schema
+        .fields()
+        .iter()
+        .map(|f| CatalogColumn {
+            name: f.name().clone(),
+            declared_type: String::new(),
+            not_null: false,
+            primary_key: false,
+        })
+        .collect();
+    infer::preview("things", "things", &catalog, &[], &schema, &[batch], &Days).unwrap()
+}
+
+/// A reading of the whole table: `rows`, and each column's range.
+fn whole(rows: usize, columns: &[(&str, usize, bool, Option<i64>)]) -> infer::WholeTable {
+    infer::WholeTable {
+        rows,
+        columns: columns
+            .iter()
+            .map(|(name, held, same, start)| {
+                (
+                    (*name).to_owned(),
+                    infer::ColumnRange {
+                        held: *held,
+                        same: *same,
+                        low: start.map(|value| Scalar::Timestamp {
+                            unit: sdm_contract::Unit::Us,
+                            zone: None,
+                            value,
+                        }),
+                        start: start.map(|us| i128::from(us) * 1_000),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+fn internal(err: &sdm_contract::CoreError) -> bool {
+    err.code == sdm_contract::ErrorCode::InternalError
+}
+
 #[test]
-fn what_the_choice_does_not_port_stays_refused_by_name() {
-    // A preview that may not hold every row.
-    assert_eq!(
-        things(&["updated_at"], 1_000, false).unwrap_err(),
-        "time_whole_table"
+fn a_full_preview_asks_the_whole_table_about_its_timestamps() {
+    // The reference asks its source only where the preview returned 1,000
+    // rows, and only of the timestamps not passed over by their names.
+    let stamps = ["_loaded_at", "birth_date", "updated_at", "started"];
+    assert!(
+        previewed(&stamps, 999, false)
+            .whole_table_columns()
+            .is_empty()
     );
+    assert_eq!(
+        previewed(&stamps, 1_000, false).whole_table_columns(),
+        ["updated_at", "started"]
+    );
+    // No timestamp but load stamps and dates of birth: nothing is asked.
+    assert!(
+        previewed(&["_loaded_at", "birth_date"], 1_000, false)
+            .whole_table_columns()
+            .is_empty()
+    );
+    // `finish` without the whole table's reading, as `table` calls it,
+    // which reads no source, takes a preview of every row only: an
+    // internal error, the refusal `time_whole_table` gone.
+    let err = infer::finish(previewed(&["updated_at"], 1_000, false), None).unwrap_err();
+    assert!(internal(&err), "{err:?}");
+    assert!(!err.fields.contains_key("rule"), "{err:?}");
+}
+
+#[test]
+fn the_whole_table_decides_what_the_preview_cannot() {
+    // One value in every row of the preview, another past it: taken.
+    let late = whole(1_001, &[("happened", 1_001, false, Some(day(0)))]);
+    let table = infer::finish(previewed(&["happened"], 1_000, true), Some(&late)).unwrap();
+    assert_eq!(table.time_column.as_deref(), Some("happened"));
+    // One value in every row of the whole table: passed over, the value
+    // named the preview's first.
+    let constant = whole(5_000, &[("happened", 5_000, true, Some(day(0)))]);
+    let table = infer::finish(previewed(&["happened"], 1_000, true), Some(&constant)).unwrap();
+    assert_eq!(table.time_column, None);
+    assert_eq!(
+        table.time.refused,
+        [(
+            "happened".to_owned(),
+            PassedOver::Constant {
+                value: Some(Scalar::Timestamp {
+                    unit: sdm_contract::Unit::Us,
+                    zone: None,
+                    value: day(0),
+                }),
+                missing: 0,
+                rows: 5_000,
+            }
+        )]
+    );
+    // Every row of the preview held, most of the whole table missing.
+    let sparse = whole(5_000, &[("happened", 1_000, false, Some(day(0)))]);
+    let table = infer::finish(previewed(&["happened"], 1_000, false), Some(&sparse)).unwrap();
+    assert_eq!(
+        table.time.refused,
+        [(
+            "happened".to_owned(),
+            PassedOver::Sparse {
+                missing: 4_000,
+                rows: 5_000
+            }
+        )]
+    );
+}
+
+#[test]
+fn where_a_column_starts_is_read_over_the_whole_table() {
+    // The preview starts both on day 0; past it `billed` starts earlier.
+    let read = whole(
+        1_001,
+        &[
+            ("shipped", 1_001, false, Some(day(0))),
+            ("billed", 1_001, false, Some(day(-30))),
+        ],
+    );
+    let table =
+        infer::finish(previewed(&["shipped", "billed"], 1_000, false), Some(&read)).unwrap();
+    assert_eq!(table.time_column.as_deref(), Some("billed"));
+    assert_eq!(table.time.how, Some(Taken::Earliest));
+    // A smallest value that is a placeholder (before 1901) is no start:
+    // the preview's earliest real value is, as the reference reads it, so
+    // the first in table order wins the tie.
+    let placeholder = -2_208_988_800_000_000; // 1900-01-01
+    let read = whole(
+        5_000,
+        &[
+            ("shipped", 5_000, false, Some(day(0))),
+            ("billed", 5_000, false, Some(placeholder)),
+        ],
+    );
+    let table =
+        infer::finish(previewed(&["shipped", "billed"], 1_000, false), Some(&read)).unwrap();
+    assert_eq!(table.time_column.as_deref(), Some("shipped"));
+}
+
+#[test]
+fn a_whole_table_reading_other_than_the_one_asked_fails_closed() {
+    // Asked and missing, given where nothing is asked, naming other
+    // columns, in another order, or empty: each an internal error, never a
+    // choice from the preview.
+    let two = ["shipped", "billed"];
+    let missing = infer::finish(previewed(&two, 1_000, false), None).unwrap_err();
+    assert!(internal(&missing), "{missing:?}");
+    let given = whole(999, &[("shipped", 999, false, Some(day(0)))]);
+    let unasked = infer::finish(previewed(&["shipped"], 999, false), Some(&given)).unwrap_err();
+    assert!(internal(&unasked), "{unasked:?}");
+    for columns in [
+        vec![("shipped", 1_000, false, Some(day(0)))],
+        vec![
+            ("billed", 1_000, false, Some(day(0))),
+            ("shipped", 1_000, false, Some(day(0))),
+        ],
+        vec![
+            ("shipped", 1_000, false, Some(day(0))),
+            ("other", 1_000, false, Some(day(0))),
+        ],
+        vec![],
+    ] {
+        let read = whole(1_000, &columns);
+        let err = infer::finish(previewed(&two, 1_000, false), Some(&read)).unwrap_err();
+        assert!(internal(&err), "{columns:?}: {err:?}");
+    }
+}
+
+/// A one-row answer to `column_ranges`: the rows, then each column's low,
+/// high and count.
+fn ranges(rows: i64, columns: Vec<(ArrayRef, ArrayRef, i64)>) -> RecordBatch {
+    let mut fields = vec![Field::new("count_star()", DataType::Int64, true)];
+    let mut arrays: Vec<ArrayRef> = vec![Arc::new(Int64Array::from(vec![rows]))];
+    for (at, (low, high, held)) in columns.into_iter().enumerate() {
+        fields.push(Field::new(
+            format!("min{at}"),
+            low.data_type().clone(),
+            true,
+        ));
+        fields.push(Field::new(
+            format!("max{at}"),
+            high.data_type().clone(),
+            true,
+        ));
+        fields.push(Field::new(format!("count{at}"), DataType::Int64, true));
+        arrays.extend([
+            low,
+            high,
+            Arc::new(Int64Array::from(vec![held])) as ArrayRef,
+        ]);
+    }
+    RecordBatch::try_new(Arc::new(Schema::new(fields)), arrays).unwrap()
+}
+
+#[test]
+fn the_whole_table_s_answer_is_read_by_column_kind() {
+    let names = ["ts", "on", "at", "said"].map(str::to_owned);
+    let batch = ranges(
+        3_000,
+        vec![
+            (stamps(&[Some(day(0))]), stamps(&[Some(day(2))]), 3_000),
+            (
+                Arc::new(Date32Array::from(vec![Some(19_723)])),
+                Arc::new(Date32Array::from(vec![Some(19_723)])),
+                2_999,
+            ),
+            (
+                Arc::new(Time64MicrosecondArray::from(vec![Some(28_800_000_000)])),
+                Arc::new(Time64MicrosecondArray::from(vec![Some(28_900_000_000)])),
+                10,
+            ),
+            (texts(&[Some("2024-01-05")]), texts(&[Some("code")]), 7),
+        ],
+    );
+    let read = infer::whole_table(&names, &[batch], &Days).unwrap();
+    assert_eq!(read.rows, 3_000);
+    let [ts, on, at, said] = &read.columns[..] else {
+        panic!("{read:?}");
+    };
+    assert_eq!((ts.1.held, ts.1.same), (3_000, false));
+    assert_eq!(ts.1.start, Some(i128::from(day(0)) * 1_000));
+    assert_eq!((on.1.held, on.1.same), (2_999, true));
+    assert_eq!(on.1.low, Some(Scalar::Date32(19_723)));
+    assert_eq!(on.1.start, Some(19_723 * 86_400_000_000_000));
+    // A time of day: counted, its smallest value kept, no instant.
+    assert_eq!((at.1.held, at.1.start), (10, None));
+    assert!(matches!(at.1.low, Some(Scalar::Time64 { .. })), "{at:?}");
+    // Text: its smallest as written, read as the choice reads text.
+    assert_eq!(said.1.low, Some(Scalar::Utf8("2024-01-05".into())));
+    assert_eq!(said.1.start, Some(i128::from(day(4)) * 1_000));
+    // No value held: no low, no start.
+    let none = ranges(3, vec![(stamps(&[None]), stamps(&[None]), 0)]);
+    let read = infer::whole_table(&names[..1], &[none], &Days).unwrap();
+    assert_eq!(
+        (read.columns[0].1.low.clone(), read.columns[0].1.start),
+        (None, None)
+    );
+}
+
+#[test]
+fn a_whole_table_answer_of_another_shape_is_refused() {
+    let one = || vec![(stamps(&[Some(day(0))]), stamps(&[Some(day(1))]), 3)];
+    let names = ["ts".to_owned()];
+    let good = ranges(3, one());
+    assert!(infer::whole_table(&names, &[good.clone()], &Days).is_ok());
+    // Two rows; no row; another number of columns; a null or negative
+    // count: each an internal error.
+    let two = RecordBatch::try_new(
+        good.schema(),
+        vec![
+            Arc::new(Int64Array::from(vec![3, 3])) as ArrayRef,
+            stamps(&[Some(day(0)), Some(day(0))]),
+            stamps(&[Some(day(1)), Some(day(1))]),
+            Arc::new(Int64Array::from(vec![3, 3])),
+        ],
+    )
+    .unwrap();
+    let empty = good.slice(0, 0);
+    let mut cases = vec![
+        vec![two],
+        vec![empty],
+        vec![good.clone(), good.clone()],
+        vec![ranges(3, vec![])],
+    ];
+    let mut columns: Vec<ArrayRef> = good.columns().to_vec();
+    columns[3] = Arc::new(Int64Array::from(vec![None::<i64>]));
+    cases.push(vec![RecordBatch::try_new(good.schema(), columns).unwrap()]);
+    let mut columns: Vec<ArrayRef> = good.columns().to_vec();
+    columns[0] = Arc::new(Int64Array::from(vec![-1]));
+    cases.push(vec![RecordBatch::try_new(good.schema(), columns).unwrap()]);
+    for batches in cases {
+        let err = infer::whole_table(&names, &batches, &Days).unwrap_err();
+        assert!(internal(&err), "{err:?}");
+    }
 }
 
 fn texts(values: &[Option<&str>]) -> ArrayRef {
