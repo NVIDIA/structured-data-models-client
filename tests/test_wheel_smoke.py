@@ -982,6 +982,11 @@ def test_the_wheels_provenance_is_held_before_any_environment(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built = _no_environment(monkeypatch)
+    # The inputs (this checkout, at no commit SHA names) are held by
+    # their own tests below; here only the wheels' provenance is.
+    monkeypatch.setattr(
+        smoke, 'inputs_clean', lambda *a, **k: None, raising=False
+    )
     shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
     arguments = _main_arguments(tmp_path, shipped, test_ops)
     assert smoke.main([*arguments, '--commit', SHA]) == 0
@@ -1252,3 +1257,202 @@ def test_a_failing_binding_still_fails_when_the_inputs_patch_pytest_s_report(
     assert counts['test_binding.py'] == {
         'passed': 1, 'failed': 0, 'errors': 0, 'skipped': 0,
     }  # fmt: skip
+
+
+# --- T1.20: the inputs tree is the commit's, clean -----------------------------
+
+#: The paths of the inputs tree the smoke takes: the sibling distributions
+#: and the contract inputs.
+TAKEN = (
+    'packages/structured-data-models-api',
+    'packages/structured-data-models-pql',
+    *INPUTS,
+)
+
+
+def _git(repo: pathlib.Path, *arguments: str) -> str:
+    return subprocess.run(
+        ['git', '-C', str(repo), '-c', 'user.name=Smoke Test',
+         '-c', 'user.email=smoke@example.com', '-c', 'commit.gpgsign=false',
+         *arguments],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()  # fmt: skip
+
+
+def _repository(root: pathlib.Path) -> tuple[pathlib.Path, str]:
+    """A real git checkout of a fake tree, committed clean, with a file
+    under ``docs/`` and one ignored there; with its HEAD."""
+    _tree(root, 20)
+    (root / 'packages/structured-data-models-pql/src').mkdir(parents=True)
+    (root / 'packages/structured-data-models-pql/src/pql.py').write_text('')
+    (root / 'docs').mkdir()
+    (root / 'docs/notes.md').write_text('# notes\n')
+    (root / '.gitignore').write_text('docs/ignored.txt\n')
+    _git(root, 'init', '-q')
+    _git(root, 'add', '-A')
+    _git(root, 'commit', '-q', '-m', 'the inputs')
+    return root, _git(root, 'rev-parse', 'HEAD')
+
+
+def test_a_clean_inputs_tree_at_the_commit_passes(
+    tmp_path: pathlib.Path,
+) -> None:
+    inputs, head = _repository(tmp_path / 'inputs')
+    assert smoke.inputs_clean(inputs, head) is None
+
+
+def test_inputs_at_another_commit_are_refused(tmp_path: pathlib.Path) -> None:
+    inputs, first = _repository(tmp_path / 'inputs')
+    _git(inputs, 'commit', '-q', '--allow-empty', '-m', 'another')
+    head = _git(inputs, 'rev-parse', 'HEAD')
+    assert head != first
+    smoke.inputs_clean(inputs, head)
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.inputs_clean(inputs, first)
+    assert first in str(refused.value) or head in str(refused.value)
+
+
+def test_an_untracked_file_under_the_pql_distribution_is_refused_by_name(
+    tmp_path: pathlib.Path,
+) -> None:
+    """In a directory of its own, so only a status listing every untracked
+    file (not the directory alone) names it."""
+    inputs, head = _repository(tmp_path / 'inputs')
+    extra = inputs / 'packages/structured-data-models-pql/src/added/extra.py'
+    extra.parent.mkdir()
+    extra.write_text('print("taken into the sibling wheel")\n')
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.inputs_clean(inputs, head)
+    assert 'extra.py' in str(refused.value)
+
+
+def _modify(path: pathlib.Path) -> None:
+    path.write_text(path.read_text() + '// changed\n')
+
+
+#: Each change under a path the smoke takes, and the file it names.
+CHANGES = {
+    'a modified lib.rs': ('rust/crates/sdm-contract/src/lib.rs', False),
+    'a staged lib.rs': ('rust/crates/sdm-contract/src/lib.rs', True),
+    'a modified error.rs': ('rust/crates/sdm-contract/src/error.rs', False),
+    'a modified stub': (
+        'packages/structured-data-models-client/src/sdm_client/_native.pyi',
+        False,
+    ),
+    'a modified API distribution': (
+        'packages/structured-data-models-api/pyproject.toml',
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize('change', list(CHANGES))
+def test_a_changed_input_is_refused_by_name(
+    tmp_path: pathlib.Path, change: str
+) -> None:
+    inputs, head = _repository(tmp_path / 'inputs')
+    path, staged = CHANGES[change]
+    _modify(inputs / path)
+    if staged:
+        _git(inputs, 'add', path)
+    with pytest.raises(smoke.SmokeFailed) as refused:
+        smoke.inputs_clean(inputs, head)
+    assert pathlib.PurePosixPath(path).name in str(refused.value)
+
+
+def test_an_inputs_directory_that_is_no_repository_is_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    inputs = _tree(tmp_path / 'inputs', 20)
+    with pytest.raises(smoke.SmokeFailed):
+        smoke.inputs_clean(inputs, SHA)
+
+
+#: Changes outside the paths the smoke takes, none of which refuses.
+ELSEWHERE = {
+    'an untracked file under docs': ('docs/untracked.md', 'new'),
+    'an ignored file under docs': ('docs/ignored.txt', 'new'),
+    'a modified file under docs': ('docs/notes.md', 'modified'),
+}
+
+
+@pytest.mark.parametrize('change', list(ELSEWHERE))
+def test_a_change_elsewhere_does_not_refuse(
+    tmp_path: pathlib.Path, change: str
+) -> None:
+    inputs, head = _repository(tmp_path / 'inputs')
+    path, kind = ELSEWHERE[change]
+    if kind == 'new':
+        (inputs / path).write_text('elsewhere\n')
+    else:
+        _modify(inputs / path)
+    assert _git(inputs, 'status', '--porcelain', '--ignored') != ''
+    smoke.inputs_clean(inputs, head)
+
+
+def _commit_arguments(
+    tmp_path: pathlib.Path, inputs: pathlib.Path, commit: str, container: bool
+) -> list[str]:
+    """``main``'s arguments for wheels of `commit` and `inputs`, in the mode
+    named; the wheels' identities say `commit`."""
+    where = tmp_path / f'wheels-{commit[:8]}'
+    where.mkdir(exist_ok=True)
+    shipped = _built(where, False, commit=commit)
+    test_ops = _built(where, True, commit=commit)
+    arguments = [
+        '--lane', 'floor', '--wheel', str(shipped),
+        '--test-ops-wheel', str(test_ops), '--out', str(tmp_path / 'out'),
+        '--inputs', str(inputs), '--commit', commit,
+    ]  # fmt: skip
+    return [*arguments, '--container'] if container else arguments
+
+
+@pytest.mark.parametrize('container', [False, True])
+def test_the_inputs_are_held_clean_at_the_commit_before_any_environment(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, container: bool
+) -> None:
+    """With ``--commit``, in the direct mode and with ``--container``: a
+    clean inputs tree at the commit builds the environment; an untracked
+    file under a distribution the smoke takes, another commit, and an
+    inputs directory that is no checkout are each refused before any
+    environment is built."""
+    built = _no_environment(monkeypatch)
+    mode = 'container' if container else 'smoke'
+    inputs, head = _repository(tmp_path / 'inputs')
+    arguments = _commit_arguments(tmp_path, inputs, head, container)
+    assert smoke.main(arguments) == 0
+    assert built == [mode]
+    built.clear()
+    # Untracked under the PQL distribution.
+    extra = inputs / 'packages/structured-data-models-pql/src/extra.py'
+    extra.write_text('')
+    assert smoke.main(arguments) != 0
+    assert built == []
+    extra.unlink()
+    assert smoke.main(arguments) == 0
+    assert built == [mode]
+    built.clear()
+    # Wheels of another commit than the inputs': their provenance holds,
+    # the inputs do not.
+    other = _commit_arguments(tmp_path, inputs, OTHER, container)
+    assert smoke.main(other) != 0
+    assert built == []
+    # No checkout at all.
+    plain = _tree(tmp_path / 'plain', 20)
+    arguments = _commit_arguments(tmp_path, plain, head, container)
+    assert smoke.main(arguments) != 0
+    assert built == []
+
+
+def test_without_a_commit_the_inputs_are_not_held(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No ``--commit``: an inputs directory that is no checkout is taken."""
+    built = _no_environment(monkeypatch)
+    inputs = _tree(tmp_path / 'inputs', 20)
+    shipped, test_ops = _built(tmp_path, False), _built(tmp_path, True)
+    arguments = _main_arguments(tmp_path, shipped, test_ops)
+    assert smoke.main([*arguments, '--inputs', str(inputs)]) == 0
+    assert built == ['smoke']
