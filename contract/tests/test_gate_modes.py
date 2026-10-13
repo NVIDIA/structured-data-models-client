@@ -25,9 +25,11 @@ runners' real observations.
   checkpoint, stubs for ``wheel_smoke.py``, the seeded-fault suite,
   ``selftest.py`` and the L0 scripts (the temporary copy has no Cargo
   workspace). 1b's checks 4 and 5 hold the ``inventory`` step, which no
-  stub can pass while the inventory's cases and ``base.adventureworks``
-  are diagnostic: they are shown failing on it, with every other step of
-  theirs passing (H26: the owner's).
+  stub can pass while any of the inventory's cases is diagnostic: they are
+  shown failing on it, naming exactly the cases still diagnostic, with
+  every other step of theirs passing (H26: the owner's). Since T1.29
+  admitted the baseline cases, ``base.adventureworks`` among them, it is
+  not named; made diagnostic again, it is.
 - Evidence inside the candidate's worktree is refused; a run of the other
   half adds its half and keeps the first; the default directory is under
   the repository's common git directory.
@@ -238,7 +240,12 @@ def observed(
 def rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
     r"""python-core's observations as rust-host's stub: what
     ``contract/availability.yaml`` makes unavailable to rust-host left out,
-    and its identity a Rust host's."""
+    its identity a Rust host's, and each statement's result read as the
+    Rust host reads it (``sdm-testkit``'s ``driver.rs``): whole, as Arrow,
+    with no driver's type names and no digest. ``compare.py``'s
+    ``sql.result`` holds rust-host to that read, which a stub keeping the
+    Python driver's reads fails on every acceptance case that runs SQL
+    (from T1.29, which admitted the baseline cases)."""
     available = yaml.safe_load(
         (ROOT / 'contract/availability.yaml').read_text()
     )['runners']['rust-host']
@@ -259,6 +266,12 @@ def rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 line[section][key] = None
             else:
                 line[field] = None
+        capture = (line.get('driver') or {}).get('capture') or {}
+        for statement in capture.get('statements', []):
+            for read in statement.get('results', []):
+                read['method'] = 'query_arrow'
+                read['values']['types'] = None
+                read.pop('digest', None)
         made.append(line)
     return made
 
@@ -862,6 +875,37 @@ def _failing_suite(r: Path) -> None:
     (r / SEEDED_SUITE).write_text(FAILING_SUITE)
 
 
+def a_python_read_on_rust_host(
+    runner: str, lines: list[dict[str, Any]]
+) -> None:
+    r"""The acceptance cases' statement results, on the rust-host stub,
+    read back as a Python driver reads them: what the stub did before T1.29
+    admitted the baseline cases, and which ``compare.py``'s ``sql.result``
+    refuses on rust-host."""
+    if runner != 'rust-host':
+        return
+    seeded = 0
+    for line in lines:
+        if line['case'] not in ACCEPTANCE:
+            continue
+        capture = (line.get('driver') or {}).get('capture') or {}
+        for statement in capture.get('statements', []):
+            for read in statement.get('results', []):
+                read['method'] = 'fetch_arrow_table'
+                read['values']['types'] = ['VARCHAR'] * len(
+                    read['values']['columns']
+                )
+                seeded += 1
+    assert seeded, 'no acceptance case read a result to seed'
+
+
+#: The acceptance cases of this tree.
+ACCEPTANCE = frozenset(
+    json.loads(path.read_text(encoding='utf-8'))['id']
+    for path in (ROOT / 'contract/cases').rglob('*.json')
+    if json.loads(path.read_text(encoding='utf-8'))['status'] == 'acceptance'
+)
+
 #: Each seeded defect: the candidate's change, the runners whose
 #: observations are given, an observation change, the wheels, the
 #: protected paths named, the check it fails, and the step.
@@ -873,6 +917,10 @@ DEFECTS: dict[str, dict[str, Any]] = {
     'l1': {'edit': _l1_defect, 'fails': ('1', 'l1')},
     'coverage': {'edit': drop_the_path, 'fails': ('1', 'coverage')},
     'compare': {'change': without_the_case, 'fails': ('1', 'compare')},
+    'a python read on rust-host': {
+        'change': a_python_read_on_rust_host,
+        'fails': ('1', 'compare'),
+    },
     'seeded': {
         'edit': _failing_suite,
         'protected': f'{SEEDED_SUITE} (seeded)',
@@ -912,9 +960,38 @@ def test_locked_1a_fails_each_check_on_its_seeded_defect(
     assert {n: c['result'] for n, c in half['checks'].items()} == wanted
     if defect == 'no wheels':
         assert '--wheel' in done.stdout and '--test-ops-wheel' in done.stdout
+    if defect == 'a python read on rust-host':
+        assert 'rust-host read it otherwise' in done.stdout, done.stdout
 
 
 # --- --locked 1b ----------------------------------------------------------------
+
+
+def short_of_acceptance(tree: Path) -> list[str]:
+    r"""The cases ``gate.sh``'s ``inventory`` step names as not acceptance
+    cases, in its order: the 40 inventory cases, then
+    ``base.adventureworks``, each whose case file in ``tree`` is not
+    ``acceptance``."""
+    listed = yaml.safe_load(
+        (
+            tree / 'docs/design/rust-core/phase-0/phase-1b-inventory.yaml'
+        ).read_text(encoding='utf-8')
+    )
+    status = {}
+    for path in (tree / 'contract/cases').rglob('*.json'):
+        case = json.loads(path.read_text(encoding='utf-8'))
+        status[case['id']] = case['status']
+    wanted = [str(each['id']) for each in listed['cases']]
+    assert len(set(wanted)) == 40
+    return [
+        case
+        for case in [*wanted, 'base.adventureworks']
+        if status.get(case) != 'acceptance'
+    ]
+
+
+def inventory_line(short: list[str]) -> str:
+    return f'{len(short)} of 41 not acceptance cases: {", ".join(short)}'
 
 
 def test_locked_1b_fails_on_the_diagnostic_inventory_and_writes_the_evidence(
@@ -923,16 +1000,27 @@ def test_locked_1b_fails_on_the_diagnostic_inventory_and_writes_the_evidence(
     observed: dict[str, list[dict[str, Any]]],
     stubs: dict[str, Any],
 ) -> None:
-    r"""Today the inventory's cases and ``base.adventureworks`` are
-    diagnostic, so 1b's checks 4 and 5 fail on the ``inventory`` step, and
-    on it alone: their other steps pass on the stubs."""
+    r"""Today most of the inventory's cases are diagnostic, so 1b's checks
+    4 and 5 fail on the ``inventory`` step, and on it alone: their other
+    steps pass on the stubs. The step names exactly the cases still
+    diagnostic; the baseline cases T1.29 admitted (``base.adventureworks``
+    and the inventory's ``base.*`` cases) are not among them."""
     commit(stubbed)
+    short = short_of_acceptance(stubbed)
+    assert short, 'every case is an acceptance case: 1b can pass; rewrite this'
+    for admitted in (
+        'base.adventureworks',
+        'base.regression',
+        'base.binary',
+        'base.multiclass',
+    ):
+        assert admitted not in short, admitted
     done = locked(
         stubbed, stubs, '1b', '--run', 'rust-host', *files(observed, tmp_path)
     )
     assert done.returncode != 0, done.stdout + done.stderr
     assert table(done, '1b') == {'4': 'FAIL', '5': 'FAIL', '6': 'FAIL'}
-    assert 'base.adventureworks' in done.stdout
+    assert inventory_line(short) in done.stdout, done.stdout
     half = evidence_of(stubbed, stubs)['halves']['1b']
     assert half['passed'] is False
     assert set(half['checks']) == {'4', '5', '6'}
@@ -945,6 +1033,35 @@ def test_locked_1b_fails_on_the_diagnostic_inventory_and_writes_the_evidence(
         for step, result in half['steps'].items()
         if result == 'FAIL'
     } == {'inventory': 'FAIL'}, half['steps']
+
+
+def _adventureworks_diagnostic(r: Path) -> None:
+    path = r / 'contract/cases/s1/base.adventureworks.json'
+    case = json.loads(path.read_text(encoding='utf-8'))
+    assert case['id'] == 'base.adventureworks'
+    case['status'] = 'diagnostic'
+    path.write_text(json.dumps(case, indent=1), encoding='utf-8')
+
+
+def test_locked_1b_names_base_adventureworks_when_it_is_diagnostic(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+) -> None:
+    r"""The ``inventory`` step reads ``base.adventureworks``' own status,
+    not only the inventory's: the candidate making it diagnostic again
+    adds it, last, to the cases the step names."""
+    commit(stubbed, edit=_adventureworks_diagnostic)
+    short = short_of_acceptance(stubbed)
+    assert short[-1] == 'base.adventureworks', short
+    done = locked(
+        stubbed, stubs, '1b', '--run', 'rust-host', *files(observed, tmp_path)
+    )
+    assert done.returncode != 0, done.stdout + done.stderr
+    assert inventory_line(short) in done.stdout, done.stdout
+    half = evidence_of(stubbed, stubs)['halves']['1b']
+    assert half['steps']['inventory'] == 'FAIL', half['steps']
 
 
 def test_a_second_half_adds_to_the_evidence_and_keeps_the_first(
