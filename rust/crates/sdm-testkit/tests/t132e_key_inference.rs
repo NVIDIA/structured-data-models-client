@@ -566,6 +566,88 @@ fn rust_host_refuses_no_table_for_a_null_in_its_key() {
     );
 }
 
+/// P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling reaches
+/// a table whose key mixes a null with real text or decimal values, which
+/// the reference refuses or fails on, the core leaves the null-key rows
+/// out and succeeds, with one warning per table. Each vector and its twin
+/// (the same layout with an integer key, which the reference answers).
+const OPTION_B: [(&str, &str); 2] = [
+    ("nulls-1-decimal.200", "nulls-1.200"),
+    ("nulls-1-text.200", "nulls-1.200"),
+];
+
+/// Each vector of [`OPTION_B`] succeeds at `materialize`, describes the
+/// tables as the reference did before it refused, and gives exactly one
+/// warning the twin's run does not, a code the twin's run never gives,
+/// whose fields name `payments`. Each is `rs-key-b:<vector id>` in
+/// `pending["exits"]`.
+#[test]
+fn rust_host_leaves_null_key_rows_out_with_one_warning() {
+    let all = vectors();
+    let bases = bases();
+    let pending = pending("exits");
+    let find = |id: &str| -> Value {
+        all["vectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"] == id)
+            .unwrap_or_else(|| panic!("{id} is a vector"))
+            .clone()
+    };
+    let mut failures = Vec::new();
+    let mut passing_but_pending = Vec::new();
+    for (id, twin_id) in OPTION_B {
+        let vector = find(id);
+        let reference = &vector["reference"]["outcome"];
+        assert_eq!(
+            reference["result"], "refusal",
+            "{id}: the reference refuses"
+        );
+        let observed = |vector: &Value| host::run(&the_case(&all, vector), &bases);
+        let (got, baseline) = match (observed(&vector), observed(&find(twin_id))) {
+            (Ok(got), Ok(baseline)) => (got, baseline),
+            (got, baseline) => {
+                failures.push(format!("{id}: host failure {got:?} {baseline:?}"));
+                continue;
+            }
+        };
+        let projected = project(&got);
+        let known: BTreeSet<String> = baseline
+            .warnings
+            .iter()
+            .map(|w| w["code"].to_string())
+            .collect();
+        let new: Vec<&Value> = got
+            .warnings
+            .iter()
+            .filter(|w| !known.contains(&w["code"].to_string()))
+            .collect();
+        let mut why = Vec::new();
+        if projected["outcome"] != "success" || projected["stage"] != "materialize" {
+            why.push(format!("answered {projected}"));
+        }
+        if projected["schema"] != wanted(&vector["reference"])["schema"] {
+            why.push("described otherwise than the reference".to_owned());
+        }
+        if new.len() != 1 || !new[0]["fields"].to_string().contains("\"payments\"") {
+            why.push(format!("warnings beyond the twin's: {new:?}"));
+        }
+        let name = format!("rs-key-b:{id}");
+        match (why.is_empty(), pending.contains(&name)) {
+            (true, true) => passing_but_pending.push(name),
+            (false, false) => failures.push(format!("{id}: {}", why.join("; "))),
+            _ => {}
+        }
+    }
+    assert!(
+        passing_but_pending.is_empty(),
+        "these pass now: take them out of contract/tests/t132e-pending.json's \
+         pending[\"exits\"]: {passing_but_pending:?}"
+    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 #[test]
 fn the_key_comparison_fails_closed() {
     let reference = json!({

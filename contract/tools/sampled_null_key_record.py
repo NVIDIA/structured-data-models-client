@@ -40,7 +40,11 @@ For each vector this script keeps the reference's answer:
 - ``keys``: each table's key as the public schema gives it;
 - ``request``: the body the endpoint received, parsed with every number
   as its text, ``metadata.request_id`` left out; null when none was sent;
-- ``warnings``: the warning classes, in order.
+- ``warnings``: the warning classes, in order;
+
+and, beside the answer and never compared, the warnings' text
+(``reference_messages``; ``messages`` in an observation), read only to
+find which warning names a table.
 
 ``register`` is derived as T1.32e's other vectors derive it (an unnamed
 refusal or INTERNAL_ERROR); any difference passes only under an approved
@@ -125,6 +129,19 @@ VECTORS: list[dict[str, Any]] = [
             _payments(
                 'CASE WHEN i=0 THEN NULL ELSE i::DECIMAL(18, 0) END',
                 'CASE WHEN i=0 THEN 3 ELSE 150 END',
+            ),
+        ],
+    },
+    {
+        # Account 3's payments: two non-null decimal keys, the null
+        # elsewhere (mixed-null-decimal's twin, as null-text-not-sampled
+        # is mixed-null-text's).
+        'id': 'null-decimal-not-sampled',
+        'setup': [
+            _ACCOUNTS,
+            _payments(
+                'CASE WHEN i=0 THEN NULL ELSE i::DECIMAL(18, 0) END',
+                'CASE WHEN i IN (1, 2) THEN 3 ELSE 150 END',
             ),
         ],
     },
@@ -227,6 +244,9 @@ def observe(vector: dict[str, Any]) -> dict[str, Any]:
         'keys': keys,
         'request': _request(bodies[0]) if bodies else None,
         'warnings': [type(w.message).__name__ for w in shown],
+        # Kept beside the answer, never compared as text (H17): read only
+        # to find which warning names a table.
+        'messages': [str(w.message) for w in shown],
     }
 
 
@@ -321,11 +341,13 @@ def main(argv: list[str] | None = None) -> int:
     recorded = []
     for vector in VECTORS:
         answer = observed[vector['id']]
+        messages = answer.pop('messages')
         why = register(answer)
         recorded.append(
             {
                 **vector,
                 'reference': answer,
+                'reference_messages': messages,
                 'register': {'required': bool(why), 'why': why},
             }
         )

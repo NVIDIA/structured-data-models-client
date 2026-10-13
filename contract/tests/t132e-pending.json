@@ -1,5 +1,5 @@
 {
- "about": "T1.32e part 1's acceptance tests that failed when the independent test author wrote them, before the implementation, at a4ed935f (contract/tests/test_t132e_time_inference.py, test_t132e_key_inference.py, test_t132e_benchmark_seeds.py, test_t132e_sampled_null_keys.py, sdm-testkit's tests/t132e_time_inference.rs and t132e_key_inference.rs). 'python-core' and 'rust-host' are time-inference vector ids, 'key-python-core' and 'key-rust-host' key vector ids, 'sampled-python-core' sampled null key vector ids (measured at 18bd89d6); 'exits' holds the exits' tests ('py:' the Python test ids, 'rs:' the vectors of rust_host_honours_a_named_time_column_on_a_large_table, 'rs-key:' those of rust_host_refuses_no_table_for_a_null_in_its_key) and the benchmark's seeds. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32e part 1's acceptance tests that failed when the independent test author wrote them, before the implementation, at a4ed935f (contract/tests/test_t132e_time_inference.py, test_t132e_key_inference.py, test_t132e_benchmark_seeds.py, test_t132e_sampled_null_keys.py, sdm-testkit's tests/t132e_time_inference.rs and t132e_key_inference.rs). 'python-core' and 'rust-host' are time-inference vector ids, 'key-python-core' and 'key-rust-host' key vector ids, 'sampled-python-core' sampled null key vector ids (measured at 18bd89d6); 'exits' holds the exits' tests ('py:' the Python test ids, 'rs:' the vectors of rust_host_honours_a_named_time_column_on_a_large_table, 'rs-key:' those of rust_host_refuses_no_table_for_a_null_in_its_key, 'rs-key-b:' those of rust_host_leaves_null_key_rows_out_with_one_warning) and the benchmark's seeds. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [
    "fallback-doubted-beside-plain.200000",
@@ -17,6 +17,12 @@
   ],
   "exits": [
    "py:test_a_named_time_column_is_honoured_on_a_large_table[fallback-unconfirmed-named.200000]",
+   "py:test_option_b_leaves_the_null_key_rows_out_with_one_warning[mixed-null-decimal]",
+   "py:test_option_b_leaves_the_null_key_rows_out_with_one_warning[mixed-null-text]",
+   "py:test_option_b_materializes_with_one_more_warning[nulls-1-decimal.200]",
+   "py:test_option_b_materializes_with_one_more_warning[nulls-1-text.200]",
+   "rs-key-b:nulls-1-decimal.200",
+   "rs-key-b:nulls-1-text.200",
    "rs:fallback-unconfirmed-named.200000"
   ],
   "key-python-core": [
@@ -282,6 +288,10 @@
    "py:test_an_old_route_refusal_is_inconclusive_and_operational",
    "py:test_no_host_appears_in_the_summary",
    "py:test_no_request_passes_the_plan",
+   "py:test_option_b_leaves_the_null_key_rows_out_with_one_warning[mixed-null-decimal]",
+   "py:test_option_b_leaves_the_null_key_rows_out_with_one_warning[mixed-null-text]",
+   "py:test_option_b_materializes_with_one_more_warning[nulls-1-decimal.200]",
+   "py:test_option_b_materializes_with_one_more_warning[nulls-1-text.200]",
    "py:test_run_keeps_the_floor_when_the_core_refuses",
    "py:test_the_budget_is_500_predictions[-1]",
    "py:test_the_budget_is_500_predictions[0]",
@@ -290,6 +300,8 @@
    "py:test_the_datasets_are_the_real_ones",
    "py:test_the_default_plan_fits_the_budget",
    "py:test_the_floor_reads_the_old_route_averaged_over_the_seeds",
+   "rs-key-b:nulls-1-decimal.200",
+   "rs-key-b:nulls-1-text.200",
    "rs-key:all-null.200",
    "rs-key:all-null.5000",
    "rs-key:entity-all-null.200",

@@ -47,6 +47,13 @@ are observed and projected by the same code; ``sdm-testkit``'s
   ``nulls-1-text.200``, the same with a text key, the reference refuses
   with INVALID_REQUEST at ``materialize``: a named code, so not marked.
 
+P1B-40, option (b) (owner, 2026-10-13, relayed):
+``nulls-1-decimal.200`` (INTERNAL_ERROR in the reference) and
+``nulls-1-text.200`` (INVALID_REQUEST: the same mixed text key reached by
+sampling) must materialize on the core, describing the tables as the
+reference did, with the twin's warnings (``nulls-1.200``) and exactly one
+more (:func:`test_option_b_materializes_with_one_more_warning`).
+
 Gating (``contract/tests/t132e_gate.py``): ``t132e-pending.json``'s
 ``pending["key-python-core"]`` and the exit's ``py:`` ids in
 ``pending["exits"]`` list the tests that failed here when this was
@@ -63,6 +70,7 @@ import importlib.util
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -247,6 +255,65 @@ def test_a_key_holding_nulls_refuses_no_table(
         f'py:test_a_key_holding_nulls_refuses_no_table[{vector_id}]',
         check,
     )
+
+
+#: P1B-40, option (b) (owner, 2026-10-13, relayed): sampling reaches a
+#: table whose key mixes a null with real text or decimal values, which
+#: the reference refuses (INVALID_REQUEST) or fails on (INTERNAL_ERROR);
+#: the core leaves the null-key rows out and succeeds, with one warning
+#: per table. Each vector and its twin, the same layout with an integer
+#: key, which the reference answers.
+OPTION_B = {
+    'nulls-1-decimal.200': 'nulls-1.200',
+    'nulls-1-text.200': 'nulls-1.200',
+}
+
+
+@pytest.mark.parametrize('vector_id', [pytest.param(i, id=i) for i in OPTION_B])
+def test_option_b_materializes_with_one_more_warning(
+    vector_id: str, core_runs: dict[str, Any]
+) -> None:
+    r"""The core succeeds at ``materialize`` where the reference refuses
+    (the approved divergence), describes the tables as the reference did
+    before it refused, and gives the twin's warnings and exactly one more:
+    the rows left out."""
+    vector = BY_ID[vector_id]
+    twin = BY_ID[OPTION_B[vector_id]]['reference']
+
+    def check() -> None:
+        observation = core_runs[vector_id]
+        assert observation['core'] is not None, 'the core was not reached'
+        got = R.project(observation)
+        assert got['outcome'] == {
+            'result': 'success',
+            'stage': 'materialize',
+            'error': None,
+            'code': None,
+        }, got['outcome']
+        assert got['schema'] == vector['reference']['schema']
+        extra = Counter(got['warnings']) - Counter(twin['warnings'])
+        missing = Counter(twin['warnings']) - Counter(got['warnings'])
+        assert sum(extra.values()) == 1 and not missing, got['warnings']
+
+    G.held(
+        'exits',
+        f'py:test_option_b_materializes_with_one_more_warning[{vector_id}]',
+        check,
+    )
+
+
+def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
+    for vector_id, twin_id in OPTION_B.items():
+        outcome = BY_ID[vector_id]['reference']['outcome']
+        assert outcome['result'] == 'refusal'
+        assert outcome['stage'] == 'materialize'
+        assert outcome['code'] in ('INVALID_REQUEST', 'INTERNAL_ERROR')
+        twin = BY_ID[twin_id]
+        assert twin['reference']['outcome']['result'] == 'success'
+        assert twin['key'] == {
+            **BY_ID[vector_id]['key'],
+            'kind': 'int',
+        }
 
 
 # --- the vectors ---------------------------------------------------------------

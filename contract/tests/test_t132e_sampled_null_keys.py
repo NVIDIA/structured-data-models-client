@@ -49,6 +49,17 @@ observed and projected by the same code.
   reference's exact answer and request: no entry excuses them, whatever
   it declares, since a single null in the walk is the reference's clean
   case (np.unique sorts it) and P1B-13 changes nothing there.
+- P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling reaches
+  a key mixing nulls with real text or decimal values (``mixed-null-text``,
+  refused INVALID_REQUEST by the reference; ``mixed-null-decimal``,
+  INTERNAL_ERROR), the core leaves the null-key rows out and succeeds:
+  :func:`test_option_b_leaves_the_null_key_rows_out_with_one_warning`
+  holds its request to the twin's (the same tables with the null row not
+  reached, recorded from the reference) with no null-key row, and its
+  warnings to the twin's and one more naming the table and the count. The
+  per-vector test then passes only under the approved entry's binding
+  refs (``refusal INVALID_REQUEST -> success``, ``refusal INTERNAL_ERROR
+  -> success``).
 - The case format holds neither ``num_context_samples`` nor
   ``random_seed``, so these vectors are not cases and ``rust-host`` does
   not run them; the core's answer is held through the Python host.
@@ -67,6 +78,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -195,6 +207,7 @@ def test_python_core_samples_a_null_key_as_the_reference(
     def check() -> None:
         got = copy.deepcopy(core_answers[vector_id])
         operations = got.pop('operations')
+        got.pop('messages')
         assert 'materialize' in operations, (
             f'the core was not reached: {operations}'
         )
@@ -374,6 +387,104 @@ def test_an_approved_success_to_success_ref_excuses_a_request_alone(
     assert {
         v['id'] for v in RECORDED['vectors'] if v['id'].startswith('singleton-')
     } == EXACT
+
+
+#: P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling
+#: reaches a table whose key mixes nulls with real text or decimal values
+#: (the reference refuses, INVALID_REQUEST, or fails, INTERNAL_ERROR),
+#: the core leaves the null-key rows out of the walk and succeeds, with one
+#: warning per table saying how many rows it left out. Each such vector,
+#: its twin (the same tables with the null row not reached, which the
+#: reference answers), and the rows left out.
+OPTION_B = {
+    'mixed-null-text': ('null-text-not-sampled', 1),
+    'mixed-null-decimal': ('null-decimal-not-sampled', 1),
+}
+
+
+def _amounts(request: Any, table: str) -> list[float]:
+    r"""Every ``amount`` the request sends for ``table``'s rows, in the
+    context and the rows to predict (``payments.amount`` is the row's
+    number, so the null-key row is amount 0)."""
+    found = []
+    for part in ('context', 'predict'):
+        rows = ((request.get(part) or {}).get('related_tables') or {}).get(
+            table
+        )
+        if not rows:
+            continue
+        at = rows['columns'].index('amount')
+        found.extend(float(row[at]['number']) for row in rows['rows'])
+    return found
+
+
+@pytest.mark.parametrize('vector_id', [pytest.param(i, id=i) for i in OPTION_B])
+def test_option_b_leaves_the_null_key_rows_out_with_one_warning(
+    vector_id: str, core_answers: dict[str, Any]
+) -> None:
+    r"""The core succeeds where the reference refuses (the approved
+    divergence: ``refusal INVALID_REQUEST -> success``, ``refusal
+    INTERNAL_ERROR -> success``); its request holds no row of the null key
+    (the payments reached for account 3 are rows 1 and 2, never row 0) and
+    is the twin's, the request the reference sends when the null row is
+    not reached at all; its warnings are the twin's and exactly one more,
+    whose text names the table and the rows left out."""
+    twin_id, left_out = OPTION_B[vector_id]
+    twin = BY_ID[twin_id]
+    reference = BY_ID[vector_id]['reference']
+
+    def check() -> None:
+        got = copy.deepcopy(core_answers[vector_id])
+        operations = got.pop('operations')
+        messages = got.pop('messages')
+        assert 'materialize' in operations, operations
+        assert got['outcome'] == {
+            'result': 'success',
+            'stage': 'predict',
+            'error': None,
+            'code': None,
+        }, got['outcome']
+        assert got['keys'] == reference['keys']
+        amounts = _amounts(got['request'], 'payments')
+        assert 0.0 not in amounts, amounts
+        assert sorted(amounts) == [1.0, 2.0], amounts
+        assert got['request'] == twin['reference']['request']
+        extra = Counter(got['warnings']) - Counter(
+            twin['reference']['warnings']
+        )
+        missing = Counter(twin['reference']['warnings']) - Counter(
+            got['warnings']
+        )
+        assert sum(extra.values()) == 1 and not missing, got['warnings']
+        naming = [m for m in messages if 'payments' in m]
+        before = [m for m in twin['reference_messages'] if 'payments' in m]
+        assert len(naming) == len(before) + 1, messages
+        assert any(
+            re.search(rf'(?<![\w.]){left_out}(?![\w.])', m) for m in naming
+        ), naming
+
+    G.held(
+        'exits',
+        f'py:test_option_b_leaves_the_null_key_rows_out_with_one_warning[{vector_id}]',
+        check,
+    )
+
+
+def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
+    # The divergence is from a refusal, and each twin is a success the
+    # reference sends a request for, with the null row's key elsewhere.
+    for vector_id, (twin_id, _) in OPTION_B.items():
+        outcome = BY_ID[vector_id]['reference']['outcome']
+        assert outcome['result'] == 'refusal'
+        assert outcome['stage'] == 'materialize'
+        assert outcome['code'] in ('INVALID_REQUEST', 'INTERNAL_ERROR')
+        twin = BY_ID[twin_id]['reference']
+        assert twin['outcome']['result'] == 'success'
+        assert sorted(_amounts(twin['request'], 'payments')) == [1.0, 2.0]
+    for vector in RECORDED['vectors']:
+        assert len(vector['reference_messages']) == len(
+            vector['reference']['warnings']
+        )
 
 
 def test_every_vector_ref_names_its_transition() -> None:
