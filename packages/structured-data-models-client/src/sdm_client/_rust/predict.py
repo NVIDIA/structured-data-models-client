@@ -1,31 +1,37 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# Bridge code: the host-held rules here (design, "Host-held semantics"),
-# the adapter's _preflight (T1.28b), are deleted in Phase 1 by that task;
-# the transport and the result's objects stay the host's. Frozen meanwhile
+# Bridge code: the transport and the result's objects stay the host's
+# (design, "Host-held semantics": the model call's errors mapped, the answer
+# re-encoded, the request id drawn); the rule rows T1.28b moved into the
+# core are gone. Deleted in Phase 5 with the old route. Frozen meanwhile
 # (E50).
 
 r"""``predict`` on the core: the model call and its answer (T1.11d).
 
 ``SDMClient.predict`` of a request materialized on the core over a DuckDB
-source comes here on the core route, in place of the relational adapter's
-call and reading of the answer (``prediction_plan``, ``normalize``).
-Everything around them stays the client's own, as on the old route: its
-checks of the call before (the request, the outputs, the rows scored from
-their own answers, the adapter's checks of the context) and, after, the
-merge of the parts and the notice of an output the answer left out.
+source comes here on the core route, after the client's own checks of its
+arguments' types (the request a ``Request``, the outputs a sequence of
+names). Everything else the old route runs before and after the call is
+the core's from T1.28b (the design's "Host-held semantics" rows it moved):
+the model and output checks and the default outputs (``_prepare``), the
+answer to a request with no rows, the adapter's checks of the context
+(``_preflight``), the parts merged into one result and the notice of an
+output the answer left out, each notice a code and fields this client
+words (:mod:`.errors`).
 
 The core's ``predict`` takes the request state ``materialize`` answered,
 which the request held since (its version, and its payload and query as
-the request holds them now), and the id this call carries, drawn as the
+the request holds them now), the model's id, the outputs the caller named
+(or that it named none), and the id this call carries, drawn as the
 adapter draws one; it makes the call the adapter makes, which this host
 sends through the client's own transport, reads the answer as the client's
-bindings read it, and lays it out: one row per answer, under the entity it
-is about. The endpoint's answer reaches the core as its JSON, every
-non-finite number Python's reader made of it written as a token the core
-reads as one (an overflowing ``1e400`` for an infinity), so both hosts
-refuse it alike.
+bindings read it, and lays it out: one row per answer, ordered by
+``row_index``, under the entity it is about, with its prediction (a class
+as the target's own type) and its probabilities. The endpoint's answer
+reaches the core as its JSON, every non-finite number Python's reader made
+of it written as a token the core reads as the same number (an infinity as
+the overflowing ``1e400``, a NaN as ``NaN``), so both hosts read it alike.
 
 What the endpoint itself wrote in a refusal (HTTP 4xx or 5xx) is shown as
 on the old route (decision E47, owner decision 2026-10-10, an exception to
@@ -48,16 +54,14 @@ it shown: a scrub of such echoes was tried and removed (E47). A failed transport
 told to the core, which ends the run with ``TRANSPORT_ERROR``; any other
 error of the transport keeps its code and gets a fixed sentence.
 
-As built at T1.11d the core predicts a regression asked for its default
-output; the rest is refused with ``UNSUPPORTED_REQUEST`` naming the rule
-(register entry P1B-4), in the core: from T1.24 the outputs asked for pass
-through to it (decision E61). Nothing here imports the relational engine.
+Nothing here imports the relational engine.
 """
 
 from __future__ import annotations
 
 import json
 import math
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
@@ -184,25 +188,42 @@ def _refusal(refused: NimRequestError) -> NimRequestError:
     )
 
 
+def _adapter(client: SDMClient, model_id: str) -> Any:
+    r"""The client's adapter of the model the core checked, which explains
+    the endpoint's refusals as on the old route (E47)."""
+    from sdm_client.client import _adapter_for
+    from sdm_client.models import spec_for
+
+    spec = spec_for(model_id)
+    adapter = client._adapters.get(spec.model_id)
+    if adapter is None:
+        adapter = _adapter_for(spec)
+        client._adapters[spec.model_id] = adapter
+    return adapter
+
+
 def predict(
     client: SDMClient,
-    adapter: Any,
     request: Request,
-    fields: tuple[str, ...],
-) -> list[PredictionResult]:
-    r"""The answer to each payload of ``request``, predicted on the core.
+    model: Any,
+    outputs: Sequence[str] | None,
+) -> PredictionResult:
+    r"""The answer to ``request``, predicted on the core.
 
     Raises:
         RouteError: The request was not materialized on the core, so it
-            holds no request state the core wrote.
-        StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
-            ``UNSUPPORTED_REQUEST`` naming the rule for what it does not
-            predict yet; the client's own checks of the call; and the
+            holds no request state the core wrote, or holds other payloads
+            than the one it wrote.
+        StructuredDataError: The core's refusal, as :mod:`.errors` maps it
+            (the model and output checks, the context's, and what it does
+            not predict yet, ``UNSUPPORTED_REQUEST`` naming the rule); a
+            model given as neither a model handle nor an id; and the
             endpoint's refusal, as the client's transport reports it.
     """
     from sdm_api.generated.tfm_api import PredictionItem
 
     from sdm_client.adapters.relational import _request_id
+    from sdm_client.models import spec_for
     from sdm_client.result import PredictionResult
 
     state = getattr(request, '_core_state', None)
@@ -210,12 +231,15 @@ def predict(
         raise RouteError(
             'predict on the core needs a request materialize built on the core'
         )
-    # The adapter's own checks of what the call sends, which its
-    # prediction_plan makes before building any call.
-    payloads = adapter._payloads(request)
-    adapter._preflight(payloads, fields, request.query)
+    if len(request.payloads) != 1:
+        raise RouteError(
+            'predict on the core takes the one payload materialize wrote'
+        )
+    # A model handle is the host's object; its id, or the id given, is the
+    # core's to check.
+    model_id = model if isinstance(model, str) else spec_for(model).model_id
 
-    def model(body: bytes) -> bytes:
+    def model_call(body: bytes) -> bytes:
         # What failed is noted inside the handlers and raised after them, so
         # the transport's exception, whose text the endpoint wrote, is not
         # even the context of what is raised.
@@ -223,8 +247,9 @@ def predict(
         transport_failed = False
         refused: NimRequestError | None = None
         try:
-            # The core's call, its bytes as written (register PD-2, T1.28a).
-            answer = client._send_body(adapter, body)
+            # The core's call, its bytes as written (register PD-2, T1.28a),
+            # through the adapter that explains the endpoint's refusals.
+            answer = client._send_body(_adapter(client, model_id), body)
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
@@ -245,40 +270,45 @@ def predict(
             raise failure
         return _encoded(answer)
 
-    parts = []
-    for payload in payloads:
-        operation = {
-            'op': 'predict',
-            'state': {'version': state['version'], 'payload': 1, 'query': 2},
-            'model': adapter.spec.model_id,
-            'request_id': _request_id(),
-            'outputs': list(fields),
-            # The inference options the caller set (a mapping, on this
-            # route), which the core refuses where the model does not read
-            # them (T1.28a).
-            'inference_asked': sorted(
-                request.requested_inference.get('inference_config', {})
-            ),
-        }
-        attachments = {1: _payload(payload), 2: codec.attachment(request.query)}
-        finished = run(operation, attachments, model=model)
-        answered = finished.result
-        rows = _rows(finished.take(answered['result']))
-        metadata = json.loads(finished.take(answered['metadata']))
-        parts.append(
-            PredictionResult(
-                model=answered['model'],
-                request_id=answered['request_id'],
-                items=[
-                    PredictionItem(
-                        row_index=row['row_index'],
-                        id=row['id'],
-                        prediction=row['prediction'],
-                    )
-                    for row in rows
-                ],
-                metadata=metadata,
-                outputs=fields,
+    operation: dict[str, Any] = {
+        'op': 'predict',
+        'state': {'version': state['version'], 'payload': 1, 'query': 2},
+        'model': model_id,
+        'request_id': _request_id(),
+        # The outputs the caller named, or that it named none (the core then
+        # asks the task's own, T1.28b).
+        'outputs': [] if outputs is None else list(outputs),
+        # The inference options the caller set (a mapping, on this
+        # route), which the core refuses where the model does not read
+        # them (T1.28a).
+        'inference_asked': sorted(
+            request.requested_inference.get('inference_config', {})
+        ),
+    }
+    if outputs is None:
+        operation['default_outputs'] = True
+    attachments = {
+        1: _payload(request.payloads[0]),
+        2: codec.attachment(request.query),
+    }
+    finished = run(operation, attachments, model=model_call)
+    answered = finished.result
+    rows = _rows(finished.take(answered['result']))
+    metadata = json.loads(finished.take(answered['metadata']))
+    return PredictionResult(
+        model=answered['model'],
+        request_id=answered['request_id'],
+        items=[
+            PredictionItem(
+                row_index=row['row_index'],
+                id=row['id'],
+                prediction=row.get('prediction'),
+                probabilities=None
+                if row.get('probabilities') is None
+                else dict(row['probabilities']),
             )
-        )
-    return parts
+            for row in rows
+        ],
+        metadata=metadata,
+        outputs=tuple(answered['outputs']),
+    )

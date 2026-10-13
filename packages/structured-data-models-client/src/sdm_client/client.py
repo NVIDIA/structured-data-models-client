@@ -434,6 +434,12 @@ class SDMClient:
         _require_output_names(outputs)
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
+        # On the core route the model and output checks, the answer to a
+        # request with no rows, the context's checks, the merge and the
+        # notice of an absent output are the core's (T1.28b).
+        on_the_core = _predicts_on_the_core(request)
+        if on_the_core is not None:
+            return on_the_core.predict(self, request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
             return _empty_answer(adapter.spec.model_id, fields, request)
@@ -443,14 +449,10 @@ class SDMClient:
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
-        on_the_core = _predicts_on_the_core(request)
-        if on_the_core is not None:
-            parts = on_the_core.predict(self, adapter, request, fields)
-        else:
-            parts = [
-                adapter.normalize(self._send(adapter, payload), fields, payload)
-                for payload in adapter.prediction_plan(request, fields)
-            ]
+        parts = [
+            adapter.normalize(self._send(adapter, payload), fields, payload)
+            for payload in adapter.prediction_plan(request, fields)
+        ]
         if not parts:
             raise StructuredDataError(
                 'the adapter produced no call for this request',

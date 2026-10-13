@@ -277,13 +277,28 @@ def _scalar(value: Any) -> Any:
     value it holds, losslessly: an integer (:func:`_integral`), and from
     T1.28a a NumPy boolean or float, its type kept (a float32 is exactly the
     double it widens to), so the core reads the call's option values as the
-    caller gave them; a sequence the encoder does not know (a ``range``) as
-    its items, as the client reads a sequence of hop counts; any other value
-    refused, as the encoder refuses it."""
+    caller gave them; a sequence the encoder does not know (a ``range``, and
+    from T1.28b a NumPy array) as its items, as the client reads a sequence
+    of hop counts and the engine's config classes a sequence of transforms;
+    any other value refused, as the encoder refuses it. From T1.28b a NumPy
+    float wider than a double (``np.longdouble``) is written as the double
+    it holds where that double is exactly its value, as the engine's config
+    classes read it, else refused."""
     import numpy as np
 
-    if isinstance(value, (np.bool_, np.floating)):
+    if isinstance(value, np.floating):
+        item = value.item()
+        if isinstance(item, float):
+            return item
+        if float(value) == value:
+            return float(value)
+        raise TypeError(
+            f'Object of type {type(value).__name__} is not JSON serializable'
+        )
+    if isinstance(value, np.bool_):
         return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
     if isinstance(value, Sequence) and not isinstance(
         value, (str, bytes, bytearray)
     ):

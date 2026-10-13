@@ -123,6 +123,23 @@ ERRORS: dict[str, tuple[type[StructuredDataError], str]] = {
 }
 
 
+#: Refusals this client words beyond their code's sentence, by code and
+#: the ``field`` the error names: a request or call past the endpoint's
+#: size says the size and the limit, as the old route's refusal does
+#: (T1.28b, carried from T1.28a's review). A template is ``str.format``'s
+#: over the error's fields; one its fields cannot fill gives the code's
+#: sentence.
+_TOO_LARGE = (
+    'the request is {bytes:,} bytes and the endpoint takes at most {limit:,} '
+    'bytes; reduce the number of tables in the graph, their columns, the '
+    'neighbourhood sampled or the context gathered (num_context_samples)'
+)
+WORDED: dict[tuple[str, str], str] = {
+    ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
+    ('INVALID_REQUEST', 'call'): _TOO_LARGE,
+}
+
+
 class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
     r"""The class the core's sampler warnings are shown as: the reference's
     ``UserWarning`` (a subclass of it, named so, so a filter, a
@@ -368,6 +385,34 @@ SAID: dict[str, dict[str | None, str]] = {
             ('static', 'at one moment or another'),
         )
     },
+    # The client's notices around the model call, which the core gives from
+    # T1.28b: a regression's constant context (the adapter's
+    # `_check_target_varies`, the target named as `_how_to_name_the_target`
+    # names it) and an output the caller named that the answer left out
+    # (`_report_absent`).
+    'CONTEXT_CONSTANT': {
+        variant: (
+            'every context row has the same '
+            + said
+            + ', so nothing in the context distinguishes one answer from '
+            'another. The endpoint will answer, but the answer cannot say '
+            'much. Gather a wider context with num_context_samples, or ask '
+            'about entities whose answers differ.'
+        )
+        for variant, said in (
+            ('column', '{target}'),
+            ('predicted', '{predicted}'),
+            ('question', 'answer to {question!r}'),
+            ('answer', 'answer'),
+        )
+    },
+    'OUTPUTS_ABSENT': {
+        None: (
+            '{model} answered without {absent!r}, which this request asked '
+            'for, so no column of to_pandas() will carry it. The answer to '
+            'the rest of the request is unaffected.'
+        )
+    },
     'TWO_WAYS_TO_A_TABLE': {
         None: (
             '{source_table!r} reaches {target_table!r} through {columns!l}, '
@@ -528,6 +573,12 @@ def error_from_core(
     details['retryable'] = bool(error.get('retryable', False))
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
+    template = WORDED.get((code, str(details.get('field'))))
+    if template is not None:
+        try:
+            sentence = template.format(**details)
+        except (KeyError, IndexError, TypeError, ValueError):
+            pass
     return _instance(cls, sentence, code, details)
 
 
