@@ -6,7 +6,7 @@
     "decimal.feature-38-0-wide",
     "decimal.target-38-18"
   ],
-  "reading": "The first refusal of each probe; each case of the decimal family probed as it is, and the wide decimal feature's case without its column. From T1.28a a DECIMAL(38, s) feature has the reference's wire dtype (float64 with a scale, int64 where its whole values fit, else its digits), so the wide decimal feature and the decimal target reach predict's result on both runners. The static decimal target is the question its case asks, so nothing is removed from it.",
+  "reading": "The first refusal of each probe; each case of the decimal family probed as it is, and the wide decimal feature's case without its column. From T1.32b a decimal feature of any precision has the reference's wire dtype (float64 with a scale, int64 up to 18 digits or where its whole values fit, else its digits), so the wide decimal feature and the decimal target reach predict's result on both runners. The static decimal target is the question its case asks, so nothing is removed from it.",
   "gaps": [],
   "entries": [
     {
@@ -15,17 +15,17 @@
       "rule": "target_type",
       "owner": "T1.32b",
       "register": "P1B-18",
-      "where": "rust/crates/sdm-core/src/materialize.rs:805",
-      "why": "decimal.class-target-38-18 asks for users.tier, a static DECIMAL(38, 18) target: the core refuses a decimal static target by name when it reads the labels, where the reference computes them and then fails INTERNAL_ERROR building its task table (an unsupported data type for TARGET; P1B-1, P1B-18). decimal.target-38-18's sum over a DECIMAL(38, 18) column is computed from T1.27, held to the reference's labels exactly on both core hosts, and from T1.28a, its decimal feature sent with the reference's wire dtype, reaches predict's result on both runners",
+      "where": "rust/crates/sdm-engine/src/labels.rs:645",
+      "why": "decimal.class-target-38-18 asks for users.tier, a static DECIMAL(38, 18) target: the core refuses a decimal static target by name when it labels it (sdm_engine::labels::label; a decimal static column compared in a condition is labelled, T1.32b), where the reference computes the labels and then fails INTERNAL_ERROR building its task table (an unsupported data type for TARGET; P1B-1, P1B-18). decimal.target-38-18's sum over a DECIMAL(38, 18) column is computed from T1.27, held to the reference's labels exactly on both core hosts, its total held to the column's declared precision from T1.32b, and its decimal feature sent with the reference's wire dtype, reaches predict's result on both runners",
       "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "UnsupportedRequestError",
+        "rust-host": {
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "target_type"
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "UnsupportedRequestError",
           "code": "UNSUPPORTED_REQUEST",
           "operation": "materialize",
           "rule": "target_type"

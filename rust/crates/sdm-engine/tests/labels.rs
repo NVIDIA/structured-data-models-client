@@ -164,6 +164,7 @@ fn problems(document: &Value) -> (Vec<String>, Counts) {
                     .iter()
                     .map(|r| (!r.is_null()).then(|| digits(r, "value")).transpose())
                     .collect::<Result<_, _>>()?,
+                precision: 38,
                 scale: 18,
             },
             other => return Err(format!("a kind {other:?}")),

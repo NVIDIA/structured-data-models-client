@@ -1,12 +1,8 @@
 {
  "about": "T1.32d's acceptance tests that failed when the independent test author wrote them, before the implementation, at a4ed935f (contract/tests/test_t132d_empty_null_vectors.py, test_t132d_empty_null_family.py, tests/test_t132d_cell_claims.py, packages/structured-data-models-client/tests_test_ops/test_t132d_canary.py, sdm-testkit's tests/t132d_empty_null_vectors.rs and t132d_empty_null_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The cell-claim seeds wait for coverage rule 6 (T1.32a part 2).",
  "pending": {
-  "python-core": [
-   "null.decimal-18-2"
-  ],
-  "rust-host": [
-   "null.decimal-18-2"
-  ],
+  "python-core": [],
+  "rust-host": [],
   "exits": [
    "py:test_a_contradicted_cell_claim_fails[foreign-key-as-key]",
    "py:test_a_contradicted_cell_claim_fails[refusal-claims-a-later-stage]",

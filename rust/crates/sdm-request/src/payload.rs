@@ -207,16 +207,17 @@ fn type_dtype(data_type: &DataType) -> Result<Dtype, CoreError> {
 }
 
 /// The wire dtype of `array`, as the reference names a column by what it
-/// holds (`_dtype_name`): a `DECIMAL(38, s)` with a scale as `float64`;
-/// with none as `int64` where every value fits, and as `string` where one
-/// does not (`_decimal_dtype_name`). A decimal of another precision is
-/// refused by name (`wire_dtype`, register P1B-3): the reference's
-/// decimal sums fail at the column's declared precision, which this core
-/// does not check yet, and such a column is sent beside them.
+/// holds (`_dtype_name`, for a decimal `_decimal_dtype_name`'s Arrow
+/// branch), at any precision: a decimal with a scale as `float64`; a whole
+/// one of up to 18 digits as `int64`; a wider whole one as `int64` where
+/// every value fits, and as `string` where one does not. A decimal of
+/// negative scale, which no source this core reads hands over, is refused
+/// by name (`wire_dtype`, register P1B-3).
 pub fn wire_dtype(array: &ArrayRef) -> Result<Dtype, CoreError> {
     match array.data_type() {
-        DataType::Decimal128(38, scale) if *scale > 0 => Ok(Dtype::Float64),
-        DataType::Decimal128(38, 0) => {
+        DataType::Decimal128(_, scale) if *scale > 0 => Ok(Dtype::Float64),
+        DataType::Decimal128(precision, 0) if *precision <= 18 => Ok(Dtype::Int64),
+        DataType::Decimal128(_, 0) => {
             let values = array.as_primitive::<Decimal128Type>();
             let fits = values.iter().flatten().all(|v| i64::try_from(v).is_ok());
             Ok(if fits { Dtype::Int64 } else { Dtype::String })
@@ -303,7 +304,11 @@ fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
 /// sends (`_cell_json_value`'s float branch over `_json_value`): a whole
 /// value only where float64 holds it exactly, a fraction only within the
 /// JSON-safe range, rounded to the nearest double; anything else refused
-/// as the caller's error ("cannot be sent as float64").
+/// as the caller's error ("cannot be sent as float64"). Every scale up to
+/// 38 is taken: the JSON-safe bound at a scale whose product with it is
+/// past `u128` bounds no `DECIMAL(38)` value (T1.32b: such a bound
+/// wrapped, refusing `DECIMAL(38, 38)` cells in a release build and
+/// panicking in a debug one).
 fn decimal_float(value: i128, scale: i8, column: &str) -> Result<Value, CoreError> {
     let lost = || {
         invalid(
@@ -322,7 +327,8 @@ fn decimal_float(value: i128, scale: i8, column: &str) -> Result<Value, CoreErro
         }
         return Value::float(float).ok_or_else(lost);
     }
-    if value.unsigned_abs() > (JSON_SAFE as u128) * unit as u128 {
+    let safe = (JSON_SAFE as u128).checked_mul(unit.unsigned_abs());
+    if safe.is_some_and(|safe| value.unsigned_abs() > safe) {
         return Err(lost());
     }
     let float: f64 = format!("{value}e-{scale}").parse().map_err(|_| lost())?;

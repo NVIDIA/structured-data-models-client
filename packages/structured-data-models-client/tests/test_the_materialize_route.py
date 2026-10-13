@@ -1475,12 +1475,11 @@ def test_a_decimal_average_past_38_digits_is_not_the_caller_s_error(
             _decimal_average(total)
         assert refused.value.code == 'INVALID_REQUEST'
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    # On the core a decimal's average takes a rule it does not port yet,
-    # refused by name (P1B-3), never as the caller's error.
-    with pytest.raises(StructuredDataError) as refused:
-        _decimal_average(average)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['rule'] == 'target_type'
+    # On the core a decimal's average is the reference's (T1.32b), its
+    # total past 38 digits not the caller's error.
+    request = _decimal_average(average)
+    rows = request._payloads[0]['context']['instance_table']['rows']
+    assert json.loads(json.dumps(rows)) == DECIMAL_AVERAGE_REFERENCE
     # The sum is the caller's error on both routes.
     with pytest.raises(StructuredDataError) as refused:
         _decimal_average(total)
