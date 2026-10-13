@@ -58,7 +58,14 @@ accuracy holds, benchmarked before Phase 1 acceptance, by this protocol
   direction, so an improvement never fails.
 
 Calls and predictions are counted before any is made (:func:`plan`); the
-run refuses a plan of more than ``--max-predictions`` (default 500). By
+run refuses a plan of more than ``--max-predictions`` (default 500, and
+never above 500). The requests are counted again where they are sent
+(:class:`Wire`, wrapping ``requests.Session.send`` in this process): each
+prediction may send one request, so an SDK retry on a throttled endpoint
+is refused before it is sent, and none past the plan; the summary records
+the requests sent. The route sent first alternates from seed to seed, and
+a control whose two routes send different requests fails the run, since it
+then isolates nothing. By
 default it makes 28 calls and 448 predictions: the generated pair three
 tasks each, AdventureWorks its notebook's regression, two seeds, two routes,
 16 entities a call.
@@ -69,7 +76,9 @@ tasks each, AdventureWorks its notebook's regression, two seeds, two routes,
         [--max-predictions 500] [--timeout SECONDS]
 
 ``--dry-run`` builds every request on both routes and answers it in process
-by the scripted endpoint's rule, with no network access (it opens no socket
+by the scripted endpoint's rule, with a probability for each class a
+classification asks for so the binary scoring path runs too, with no
+network access (it opens no socket
 and reads no Databricks configuration): it shows the plan, whether each pair
 of requests is one request, and the metrics of the scripted answers, which
 say nothing of a model. A live run writes, under ``--raw-dir``, each call's
@@ -515,6 +524,101 @@ def build(
     return PredictiveQuery(task.pql, schema).materialize(**arguments)
 
 
+#: The most predictions a run may send: E73(a)'s "a few hundred"; a larger
+#: --max-predictions is refused.
+PREDICTION_CEILING = 500
+
+
+class WireBudget(smoke.SmokeError):  # type: ignore[misc, name-defined]
+    r"""A request the run may not send: a second one for one prediction (an
+    SDK retry), or one past the budget. Not an ``OSError``, so the SDK's
+    retry loop and the client's transport pass it straight out."""
+
+
+class Wire:
+    r"""Counts, and bounds, the prediction requests that reach the network
+    (the protocol review's item 4): ``requests.Session.send`` is wrapped,
+    for this script's process alone, so each request to a serving endpoint's
+    ``invocations`` is counted where it is sent, whatever the SDK retries
+    above it. Each prediction may send one; a second is refused before it is
+    sent, as is any past ``limit``. Its URL is never kept or shown."""
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.sent = 0
+        self._allowed = 0
+        self._original: Any = None
+
+    def install(self) -> None:
+        import requests
+
+        original = requests.Session.send
+        wire = self
+
+        def send(session: Any, request: Any, **kwargs: Any) -> Any:
+            if wire.counts(getattr(request, 'url', '')):
+                if wire._allowed < 1:
+                    raise WireBudget('a prediction would send a second request')
+                if wire.sent >= wire.limit:
+                    raise WireBudget('the run would pass its request budget')
+                wire._allowed -= 1
+                wire.sent += 1
+            return original(session, request, **kwargs)
+
+        self._original = original
+        requests.Session.send = send  # type: ignore[method-assign, assignment]
+
+    def uninstall(self) -> None:
+        if self._original is not None:
+            import requests
+
+            requests.Session.send = self._original  # type: ignore[method-assign]
+            self._original = None
+
+    @staticmethod
+    def counts(url: str) -> bool:
+        from urllib.parse import urlparse
+
+        path = urlparse(str(url)).path
+        return '/serving-endpoints/' in path and path.endswith('/invocations')
+
+    def allow_one(self) -> int:
+        r"""Allows the next prediction one request; the count before it."""
+        self._allowed = 1
+        return self.sent
+
+
+class DryTransport:
+    r"""The dry run's endpoint: the scripted endpoint's rule, in process,
+    with a probability for each class a classification asks for (the rule
+    gives none), so the binary task's scoring path is read offline as a
+    live answer is (the protocol review's item 9)."""
+
+    serves_sessions = False
+    url = 'in-process'
+
+    def __init__(self) -> None:
+        self._scripted = smoke._Recorded()
+
+    def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+        answer: dict[str, Any] = self._scripted.predict(payload)
+        target = (payload.get('task') or {}).get('target') or {}
+        classes = target.get('classes')
+        asked = (payload.get('output') or {}).get('fields') or []
+        if isinstance(classes, list) and classes and 'probabilities' in asked:
+            for item in answer.get('predictions', []):
+                first = 0.2 + 0.6 * ((int(item['row_index']) * 7) % 5) / 4
+                rest = (1 - first) / max(1, len(classes) - 1)
+                item['probabilities'] = {
+                    str(c): (first if at == len(classes) - 1 else rest)
+                    for at, c in enumerate(classes)
+                }
+        return answer
+
+    def close(self) -> None:
+        pass
+
+
 class Recording:
     r"""Wraps a client's transport so each request's digest is kept (never
     the request): which route's request reached the endpoint."""
@@ -544,8 +648,8 @@ def read(
     r"""Each entity's answer: its prediction, and for a binary task the
     positive class's probability (a column named for the class ``true``,
     whatever its case); a binary answer with none is refused, never scored
-    by its hard label, but in a dry run, whose scripted answers carry no
-    probabilities and whose metrics say nothing of a model."""
+    by its hard label, in a dry run too, whose transport answers with
+    probabilities (``dry`` is kept for the callers that pass it)."""
     found: dict[Any, dict[str, Any]] = {}
     positive = [
         c for c in frame.columns if str(c).lower() == 'probability_true'
@@ -555,8 +659,6 @@ def read(
         if task.kind == 'binary':
             if len(positive) == 1:
                 answer['score'] = float(row[positive[0]])
-            elif dry:
-                answer['score'] = float(bool(answer['prediction']))
             else:
                 raise smoke.SmokeError(
                     'a binary answer holds no probability of its positive class'
@@ -730,6 +832,12 @@ def verdict(units: list[dict[str, Any]]) -> tuple[bool, list[str]]:
             continue
         if unit['worse'] > TOLERANCE:
             reasons.append(f'{where}: the core is {unit["worse"]:.2%} worse')
+        if unit['control'] and False in (unit.get('one_request') or []):
+            # The control isolates P1B-13 only where both routes send one
+            # request (the protocol review's item 6).
+            reasons.append(
+                f"{where}: the control's two routes sent different requests"
+            )
         if unit['control']:
             interval = unit['interval']
             if interval is None or not interval[0] <= 0 <= interval[1]:
@@ -767,7 +875,14 @@ def run(
     recording: Recording,
     raw: Any,
     dry: bool = False,
+    wire: Wire | None = None,
 ) -> list[dict[str, Any]]:
+    r"""Every unit's numbers. Each prediction is one request: the
+    recording's digests grow by exactly one per prediction and, on a live
+    run (``wire``), the requests counted where they are sent by exactly one
+    (an empty answer sending none, or an SDK retry sending more, stops the
+    run). The route sent first alternates from one seed to the next, so an
+    endpoint warming or caching favours neither."""
     from sdm_client import KumoRelational
 
     units = []
@@ -781,14 +896,24 @@ def run(
                 'core': [],
             }
             digests: dict[str, list[str]] = {'old': [], 'core': []}
-            for seed in seeds:
-                for route in ('old', 'core'):
+            for turn, seed in enumerate(seeds):
+                for route in (
+                    ('old', 'core') if turn % 2 == 0 else ('core', 'old')
+                ):
                     request = build(dataset, task, route, seed, keys)
+                    recorded = len(recording.digests)
+                    before = wire.allow_one() if wire is not None else 0
                     result = client.predict(
                         request,
                         model=KumoRelational(),
                         outputs=outputs_of(task),
                     )
+                    if len(recording.digests) != recorded + 1 or (
+                        wire is not None and wire.sent != before + 1
+                    ):
+                        raise smoke.SmokeError(
+                            'a prediction did not send exactly one request'
+                        )
                     answers = read(result.to_pandas(), task, dry)
                     missing = [k for k in keys if k not in answers]
                     if missing:
@@ -923,6 +1048,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         smoke._usage('--seeds names each seed once')
     if arguments.entities < 4 or arguments.timeout <= 0:
         smoke._usage('--entities is 4 or more and --timeout positive')
+    if not 0 < arguments.max_predictions <= PREDICTION_CEILING:
+        smoke._usage(f'--max-predictions is at most {PREDICTION_CEILING}')
     environ = dict(os.environ)
     endpoint = arguments.endpoint or environ.get(ENDPOINT_VARIABLE) or None
     profile = arguments.profile or environ.get(PROFILE_VARIABLE) or None
@@ -953,12 +1080,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    wire: Wire | None = None
     try:
         if arguments.dry_run:
             smoke._no_network()
             from sdm_client import SDMClient
 
-            transport = smoke._Recorded()
+            transport = DryTransport()
             client = SDMClient.__new__(SDMClient)
             recording = Recording(transport)
             client._start(recording)
@@ -966,6 +1094,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             smoke.know_profile(environ, profile)
             client = smoke._client(endpoint, profile, arguments.timeout)
+            wire = Wire(calls)
+            wire.install()
             recording = Recording(client._transport)
             client._transport = recording
             arguments.raw_dir.mkdir(parents=True, exist_ok=True)
@@ -985,6 +1115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 recording,
                 raw,
                 arguments.dry_run,
+                wire,
             )
         if not arguments.dry_run:
             client.close()
@@ -994,6 +1125,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         say(f'benchmark failed: {smoke._diagnosis(failed)}', file=sys.stderr)
         return 1
+    finally:
+        if wire is not None:
+            wire.uninstall()
     # A dry run's answers are the scripted rule's, which say nothing of a
     # model: it gives no verdict.
     passed, reasons = (None, []) if arguments.dry_run else verdict(units)
@@ -1018,6 +1152,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
         'calls': calls,
         'predictions': predictions,
+        # The prediction requests counted where they were sent (none on a
+        # dry run, which sends nothing), and the predictions they carried.
+        'requests_sent': None if wire is None else wire.sent,
+        'predictions_sent': (
+            None if wire is None else wire.sent * arguments.entities
+        ),
         'units': units,
         'passed': passed,
         'reasons': reasons,
