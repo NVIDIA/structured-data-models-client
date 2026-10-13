@@ -356,3 +356,29 @@ def test_every_project_is_accounted_for_exactly_once(kitmaker, release):
         names[2]: 'already published',
         **{name: 'published' for name in (names[1], names[3], names[4])},
     }
+
+
+def test_an_upload_with_no_answer_is_not_called_unpublished(
+    kitmaker, release, monkeypatch
+):
+    """Portal may have accepted the upload before the connection died, so the
+    files may be live. Reporting that as NOT published sends the next person to
+    republish something that is already there."""
+    names = list(kitmaker.PROJECTS.values())
+    summary = release()
+    real = kitmaker.submit
+
+    def lose_the_answer(project_id, name, urls, upload):
+        if upload and name == names[1]:
+            raise SystemExit('POST /releases failed: connection reset')
+        return real(project_id, name, urls, upload)
+
+    monkeypatch.setattr(kitmaker, 'submit', lose_the_answer)
+    with pytest.raises(SystemExit, match='connection reset'):
+        kitmaker.main()
+
+    assert states(summary, kitmaker) == {
+        names[0]: 'published',
+        names[1]: 'MAY be published, no answer from Portal',
+        **{name: 'NOT published' for name in names[2:]},
+    }

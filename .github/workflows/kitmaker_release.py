@@ -303,19 +303,30 @@ def verify(name: str, version: str, expected: dict[str, str]) -> None:
 def write_summary(
     published: list[str],
     unverified: list[str],
+    in_flight: list[str],
     attempted: list[str],
     skipped: list[str],
 ) -> None:
     r"""What is live and what is not. Written whatever happens, including a
     failure in pass one, because a release that stopped early is exactly when
-    this file is read. Every project appears once: a project nothing reached is
-    said to be unreached rather than left to be inferred."""
+    this file is read.
+
+    Every project appears once, and the three states that are not plainly good
+    are distinguished, because each asks something different of whoever reads
+    it: files that are live but wrong, files that may or may not be live, and
+    files that were never offered to Portal at all.
+    """
     lines = [f'published: {name}' for name in published]
     lines += [f'published but NOT verified: {name}' for name in unverified]
     lines += [
+        f'MAY be published, no answer from Portal: {name}' for name in in_flight
+    ]
+    lines += [
         f'NOT published: {name}'
         for name in attempted
-        if name not in published and name not in unverified
+        if name not in published
+        and name not in unverified
+        and name not in in_flight
     ]
     lines += [f'already published: {name}' for name in skipped]
     lines += [
@@ -382,6 +393,7 @@ def main() -> None:
     skipped: list[str] = []
     published: list[str] = []
     unverified: list[str] = []
+    in_flight: list[str] = []
     try:
         # Pass one: nothing publishes until every project has validated and
         # every dry run has finished. A project already on PyPI at this version
@@ -422,16 +434,21 @@ def main() -> None:
         # which is why the whole of pass one had to pass first.
         for project_id, (name, project_urls, expected) in todo.items():
             print(f'publishing: {name}')
+            # From here the files may be live whatever happens next. A lost
+            # response, or a submission that never reaches a terminal state,
+            # says nothing about whether Portal accepted the upload, so the
+            # project is recorded as uncertain before it is asked for.
+            in_flight.append(name)
             wait_for(submit(project_id, name, project_urls, True), name)
-            # Kitmaker has reported success, so the files are live whatever
-            # verification then finds. Recording it before the check keeps the
-            # summary honest about what is on PyPI.
+            # Portal has reported success, so the files are live whatever
+            # verification then finds.
+            in_flight.remove(name)
             unverified.append(name)
             verify(name, version, expected)
             unverified.remove(name)
             published.append(name)
     finally:
-        write_summary(published, unverified, attempted, skipped)
+        write_summary(published, unverified, in_flight, attempted, skipped)
 
 
 if __name__ == '__main__':

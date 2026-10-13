@@ -1,7 +1,8 @@
 # Releasing
 
-Five distributions, one version, published together. A release is a tag; the
-tag is the only manual step.
+Five distributions, one version, published together. A release is a tag and
+then an approval: the `pypi` environment has required reviewers, so the job
+that creates the GitHub Release and publishes to PyPI waits for one.
 
 The tag has to sit on a commit that is on `main` and whose CI run passed.
 The publish workflow checks both before it builds anything, so a tag on an
@@ -64,7 +65,7 @@ publishes.
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-That is the whole release. `.github/workflows/publish.yml` builds the four
+That starts the release. `.github/workflows/publish.yml` builds the four
 pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
 (cp310 to cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
 the engine's `[tool.cibuildwheel]`), and then refuses to
