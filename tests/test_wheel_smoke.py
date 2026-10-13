@@ -1456,3 +1456,205 @@ def test_without_a_commit_the_inputs_are_not_held(
     arguments = _main_arguments(tmp_path, shipped, test_ops)
     assert smoke.main([*arguments, '--inputs', str(inputs)]) == 0
     assert built == ['smoke']
+
+
+# --- T1.20: an ignored file never reaches a wheel or the suite ----------------
+
+#: A file the commit holds although an ignore pattern matches it (added
+#: with ``--force``): the export takes it, as the commit holds it.
+FORCED = 'packages/structured-data-models-pql/src/predictive_query/kept.orig'
+
+#: Each ignored file, how it is ignored, and the ignore rule: in the
+#: committed ``.gitignore`` at the root, in a ``.gitignore`` the PQL
+#: distribution commits, or in the checkout's own ``.git/info/exclude``.
+#: The first four are under a sibling distribution the smoke builds into a
+#: wheel; the last two beside the stub and the contract sources.
+IGNORED: dict[str, tuple[str, str, str]] = {
+    'a .py in the PQL distribution, by a pattern': (
+        'packages/structured-data-models-pql/src/predictive_query/extra.py',
+        '.gitignore',
+        'extra.py',
+    ),
+    'a .py in an ignored directory of the API distribution': (
+        'packages/structured-data-models-api/src/generated/api_extra.py',
+        '.gitignore',
+        'packages/structured-data-models-api/src/generated/',
+    ),
+    'a .py ignored by the PQL distribution s own .gitignore': (
+        'packages/structured-data-models-pql/src/predictive_query/'
+        'settings.local.py',
+        'packages/structured-data-models-pql/.gitignore',
+        '*.local.py',
+    ),
+    'a setup.py in the API distribution, by .git/info/exclude': (
+        'packages/structured-data-models-api/setup.py',
+        '.git/info/exclude',
+        '/packages/structured-data-models-api/setup.py',
+    ),
+    'a copy beside the stub': (
+        'packages/structured-data-models-client/src/sdm_client/_native.pyi.orig',
+        '.gitignore',
+        '*.orig',
+    ),
+    'a source beside the contract s': (
+        'rust/crates/sdm-contract/src/extra.rs',
+        '.gitignore',
+        'rust/crates/sdm-contract/src/extra.rs',
+    ),
+}
+
+
+def _ignoring_repository(
+    root: pathlib.Path, ignored: str
+) -> tuple[pathlib.Path, str, pathlib.Path]:
+    """:func:`_repository`, with a tracked module beside each ignored file
+    in the distributions, the ignore rule of `ignored` (committed, but for
+    ``.git/info/exclude``), a file the commit holds although ``*.orig``
+    ignores it, all committed; then the ignored file written, in the
+    working tree only. Returns the checkout, its HEAD and the ignored
+    file."""
+    inputs, _ = _repository(root)
+    path, rules, rule = IGNORED[ignored]
+    for module in (
+        'packages/structured-data-models-pql/src/predictive_query/__init__.py',
+        'packages/structured-data-models-api/src/api.py',
+    ):
+        (inputs / module).parent.mkdir(parents=True, exist_ok=True)
+        (inputs / module).write_text(f'# {module}, as committed\n')
+    gitignore = inputs / '.gitignore'
+    gitignore.write_text(gitignore.read_text() + '*.orig\n')
+    target = inputs / rules
+    target.parent.mkdir(parents=True, exist_ok=True)
+    before = target.read_text() if target.is_file() else ''
+    target.write_text(before + rule + '\n')
+    _git(inputs, 'add', '-A')
+    (inputs / FORCED).write_text('# held by the commit, though ignored\n')
+    _git(inputs, 'add', '--force', FORCED)
+    _git(inputs, 'commit', '-q', '-m', 'ignore rules')
+    head = _git(inputs, 'rev-parse', 'HEAD')
+    extra = inputs / path
+    extra.parent.mkdir(parents=True, exist_ok=True)
+    extra.write_text('raise SystemExit("not the commit s")\n')
+    # Ignored: git sees it only when asked for ignored files.
+    assert _git(inputs, 'status', '--porcelain', '--untracked-files=all') == ''
+    assert path in _git(
+        inputs, 'status', '--porcelain', '--ignored', '--untracked-files=all'
+    )
+    return inputs, head, extra
+
+
+def _committed(repo: pathlib.Path, commit: str, path: str) -> bytes:
+    return subprocess.run(
+        ['git', '-C', str(repo), 'show', f'{commit}:{path}'],
+        capture_output=True,
+        check=True,
+    ).stdout
+
+
+def _held_as_committed(
+    tree: pathlib.Path, repo: pathlib.Path, commit: str
+) -> set[str]:
+    """Asserts `tree` holds every file `commit` holds under :data:`TAKEN`
+    and nothing `commit` does not hold, each file as `commit` holds it.
+    Returns `tree`'s files."""
+    files = {
+        path.relative_to(tree).as_posix()
+        for path in tree.rglob('*')
+        if path.is_file() or path.is_symlink()
+    }
+    held = set(_git(repo, 'ls-tree', '-r', '--name-only', commit).splitlines())
+    taken = set(
+        _git(
+            repo, 'ls-tree', '-r', '--name-only', commit, '--', *TAKEN
+        ).splitlines()
+    )
+    assert FORCED in taken and INPUTS[0] in taken
+    assert taken <= files, sorted(taken - files)
+    assert files <= held, sorted(files - held)
+    for name in files:
+        assert (tree / name).read_bytes() == _committed(repo, commit, name), (
+            name
+        )
+    return files
+
+
+@pytest.mark.parametrize('ignored', list(IGNORED))
+def test_an_ignored_file_passes_inputs_clean_and_is_never_exported(
+    tmp_path: pathlib.Path, ignored: str
+) -> None:
+    """``inputs_clean`` leaves ignored files aside, so the export is what
+    keeps them out: the tree ``exported`` makes holds every file the commit
+    holds under the paths taken, as it holds them (an ignored file the
+    commit holds among them), and not the ignored file."""
+    inputs, head, extra = _ignoring_repository(tmp_path / 'inputs', ignored)
+    smoke.inputs_clean(inputs, head)
+    into = _scratch(tmp_path)
+    tree = smoke.exported(inputs, head, into)
+    assert tree == into
+    files = _held_as_committed(tree, inputs, head)
+    name = extra.relative_to(inputs).as_posix()
+    assert name not in files
+    assert not (tree / name).exists()
+    assert not any(path.name == extra.name for path in tree.rglob('*'))
+
+
+@pytest.mark.parametrize('ignored', list(IGNORED))
+@pytest.mark.parametrize('container', [False, True])
+def test_with_a_commit_the_smoke_runs_on_the_export_not_the_given_tree(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    container: bool,
+    ignored: str,
+) -> None:
+    """Through ``main`` with ``--commit``, an ignored file in the inputs
+    tree: the tree the run takes its inputs from (the one ``suite``
+    receives directly, the one mounted at ``/inputs`` in the container) is
+    not the given tree, and holds what the commit holds and not the
+    ignored file. No environment is built: the direct run stops at its
+    suite, the container's docker is never started."""
+    inputs, head, extra = _ignoring_repository(tmp_path / 'inputs', ignored)
+    name = extra.relative_to(inputs).as_posix()
+    seen: list[pathlib.Path] = []
+
+    def taken(tree: pathlib.Path) -> None:
+        tree = tree.resolve()
+        assert tree != inputs.resolve()
+        assert not tree.is_relative_to(inputs.resolve())
+        files = _held_as_committed(tree, inputs, head)
+        assert name not in files
+        assert not (tree / name).exists()
+        seen.append(tree)
+
+    def suite(
+        own: pathlib.Path, given: pathlib.Path, into: pathlib.Path
+    ) -> pathlib.Path:
+        taken(given)
+        raise smoke.SmokeFailed('stopped at the suite')
+
+    def checked(command: list[str], **keywords: Any) -> str:
+        raise smoke.SmokeFailed(f'no environment in this test: {command}')
+
+    class Done:
+        returncode = 0
+
+    def run(command: list[str], **keywords: Any) -> Done:
+        assert command[:1] == ['docker'], command
+        mounts = [
+            command[i + 1] for i, x in enumerate(command[:-1]) if x == '-v'
+        ]
+        at_inputs = [m for m in mounts if m.endswith(':/inputs:ro')]
+        assert len(at_inputs) == 1, mounts
+        taken(pathlib.Path(at_inputs[0][: -len(':/inputs:ro')]))
+        return Done()
+
+    monkeypatch.setattr(smoke, 'suite', suite)
+    monkeypatch.setattr(smoke, '_checked', checked)
+    monkeypatch.setattr(smoke, '_run', run)
+    arguments = _commit_arguments(tmp_path, inputs, head, container)
+    status = smoke.main(arguments)
+    assert len(seen) == 1, seen
+    assert status == (0 if container else 1)
+    # The given tree is as it was: the ignored file still there, untouched.
+    assert extra.read_text() == 'raise SystemExit("not the commit s")\n'
+    # The tree the run took was a temporary one, gone with the run.
+    assert not seen[0].exists()
