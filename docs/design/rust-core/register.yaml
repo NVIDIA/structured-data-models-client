@@ -2704,6 +2704,57 @@ entries:
     before the client's import in the floor lane alone; reviewer-owned
     (checkpoint 7), not the owner's.
 
+- id: HOST-5
+  title: In the floor cell the old route's sampler raises the runtime's BlockManager DeprecationWarnings the core route does not
+  kind: change
+  old_behavior: >-
+    In the floor-pandas2.2 cell (Python 3.10, pandas 2.2.0, pyarrow 14.0.1,
+    NumPy 1.26.4) the old route's sampler converts each fetch with
+    pyarrow 14's to_pandas(), which passes a BlockManager to DataFrame, so
+    pandas 2.2.0 raises a DeprecationWarning from pandas/core/frame.py for
+    each: python-old records five on base.regression's materialize, around
+    the client's own UserWarning. ref-pandas3 and dbr17-pandas2 show none.
+  new_behavior: >-
+    The core route reads the fetches as Arrow and converts none in the
+    sampler, so python-core records the client's UserWarning alone there.
+    A runtime-only difference in one cell, which the client neither causes
+    nor raises: for an acceptance case the warnings rule, which in a cell
+    other than the reference's holds python-core to python-old (H1), fails
+    it. Proposed (decision E81): with this entry approved by the owner,
+    compare.py leaves out of that comparison a DeprecationWarning
+    python-old shows and python-core does not whose origin, the top-level
+    module whose files raised it as the runners record it (host.origins),
+    is pandas or pyarrow, a runtime warning matching only a runtime warning
+    and any other only another; a warning python-core shows that python-old
+    does not, another class, another module (sdm_client's own included),
+    or a missing or mismatched record of origins still fails. Until the
+    owner approves it the rule is inactive.
+  affected_inputs: >-
+    Any acceptance case whose materialize the old route samples, in the
+    floor-pandas2.2 cell: base.regression, base.binary, base.multiclass
+    and base.adventureworks once T1.29's part 2 admits them.
+  cases: [T1.29, base.regression, base.binary, base.multiclass, base.adventureworks]
+  refs: [HOST-3]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E81}
+  notes: >-
+    Found when T1.29 first admitted the baseline cases: gate.sh against
+    f1d1808 in floor-pandas2.2 failed warnings on all four (python-core
+    ['UserWarning'], python-old five DeprecationWarnings from
+    pandas/core/frame.py around it); while base.regression is diagnostic
+    the same difference is reported. HOST-3, the same warning raised alike
+    on both routes by to_pandas() of the result, is unchanged. A relaxation
+    of a comparison rule waits for the owner (decisions.md's preamble), so
+    the narrowing reads this entry's approval from the register of the
+    comparator's own tree (compare.owner_approved), and the gate runs the
+    checkpoint's comparator and runner: the narrowing judges a candidate
+    only once part 1, which builds it, has landed and this entry's owner
+    approval is on the phase head; so T1.29 lands in two parts, the
+    admission in part 2 (the orchestrator's decision of 2026-10-13). A
+    candidate cannot approve it for itself. Seeded in
+    contract/tests/test_runtime_deprecations.py.
+
 # --- PQL validation (T1.12) ---------------------------------------------------
 
 - id: PQL-1

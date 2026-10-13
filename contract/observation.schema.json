@@ -28,7 +28,20 @@
       "additionalProperties": false,
       "required": ["warnings"],
       "properties": {
-        "warnings": {"type": "array", "items": {"type": "string"}}
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "origins": {
+          "description": "Each warning in order, its class and the top-level module whose files raised it (null when none of those loaded holds the file): python-core and python-old from T1.29 (register HOST-5), never python-ref.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["class", "module"],
+            "properties": {
+              "class": {"type": "string"},
+              "module": {"type": ["string", "null"]}
+            }
+          }
+        }
       }
     },
     "driver": {

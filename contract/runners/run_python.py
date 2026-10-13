@@ -1860,7 +1860,44 @@ def _call(
         [type(warning.message).__name__ for warning in shown],
         driver,
         public,
+        [
+            {
+                'class': type(warning.message).__name__,
+                'module': _origin(warning.filename),
+            }
+            for warning in shown
+        ],
     )
+
+
+def _origin(filename: str) -> str | None:
+    r"""The top-level module whose files hold ``filename``, the file a
+    warning names as raising it: the imported package or module whose
+    directory (or file) is the longest prefix of it, or None when none is.
+    Read from the modules loaded, never from the warning's text, so a
+    comparison can tell the runtime's own warnings (pandas', pyarrow's)
+    from the client's (decision E81, register HOST-5)."""
+    try:
+        target = os.path.realpath(filename)
+    except (TypeError, ValueError):
+        return None
+    found, length = None, -1
+    for name, module in list(sys.modules.items()):
+        if '.' in name or module is None:
+            continue
+        where = getattr(module, '__file__', None)
+        if not isinstance(where, str):
+            continue
+        where = os.path.realpath(where)
+        if os.path.basename(where).startswith('__init__.'):
+            root = os.path.dirname(where) + os.sep
+            hit = target.startswith(root)
+        else:
+            root = where
+            hit = target == root
+        if hit and len(root) > length:
+            found, length = name, len(root)
+    return found
 
 
 # --- the run ---------------------------------------------------------------------
@@ -1908,7 +1945,9 @@ def run(
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
         try:
-            outcome, shown, driver, public = _call(case, bases, driver_capture)
+            outcome, shown, driver, public, origins = _call(
+                case, bases, driver_capture
+            )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
         recorded.append(
@@ -1921,6 +1960,7 @@ def run(
                 'sdm_client._native' in sys.modules,
                 driver,
                 public,
+                origins,
             )
         )
     reference_identity = None
@@ -1947,6 +1987,7 @@ def run(
         loaded,
         driver,
         public,
+        origins,
     ) in recorded:
         observation = {
             'format': 'sdm-observation/1',
@@ -1967,7 +2008,14 @@ def run(
                 'inputs': {'case': case_digest, 'bases': bases_digest},
             },
             'outcome': outcome,
-            'host': {'warnings': shown},
+            # Each warning's origin on the candidate's runners, which a
+            # cell other than the reference's compares (HOST-5); never on
+            # python-ref, whose committed lines it would change.
+            'host': (
+                {'warnings': shown}
+                if mode == 'python-ref'
+                else {'warnings': shown, 'origins': origins}
+            ),
             'core': capture.core() if capture else None,
             'driver': driver,
             'public': public,

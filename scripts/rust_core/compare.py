@@ -144,6 +144,17 @@ STAGE_OF = {
 }
 STAGES = ('from_source', 'materialize', 'predict')
 _INTEGER = re.compile(r'-?(0|[1-9][0-9]*)')
+#: The register this comparator's own tree holds, read for HOST-5's
+#: approval: the checkpoint's, when ``gate.sh`` runs the checkpoint's copy,
+#: so a candidate never approves its own narrowing.
+REGISTER = REPO / 'docs/design/rust-core/register.yaml'
+#: The entry that, approved by the owner, narrows the ``warnings`` rule in
+#: a cell other than the reference's (decision E81): a ``DeprecationWarning``
+#: python-old shows and python-core does not, raised from one of
+#: ``RUNTIME_LIBRARIES``' own files by the warning's recorded origin, is not
+#: counted. Any other difference still fails.
+RUNTIME_DEPRECATIONS = 'HOST-5'
+RUNTIME_LIBRARIES = ('pandas', 'pyarrow')
 
 
 def _runner() -> ModuleType:
@@ -197,6 +208,10 @@ class Report:
         self.rules = rules or {}
         #: The payload exclusions of the policy compared under, checked.
         self.paths = paths
+        #: Whether HOST-5 is approved by the owner, so the ``warnings``
+        #: rule leaves out the runtime's DeprecationWarnings python-old
+        #: alone shows in another cell (decision E81).
+        self.narrowed = False
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -797,7 +812,15 @@ def _host_fields(
     if found:
         report.fail(f'{where}: {found}', 'schema')
     if observation['host']['warnings'] != reference['host']['warnings']:
-        report.fail(f'{where}: host.warnings: differ', 'warnings')
+        if against == 'python-old' and _runtime_only(
+            observation['host'], reference['host'], report.narrowed
+        ):
+            report.note(
+                f'{where}: host.warnings: python-old alone shows the '
+                f"runtime's DeprecationWarnings ({RUNTIME_DEPRECATIONS})"
+            )
+        else:
+            report.fail(f'{where}: host.warnings: differ', 'warnings')
     found = _path_of(mine['result'], theirs['result'], 'public.result')
     if found:
         report.fail(f'{where}: {found}', 'result')
@@ -812,6 +835,91 @@ def _host_fields(
     found = _path_of(sent, wanted, 'public.payloads')
     if found:
         report.fail(f'{where}: {found}', 'payload')
+
+
+def _runtime_only(core: Any, old: Any, narrowed: bool) -> bool:
+    r"""Whether python-core's warnings are python-old's with only the
+    runtime's DeprecationWarnings left out (HOST-5): each removed one a
+    ``DeprecationWarning`` whose recorded origin is one of
+    ``RUNTIME_LIBRARIES`` (:func:`_runtime`), the rest the same classes in
+    the same order, as the rule compares them (the client's own warnings
+    name the caller's frame, which the two routes reach from different
+    modules, so a kept warning's origin is not compared). A runtime warning
+    is matched only by a runtime warning and any other only by another
+    (fix round 1, Codex P2): a warning python-core alone shows can never
+    stand in for one of the runtime's that python-old shows. False unless
+    ``narrowed`` (the entry the owner approved) and both runners recorded
+    every warning's origin, its class the one the warning list names; a
+    missing, short or retyped record never narrows anything."""
+    if not narrowed:
+        return False
+    mine, theirs = _origins(core), _origins(old)
+    if mine is None or theirs is None:
+        return False
+    at = 0
+    for each in theirs:
+        if (
+            at < len(mine)
+            and each[0] == mine[at][0]
+            and _runtime(each) == _runtime(mine[at])
+        ):
+            at += 1
+        elif not _runtime(each):
+            return False
+    return at == len(mine)
+
+
+def _runtime(warning: tuple[str, str | None]) -> bool:
+    r"""Whether a warning is one HOST-5 may leave out: a
+    ``DeprecationWarning`` raised from a runtime library's own files."""
+    return (
+        warning[0] == 'DeprecationWarning' and warning[1] in RUNTIME_LIBRARIES
+    )
+
+
+def _origins(host: Any) -> list[tuple[str, str | None]] | None:
+    r"""A host section's warnings as (class, module) pairs, or None where
+    its record of origins is missing or does not match its warnings."""
+    if not isinstance(host, dict):
+        return None
+    shown, origins = host.get('warnings'), host.get('origins')
+    if not isinstance(shown, list) or not isinstance(origins, list):
+        return None
+    if len(shown) != len(origins):
+        return None
+    found = []
+    for name, each in zip(shown, origins, strict=True):
+        if (
+            not isinstance(each, dict)
+            or set(each) != {'class', 'module'}
+            or each['class'] != name
+            or not isinstance(name, str)
+            or not isinstance(each['module'], (str, type(None)))
+        ):
+            return None
+        found.append((name, each['module']))
+    return found
+
+
+def owner_approved(entry: str, register: Path = REGISTER) -> bool:
+    r"""Whether ``register`` holds ``entry`` approved by the owner; any
+    file it cannot read, or an entry of another status, says no."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
+        return False
+    entries = loaded.get('entries') if isinstance(loaded, dict) else None
+    if not isinstance(entries, list):
+        return False
+    return any(
+        isinstance(each, dict)
+        and each.get('id') == entry
+        and each.get('status') == 'approved'
+        and each.get('approved_by') == 'owner'
+        for each in entries
+    )
 
 
 def _core_payload(
@@ -1214,6 +1322,7 @@ def compare(
     policy_file: Path | None = None,
     bases_file: Path | None = None,
     expect_file: Path | None = None,
+    register_file: Path = REGISTER,
 ) -> Report:
     check = _capture_check()
     try:
@@ -1225,6 +1334,7 @@ def compare(
         report.fail(f'compare-policy.yaml: {problem}')
         return report
     report = Report(policy['rules'], check.excluded(policy))
+    report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
     if set(policy['rules']) != set(RULES):
         report.fail(
             'compare-policy.yaml: its rules are not the ones this runs: '
