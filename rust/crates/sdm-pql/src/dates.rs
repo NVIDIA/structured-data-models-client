@@ -102,6 +102,10 @@ pub struct Held {
 impl Held {
     /// Whether the host can hold `stamp`, read on its own wall clock.
     pub fn holds(&self, stamp: &Stamp) -> bool {
+        // pandas bounds the UTC instant; the wall clock is that instant
+        // only for a literal without an offset, and the reader gives none
+        // since D8's packed dates are refused (decision E79).
+        debug_assert!(stamp.offset.is_none(), "a date literal read with an offset");
         let at = stamp.at;
         let days = days_from_civil(i64::from(at.year), i64::from(at.month), i64::from(at.day));
         let seconds = days * 86_400
