@@ -179,6 +179,13 @@
     "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 37) USING user_id::DECIMAL(38, 37) + 0.1234567890123456789012345678901234567",
     "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 37) USING user_id::DECIMAL(38, 37) + 0.1234567890123456789012345678901234567"
    ]
+  },
+  {
+   "id": "utf8-float-text",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' WHEN 3 THEN '1059438285926254.3' ELSE user_id::VARCHAR END",
+    "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' WHEN 3 THEN '1059438285926254.3' ELSE user_id::VARCHAR END"
+   ]
   }
  ],
  "vectors": [
@@ -1064,7 +1071,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as int8.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as int8.mixed.int-text, int8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -1559,7 +1566,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as int8.text.digits, which the reference answers differently"
+     "the host gives the core the same column as int8.text.digits, int8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -1707,7 +1714,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -1727,16 +1734,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as int8.text.digits, int8.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -3426,7 +3443,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as int16.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as int16.mixed.int-text, int16.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -3921,7 +3938,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as int16.text.digits, which the reference answers differently"
+     "the host gives the core the same column as int16.text.digits, int16.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -4069,7 +4086,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -4089,16 +4106,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as int16.text.digits, int16.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -5798,7 +5825,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as int32.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as int32.mixed.int-text, int32.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -6293,7 +6320,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as int32.text.digits, which the reference answers differently"
+     "the host gives the core the same column as int32.text.digits, int32.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -6441,7 +6468,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -6461,16 +6488,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as int32.text.digits, int32.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -8198,7 +8235,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as int64.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as int64.mixed.int-text, int64.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -8693,7 +8730,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as int64.text.digits, which the reference answers differently"
+     "the host gives the core the same column as int64.text.digits, int64.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -8841,7 +8878,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -8861,16 +8898,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as int64.text.digits, int64.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -10566,7 +10613,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as uint8.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as uint8.mixed.int-text, uint8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -11056,7 +11103,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as uint8.text.digits, which the reference answers differently"
+     "the host gives the core the same column as uint8.text.digits, uint8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -11204,7 +11251,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -11224,16 +11271,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as uint8.text.digits, uint8.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -12925,7 +12982,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as uint16.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as uint16.mixed.int-text, uint16.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -13415,7 +13472,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as uint16.text.digits, which the reference answers differently"
+     "the host gives the core the same column as uint16.text.digits, uint16.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -13563,7 +13620,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -13583,16 +13640,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as uint16.text.digits, uint16.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -15294,7 +15361,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as uint32.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as uint32.mixed.int-text, uint32.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -15784,7 +15851,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as uint32.text.digits, which the reference answers differently"
+     "the host gives the core the same column as uint32.text.digits, uint32.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -15932,7 +15999,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -15952,16 +16019,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as uint32.text.digits, uint32.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -17686,7 +17763,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as uint64.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as uint64.mixed.int-text, uint64.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -18176,7 +18253,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as uint64.text.digits, which the reference answers differently"
+     "the host gives the core the same column as uint64.text.digits, uint64.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -18324,7 +18401,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -18344,16 +18421,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as uint64.text.digits, uint64.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -20648,7 +20735,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -22491,7 +22578,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as float32.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as float32.mixed.int-text, float32.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -23006,7 +23093,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as float32.text.digits, which the reference answers differently"
+     "the host gives the core the same column as float32.text.digits, float32.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -23145,7 +23232,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -23181,7 +23268,8 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1.0', '2'], the same as that text given as text, which the reference answers otherwise (success)"
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as float32.text.digits, float32.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -24912,7 +25000,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the host gives the core the same column as float64.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as float64.mixed.int-text, float64.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -25427,7 +25515,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as float64.text.digits, which the reference answers differently"
+     "the host gives the core the same column as float64.text.digits, float64.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -25566,7 +25654,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -25602,7 +25690,8 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1.0', '2'], the same as that text given as text, which the reference answers otherwise (success)"
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as float64.text.digits, float64.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -27385,7 +27474,7 @@
    "register": {
     "required": true,
     "why": [
-     "the host gives the core the same column as utf8.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as utf8.mixed.int-text, utf8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -27910,7 +27999,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
-     "the host gives the core the same column as utf8.text.digits, which the reference answers differently"
+     "the host gives the core the same column as utf8.text.digits, utf8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -28051,7 +28140,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -28071,16 +28160,26 @@
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1"
+      ],
+      [
+       "s",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as utf8.text.digits, utf8.mixed.int-text, which the reference answers differently"
+    ],
+    "disposition": "as_text"
    }
   },
   {
@@ -29816,7 +29915,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host gives the core the same column as large-utf8.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as large-utf8.mixed.int-text, large-utf8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -30354,7 +30453,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
-     "the host gives the core the same column as large-utf8.text.digits, which the reference answers differently"
+     "the host gives the core the same column as large-utf8.text.digits, large-utf8.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -30490,7 +30589,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -30519,7 +30618,8 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1.0', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)"
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the host gives the core the same column as large-utf8.text.digits, large-utf8.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -32246,7 +32346,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host gives the core the same column as decimal128-18-0.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as decimal128-18-0.mixed.int-text, decimal128-18-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -32737,7 +32837,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
-     "the host gives the core the same column as decimal128-18-0.text.digits, which the reference answers differently"
+     "the host gives the core the same column as decimal128-18-0.text.digits, decimal128-18-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -32873,7 +32973,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -32902,7 +33002,8 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1.0', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)"
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the host gives the core the same column as decimal128-18-0.text.digits, decimal128-18-0.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -35081,7 +35182,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host gives the core the same column as decimal128-38-10.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as decimal128-38-10.mixed.int-text, decimal128-38-10.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -35584,7 +35685,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
-     "the host gives the core the same column as decimal128-38-10.text.digits, which the reference answers differently"
+     "the host gives the core the same column as decimal128-38-10.text.digits, decimal128-38-10.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -35720,7 +35821,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -35749,7 +35850,8 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1.0', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)"
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the host gives the core the same column as decimal128-38-10.text.digits, decimal128-38-10.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -38078,7 +38180,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host gives the core the same column as decimal128-38-0.mixed.int-text, which the reference answers differently"
+     "the host gives the core the same column as decimal128-38-0.mixed.int-text, decimal128-38-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -38574,7 +38676,7 @@
     "required": true,
     "why": [
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
-     "the host gives the core the same column as decimal128-38-0.text.digits, which the reference answers differently"
+     "the host gives the core the same column as decimal128-38-0.text.digits, decimal128-38-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -38710,7 +38812,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1.0"
+      "v": "1"
      },
      {
       "t": "utf8",
@@ -38739,7 +38841,8 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1.0', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)"
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the host gives the core the same column as decimal128-38-0.text.digits, decimal128-38-0.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
    }
@@ -44879,6 +44982,250 @@
    "register": {
     "required": false,
     "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.mixed.float-1e16-text",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "text",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "10000000000000000"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "10000000000000000"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['10000000000000000', '0'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host gives the core the same column as utf8-float-text.text.1e16, which the reference answers differently"
+    ],
+    "disposition": "as_text"
+   }
+  },
+  {
+   "id": "utf8-float-text.mixed.float-tiny-text",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "text",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "0.00000015"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.00000015"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['0.00000015', '0'], the same as that text given as text, which the reference answers otherwise (success)"
+    ],
+    "disposition": "as_text"
+   }
+  },
+  {
+   "id": "utf8-float-text.mixed.float-tie-text",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1059438285926254.2"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "text",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "1059438285926254.3"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1059438285926254.3"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1059438285926254.3', '0'], the same as that text given as text, which the reference answers otherwise (success)"
+    ],
+    "disposition": "as_text"
+   }
+  },
+  {
+   "id": "utf8-float-text.text.1e16",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "str",
+     "v": "10000000000000000"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "10000000000000000"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "10000000000000000"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "10000000000000000"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the host gives the core the same column as utf8-float-text.mixed.float-1e16-text, which the reference answers differently"
+    ],
     "disposition": null
    }
   }

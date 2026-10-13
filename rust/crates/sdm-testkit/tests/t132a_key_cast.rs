@@ -587,6 +587,7 @@ key_types! {
     rust_host_holds_a_38_digit_hugeint_key_exactly => "decimal128-38-0-wide",
     rust_host_holds_a_38_digit_decimal_38_10_key_exactly => "decimal128-38-10-wide",
     rust_host_holds_a_decimal_38_37_key_exactly => "decimal128-38-37",
+    rust_host_reaches_a_text_key_by_the_core_s_float_text => "utf8-float-text",
 }
 
 #[test]

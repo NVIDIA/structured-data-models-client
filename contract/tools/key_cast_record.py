@@ -38,7 +38,10 @@ this script keeps:
   raised. It documents the rule table; no host is compared on it;
 - ``host_arrow``: the entities as one Arrow column by the host's natural
   inference (``pa.array(values)``) or, when that fails (mixed kinds, an
-  integer past int64), as text: ``str()`` of each value, None, NaN,
+  integer past int64), as text: each value's text (``host_text``: a float
+  as the core writes a float entity, its shortest digits with no exponent
+  and a whole one with no point, ``1e16`` as ``10000000000000000``, not
+  Python's ``1e+16``; T1.32g; any other value its ``str()``), None, NaN,
   ``pd.NA`` and ``pd.NaT`` as null, a column of them alone Arrow's null
   type (design, "Host-held semantics", the ledger's row for this cast).
   ``rust-host`` hands the core this column; ``python-core`` hands the
@@ -371,6 +374,12 @@ def _large_vectors() -> dict[str, tuple[list[Any], dict[str, Any]]]:
 
 #: The key types whose table holds the neighbours a cast could land on,
 #: or values 38 digits wide, each with its own entities only.
+#: ``utf8-float-text``'s keys: ``user_id`` 1 to 3 as the core's text of
+#: three floats, every other its digits.
+FLOAT_TEXT_KEYS = (
+    "CASE X WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' "
+    "WHEN 3 THEN '1059438285926254.3' ELSE X::VARCHAR END"
+)
 ROUND_2: list[dict[str, Any]] = [
     {
         'id': 'float32-near-one',
@@ -514,6 +523,22 @@ ROUND_2: list[dict[str, Any]] = [
                 ['1.12345678901234567890123456789012345671'],
                 REFUSED,
             ),
+        },
+    },
+    {
+        # T1.32g (T1.32a's carried P3): a text key holding the text the
+        # core writes for three floats Python writes otherwise (``str``:
+        # ``1e+16``, ``1.5e-07``, ``1059438285926254.2``), so a float
+        # mixed with text reaches a key only by the core's text: an
+        # exponent each way, and a tie of the shortest digits
+        # (1059438285926254.25, which Rust writes away from zero).
+        'id': 'utf8-float-text',
+        'setup': _alter('VARCHAR', FLOAT_TEXT_KEYS),
+        'extra': {
+            'mixed.float-1e16-text': [1e16, '0'],
+            'mixed.float-tiny-text': [1.5e-07, '0'],
+            'mixed.float-tie-text': [1059438285926254.2, '0'],
+            'text.1e16': ['10000000000000000', '0'],
         },
     },
 ]
@@ -795,6 +820,53 @@ def unscaled(value: Decimal, scale: int) -> int:
     return -whole if sign else whole
 
 
+def float_text(value: float) -> str:
+    r"""A float as the core writes a float entity (``sdm_engine::keys``'s
+    ``Entity::Float``, Rust's ``{}`` of an ``f64``): the shortest digits
+    that read back as it, a tie between two such digit strings going away
+    from zero (Rust's choice; Python's ``repr`` takes the even one), written
+    with no exponent, a whole one with no point: ``1e16`` is
+    ``10000000000000000``, ``1.0`` is ``1``, ``-0.0`` is ``-0``,
+    ``1.5e-07`` is ``0.00000015`` and ``1059438285926254.25`` is
+    ``1059438285926254.3`` (``repr``: ``.2``). Exact arithmetic throughout
+    (``Fraction``), never a decimal context."""
+    if not math.isfinite(value):
+        return str(value)  # 'inf' and '-inf', as Rust writes them
+    sign, digits, exponent = Decimal(repr(value)).as_tuple()
+    assert isinstance(exponent, int)
+    whole = int(''.join(map(str, digits)))
+    unit = Fraction(10) ** exponent
+    if 2 * (abs(Fraction(value)) - whole * unit) == unit:
+        up = (whole + 1) * unit
+        if float(up) == abs(value):
+            whole += 1
+    text = str(whole)
+    if whole == 0:
+        exponent = 0
+    else:
+        # Trailing zeros (``1.0``'s, or a tie carried up) carry nothing.
+        stripped = text.rstrip('0')
+        exponent += len(text) - len(stripped)
+        text = stripped
+    if exponent >= 0:
+        written = text + '0' * exponent
+    elif -exponent < len(text):
+        written = f'{text[:exponent]}.{text[exponent:]}'
+    else:
+        written = '0.' + '0' * (-exponent - len(text)) + text
+    return ('-' if sign else '') + written
+
+
+def host_text(value: Any) -> str:
+    r"""A value as the host's text column holds it where pyarrow infers no
+    one type: a float (NumPy's ``float64`` too) as the core writes a float
+    entity (``float_text``; T1.32g, T1.32a's carried P3), any other value
+    its ``str()``."""
+    if isinstance(value, float):
+        return float_text(value)
+    return str(value)
+
+
 def host_arrow(values: list[Any]) -> dict[str, Any]:
     r"""The entities as one Arrow column by the host's natural inference,
     or as text when it fails: the column's type and each value as the
@@ -810,7 +882,8 @@ def host_arrow(values: list[Any]) -> dict[str, Any]:
             column = pa.nulls(len(values))
         else:
             column = pa.array(
-                [None if _missing(v) else str(v) for v in values], pa.string()
+                [None if _missing(v) else host_text(v) for v in values],
+                pa.string(),
             )
         rule = 'text'
     kind = column.type
@@ -1017,7 +1090,7 @@ def mixed(values: list[Any]) -> bool:
 
 def as_text(values: list[Any]) -> list[Any]:
     r"""The entities as the host's text column holds them, as text given."""
-    return [None if _missing(v) else str(v) for v in values]
+    return [None if _missing(v) else host_text(v) for v in values]
 
 
 def record(

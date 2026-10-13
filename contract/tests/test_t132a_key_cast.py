@@ -42,7 +42,11 @@ same vectors, so the two hosts agree through them.
 - A mix of kinds the host hands over as text (``disposition: as_text``):
   its answer is the host's own answer to that text given as text, and,
   where the reference answers that text otherwise than INTERNAL_ERROR, the
-  reference's answer to it.
+  reference's answer to it. That text is the recorder's ``host_text``, and
+  a float's is the core's text of a float entity (T1.32g, T1.32a's
+  carried P3): ``1e16`` is ``10000000000000000``, not Python's ``1e+16``.
+  The ``utf8-float-text`` key holds those texts as keys, so a host writing
+  a float otherwise reaches no key.
 - The vectors themselves: recorded at the reference of
   ``contract/reference-env.txt``; every key type and input of the
   recorder present; each input read back exactly; the host's column, the
@@ -388,6 +392,33 @@ def test_the_derived_float_rule_is_exact() -> None:
     assert R.float_bits(R.nearest(exact, 24), 24) == '3f800001'
 
 
+def test_the_host_text_of_a_float_is_the_core_s() -> None:
+    # The recorder's text of a float in a mix, against values worked by
+    # hand from Rust's ``{}`` of an f64 (keys.rs's Entity::Float): the
+    # shortest digits, no exponent, a whole one with no point, a tie of
+    # the shortest digits away from zero; in a hostile decimal context.
+    worked = [
+        (1e16, '10000000000000000'),
+        (1.0, '1'),
+        (-0.0, '-0'),
+        (0.0, '0'),
+        (2.5, '2.5'),
+        (1.5e-07, '0.00000015'),
+        (1e22, '10000000000000000000000'),
+        (-1234.5, '-1234.5'),
+        (1059438285926254.2, '1059438285926254.3'),
+        (-1059438285926254.2, '-1059438285926254.3'),
+        (1059438285926254.8, '1059438285926254.8'),
+    ]
+    with _hostile():
+        for value, text in worked:
+            assert R.float_text(value) == text, repr(value)
+            assert R.host_text(value) == text, repr(value)
+    assert R.host_text('1e16') == '1e16'
+    assert R.host_text(7) == '7'
+    assert R.as_text([1e16, None, '2']) == ['10000000000000000', None, '2']
+
+
 def test_the_vectors_are_not_vacuous() -> None:
     answers = [v['reference']['public'] for v in RECORDED['vectors']]
     outcomes = [(a['outcome'], a.get('code')) for a in answers]
@@ -416,6 +447,12 @@ def test_the_vectors_are_not_vacuous() -> None:
     for key in ('float32', 'float64', 'decimal128-18-0', 'decimal128-38-0'):
         mark = by_id[f'{key}.mixed.float-text']['register']
         assert mark['required'] and mark['disposition'] == 'as_text', key
+    # T1.32g: each float whose text Python writes otherwise than the core
+    # reaches a key of utf8-float-text only by the core's text.
+    for name in ('1e16', 'tiny', 'tie'):
+        vector = by_id[f'utf8-float-text.mixed.float-{name}-text']
+        assert vector['register']['disposition'] == 'as_text', name
+        assert vector['reference']['as_text']['outcome'] == 'success', name
     # Each key type has successes and refusals of both codes, or fails
     # everywhere with INTERNAL_ERROR (the reference's decimal and
     # large_string keys).
