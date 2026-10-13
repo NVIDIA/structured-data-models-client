@@ -44,17 +44,31 @@ this script keeps:
   ``rust-host`` hands the core this column; ``python-core`` hands the
   bridge the Python values themselves;
 - ``register``: whether a host may differ from the reference only under
-  a register entry naming the vector (``REGISTER_REF``), and why. It is
-  derived from the reference's answer, never chosen: the reference fails
-  with ``INTERNAL_ERROR`` (E66(b)'s class, a clearer answer is a change),
-  or accepts an entity by changing its kind (text read as a number, a
-  number or a time written as text, a boolean or a time read as a number)
-  or its value (``1.5`` cast to ``1``). Every other vector is held to the
-  reference exactly. This marks where the core is expected to differ; it
-  decides no policy.
+  a register entry naming the vector and the transition it makes
+  (``REGISTER_REF``), why, and the disposition it is held to
+  (``derive_marks``). It is derived from the recorded answers, never
+  chosen: the reference fails with ``INTERNAL_ERROR`` (E66(b)'s class, a
+  clearer answer is a change); it accepts an entity by changing its kind
+  (text read as a number, a number or a time written as text, a boolean
+  or a time read as a number) or its value (``1.5`` cast to ``1``); the
+  host hands the core the same column as another vector the reference
+  answers otherwise; a derived expectation is not the reference's answer
+  (disposition ``expected``); or the host hands a mix of kinds over as
+  text the reference answers otherwise given as text (``as_text``, the
+  reference's answer to that text recorded beside it, disposition
+  ``as_text``). Every other vector is held to the reference exactly. This
+  marks where the core is expected to differ; it decides no policy;
+- ``expected`` (round 2, ``ROUND_2`` and the decimal keys' exponents):
+  where the rule is the core's own, derived from the exact value by
+  integer arithmetic, never through a double: a text or decimal entity of
+  a float key is the nearest float of the key's width, ties to even, past
+  the largest refused by name; an exponent past any key and a decimal no
+  key holds are refused by name; a 38-digit decimal is held exactly.
+  Integer entities of float keys are the reference's, recorded.
 
 Nothing here is written by hand but the inputs: every expected value is
-the reference's. ``observe``, ``decode`` and ``canonical`` are imported by
+the reference's or derived here. Decimals are written from their digits,
+never through the caller's decimal context (``unscaled``). ``observe``, ``decode`` and ``canonical`` are imported by
 ``contract/tests/test_t132a_key_cast.py``, so both routes are observed by
 the same code.
 """
@@ -73,6 +87,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
 from decimal import Decimal
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -135,7 +150,11 @@ KEYS: list[dict[str, Any]] = [
             *_alter('VARCHAR', 'X::VARCHAR'),
         ],
     },
-    {'id': 'decimal128-18-0', 'setup': _alter('DECIMAL(18, 0)')},
+    {
+        'id': 'decimal128-18-0',
+        'setup': _alter('DECIMAL(18, 0)'),
+        'derived': lambda: _exponent_vectors(),
+    },
     {
         'id': 'decimal128-38-10',
         'setup': _alter('DECIMAL(38, 10)', 'X + 0.5'),
@@ -144,8 +163,359 @@ KEYS: list[dict[str, Any]] = [
             'own.text': ['1.5'],
             'own.float': [1.5],
         },
+        'derived': lambda: _exponent_vectors(),
     },
     {'id': 'decimal128-38-0', 'setup': _alter('HUGEINT')},
+]
+
+
+# --- the vectors whose expectation is derived, not recorded -----------------
+#
+# Round 2 (the reviews of T1.32a part 1): float keys whose table holds the
+# neighbours a rounded entity could land on, decimal exponents at the
+# extremes, and decimals 38 and 76 digits wide. The reference is recorded
+# for each as for every vector, and where the rule is the core's own (a
+# text or decimal entity of a float key takes the nearest float of the
+# key's width; an exponent past any key is refused by name; a wide decimal
+# key holds its entity exactly) the vector also carries ``expected``,
+# derived here from the exact value by integer arithmetic, never through a
+# double. A host is held to ``expected`` first; where it differs from the
+# reference's answer, a register entry must name the transition.
+
+F32_MAX = Fraction((2**24 - 1) * 2**104)
+F64_MAX = Fraction((2**53 - 1) * 2**971)
+
+
+def nearest(q: Fraction, bits: int) -> Fraction | None:
+    r"""The float of ``bits`` (24 for float32, 53 for float64) nearest the
+    exact ``q``, ties to even, or None past the largest finite one. Normal
+    numbers only (the vectors hold none smaller)."""
+    if q == 0:
+        return Fraction(0)
+    magnitude = abs(q)
+    e = magnitude.numerator.bit_length() - magnitude.denominator.bit_length()
+    while Fraction(2) ** e > magnitude:
+        e -= 1
+    while Fraction(2) ** (e + 1) <= magnitude:
+        e += 1
+    ulp = Fraction(2) ** (e - bits + 1)
+    rounded = round(magnitude / ulp) * ulp  # Fraction rounds ties to even
+    if rounded > (F32_MAX if bits == 24 else F64_MAX):
+        return None
+    return rounded if q > 0 else -rounded
+
+
+def float_bits(q: Fraction, bits: int) -> str:
+    r"""The IEEE-754 bits of a value ``nearest`` gave, in hex (exact: the
+    value is a float of that width, so a double holds it)."""
+    return struct.pack('>f' if bits == 24 else '>d', float(q)).hex()
+
+
+def exact_text(q: Fraction) -> str:
+    r"""A dyadic rational's exact decimal expansion."""
+    k = q.denominator.bit_length() - 1
+    if q.denominator != 1 << k:
+        raise ValueError('not dyadic')
+    digits = str(abs(q.numerator) * 5**k).rjust(k + 1, '0')
+    whole, fraction = (digits[:-k], digits[-k:]) if k else (digits, '')
+    text = whole + ('.' + fraction.rstrip('0') if fraction.rstrip('0') else '')
+    return ('-' if q < 0 else '') + text
+
+
+def decimal_text(text: str) -> str:
+    r"""A plain decimal's text normalized: no sign on zero, no leading
+    zeros, no trailing fractional zeros, no point left alone."""
+    text = text.strip()
+    sign = '-' if text.startswith('-') else ''
+    text = text.lstrip('+-')
+    whole, _, fraction = text.partition('.')
+    whole = whole.lstrip('0') or '0'
+    fraction = fraction.rstrip('0')
+    if whole == '0' and not fraction:
+        return '0'
+    return sign + whole + ('.' + fraction if fraction else '')
+
+
+def _floats(values: list[Fraction], kind: str) -> list[str]:
+    r"""The ``CASE`` giving ``user_id`` 0 to 7 these exact float values."""
+    whens = ' '.join(
+        f"WHEN {i} THEN '{exact_text(v)}'::DOUBLE" for i, v in enumerate(values)
+    )
+    return _alter(kind, f'CASE X {whens} END')
+
+
+def _float_vectors(
+    pairs: list[tuple[Fraction, Fraction, Fraction]], bits: int, signs: bool
+) -> dict[str, tuple[list[Any], dict[str, Any]]]:
+    r"""Text and decimal entities just above, below and at the midpoint of
+    each neighbouring pair ``(lo, hi)``, ``tiny`` apart, both signs, each
+    expecting the nearest float of the width (``nearest``)."""
+    out: dict[str, tuple[list[Any], dict[str, Any]]] = {}
+    for lo, hi, tiny in pairs:
+        mid = (lo + hi) / 2
+        label = f'{exact_text(lo).split(".")[0]}'
+        for sign in (1, -1) if signs else (1,):
+            for where, value in (
+                ('above', mid + tiny),
+                ('below', mid - tiny),
+                ('midpoint', mid),
+            ):
+                exact = sign * value
+                text = _plain(exact)
+                expected = expect_float(exact, bits)
+                tag = f'{"minus-" if sign < 0 else ""}{label}.{where}'
+                out[f'near.{tag}.text'] = ([text], expected)
+                out[f'near.{tag}.decimal'] = ([Decimal(text)], expected)
+    return out
+
+
+def _plain(q: Fraction) -> str:
+    r"""A rational with a terminating decimal expansion, as plain text."""
+    n, d = q.numerator, q.denominator
+    twos = fives = 0
+    while d % 2 == 0:
+        d //= 2
+        twos += 1
+    while d % 5 == 0:
+        d //= 5
+        fives += 1
+    if d != 1:
+        raise ValueError('no terminating expansion')
+    k = max(twos, fives)
+    digits = str(abs(n) * (10**k // q.denominator)).rjust(k + 1, '0')
+    whole, fraction = (digits[:-k], digits[-k:]) if k else (digits, '')
+    fraction = fraction.rstrip('0')
+    return ('-' if q < 0 else '') + whole + ('.' + fraction if fraction else '')
+
+
+def expect_float(exact: Fraction, bits: int) -> dict[str, Any]:
+    r"""What a float key of ``bits`` answers an entity of value ``exact``:
+    its nearest float, or a refusal by name past the largest."""
+    rounded = nearest(exact, bits)
+    if rounded is None:
+        return {'outcome': 'refusal', 'code': 'INVALID_REQUEST', 'named': True}
+    kind = 'f32' if bits == 24 else 'f64'
+    return {
+        'outcome': 'success',
+        'entities': [[kind, float_bits(rounded, bits)]],
+    }
+
+
+def expect_decimal(text: str) -> dict[str, Any]:
+    return {'outcome': 'success', 'entities': [['dec', decimal_text(text)]]}
+
+
+REFUSED = {'outcome': 'refusal', 'code': 'INVALID_REQUEST', 'named': True}
+_ONE = Fraction(1)
+_E23 = Fraction(1, 2**23)
+_NEAR_ONE = [_ONE, _ONE + _E23, Fraction(2**24), Fraction(2**24 + 2)]
+_LARGE = [
+    Fraction(2**60),
+    Fraction(2**60 + 2**37),
+    F32_MAX,
+    F32_MAX - 2**104,
+]
+_OVER = F32_MAX + 2**103
+_EXPONENTS = [
+    '100e2147483647',
+    '-100e2147483647',
+    '1.000e2147483647',
+    '1e2147483648',
+    '100e-2147483648',
+    '1e-2147483648',
+    '1e-2147483649',
+    '10e99999999999999999999',
+    '1e-99999999999999999999',
+]
+WIDE = 12345678901234567890123456789012345670
+
+
+def _exponent_vectors() -> dict[str, tuple[list[Any], dict[str, Any]]]:
+    out: dict[str, tuple[list[Any], dict[str, Any]]] = {}
+    for i, text in enumerate(_EXPONENTS):
+        out[f'exponent.{i}.text'] = ([text], REFUSED)
+    out['exponent.huge.decimal'] = ([Decimal('100E+2147483647')], REFUSED)
+    out['exponent.tiny.decimal'] = ([Decimal('1E-2147483648')], REFUSED)
+    return out
+
+
+def _large_vectors() -> dict[str, tuple[list[Any], dict[str, Any]]]:
+    out = _float_vectors(
+        [
+            (_LARGE[0], _LARGE[1], Fraction(1, 1000)),
+            (_LARGE[3], _LARGE[2], Fraction(1)),
+        ],
+        24,
+        True,
+    )
+    for sign in (1, -1):
+        tag = 'minus-' if sign < 0 else ''
+        for where, value in (
+            ('below', _OVER - 1),
+            ('at', _OVER),
+            ('above', _OVER + 1),
+        ):
+            exact = sign * value
+            expected = expect_float(exact, 24)
+            out[f'overflow.{tag}{where}.text'] = ([_plain(exact)], expected)
+            out[f'overflow.{tag}{where}.decimal'] = (
+                [Decimal(_plain(exact))],
+                expected,
+            )
+        out[f'overflow.{tag}1e39.text'] = (
+            [f'{"-" if sign < 0 else ""}1e39'],
+            expect_float(sign * Fraction(10**39), 24),
+        )
+    return out
+
+
+#: The key types whose table holds the neighbours a cast could land on,
+#: or values 38 digits wide, each with its own entities only.
+ROUND_2: list[dict[str, Any]] = [
+    {
+        'id': 'float32-near-one',
+        'setup': _floats(_NEAR_ONE + [-v for v in _NEAR_ONE], 'FLOAT'),
+        'extra': {
+            f'int.{tag}{n}': [sign * n]
+            for sign, tag in ((1, ''), (-1, 'minus-'))
+            for n in (2**24, 2**24 + 1, 2**24 + 2)
+        }
+        | {'float.2pow24-plus-1': [float(2**24 + 1)]},
+        'derived': lambda: _float_vectors(
+            [
+                (_ONE, _ONE + _E23, Fraction(1, 10**30)),
+                (Fraction(2**24), Fraction(2**24 + 2), Fraction(1, 10**6)),
+            ],
+            24,
+            True,
+        ),
+    },
+    {
+        'id': 'float32-large',
+        'setup': _floats(_LARGE + [-v for v in _LARGE], 'FLOAT'),
+        'extra': {
+            f'int.{tag}{name}': [sign * n]
+            for sign, tag in ((1, ''), (-1, 'minus-'))
+            for name, n in (
+                ('2pow60', 2**60),
+                ('2pow60-mid-plus-1', 2**60 + 2**36 + 1),
+                ('2pow60-mid-minus-1', 2**60 + 2**36 - 1),
+            )
+        },
+        'derived': _large_vectors,
+    },
+    {
+        'id': 'float32-past-2pow24',
+        'setup': _alter('FLOAT', 'X * 2 + 16777216'),
+        'extra': {f'int.{n}': [n] for n in (2**24 + 1, 2**24 + 2, 2**24 + 3)},
+        'derived': lambda: {
+            f'text.{n}': ([str(n)], expect_float(Fraction(n), 24))
+            for n in (2**24 + 1, 2**24 + 3)
+        },
+    },
+    {
+        'id': 'float64-past-2pow53',
+        'setup': _alter('DOUBLE', 'X * 2 + 9007199254740992'),
+        'extra': {f'int.{n}': [n] for n in (2**53 + 1, 2**53 + 2, 2**53 + 3)}
+        | {'float.2pow53-plus-2': [float(2**53 + 2)]},
+        'derived': lambda: (
+            {
+                f'text.{n}': ([str(n)], expect_float(Fraction(n), 53))
+                for n in (2**53 + 1, 2**53 + 3)
+            }
+            | {
+                'decimal.2pow53-plus-1-and-a-bit': (
+                    [Decimal('9007199254740993.0000001')],
+                    expect_float(
+                        Fraction(Decimal('9007199254740993.0000001')), 53
+                    ),
+                )
+            }
+        ),
+    },
+    {
+        'id': 'float64-past-minus-2pow53',
+        'setup': _alter('DOUBLE', 'X * -2 - 9007199254740992'),
+        'extra': {'int.minus-2pow53-minus-1': [-(2**53) - 1]},
+        'derived': lambda: {
+            'text.minus-2pow53-minus-1': (
+                [str(-(2**53) - 1)],
+                expect_float(Fraction(-(2**53) - 1), 53),
+            )
+        },
+    },
+    {
+        'id': 'decimal128-38-0-wide',
+        'setup': _alter('HUGEINT', f'X::HUGEINT + {WIDE}::HUGEINT'),
+        'derived': lambda: {
+            'wide.decimal': (
+                [Decimal(str(WIDE + 1))],
+                expect_decimal(str(WIDE + 1)),
+            ),
+            'wide.text': ([str(WIDE + 1)], expect_decimal(str(WIDE + 1))),
+            'wide.int': ([WIDE + 1], expect_decimal(str(WIDE + 1))),
+            'wide.exponent': (
+                [Decimal('1.2345678901234567890123456789012345671E+37')],
+                expect_decimal(str(WIDE + 1)),
+            ),
+            'wide.scaled-zeros': (
+                [Decimal(f'{WIDE + 1}.000')],
+                expect_decimal(str(WIDE + 1)),
+            ),
+            'wide.76-digits': ([Decimal('1' * 76)], REFUSED),
+            'wide.39-digits-text': (['1' * 39], REFUSED),
+        },
+    },
+    {
+        'id': 'decimal128-38-10-wide',
+        'setup': _alter(
+            'DECIMAL(38, 10)',
+            'X::DECIMAL(38, 10) + 1234567890123456789012345678.0123456789',
+        ),
+        'derived': lambda: {
+            'wide.decimal': (
+                [Decimal('1234567890123456789012345679.0123456789')],
+                expect_decimal('1234567890123456789012345679.0123456789'),
+            ),
+            'wide.text': (
+                ['1234567890123456789012345679.0123456789'],
+                expect_decimal('1234567890123456789012345679.0123456789'),
+            ),
+            'wide.trailing-zeros': (
+                [Decimal('1234567890123456789012345679.01234567890000')],
+                expect_decimal('1234567890123456789012345679.0123456789'),
+            ),
+            'wide.inexact': (
+                [Decimal('1234567890123456789012345679.01234567891')],
+                REFUSED,
+            ),
+        },
+    },
+    {
+        'id': 'decimal128-38-37',
+        'setup': _alter(
+            'DECIMAL(38, 37)',
+            'X::DECIMAL(38, 37) + 0.1234567890123456789012345678901234567',
+        ),
+        'derived': lambda: {
+            'wide.decimal': (
+                [Decimal('1.1234567890123456789012345678901234567')],
+                expect_decimal('1.1234567890123456789012345678901234567'),
+            ),
+            'wide.text': (
+                ['1.1234567890123456789012345678901234567'],
+                expect_decimal('1.1234567890123456789012345678901234567'),
+            ),
+            'wide.out-of-range': (
+                ['10.1234567890123456789012345678901234567'],
+                REFUSED,
+            ),
+            'wide.inexact': (
+                ['1.12345678901234567890123456789012345671'],
+                REFUSED,
+            ),
+        },
+    },
 ]
 
 
@@ -223,9 +593,26 @@ def _inputs() -> dict[str, list[Any]]:
     }
 
 
+def derived(key: dict[str, Any]) -> dict[str, tuple[list[Any], dict[str, Any]]]:
+    r"""``key``'s entities whose expectation is derived, with it."""
+    made = key.get('derived')
+    return made() if made else {}
+
+
 def inputs(key: dict[str, Any]) -> dict[str, list[Any]]:
-    r"""``key``'s entities: the shared inputs and its own."""
-    return {**_inputs(), **key.get('extra', {})}
+    r"""``key``'s entities: the shared inputs (the round-2 key types have
+    none), its own, and those whose expectation is derived."""
+    shared = _inputs() if key not in ROUND_2 else {}
+    own = {name: list(values) for name, values in key.get('extra', {}).items()}
+    return {
+        **shared,
+        **own,
+        **{name: values for name, (values, _) in derived(key).items()},
+    }
+
+
+def all_keys() -> list[dict[str, Any]]:
+    return KEYS + ROUND_2
 
 
 # --- values as JSON ----------------------------------------------------------
@@ -378,17 +765,34 @@ def _scalar(value: Any, arrow_type: Any) -> dict[str, Any]:
         return {'t': 'utf8', 'v': value}
     if pa.types.is_binary(arrow_type):
         return {'t': 'binary', 'v': base64.b64encode(value).decode()}
-    if pa.types.is_decimal128(arrow_type):
-        unscaled = int(value.scaleb(arrow_type.scale))
+    if pa.types.is_decimal(arrow_type):
         return {
-            't': 'd128',
+            't': 'd128' if pa.types.is_decimal128(arrow_type) else 'd256',
             'p': arrow_type.precision,
             's': arrow_type.scale,
-            'v': str(unscaled),
+            'v': str(unscaled(value, arrow_type.scale)),
         }
     if pa.types.is_date32(arrow_type):
         return {'t': 'date32', 'v': str((value - date(1970, 1, 1)).days)}
     raise TypeError(f'no scalar for {arrow_type}')
+
+
+def unscaled(value: Decimal, scale: int) -> int:
+    r"""``value`` times ``10**scale``, exactly, as an integer: from its
+    digits and exponent, never through the caller's decimal context (whose
+    precision, 28 digits by default, would round a 38-digit value)."""
+    sign, digits, exponent = value.as_tuple()
+    if not isinstance(exponent, int):
+        raise ValueError(f'not a finite decimal: {value!r}')
+    whole = int(''.join(map(str, digits)) or '0')
+    shift = exponent + scale
+    if shift >= 0:
+        whole *= 10**shift
+    else:
+        whole, rest = divmod(whole, 10**-shift)
+        if rest:
+            raise ValueError(f'{value!r} has more than {scale} decimals')
+    return -whole if sign else whole
 
 
 def host_arrow(values: list[Any]) -> dict[str, Any]:
@@ -448,11 +852,14 @@ def shop() -> list[str]:
     return statements
 
 
-def observe(key: dict[str, Any], values: list[Any]) -> dict[str, Any]:
+def observe(
+    key: dict[str, Any], values: list[Any], fields: tuple[str, ...] = ()
+) -> dict[str, Any]:
     r"""``Schema.from_source`` and ``materialize`` over ``key``'s source
     with ``values`` as the entities, on the route the environment selects:
     the outcome, and on success the entities as the payload's predicted
-    rows carry them, in order."""
+    rows carry them, in order. With ``fields``, a refusal also gives those
+    of its details (each as text), what names it."""
     import duckdb
     import pandas as pd
     from sdm_client import PredictiveQuery, Schema
@@ -471,12 +878,20 @@ def observe(key: dict[str, Any], values: list[Any]) -> dict[str, Any]:
                 indices=values, anchor_time=pd.Timestamp(ANCHOR)
             )
     except Exception as error:  # noqa: BLE001 - the outcome is recorded
-        return {
+        refusal: dict[str, Any] = {
             'outcome': 'refusal',
             'stage': stage,
             'error': type(error).__name__,
             'code': getattr(error, 'code', None),
         }
+        if fields:
+            details = getattr(error, 'details', None) or {}
+            refusal['fields'] = {
+                name: str(details[name])
+                for name in fields
+                if details.get(name) is not None
+            }
+        return refusal
     finally:
         connection.close()
     table = request._payloads[0]['predict']['instance_table']
@@ -595,8 +1010,25 @@ def register(values: list[Any], public: dict[str, Any]) -> list[str]:
     return why
 
 
-def record(key: dict[str, Any], name: str, values: list[Any]) -> dict[str, Any]:
-    r"""One vector, observed on the reference."""
+def mixed(values: list[Any]) -> bool:
+    r"""Whether the entities are of more than one kind, missing ones aside."""
+    return len({_kind(v) for v in values if not _missing(v)}) > 1
+
+
+def as_text(values: list[Any]) -> list[Any]:
+    r"""The entities as the host's text column holds them, as text given."""
+    return [None if _missing(v) else str(v) for v in values]
+
+
+def record(
+    key: dict[str, Any],
+    name: str,
+    values: list[Any],
+    expected: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    r"""One vector, observed on the reference: also, when the host hands a
+    mix of kinds over as text, the reference's answer to that text given
+    as text (``as_text``)."""
     encoded = [encode(v) for v in values]
     arrow = host_arrow(values)
     with _watching_the_cast(values) as seen:
@@ -608,15 +1040,130 @@ def record(key: dict[str, Any], name: str, values: list[Any]) -> dict[str, Any]:
         cast = {'dtype': seen['dtype'], 'raised': seen['raised']}
     else:
         cast = {'dtype': seen['dtype'], 'values': seen['values']}
-    why = register(values, public)
-    return {
+    reference: dict[str, Any] = {'public': public, 'cast': cast}
+    if arrow['rule'] == 'text' and mixed(values):
+        reference['as_text'] = observe(key, as_text(values))
+    vector: dict[str, Any] = {
         'id': f'{key["id"]}.{name}',
         'key': key['id'],
         'input': encoded,
         'host_arrow': arrow,
-        'reference': {'public': public, 'cast': cast},
-        'register': {'required': bool(why), 'why': why},
+        'reference': reference,
     }
+    if expected is not None:
+        vector['expected'] = expected
+    return vector
+
+
+# --- what a host is held to ----------------------------------------------------
+
+
+def outcome_class(answer: dict[str, Any]) -> str:
+    r"""``success`` or ``refusal <CODE>``: a register entry's transition is
+    written from one of these to another."""
+    if answer['outcome'] == 'success':
+        return 'success'
+    return f'refusal {answer.get("code")}'
+
+
+def same(got: dict[str, Any], want: dict[str, Any]) -> bool:
+    r"""The same public answer: outcome, code and stage or entities, and the
+    class where both observe it (``rust-host`` observes no stage or class,
+    and ``fields`` are not the reference's)."""
+    keys = set(got) & set(want) - {'fields'}
+    return got['outcome'] == want['outcome'] and all(
+        got[k] == want[k] for k in keys
+    )
+
+
+def _f32_hex(value: float) -> str | None:
+    try:
+        return struct.pack('>f', value).hex()
+    except OverflowError:
+        return None
+
+
+def _cell_matches(wanted: list[str], cell: Any) -> bool:
+    if not isinstance(cell, list):
+        return False
+    if wanted[0] in ('f32', 'f64'):
+        if cell[0] == 'f':
+            value = struct.unpack('>d', bytes.fromhex(cell[1]))[0]
+        elif cell[0] == 'i':
+            value = float(int(cell[1]))
+        else:
+            return False
+        if wanted[0] == 'f32':
+            return _f32_hex(value) == wanted[1]
+        return struct.pack('>d', value).hex() == wanted[1]
+    if wanted[0] == 'dec':
+        if cell[0] in ('i', 's'):
+            try:
+                return decimal_text(cell[1]) == wanted[1]
+            except ValueError:
+                return False
+        if cell[0] == 'f':
+            # A payload that writes the key as a double can only be held to
+            # the double nearest the value.
+            near = float(Fraction(Decimal(wanted[1])))
+            return struct.pack('>d', near).hex() == cell[1]
+        return False
+    return wanted == cell
+
+
+def matches(expected: dict[str, Any], got: dict[str, Any]) -> bool:
+    r"""Whether ``got`` is the derived expectation: a success whose entities
+    are the expected values (a float at the expected width's bits, a
+    decimal by its exact value), or a refusal of the expected code, which
+    where it must be named also names the field and why (``fields``)."""
+    if got.get('outcome') != expected['outcome']:
+        return False
+    if expected['outcome'] == 'refusal':
+        if got.get('code') != expected['code']:
+            return False
+        if expected.get('named') and 'fields' in got:
+            named = got['fields']
+            return named.get('field') == 'indices' and bool(named.get('reason'))
+        return True
+    have = got.get('entities') or []
+    return len(have) == len(expected['entities']) and all(
+        _cell_matches(w, c)
+        for w, c in zip(expected['entities'], have, strict=True)
+    )
+
+
+def derive_marks(vectors: list[dict[str, Any]]) -> None:
+    r"""Each vector's ``register``: whether a host may differ from the
+    reference only under an entry naming the vector and its transition,
+    why, and the disposition it is held to; derived from the recorded
+    answers alone, never chosen."""
+    for vector in vectors:
+        values = [decode(tagged) for tagged in vector['input']]
+        reference = vector['reference']
+        public = reference['public']
+        why = register(values, public)
+        disposition = None
+        if 'expected' in vector and not matches(vector['expected'], public):
+            why.append(
+                'the expectation derived from the exact value is not the '
+                "reference's answer"
+            )
+            disposition = 'expected'
+        text = reference.get('as_text')
+        if text is not None and text != public:
+            column = [v.get('v') for v in vector['host_arrow']['values']]
+            why.append(
+                f'the host hands the core the text column {column}, the same '
+                'as that text given as text, which the reference answers '
+                f'otherwise ({outcome_class(text)})'
+            )
+            disposition = 'as_text'
+        vector['register'] = {
+            'required': bool(why),
+            'why': why,
+            'disposition': disposition,
+        }
+    alike(vectors)
 
 
 def alike(vectors: list[dict[str, Any]]) -> None:
@@ -667,19 +1214,20 @@ def main() -> int:
         print("sdm_client is not the reference checkout's", file=sys.stderr)
         return 1
     vectors = []
-    for key in KEYS:
+    for key in all_keys():
+        expectations = derived(key)
         for name, values in inputs(key).items():
-            vector = record(key, name, values)
+            expected = expectations[name][1] if name in expectations else None
+            vector = record(key, name, values, expected)
             vectors.append(vector)
             public = vector['reference']['public']
             print(
                 vector['id'],
                 public['outcome'],
                 public.get('code') or '',
-                '(register)' if vector['register']['required'] else '',
                 file=sys.stderr,
             )
-    alike(vectors)
+    derive_marks(vectors)
     document = {
         'format': FORMAT,
         'recorded_by': 'contract/tools/key_cast_record.py',
@@ -695,7 +1243,9 @@ def main() -> int:
         'query': QUERY,
         'anchor_time': ANCHOR,
         'register_ref': REGISTER_REF,
-        'keys': [{'id': key['id'], 'setup': key['setup']} for key in KEYS],
+        'keys': [
+            {'id': key['id'], 'setup': key['setup']} for key in all_keys()
+        ],
         'vectors': vectors,
     }
     OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')

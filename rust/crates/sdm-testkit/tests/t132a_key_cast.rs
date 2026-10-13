@@ -19,13 +19,21 @@
 //!   core's answer must be the reference's public answer: a request whose
 //!   predicted rows carry the reference's entities in order, or a refusal
 //!   with its code (this host observes no stage or exception class).
-//! - A vector the recorder marked `register.required` (the reference fails
-//!   with INTERNAL_ERROR, or its pandas cast changes an entity's kind or
-//!   value, or the core cannot tell it from another vector the reference
-//!   answers otherwise) may differ only where an entry of
-//!   `docs/design/rust-core/register.yaml`, proposed or approved, names it
-//!   in its `refs` (`contract/key-cast-vectors.json#<id or glob>`); every
-//!   other vector is held to the reference exactly.
+//! - A vector carrying `expected` (derived by the recorder from the exact
+//!   value, never through a double) is held to it first: a float key's
+//!   nearest float at its width, ties to even (`f32`/`f64` bits), a
+//!   decimal's exact value (`dec`), or a refusal by name (INVALID_REQUEST
+//!   naming `indices` and why).
+//! - A vector marked `register.required` may differ from the reference
+//!   only under an entry of `docs/design/rust-core/register.yaml`,
+//!   proposed or approved, whose `refs` name it with the transition it
+//!   makes (`contract/key-cast-vectors.json#<id or glob> <from> -> <to>`,
+//!   each `success` or `refusal <CODE>`); an entry covers only the
+//!   transition it declares. Every other vector is held to the reference
+//!   exactly.
+//! - A mix of kinds the host hands over as text (`disposition: as_text`)
+//!   answers as the reference answers that text given as text, where the
+//!   reference does not fail with INTERNAL_ERROR on it.
 //! - A refusal by a rule the core does not take yet (`UNSUPPORTED_REQUEST`)
 //!   never passes: the reference gives none on these vectors.
 //!
@@ -96,13 +104,36 @@ fn glob(pattern: &str, text: &str) -> bool {
     p[pi..].iter().all(|c| *c == '*')
 }
 
-/// The register's entries that name a vector in their `refs`, proposed or
-/// approved: (id, the patterns). Read from the YAML's text, entry by entry
+/// A ref naming vectors: (entry, glob, from, to).
+type Transition = (String, String, String, String);
+
+/// One `refs` item of the vector form: the glob, the transition's start
+/// and its end; None for any other text.
+fn transition(item: &str) -> Option<(String, String, String)> {
+    let rest = item.strip_prefix(REF)?;
+    let (glob, classes) = rest.split_once(' ')?;
+    let (old, new) = classes.split_once(" -> ")?;
+    let class = |c: &str| {
+        c == "success"
+            || c.strip_prefix("refusal ").is_some_and(|code| {
+                !code.is_empty()
+                    && code.starts_with(|ch: char| ch.is_ascii_uppercase())
+                    && code.chars().all(|ch| ch.is_ascii_uppercase() || ch == '_')
+            })
+    };
+    (!glob.is_empty() && class(old) && class(new))
+        .then(|| (glob.to_owned(), old.to_owned(), new.to_owned()))
+}
+
+/// Each vector ref of the register's proposed or approved entries, as
+/// (entry, glob, from, to), read from the YAML's text entry by entry
 /// (`- id:` at the margin), the `refs` field alone, in its flow
-/// (`refs: [a, b]`) or block (`refs:` then `  - a`) form.
-fn register_patterns() -> Vec<(String, Vec<String>)> {
+/// (`refs: [a, b]`) or block (`refs:` then `  - a`) form; and the refs
+/// naming vectors that declare no transition.
+fn transitions() -> (Vec<Transition>, Vec<String>) {
     let text = std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
     let mut out = Vec::new();
+    let mut malformed = Vec::new();
     for block in text.split("\n- id: ").skip(1) {
         let id = block.lines().next().unwrap_or_default().trim().to_owned();
         let status = block
@@ -137,24 +168,161 @@ fn register_patterns() -> Vec<(String, Vec<String>)> {
                 }
             }
         }
-        let patterns: Vec<String> = refs
-            .iter()
-            .map(|r| r.trim_matches(|c| c == '\'' || c == '"'))
-            .filter_map(|r| r.strip_prefix(REF))
-            .map(str::to_owned)
-            .collect();
-        if !patterns.is_empty() {
-            out.push((id, patterns));
+        for item in refs {
+            let item = item.trim_matches(|c| c == '\'' || c == '"');
+            if !item.starts_with(REF) {
+                continue;
+            }
+            match transition(item) {
+                Some((glob, old, new)) => out.push((id.clone(), glob, old, new)),
+                None => malformed.push(format!("{id}: {item}")),
+            }
         }
     }
-    out
+    (out, malformed)
 }
 
-fn registered(id: &str, entries: &[(String, Vec<String>)]) -> Option<String> {
+/// The entry naming `id` with exactly the transition `old` to `new`.
+fn covered(id: &str, old: &str, new: &str, entries: &[Transition]) -> Option<String> {
     entries
         .iter()
-        .find(|(_, patterns)| patterns.iter().any(|p| glob(p, id)))
-        .map(|(entry, _)| entry.clone())
+        .find(|(_, glob_, from, to)| from == old && to == new && glob(glob_, id))
+        .map(|(entry, ..)| entry.clone())
+}
+
+/// `success` or `refusal <CODE>`.
+fn outcome_class(answer: &Value) -> String {
+    if answer["outcome"] == "success" {
+        "success".to_owned()
+    } else {
+        format!("refusal {}", answer["code"].as_str().unwrap_or("-"))
+    }
+}
+
+/// A plain decimal's text normalized as the recorder's `decimal_text`.
+fn decimal_text(text: &str) -> Option<String> {
+    let text = text.trim();
+    let (sign, body) = match text.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", text.strip_prefix('+').unwrap_or(text)),
+    };
+    let (whole, fraction) = body.split_once('.').unwrap_or((body, ""));
+    if whole.is_empty() && fraction.is_empty()
+        || !whole
+            .bytes()
+            .chain(fraction.bytes())
+            .all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let whole = whole.trim_start_matches('0');
+    let whole = if whole.is_empty() { "0" } else { whole };
+    let fraction = fraction.trim_end_matches('0');
+    if whole == "0" && fraction.is_empty() {
+        return Some("0".to_owned());
+    }
+    Some(if fraction.is_empty() {
+        format!("{sign}{whole}")
+    } else {
+        format!("{sign}{whole}.{fraction}")
+    })
+}
+
+/// Whether a canonical entity cell is the derived one.
+fn cell_matches(wanted: &Value, cell: &Value) -> bool {
+    let (Some(kind), Some(value)) = (wanted[0].as_str(), wanted[1].as_str()) else {
+        return false;
+    };
+    let number = || -> Option<f64> {
+        match cell[0].as_str()? {
+            "f" => Some(f64::from_bits(
+                u64::from_str_radix(cell[1].as_str()?, 16).ok()?,
+            )),
+            "i" => cell[1].as_str()?.parse::<i128>().ok().map(|i| i as f64),
+            _ => None,
+        }
+    };
+    match kind {
+        "f32" => number().is_some_and(|x| format!("{:08x}", (x as f32).to_bits()) == value),
+        "f64" => number().is_some_and(|x| format!("{:016x}", x.to_bits()) == value),
+        "dec" => match cell[0].as_str() {
+            Some("i") | Some("s") => {
+                cell[1].as_str().and_then(decimal_text).as_deref() == Some(value)
+            }
+            // A payload that writes the key as a double is held to the
+            // double nearest the value.
+            Some("f") => value
+                .parse::<f64>()
+                .is_ok_and(|near| cell[1] == format!("{:016x}", near.to_bits()).as_str()),
+            _ => false,
+        },
+        _ => wanted == cell,
+    }
+}
+
+/// Whether this host's answer is the derived expectation.
+fn matches(expected: &Value, got: &Value) -> bool {
+    if got["outcome"] != expected["outcome"] {
+        return false;
+    }
+    if expected["outcome"] == "refusal" {
+        if got["code"] != expected["code"] {
+            return false;
+        }
+        if expected["named"] == true {
+            return got["fields"]["field"] == "indices"
+                && got["fields"]["reason"]
+                    .as_str()
+                    .is_some_and(|r| !r.is_empty());
+        }
+        return true;
+    }
+    let (Some(want), Some(have)) = (expected["entities"].as_array(), got["entities"].as_array())
+    else {
+        return false;
+    };
+    want.len() == have.len() && want.iter().zip(have).all(|(w, h)| cell_matches(w, h))
+}
+
+/// Why this host's answer fails `vector`, or None.
+fn problem(vector: &Value, got: &Value, entries: &[Transition]) -> Option<String> {
+    let id = vector["id"].as_str().unwrap();
+    let reference = &vector["reference"];
+    let public = &reference["public"];
+    if got["code"] == "UNSUPPORTED_REQUEST" || got["outcome"] == "host failure" {
+        return Some(format!("{id}: got {got}"));
+    }
+    if let Some(expected) = vector.get("expected")
+        && !matches(expected, got)
+    {
+        return Some(format!(
+            "{id}: got {got}, the derived expectation {expected}"
+        ));
+    }
+    if vector["register"]["disposition"] == "as_text" {
+        let text = &reference["as_text"];
+        if outcome_class(text) != "refusal INTERNAL_ERROR" && !agrees(got, text) {
+            return Some(format!(
+                "{id}: got {got}, the reference's answer to its text {text}"
+            ));
+        }
+    }
+    if agrees(got, public) {
+        return None;
+    }
+    if vector["register"]["required"] != true {
+        return Some(format!(
+            "{id}: got {got}, the reference {public} (held exactly)"
+        ));
+    }
+    let (old, new) = (outcome_class(public), outcome_class(got));
+    if covered(id, &old, &new, entries).is_none() {
+        return Some(format!(
+            "{id}: got {got}, the reference {public}: no register entry names it \
+             with the transition {old} -> {new}"
+        ));
+    }
+    None
 }
 
 /// A number the payload carries (`{"number": text}`) as the recorder's
@@ -243,6 +411,7 @@ fn answer(template: &Case, bases: &bases::Bases, vector: &Value, keys: &Value) -
             "outcome": "refusal",
             "code": code,
             "rule": fields.get("rule"),
+            "fields": {"field": fields.get("field"), "reason": fields.get("reason")},
         }),
         other => serde_json::json!({"outcome": format!("{other:?}")}),
     }
@@ -332,7 +501,7 @@ fn key_type(key: &str) {
         .case
         .clone();
     let bases = bases::load(&contract.join("bases.yaml")).unwrap();
-    let entries = register_patterns();
+    let (entries, _) = transitions();
     let pending = ids(&json("contract/tests/t132a-pending.json")["pending"]["rust-host"]);
     let mut failures = Vec::new();
     let mut passing_but_pending = Vec::new();
@@ -343,21 +512,15 @@ fn key_type(key: &str) {
         }
         ran += 1;
         let id = vector["id"].as_str().unwrap();
-        let want = &vector["reference"]["public"];
         let got = answer(&template, &bases, vector, keys);
-        let unported = got["code"] == "UNSUPPORTED_REQUEST";
-        let ok = !unported
-            && (agrees(&got, want)
-                || (vector["register"]["required"] == true
-                    && got["outcome"] != "host failure"
-                    && registered(id, &entries).is_some()));
-        match (ok, pending.contains(id)) {
-            (true, true) => passing_but_pending.push(id.to_owned()),
-            (false, false) => failures.push(format!("{id}: got {got}, the reference {want}")),
+        let failed = problem(vector, &got, &entries);
+        match (failed, pending.contains(id)) {
+            (None, true) => passing_but_pending.push(id.to_owned()),
+            (Some(why), false) => failures.push(why),
             _ => {}
         }
     }
-    assert!(ran > 40, "{key}: {ran} vectors");
+    assert!(ran > 0, "{key}: {ran} vectors");
     assert!(
         passing_but_pending.is_empty(),
         "these pass now: take them out of contract/tests/t132a-pending.json's \
@@ -416,21 +579,112 @@ key_types! {
     rust_host_casts_to_a_decimal_18_0_key_as_the_reference => "decimal128-18-0",
     rust_host_casts_to_a_decimal_38_10_key_as_the_reference => "decimal128-38-10",
     rust_host_casts_to_a_hugeint_key_as_the_reference => "decimal128-38-0",
+    rust_host_rounds_to_a_float32_key_near_one => "float32-near-one",
+    rust_host_rounds_to_a_float32_key_near_its_largest => "float32-large",
+    rust_host_casts_to_a_float32_key_past_2pow24 => "float32-past-2pow24",
+    rust_host_casts_to_a_float64_key_past_2pow53 => "float64-past-2pow53",
+    rust_host_casts_to_a_float64_key_past_minus_2pow53 => "float64-past-minus-2pow53",
+    rust_host_holds_a_38_digit_hugeint_key_exactly => "decimal128-38-0-wide",
+    rust_host_holds_a_38_digit_decimal_38_10_key_exactly => "decimal128-38-10-wide",
+    rust_host_holds_a_decimal_38_37_key_exactly => "decimal128-38-37",
 }
 
 #[test]
-fn the_glob_and_the_register_reading_hold() {
+fn the_glob_the_transitions_and_the_derived_matches_hold() {
     assert!(glob("decimal128-18-0.*", "decimal128-18-0.int.present"));
     assert!(glob("*.text.hex", "int64.text.hex"));
     assert!(!glob("int64.*", "int8.int.present"));
     assert!(glob("int64.int.present", "int64.int.present"));
     assert!(!glob("int64.int.present", "int64.int.present-2"));
-    // Fail closed: a vector no entry names is not registered.
-    assert_eq!(registered("int64.int.present", &[]), None);
-    let entries = vec![("X-1".to_owned(), vec!["int64.*".to_owned()])];
+    let read = |t: &str| transition(&format!("{REF}{t}"));
     assert_eq!(
-        registered("int64.text.hex", &entries),
+        read("*.time.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST"),
+        Some((
+            "*.time.*".to_owned(),
+            "refusal INTERNAL_ERROR".to_owned(),
+            "refusal INVALID_REQUEST".to_owned()
+        ))
+    );
+    assert_eq!(read("*.time.*"), None);
+    assert_eq!(read("*.time.* refusal -> success"), None);
+    // An entry covers only the transition it declares; none, nothing.
+    let entries = vec![(
+        "X-1".to_owned(),
+        "int64.*".to_owned(),
+        "success".to_owned(),
+        "refusal INVALID_REQUEST".to_owned(),
+    )];
+    assert_eq!(
+        covered(
+            "int64.text.hex",
+            "success",
+            "refusal INVALID_REQUEST",
+            &entries
+        ),
         Some("X-1".to_owned())
     );
-    assert_eq!(registered("int8.text.hex", &entries), None);
+    assert_eq!(
+        covered(
+            "int64.text.hex",
+            "refusal INTERNAL_ERROR",
+            "refusal INVALID_REQUEST",
+            &entries
+        ),
+        None
+    );
+    assert_eq!(
+        covered(
+            "int8.text.hex",
+            "success",
+            "refusal INVALID_REQUEST",
+            &entries
+        ),
+        None
+    );
+    assert_eq!(
+        covered("int64.text.hex", "success", "refusal INVALID_REQUEST", &[]),
+        None
+    );
+    // Derived matches: a float32 at its width, a decimal by its value, a
+    // refusal by name.
+    let f32_one_up = serde_json::json!({"outcome": "success", "entities": [["f32", "3f800001"]]});
+    let wide = serde_json::json!({"outcome": "success", "entities": [["f", format!("{:016x}", 1.000_000_119_209_289_6_f64.to_bits())]]});
+    assert!(matches(&f32_one_up, &wide));
+    let one = serde_json::json!({"outcome": "success", "entities": [["f", "3ff0000000000000"]]});
+    assert!(!matches(&f32_one_up, &one));
+    let dec = serde_json::json!({"outcome": "success", "entities": [["dec", "12.5"]]});
+    assert!(matches(
+        &dec,
+        &serde_json::json!({"outcome": "success", "entities": [["s", "012.500"]]})
+    ));
+    assert!(!matches(
+        &dec,
+        &serde_json::json!({"outcome": "success", "entities": [["s", "12.51"]]})
+    ));
+    let named = serde_json::json!({"outcome": "refusal", "code": "INVALID_REQUEST", "named": true});
+    let bare = serde_json::json!({"outcome": "refusal", "code": "INVALID_REQUEST", "fields": {"field": null, "reason": null}});
+    assert!(!matches(&named, &bare));
+    let by_name = serde_json::json!({"outcome": "refusal", "code": "INVALID_REQUEST", "fields": {"field": "indices", "reason": "out_of_range"}});
+    assert!(matches(&named, &by_name));
+}
+
+#[test]
+fn every_vector_ref_names_its_transition() {
+    gated("every_vector_ref_names_its_transition", || {
+        let (_, malformed) = transitions();
+        assert!(malformed.is_empty(), "{malformed:?}");
+    });
+}
+
+fn gated(test: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
+    let pending = ids(&json("contract/tests/t132a-pending.json")["pending"]["exits"]);
+    let outcome = std::panic::catch_unwind(check);
+    match (outcome, pending.contains(&format!("rust:{test}"))) {
+        (Ok(()), true) => panic!(
+            "{test} passes now: take rust:{test} out of \
+             contract/tests/t132a-pending.json's pending[\"exits\"]"
+        ),
+        (Err(failure), false) => std::panic::resume_unwind(failure),
+        _ => {}
+    }
 }

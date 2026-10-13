@@ -9,11 +9,12 @@ to the reference's rule-table vectors.
 
 Written by the package's independent test author from the brief, the
 design's ledger row ("The entities cast to the key's type") and the
-reference, before the implementation. ``contract/key-cast-vectors.json``
-is recorded from the reference by ``contract/tools/key_cast_record.py``,
-whose ``observe`` this test calls, so both routes are observed by the same
-code; ``sdm-testkit``'s ``tests/t132a_key_cast.rs`` holds ``rust-host`` to
-the same vectors, so the two hosts agree through them.
+reference, before the implementation, and widened in round 2 from the
+reviews of part 1. ``contract/key-cast-vectors.json`` is recorded from the
+reference by ``contract/tools/key_cast_record.py``, whose ``observe`` this
+test calls, so both routes are observed by the same code;
+``sdm-testkit``'s ``tests/t132a_key_cast.rs`` holds ``rust-host`` to the
+same vectors, so the two hosts agree through them.
 
 - Exit "the entities' cast runs in the core, both hosts giving the same
   answers and error codes over the rule table's vectors": each vector's
@@ -22,21 +23,32 @@ the same vectors, so the two hosts agree through them.
   DuckDB routes) with the vector's entities as a caller passes them. The
   answer must be the reference's: a request whose predicted rows carry the
   reference's entities, in order, or a refusal of the same class, code and
-  stage. INVALID_REQUEST against INTERNAL_ERROR is part of the answer
-  (E41(l)).
-- A vector the recorder marked ``register.required`` (the reference fails
-  with INTERNAL_ERROR, its pandas cast changes an entity's kind or value,
-  or the core cannot tell it from another vector the reference answers
-  otherwise) may differ only where an entry of
-  ``docs/design/rust-core/register.yaml``, proposed or approved, names it
-  in its ``refs`` (``contract/key-cast-vectors.json#<id or glob>``); every
-  other vector is held to the reference exactly, and no vector may end in
+  stage (INVALID_REQUEST against INTERNAL_ERROR is part of it, E41(l)).
+- A vector carrying ``expected`` is held to it first: derived by the
+  recorder from the exact value, never through a double. A text or
+  decimal entity of a float key is the nearest float of the key's width,
+  ties to even (float tables holding both neighbours, both signs, and the
+  float32 overflow boundary); an exponent past any key, or a wide decimal
+  no key holds, is refused by name (INVALID_REQUEST naming ``indices``
+  and why); a decimal 38 digits wide is held exactly.
+- A vector marked ``register.required`` may differ from the reference only
+  under an entry of ``docs/design/rust-core/register.yaml``, proposed or
+  approved, whose ``refs`` name the vector and the transition it makes:
+  ``contract/key-cast-vectors.json#<id or glob> <from> -> <to>``, each of
+  ``success`` or ``refusal <CODE>``, from the reference's answer to the
+  host's. An entry covers only the transition it declares. Every other
+  vector is held to the reference exactly, and no vector may end in
   ``UNSUPPORTED_REQUEST`` (a rule the core does not take yet).
+- A mix of kinds the host hands over as text (``disposition: as_text``):
+  its answer is the host's own answer to that text given as text, and,
+  where the reference answers that text otherwise than INTERNAL_ERROR, the
+  reference's answer to it.
 - The vectors themselves: recorded at the reference of
-  ``contract/reference-env.txt``, every key type and input of the recorder
-  present, each input read back exactly, the host's column and the
-  register marks what the recorder derives (so neither is edited by hand),
-  and not vacuous.
+  ``contract/reference-env.txt``; every key type and input of the
+  recorder present; each input read back exactly; the host's column, the
+  derived expectations and the register marks re-derived (so none is
+  edited by hand); decimals written exactly, whatever the caller's decimal
+  context; and not vacuous.
 
 Gating (``contract/tests/t132a_gate.py``): ``t132a-pending.json``'s
 ``pending["python-core"]`` lists the vectors that failed here when this was
@@ -48,10 +60,14 @@ changes nothing else of this file, the vectors or the recorder.
 
 from __future__ import annotations
 
+import copy
+import decimal
 import fnmatch
 import importlib.util
 import json
+import re
 import sys
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -96,37 +112,86 @@ RECORDED: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
 KEYS = {key['id']: key for key in RECORDED['keys']}
 
 
-def registered(vector_id: str) -> str | None:
-    r"""The register entry, proposed or approved, whose ``refs`` name the
-    vector (by id or a glob of ids), or None."""
+#: A ref naming vectors and the transition it covers.
+TRANSITION = re.compile(
+    re.escape('contract/key-cast-vectors.json#')
+    + r'(?P<glob>\S+) (?P<old>success|refusal [A-Z][A-Z_]*)'
+    + r' -> (?P<new>success|refusal [A-Z][A-Z_]*)'
+)
+
+
+def transitions() -> tuple[list[tuple[str, str, str, str]], list[str]]:
+    r"""Each vector ref of the register's proposed or approved entries, as
+    (entry, glob, from, to), and the refs naming vectors that declare no
+    transition (malformed)."""
     document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    out: list[tuple[str, str, str, str]] = []
+    malformed: list[str] = []
     for entry in document['entries']:
         if entry.get('status') not in ('proposed', 'approved'):
             continue
         for ref in entry.get('refs') or []:
             if not isinstance(ref, str) or not ref.startswith(R.REGISTER_REF):
                 continue
-            if fnmatch.fnmatchcase(vector_id, ref[len(R.REGISTER_REF) :]):
-                return str(entry['id'])
+            found = TRANSITION.fullmatch(ref)
+            if found is None:
+                malformed.append(f'{entry["id"]}: {ref}')
+                continue
+            out.append(
+                (str(entry['id']), found['glob'], found['old'], found['new'])
+            )
+    return out, malformed
+
+
+def covered(vector_id: str, old: str, new: str) -> str | None:
+    r"""The entry whose ref names the vector with exactly this transition."""
+    for entry, glob, frm, to in transitions()[0]:
+        if (frm, to) == (old, new) and fnmatch.fnmatchcase(vector_id, glob):
+            return entry
     return None
 
 
-def problem_of(vector: dict[str, Any], got: dict[str, Any]) -> str | None:
-    r"""Why ``got`` fails the vector, or None when it is the reference's
-    answer, or a marked vector's registered difference."""
-    want = vector['reference']['public']
+def problem_of(
+    vector: dict[str, Any],
+    got: dict[str, Any],
+    own_text: dict[str, Any] | None = None,
+) -> str | None:
+    r"""Why ``got`` fails the vector, or None: its derived expectation and
+    disposition held, then the reference's answer, or a marked vector's
+    difference under an entry declaring that transition. ``own_text`` is
+    the host's answer to the vector's text column given as text."""
+    vid = vector['id']
+    reference = vector['reference']
+    public = reference['public']
     if got.get('code') == 'UNSUPPORTED_REQUEST':
-        return f'refused by a rule the core does not take yet: {got}'
-    if got == want:
+        return f'{vid}: refused by a rule the core does not take yet: {got}'
+    expected = vector.get('expected')
+    if expected is not None and not R.matches(expected, got):
+        return f'{vid}: got {got}, the derived expectation {expected}'
+    if vector['register'].get('disposition') == 'as_text':
+        if own_text is not None and not R.same(got, own_text):
+            return (
+                f'{vid}: got {got}, but {own_text} for the same text given '
+                'as text'
+            )
+        text = reference['as_text']
+        if R.outcome_class(text) != 'refusal INTERNAL_ERROR' and not R.same(
+            got, text
+        ):
+            return (
+                f"{vid}: got {got}, the reference's answer to its text {text}"
+            )
+    if R.same(got, public):
         return None
-    if vector['register']['required'] and registered(vector['id']):
-        return None
-    marked = (
-        'marked register entry required, and no entry names it'
-        if vector['register']['required']
-        else 'held to the reference exactly'
-    )
-    return f'{vector["id"]}: got {got}, the reference {want} ({marked})'
+    if not vector['register']['required']:
+        return f'{vid}: got {got}, the reference {public} (held exactly)'
+    old, new = R.outcome_class(public), R.outcome_class(got)
+    if covered(vid, old, new) is None:
+        return (
+            f'{vid}: got {got}, the reference {public}: no register entry '
+            f'names it with the transition {old} -> {new}'
+        )
+    return None
 
 
 def _cases() -> list[Any]:
@@ -150,9 +215,15 @@ def test_python_core_casts_the_entities_as_the_reference(
     vector: dict[str, Any], core_route: None
 ) -> None:
     def check() -> None:
+        key = KEYS[vector['key']]
         values = [R.decode(tagged) for tagged in vector['input']]
-        got = R.observe(KEYS[vector['key']], values)
-        problem = problem_of(vector, got)
+        expected = vector.get('expected') or {}
+        fields = ('field', 'reason') if expected.get('named') else ()
+        got = R.observe(key, values, fields)
+        own_text = None
+        if vector['register'].get('disposition') == 'as_text':
+            own_text = R.observe(key, R.as_text(values))
+        problem = problem_of(vector, got, own_text)
         assert problem is None, problem
 
     G.held('python-core', vector['id'], check)
@@ -169,12 +240,11 @@ def test_the_vectors_are_the_reference_s() -> None:
     env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
     assert f'reference: {RECORDED["reference"]}' in env
     # Every key type and every input the recorder names, each once.
-    assert [key['id'] for key in RECORDED['keys']] == [
-        key['id'] for key in R.KEYS
-    ]
-    for key in R.KEYS:
+    keys = R.all_keys()
+    assert [key['id'] for key in RECORDED['keys']] == [k['id'] for k in keys]
+    for key in keys:
         assert KEYS[key['id']]['setup'] == key['setup']
-    wanted = [f'{key["id"]}.{name}' for key in R.KEYS for name in R.inputs(key)]
+    wanted = [f'{key["id"]}.{name}' for key in keys for name in R.inputs(key)]
     assert [v['id'] for v in RECORDED['vectors']] == wanted
 
 
@@ -184,20 +254,138 @@ def test_each_input_reads_back_exactly() -> None:
         assert [R.encode(v) for v in values] == vector['input'], vector['id']
 
 
-def test_the_host_column_and_the_marks_are_the_recorder_s() -> None:
+def test_the_column_expectations_and_marks_are_the_recorder_s() -> None:
     # Derived, never edited: the host's natural column (pyarrow at the
-    # reference cell's pin) and the register marks from the answers.
-    import copy
-
+    # reference cell's pin), each derived expectation, and the register
+    # marks from the recorded answers.
+    expectations = {
+        f'{key["id"]}.{name}': expected
+        for key in R.all_keys()
+        for name, (_, expected) in R.derived(key).items()
+    }
     vectors = copy.deepcopy(RECORDED['vectors'])
     for vector in vectors:
         values = [R.decode(tagged) for tagged in vector['input']]
         assert R.host_arrow(values) == vector['host_arrow'], vector['id']
-        why = R.register(values, vector['reference']['public'])
-        vector['register'] = {'required': bool(why), 'why': why}
-    R.alike(vectors)
+        assert vector.get('expected') == expectations.get(vector['id'])
+        del vector['register']
+    R.derive_marks(vectors)
     for derived, recorded in zip(vectors, RECORDED['vectors'], strict=True):
         assert derived['register'] == recorded['register'], derived['id']
+
+
+#: Decimals 38 and 76 digits wide, at several scales, signed: the exact
+#: unscaled digits each Arrow column must carry, written here from the
+#: text by hand rules (digits shifted by the scale), never by arithmetic.
+WIDE = [
+    '12345678901234567890123456789012345678',
+    '-99999999999999999999999999999999999999',
+    '1234567890123456789012345678.0123456789',
+    '-1.2345678901234567890123456789012345678',
+    '0.00000000000000000000000000000000000001',
+    '1' * 76,
+    '-' + '9' * 40 + '.' + '1' * 36,
+]
+
+
+def _digits(text: str, scale: int) -> str:
+    sign = '-' if text.startswith('-') else ''
+    whole, _, fraction = text.lstrip('-').partition('.')
+    digits = (whole + fraction.ljust(scale, '0')).lstrip('0') or '0'
+    return sign + digits if digits != '0' else '0'
+
+
+def _hostile() -> Any:
+    context = decimal.Context(prec=3, Emax=5, Emin=-5)
+    context.traps[decimal.Inexact] = True
+    context.traps[decimal.Rounded] = True
+    return decimal.localcontext(context)
+
+
+def _wide(write: Any) -> list[str]:
+    r"""What ``write`` (a value to its scalar) gets wrong of ``WIDE`` in a
+    hostile decimal context: precision 3, rounding trapped."""
+    import pyarrow as pa
+
+    wrong = []
+    for text in WIDE:
+        value = Decimal(text)
+        kind = pa.array([value]).type
+        want = {
+            't': 'd128' if pa.types.is_decimal128(kind) else 'd256',
+            'p': kind.precision,
+            's': kind.scale,
+            'v': _digits(text, kind.scale),
+        }
+        try:
+            with _hostile():
+                got = write(value)
+        except Exception as error:  # noqa: BLE001 - reported
+            got = f'raised {type(error).__name__}'
+        if got != want:
+            wrong.append(f'{text}: {got}, not {want}')
+    return wrong
+
+
+def test_the_recorder_writes_wide_decimals_exactly() -> None:
+    assert _wide(lambda value: R.host_arrow([value])['values'][0]) == []
+
+
+def test_the_runner_writes_wide_decimals_exactly(
+    request: pytest.FixtureRequest,
+) -> None:
+    # The Python runner's record of the entities the host sent
+    # (run_python.py's _scalars), held to the same exact digits.
+    import pyarrow as pa
+
+    run_python = _module('run_python', ROOT / 'contract/runners/run_python.py')
+
+    def write(value: Decimal) -> Any:
+        return run_python._scalars(pa.table({'indices': pa.array([value])}))[0]
+
+    def check() -> None:
+        assert _wide(write) == []
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def test_the_recorded_decimal_columns_hold_in_a_hostile_context() -> None:
+    with _hostile():
+        for vector in RECORDED['vectors']:
+            if 'Decimal' not in json.dumps(vector['input']):
+                continue
+            values = [R.decode(tagged) for tagged in vector['input']]
+            assert R.host_arrow(values) == vector['host_arrow'], vector['id']
+
+
+def _module(name: str, path: Path) -> ModuleType:
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def test_the_derived_float_rule_is_exact() -> None:
+    # The derivation itself: nearest at the width, ties to even, by
+    # integer arithmetic, against values worked by hand.
+    from fractions import Fraction
+
+    one, ulp = Fraction(1), Fraction(1, 2**23)
+    tiny = Fraction(1, 10**30)
+    assert R.nearest(one + ulp / 2 + tiny, 24) == one + ulp
+    assert R.nearest(one + ulp / 2 - tiny, 24) == one
+    assert R.nearest(one + ulp / 2, 24) == one  # tie: 1.0 is even
+    assert R.nearest(Fraction(2**24 + 3), 24) == 2**24 + 4  # tie: up to even
+    assert R.nearest(Fraction(2**53 + 1), 53) == 2**53
+    assert R.nearest(-(one + ulp / 2 + tiny), 24) == -(one + ulp)
+    assert R.nearest(R.F32_MAX + 2**103 - 1, 24) == R.F32_MAX
+    assert R.nearest(R.F32_MAX + 2**103, 24) is None  # tie past the largest
+    # Codex's repro: the text below gives 1.00000011920928955078125.
+    exact = Fraction(Decimal('1.000000059604644775390625000001'))
+    assert R.float_bits(R.nearest(exact, 24), 24) == '3f800001'
 
 
 def test_the_vectors_are_not_vacuous() -> None:
@@ -217,10 +405,23 @@ def test_the_vectors_are_not_vacuous() -> None:
         assert vector['register']['required'] == bool(vector['register']['why'])
     # The reference's own cast was observed wherever its engine cast.
     assert all(v['reference']['cast'] for v in RECORDED['vectors'])
+    # Round 2: derived expectations of each kind, and the four mixed
+    # float-and-text vectors whose text the reference takes, marked with
+    # their disposition.
+    expected = [v['expected'] for v in RECORDED['vectors'] if 'expected' in v]
+    kinds = {e['entities'][0][0] for e in expected if e['outcome'] == 'success'}
+    assert kinds == {'f32', 'f64', 'dec'}
+    assert sum(1 for e in expected if e['outcome'] == 'refusal') > 20
+    by_id = {v['id']: v for v in RECORDED['vectors']}
+    for key in ('float32', 'float64', 'decimal128-18-0', 'decimal128-38-0'):
+        mark = by_id[f'{key}.mixed.float-text']['register']
+        assert mark['required'] and mark['disposition'] == 'as_text', key
     # Each key type has successes and refusals of both codes, or fails
     # everywhere with INTERNAL_ERROR (the reference's decimal and
     # large_string keys).
     for key in KEYS:
+        if any(key == k['id'] for k in R.ROUND_2):
+            continue
         mine = {
             (
                 v['reference']['public']['outcome'],
@@ -265,29 +466,85 @@ def test_the_gate_holds_a_pending_test_to_failing(
         G.held('python-core', 'seeded.unlisted', failing)
 
 
-def test_a_difference_is_held_unless_marked_and_registered(
+def test_a_difference_is_held_unless_marked_and_its_transition_named(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Fail closed: the comparison itself, on a seeded difference.
-    vector = next(
-        v for v in RECORDED['vectors'] if not v['register']['required']
+    # Fail closed: the comparison itself, on seeded differences.
+    vectors = RECORDED['vectors']
+    plain = next(
+        v
+        for v in vectors
+        if not v['register']['required'] and 'expected' not in v
     )
-    marked = next(v for v in RECORDED['vectors'] if v['register']['required'])
+    marked = next(
+        v
+        for v in vectors
+        if v['register']['required']
+        and v['register']['disposition'] is None
+        and v['reference']['public']['outcome'] == 'success'
+    )
     other = {
         'outcome': 'refusal',
         'stage': 'materialize',
         'error': 'StructuredDataError',
         'code': 'NOT_THE_REFERENCE_S',
     }
-    assert problem_of(vector, vector['reference']['public']) is None
-    assert problem_of(vector, other) is not None
+    me = sys.modules[__name__]
+    assert problem_of(plain, plain['reference']['public']) is None
+    assert problem_of(plain, other) is not None
     unported = dict(other, code='UNSUPPORTED_REQUEST')
     assert problem_of(marked, unported) is not None
-    monkeypatch.setattr(sys.modules[__name__], 'registered', lambda _: None)
+    monkeypatch.setattr(me, 'transitions', lambda: ([], []))
     assert problem_of(marked, other) is not None
-    monkeypatch.setattr(
-        sys.modules[__name__], 'registered', lambda _: 'SEEDED-1'
-    )
+    # An entry covers only the transition it declares.
+    wrong = [('SEEDED-1', marked['id'], 'success', 'refusal INVALID_REQUEST')]
+    monkeypatch.setattr(me, 'transitions', lambda: (wrong, []))
+    assert problem_of(marked, other) is not None
+    right = [
+        ('SEEDED-1', marked['id'], 'success', 'refusal NOT_THE_REFERENCE_S')
+    ]
+    monkeypatch.setattr(me, 'transitions', lambda: (right, []))
     assert problem_of(marked, other) is None
     # An unmarked vector is never excused by an entry.
-    assert problem_of(vector, other) is not None
+    anything = [('SEEDED-2', '*', 'success', 'refusal NOT_THE_REFERENCE_S')]
+    monkeypatch.setattr(me, 'transitions', lambda: (anything, []))
+    assert problem_of(plain, other) is not None
+    # A derived expectation binds before any entry.
+    derived = next(v for v in vectors if 'expected' in v)
+    assert problem_of(derived, other) is not None
+    # An as_text disposition binds to the host's own answer to its text.
+    mixed = next(
+        v for v in vectors if v['register']['disposition'] == 'as_text'
+    )
+    text = mixed['reference']['as_text']
+    assert problem_of(mixed, text, own_text=other) is not None
+
+
+def test_the_transition_syntax_reads_and_refuses() -> None:
+    good = 'contract/key-cast-vectors.json#*.time.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+    found = TRANSITION.fullmatch(good)
+    assert found is not None and found['glob'] == '*.time.*'
+    for bad in (
+        'contract/key-cast-vectors.json#*.time.*',
+        'contract/key-cast-vectors.json#*.time.* refusal -> success',
+        'contract/key-cast-vectors.json#*.time.* success->success',
+    ):
+        assert TRANSITION.fullmatch(bad) is None, bad
+
+
+def test_every_vector_ref_names_its_transition(
+    request: pytest.FixtureRequest,
+) -> None:
+    def check() -> None:
+        found, malformed = transitions()
+        assert malformed == [], malformed
+        # Not vacuous: each ref names a vector the reference answers as its
+        # transition starts.
+        for entry, glob, old, _ in found:
+            assert any(
+                fnmatch.fnmatchcase(v['id'], glob)
+                and R.outcome_class(v['reference']['public']) == old
+                for v in RECORDED['vectors']
+            ), (entry, glob, old)
+
+    G.held('exits', f'py:{request.node.name}', check)
