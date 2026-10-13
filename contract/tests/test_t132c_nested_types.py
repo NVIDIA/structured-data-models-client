@@ -44,7 +44,7 @@ by the same code; ``sdm-testkit``'s ``tests/t132c_nested_types.rs`` holds
   with its warning) is held to the reference exactly unless an approved
   entry declares its transition.
 - Reviewers: only the owner approves an entry, but a ref attached to an
-  already approved entry (P1B-7, P1B-9, P1B-10) takes effect here at once.
+  already approved entry (P1B-7, P1B-8, P1B-10) takes effect here at once.
   Each newly attached ref therefore needs a reviewer's check that the
   entry's approved ``new_behavior`` really is that transition for those
   vectors, and that its glob names no vector the owner did not approve.

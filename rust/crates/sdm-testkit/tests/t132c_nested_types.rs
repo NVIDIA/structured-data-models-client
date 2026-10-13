@@ -35,7 +35,7 @@
 //!   difference is expected and excuses nothing by itself; an unmarked
 //!   vector (BLOB, left out with the reference's warning) is held exactly
 //!   unless an approved entry declares its transition.
-//! - Reviewers: a ref attached to an already approved entry (P1B-7, P1B-9,
+//! - Reviewers: a ref attached to an already approved entry (P1B-7, P1B-8,
 //!   P1B-10) takes effect here at once, though only the owner approves
 //!   entries; each newly attached ref needs a reviewer's check that the
 //!   entry's approved behaviour is that transition for exactly those
