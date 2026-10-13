@@ -236,12 +236,16 @@ class DatabricksServingTransport:
             # RuntimeError and would otherwise escape the error contract. Not
             # chained: a JSONDecodeError holds the whole body, rows and all.
             answer = json.loads(body)
-        except (ValueError, RecursionError):
-            raise StructuredDataError(
+        except (ValueError, RecursionError) as error:
+            failed = StructuredDataError(
                 f'serving endpoint {self._endpoint!r} answered with a '
                 f'response that is not JSON',
                 code='TRANSPORT_ERROR',
-            ) from None
+            )
+            # Nested past what this interpreter's reader reads: said so, for
+            # the core route (StructuredDataError._response_too_deep).
+            failed._response_too_deep = isinstance(error, RecursionError)
+            raise failed from None
         if not isinstance(answer, dict):
             raise StructuredDataError(
                 f'expected a JSON object from serving endpoint '

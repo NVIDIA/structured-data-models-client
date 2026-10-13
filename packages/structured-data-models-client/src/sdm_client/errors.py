@@ -69,6 +69,14 @@ class StructuredDataError(Exception):
             there is none.
     """
 
+    #: Set on a transport's ``TRANSPORT_ERROR`` for an answer whose JSON is
+    #: nested deeper than this interpreter's reader reads (Python before
+    #: 3.12 raises ``RecursionError`` past about 1,000 levels): the core
+    #: route reports such an answer as too deep, as it reports one it reads
+    #: itself (T1.28b, register P1B-22). Read by nothing else; the error's
+    #: class, code and message are as on any other answer that is not JSON.
+    _response_too_deep: bool = False
+
     def __init__(
         self,
         message: str,

@@ -371,11 +371,15 @@ def _decoded_object(content: bytes, url: str) -> dict[str, Any]:
     try:
         body = json.loads(content or b'{}')
     except (ValueError, RecursionError) as error:
-        raise StructuredDataError(
+        failed = StructuredDataError(
             f'{redact_url(url)} did not return JSON',
             code='TRANSPORT_ERROR',
             details={'url': redact_url(url)},
-        ) from error
+        )
+        # Nested past what this interpreter's reader reads: said so, for the
+        # core route (StructuredDataError._response_too_deep).
+        failed._response_too_deep = isinstance(error, RecursionError)
+        raise failed from error
     if not isinstance(body, dict):
         raise StructuredDataError(
             f'Expected a JSON object from {redact_url(url)}, got '

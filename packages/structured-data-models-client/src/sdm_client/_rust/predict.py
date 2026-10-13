@@ -269,9 +269,7 @@ def predict(
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
-            if failed.code == 'TRANSPORT_ERROR' and isinstance(
-                failed.__cause__, RecursionError
-            ):
+            if failed.code == 'TRANSPORT_ERROR' and failed._response_too_deep:
                 # An answer nested deeper than Python's reader takes on this
                 # interpreter (before 3.12, past about 1,000 levels): the
                 # core is told so with an answer cut one level past its own
