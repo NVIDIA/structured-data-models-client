@@ -69,11 +69,11 @@
    "probes": {
     "key.decimal-18-0": {
      "described": "c2ee62778c3bb29b6e842180593f735df8cee4f7e77e227811ba2d814f524f9d",
-     "warnings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
     },
     "key.decimal-38-10": {
      "described": "c68a30fe16db849f48d40453fe5074cfee967261dbabd4699f230f39121da12b",
-     "warnings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
     },
     "key.declared-int32": {
      "described": "7e2860d33d819e028a2bcee9791f4345c629b943bb1d0d0a3b8002120bae5165",
@@ -81,7 +81,7 @@
     },
     "key.hugeint": {
      "described": "45a11346ccc6968f114d7b42efed01b534bd3f46eb6daa0857a9d1c16d22dbf0",
-     "warnings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+     "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
     },
     "key.uint64-above-int64-max": {
      "described": "264adaa2527eb92b8cd3a760cf9a0b1906dbc984abc0edf8cca63db1aec17365",

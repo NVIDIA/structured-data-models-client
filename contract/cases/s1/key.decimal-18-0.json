@@ -39,6 +39,36 @@
         "time_columns": {}
       },
       "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "d128",
+          "p": 1,
+          "s": 0,
+          "v": "0"
+        },
+        {
+          "t": "d128",
+          "p": 1,
+          "s": 0,
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
     }
   },
   "expect": {

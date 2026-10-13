@@ -83,14 +83,22 @@ def test_the_inventory_loader_maps_every_case_without_loss() -> None:
 
 #: The inventory cases whose call the contract cannot carry to materialize,
 #: so their core is describe_source alone (T1.21e): materialize's indices
-#: are one integer or text type, at least one, and these name none, or
-#: entities of a decimal key (the keys and empty-null refusal maps' gaps).
+#: are at least one, and this names none (the empty-null refusal map's
+#: gap). From T1.32a the decimal keys' entities are carried, each a scalar
+#: of the type the host's values have.
 _DESCRIBE_ONLY = {
     'empty.indices',
-    'key.hugeint',
-    'key.decimal-18-0',
-    'key.decimal-38-10',
 }
+
+
+def _written(index: dict[str, Any]) -> str:
+    r"""An entity scalar's value as the call writes it: a decimal's at its
+    scale, any other's ``v``."""
+    from decimal import Decimal
+
+    if index['t'] in ('d128', 'd256'):
+        return str(Decimal(index['v']).scaleb(-index['s']))
+    return str(index['v'])
 
 
 def _anchor(text: str) -> dict[str, Any]:
@@ -124,7 +132,7 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
         problems.append('materialize present where it cannot be, or absent')
     if materialize is not None:
         call = given['materialize']
-        if [index['v'] for index in materialize['indices']] != [
+        if [_written(index) for index in materialize['indices']] != [
             str(index) for index in call['indices']
         ]:
             problems.append("materialize's indices are not the call's")
