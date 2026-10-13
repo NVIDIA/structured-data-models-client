@@ -1634,47 +1634,49 @@ entries:
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build,
     SDMClient.predict of a request materialized on the core over a DuckDB
-    source runs on the core's predict (T1.11d), which sends a regression
-    asked for its default output to kumo-relational and lays out an answer
-    of float predictions, by the reference's rules, and refuses every other
-    input with UNSUPPORTED_REQUEST naming the rule, never a value (fields
-    operation and rule): outputs (any but the regression's default,
-    prediction), in the bridge before the core ran until T1.24, in the core
-    from T1.24 (E61), which the bridge passes them to (Predict.outputs,
-    contract version 13), before the state is read or the model called,
-    raised as the core's UnsupportedRequestError where the bridge raised
-    StructuredDataError with the same code; in the core, model (the
-    tabular model), problem_type, prediction_statistic (a statistic not
-    written as text), entity_ref (a request with no entity reference
+    source runs on the core's predict (T1.11d). From T1.28b it runs the
+    client's predict-side rules (sdm-request's predict): the model and
+    output checks and the task's default outputs (SDMClient._prepare), the
+    answer to a request with no rows, the adapter's _preflight, the merge
+    and the notice of an absent output, as the reference's; it predicts a
+    regression, a binary and a multiclass classification asked for any
+    outputs the model produces, and lays out the answer as the reference's
+    frame (a class as the target's type, its probabilities keyed as the
+    column spells the classes, a null prediction as NaN), a non-finite
+    number read as the reference's reader reads it (the owner's decision
+    of 2026-10-12: passed through). It refuses the rest with
+    UNSUPPORTED_REQUEST naming the rule, never a value (fields operation
+    and rule): model (the tabular model, once its shape checks pass, which
+    refuse a relational request first as the reference does), problem_type
+    (a forecast or a link prediction), prediction_statistic (a statistic
+    not written as text), entity_ref (a request with no entity reference
     column), id_type (an entity key not declared int8 to int64, written as
     an integer or as plain digits, or string), instance_id_type,
-    response_field (an answer carrying a field beyond its id, row_index
-    and prediction, named in field) and prediction_type (a prediction not
-    written as a JSON float). A number that is not finite anywhere in an
-    answer, metadata included (a NaN or Infinity token, which Python's
-    reader takes and JSON does not hold, or a token past a double's range,
-    1e400, which reads as an infinity), is INVALID_RESPONSE on the core,
-    field response, reason not_finite, on every host, where the reference
-    passes the value on. From T1.28a a classification's call is written as
-    the reference's (its default outputs, prediction and probabilities, and
-    no statistic), its answer refused by name (problem_type, the result's
-    layout T1.28b's), and outputs other than the task's default refused by
-    name (outputs) once the request state's task is read; an inference
-    option the caller set and the model does not read is refused before
-    the call, UNSUPPORTED_REQUEST naming the model and the options, as the
-    reference's adapter refuses it. A request not materialized on
-    the core has no core route (RouteError, the seam's own failure). The
-    default route is unchanged.
+    response_field (an answer carrying scores, rankings, embeddings,
+    quantiles, an explanation or item metadata, named in field),
+    prediction_type (a classification's answer not of its target's type)
+    and target_type (a classification of a float target, which
+    materialize does not write). An answer nested past 128 levels (P1B-22)
+    and a regression's prediction that is not a number (P1B-23) are
+    INVALID_RESPONSE, approved by the owner. A request not materialized on
+    the core, or holding other payloads than the one it wrote, has no core
+    route (RouteError, the seam's own failure). The default route is
+    unchanged.
   affected_inputs: >-
     SDMClient.predict of a request materialized on the core over a DuckDB
     source, under a forced core route, with any of the inputs or answers
     above; base.regression is none of them, and its request and result are
     the reference's.
-  cases: [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28, T1.28a, T1.29]
+  cases: [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28, T1.28a, T1.28b, T1.29]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
+    Rewritten at T1.28b, which lifted outputs, the classification's
+    layout, the prediction types a regression's number and a class take,
+    and the non-finite numbers (owner, 2026-10-12, E78(h)); what remains
+    is the forecast, ranking, tabular and extra-output work of later
+    packages.
     Proposed by the implementer of T1.11d (Phase 1 decisions row E45), for
     the owner: each is a refusal of an input or answer the reference
     accepts, so it waits for the owner (P1B-1 process) and is never
@@ -2077,10 +2079,11 @@ entries:
     source under a forced core route, the schema's keys, relationships or a
     table's time column edited between them.
   cases: [T1.26b, T1.24b]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
   notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator during T1.28b (E78(l)).
     Found by T1.26b's review round 1 (Codex P2). Following the edit is the
     proposed behavior: the reference's request after such an edit is the
     first schema's, which the caller's edit says is not the one asked for;
@@ -2184,10 +2187,11 @@ entries:
     retyped, a table mapped to another source table or a table or column
     added since, then edited by a setter the core takes.
   cases: [T1.24b]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
   notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator during T1.28b (E78(l)).
     The core checks an edit against what the source said of each column
     (its data type), which it does not know of a column it did not
     describe or one retyped since; following such a schema is later work,
@@ -2264,10 +2268,11 @@ entries:
     forced core route whose sampled tables hold a decimal feature whose
     values float64 does not hold exactly.
   cases: [T1.27, T1.28a]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
   notes: >-
+    Closed by the owner on 2026-10-12, relayed by the orchestrator during T1.28b (E78(l)), as the reviewers agreed: settled at T1.28a, the core refuses as the reference does, so no change remains.
     Found by T1.27's review (subagent P3-3) with the differential, which
     classifies it here (contract/tools/differential.py's CODE_CHANGES). The
     reference's answer is a named INVALID_REQUEST, so E66(b)'s class does
@@ -2304,10 +2309,11 @@ entries:
     forced core route past the entity count, the context size or the hops
     the endpoint takes.
   cases: [T1.28a]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
   notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator during T1.28b (E78(l)).
     Measured at T1.28a: the independent test author's recorded cases
     (test_t128a_payload_rules.py: num_context_samples 10,001, 1,001
     entities) hold the code and the reference's class as a base of the
@@ -2345,6 +2351,84 @@ entries:
     where the reference crashes or gives an internal error, a named
     refusal is approved): for the reviewer to approve under the class,
     never self-approved.
+
+- id: P1B-22
+  title: A model's answer nested past 128 levels is refused INVALID_RESPONSE where the reference reads it
+  kind: change
+  old_behavior: >-
+    The reference's client decodes an answer's JSON at any depth Python's
+    reader takes (an answer whose metadata or an item's unread member
+    nests 200 or 5,000 levels is read, and predict returns its result).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the core reads an answer nested at most 128 levels
+    (sdm_wire::json::MAX_DEPTH) and refuses a deeper one before anything
+    of it is built: StructuredDataError, code INVALID_RESPONSE, fields
+    field response, reason too_deep and category depth, a local error
+    (no endpoint status), on every host; the Python host writes an answer
+    its transport decoded past that depth cut one level past it, so the
+    core refuses it alike (_rust/predict.py's _encoded). The default
+    route is unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a request materialized on the core over a DuckDB
+    source, under a forced core route, answered with JSON nested more
+    than 128 levels anywhere.
+  cases: [T1.28b]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
+  notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator
+    during T1.28b (E78(f)): the bounded reader's refusal is kept. The
+    boundary vectors of contract/response-vectors.json it covers end so on
+    both core hosts (the client's
+    tests/test_t128b_predict_result.py, sdm-testkit's
+    tests/t128b_predict_result.rs): boundary.deep.metadata-200,
+    boundary.deep.metadata-5000 and boundary.deep.item-5000;
+    boundary.deep.metadata-100 is read as the reference reads it. The
+    vectors are named here, not in cases, which register.py holds to
+    corpus cases, task IDs and inventory cases.
+
+- id: P1B-23
+  title: A regression's prediction that is not a number is refused INVALID_RESPONSE where the reference passes it on
+  kind: change
+  old_behavior: >-
+    The reference's client takes an answer's prediction as written: for a
+    regression, text, a boolean, a list or an integer past int64 is put in
+    the result as is, and its frame's prediction column is then of object
+    dtype; an integer past a double's range makes to_pandas() raise
+    OverflowError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    regression's prediction is a number: a JSON number (an integer token
+    within int64, read as the double it is; a float token, a token past a
+    double's range read as an infinity; NaN and Infinity read as
+    Python's reader reads them, P1B-4) or null; any other (text, a
+    boolean, an array, an object, an integer past int64) refuses the
+    answer: StructuredDataError, code INVALID_RESPONSE, fields field
+    prediction.prediction and reason not_a_number, a local error, on
+    every host (sdm_request::predict's answer_of). The default route is
+    unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a regression materialized on the core over a
+    DuckDB source, under a forced core route, answered with a prediction
+    that is not a number.
+  cases: [T1.28b]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
+  notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator
+    during T1.28b (E78(g)). A result column holds one type on every host,
+    so a column mixing text, booleans or lists with numbers has no layout
+    the pure-Rust host could give alike. The boundary vectors
+    boundary.evidence.prediction-text, boundary.evidence.prediction-bool,
+    boundary.evidence.prediction-list, boundary.finite.integer-past-int64
+    and boundary.finite.integer-past-double end so on both core hosts. The
+    vectors are named here, not in cases, which register.py holds to
+    corpus cases, task IDs and inventory cases. A classification's answer that is
+    not of its target's type stays refused by name (prediction_type,
+    P1B-4).
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
@@ -2641,10 +2725,11 @@ entries:
     Queries with a date literal read day first whose format pandas names
     (a four-digit year, one or two digits elsewhere), on the core route.
   cases: [T1.6b]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E69}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
   notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator during T1.28b (E78(l)).
     Measured at T1.6b: the corpus's one day-first case gives the reference's
     warning twice and the core's once, the same format
     (sdm-core/tests/pql_corpus.rs compares the formats as a set, and fails
@@ -2677,10 +2762,11 @@ entries:
     PQL date literals day first whose middle field has four digits and
     equals the year written last (with its time of day, if any).
   cases: [T1.6b]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E69}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
   notes: >-
+    Approved by the owner on 2026-10-12, relayed by the orchestrator during T1.28b (E78(l)).
     Found by T1.6b's probes: 144 of the 1,134 literals of dates.json's
     format_guess set, and 7 of the 330 generated queries of the pre-push
     differential, differ only so; every reading agrees. Executable:
