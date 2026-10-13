@@ -55,7 +55,11 @@ Before it changes anything it refuses, naming the reason, unless:
   and to nothing else;
 - the newest CI run ``gh`` reports on the candidate's exact SHA completed
   with conclusion success; a cancelled, failed or unfinished run does not
-  count (T1.8b's candidate run was cancelled).
+  count (T1.8b's candidate run was cancelled). Only a push run on the
+  phase branch or a topic branch under it (an archive branch never) counts
+  as evidence, here, for the landing runs and in ``verify``: a run of
+  another event (a pull request's) skips the checkpoint's gate, which CI
+  runs only on such pushes (T1.20, Codex P2).
 
 It then commits the landing commit (``git commit --allow-empty -s``) with
 ``Reviewed-by``, ``Protected-paths``, ``Base-SHA`` (the phase head) and
@@ -562,6 +566,18 @@ def check_reviews(
     return [Path(p) for p in paths]
 
 
+def gating(run: dict[str, object]) -> bool:
+    """Whether a run is evidence: a push to the phase branch or a topic
+    branch under it, never an archive branch, so CI ran the checkpoint's
+    gate in it; a pull request's run on the same SHA skips the gate."""
+    branch = str(run.get('headBranch'))
+    under = branch == PHASE_BRANCH or (
+        TOPIC_BRANCH.fullmatch(branch) is not None
+        and not branch.startswith(ARCHIVE_PREFIX)
+    )
+    return run.get('event') == 'push' and under
+
+
 def runs_on(tools: Tools, sha: str) -> list[dict[str, object]]:
     out = tools.gh(
         'run',
@@ -575,7 +591,11 @@ def runs_on(tools: Tools, sha: str) -> list[dict[str, object]]:
         '--json',
         RUN_FIELDS,
     )
-    runs = [r for r in json.loads(out or '[]') if r.get('headSha') == sha]
+    runs = [
+        r
+        for r in json.loads(out or '[]')
+        if r.get('headSha') == sha and gating(r)
+    ]
     return sorted(runs, key=lambda r: str(r.get('createdAt', '')), reverse=True)
 
 
@@ -588,7 +608,9 @@ def check_candidate_ci(tools: Tools, candidate: str) -> dict[str, object]:
     runs = runs_on(tools, candidate)
     if not runs:
         raise Refusal(
-            f'no CI run on the candidate {candidate[:12]} itself; push it and '
+            f'no CI run on the candidate {candidate[:12]} itself that is a '
+            'push to the phase branch or a topic branch under it (a pull '
+            "request's run skips the gate and does not count); push it and "
             'let its run finish'
         )
     newest = runs[0]
