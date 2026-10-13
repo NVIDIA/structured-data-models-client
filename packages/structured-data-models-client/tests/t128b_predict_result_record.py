@@ -29,8 +29,26 @@ missing or retyped evidence) also go, each with the reference's public
 outcome, into ``contract/response-vectors.json``'s ``boundaries``, beside
 its ``vectors`` (which this script leaves as they are).
 
-Nothing here is written by hand but the inputs; every expected value is the
-reference's. ``observe`` and ``answer`` are imported by the test, so both
+The reference's outcome depends, for a few cases, on the interpreter and
+on pandas, so it is recorded at each pin the tests run at too. With
+``--cell``, run by the reference's code (b413e9ad's packages, installed
+from ``git archive``) under another interpreter or pandas, this script
+observes every case and boundary vector again (each boundary answer
+replayed as recorded) and records where that cell differs: a frame's
+dtypes on pandas 2 as ``dtypes_pandas2`` (pandas 3's text column is
+``str``, pandas 2's ``object``), and any other difference as the whole
+outcome under ``by_python`` keyed by the interpreter's version (an answer
+nested 5,000 levels, which Python 3.10's and 3.11's JSON reader cannot
+read; a probability in Kawi digits, which Python before 3.12 does not know
+as digits). Run it after the full recording, under each pin::
+
+    python packages/structured-data-models-client/tests/\
+t128b_predict_result_record.py --cell
+
+Nothing here is written by hand but the inputs, and one case's outcome on
+the core, which is the orchestrator's policy and not the reference's
+(``core_outcome``: Kawi digits refused on every interpreter); every
+expected value is the reference's. ``observe`` and ``answer`` are imported by the test, so both
 routes are observed and answered by the same code.
 """
 
@@ -400,6 +418,7 @@ def case(
     rust_case: str | None = None,
     divergence: str | None = None,
     items: bool = False,
+    core_outcome: dict[str, Any] | None = None,
     **materialize: Any,
 ) -> None:
     CASES.append(
@@ -415,6 +434,9 @@ def case(
             'divergence': divergence,
             # Whether .items is recorded and compared, as well as the frame.
             **({'items': True} if items else {}),
+            # The outcome the core gives where it is a policy, not the
+            # reference's (a registered difference).
+            **({'core_outcome': core_outcome} if core_outcome else {}),
         }
     )
 
@@ -428,6 +450,7 @@ def base_case(
     predict: dict[str, Any] | None = None,
     divergence: str | None = None,
     items: bool = False,
+    core_outcome: dict[str, Any] | None = None,
 ) -> None:
     r"""A case over a contract case's own input, so rust-host can replay it:
     its materialize is the case's, its answer the bytes recorded here."""
@@ -442,6 +465,7 @@ def base_case(
         rust_case=contract,
         divergence=divergence,
         items=items,
+        core_outcome=core_outcome,
         **spec['materialize'],
     )
 
@@ -836,6 +860,23 @@ for name, token in (
         items=True,
     )
 
+#: The Unicode policy across cells (the orchestrator's): a probability in
+#: Kawi digits (Unicode 15) is refused INVALID_RESPONSE on the core on
+#: every interpreter, where the reference reads it from Python 3.12
+#: (Unicode 15) and refuses it on 3.10 and 3.11 (a registered difference);
+#: Arabic-Indic digits (numeric-text.arabic-indic-digits, Unicode 1.1, in
+#: Unicode 13 like every digit Python 3.10 knows) are read on both routes
+#: everywhere.
+UNICODE_POLICY = {'outcome': 'refused', 'code': 'INVALID_RESPONSE'}
+base_case(
+    'base.binary',
+    'numeric-text.kawi-digits',
+    NUMERIC_TEXT,
+    script='probabilities:' + json.dumps('\U00011f50.\U00011f55') + '|0.5',
+    items=True,
+    core_outcome=UNICODE_POLICY,
+)
+
 
 # The carry-forward: option values the reference accepts.
 def _carry_cases() -> None:
@@ -1222,5 +1263,89 @@ def main() -> int:
     return 0
 
 
+def cell() -> int:
+    r"""Record where this interpreter's and pandas' reference outcome
+    differs from the full recording (``--cell``; see the module's text)."""
+    import pandas as pd
+    import sdm_relational_engine  # noqa: F401 - the reference's engine
+
+    python = f'{sys.version_info.major}.{sys.version_info.minor}'
+    pandas2 = int(pd.__version__.split('.')[0]) < 3
+    recorded = json.loads(OUT.read_text(encoding='utf-8'))
+    document = json.loads(VECTORS.read_text(encoding='utf-8'))
+    specs = {spec['name']: spec for spec in CASES}
+    calls = next(
+        c['expected']['calls']
+        for c in recorded['cases']
+        if c['name'] == 'layout.regression.given'
+    )
+    global answer
+    scripted = answer
+
+    def differs(expected: dict[str, Any], got: dict[str, Any]) -> set[str]:
+        # The text of a local error names the endpoint's port; not compared.
+        return {
+            k
+            for k in set(expected) | set(got)
+            if k not in ('message', 'dtypes_pandas2', 'by_python')
+            and expected.get(k) != got.get(k)
+        }
+
+    def keep(expected: dict[str, Any], got: dict[str, Any], name: str) -> None:
+        different = differs(expected, got)
+        if pandas2 and different == {'dtypes'}:
+            expected['dtypes_pandas2'] = got['dtypes']
+            print(name, 'dtypes on pandas 2:', got['dtypes'], file=sys.stderr)
+        elif different:
+            got = {k: v for k, v in got.items() if k != 'message'}
+            expected.setdefault('by_python', {})[python] = got
+            print(
+                name,
+                f'differs on Python {python}:',
+                sorted(different),
+                file=sys.stderr,
+            )
+
+    for entry in recorded['cases']:
+        if entry['name'] not in specs:
+            continue  # the size case: its outcome is held, not compared
+        answer = scripted
+        keep(entry['expected'], observe(specs[entry['name']]), entry['name'])
+    for vector in document['boundaries']:
+        answer = lambda script, body, v=vector: (v['status'], v['body'])  # noqa: E731
+        got = observe(specs[vector['name']])
+        got['calls'] = [
+            {'status': c['status'], 'answer': None, 'output': c['output']}
+            for c in got['calls']
+        ]
+        reference = {
+            **vector['reference'],
+            'calls': [
+                {
+                    'status': vector['status'],
+                    'answer': None,
+                    'output': c['output'],
+                }
+                for c in calls
+            ],
+        }
+        keep(reference, got, vector['name'])
+        reference.pop('calls')
+        for outcome in reference.get('by_python', {}).values():
+            outcome.pop('calls', None)
+        vector['reference'] = reference
+    answer = scripted
+    OUT.write_text(
+        json.dumps(recorded, indent=1, allow_nan=False) + '\n',
+        encoding='utf-8',
+    )
+    VECTORS.write_text(
+        json.dumps(document, indent=2, ensure_ascii=False, allow_nan=False)
+        + '\n',
+        encoding='utf-8',
+    )
+    return 0
+
+
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(cell() if sys.argv[1:] == ['--cell'] else main())

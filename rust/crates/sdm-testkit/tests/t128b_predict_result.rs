@@ -28,6 +28,9 @@
 //!   prediction null (the reference's `.items` say `None`) and a NaN a NaN,
 //!   and probabilities written as text, accepted (their values compared,
 //!   each class as `str()` writes it) or refused as the reference does;
+//! - the Unicode policy across cells: a probability in Kawi digits is
+//!   refused `INVALID_RESPONSE` as a local error (`core_outcome`, the
+//!   orchestrator's policy), where the reference reads it from Python 3.12;
 //! - the ledger rows "the call's model and output checks" and "the parts
 //!   merged into one result with the notice of an absent output" (`PREPARE`
 //!   and `CONTEXT` cases over a contract case): the reference's refusal code,
@@ -457,8 +460,19 @@ fn run_recorded(covers: &[&str]) -> usize {
         let (status, body) = answer_of(spec);
         ran += 1;
         let got = predict(id, model, &outputs, status, &body);
+        let policy = &spec["core_outcome"];
         let outcome = std::panic::catch_unwind(|| {
-            if expected["outcome"] == "result" {
+            if let Some(code) = policy["code"].as_str() {
+                // A policy, not the reference's outcome (the Unicode policy
+                // across cells: Kawi digits refused on every interpreter).
+                match got {
+                    Ended::Refused { code: got, fields } => {
+                        assert_eq!(got, code, "{name}: {fields}");
+                        assert!(fields.get("status").is_none(), "{name}: {fields}");
+                    }
+                    Ended::Result(_) => panic!("{name}: a result where the policy refuses"),
+                }
+            } else if expected["outcome"] == "result" {
                 assert_result(name, got, expected);
             } else {
                 match got {

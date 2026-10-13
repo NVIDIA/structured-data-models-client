@@ -37,6 +37,11 @@ must equal the reference's. Each case names the exit it covers:
   naming a proposed entry (P1B-4) is held to the reference;
 - ``CARRY``, the brief's carry-forward: ``np.longdouble`` options and a
   NumPy array of ``target_transforms`` end as on the reference;
+- across cells: each case is held to the reference's outcome at this
+  interpreter and pandas, recorded at each pin (``by_python``,
+  ``dtypes_pandas2``); a probability in Kawi digits is the orchestrator's
+  Unicode policy, refused INVALID_RESPONSE on the core on every
+  interpreter (``core_outcome``), registered where the reference reads it;
 - ``INTEGERS``, ``ABSENT_VALUES`` and ``NUMERIC_TEXT`` (the review of
   part 2): a regression's integer predictions kept exact past 2**53 in an
   int64 column, a column mixing integers and floats as float64; a missing
@@ -131,6 +136,36 @@ def _owner_approved(entry: str | None) -> bool:
             and fields.get('approved_by') == 'owner'
         )
     return False
+
+
+def _here(expected: dict[str, Any]) -> dict[str, Any]:
+    r"""The reference's outcome at this interpreter and pandas, as the
+    recorder recorded it at each pin (``--cell``): the outcome this Python
+    gave where it differs (``by_python``), and pandas 2's dtypes where
+    pandas 3's text column (``str``) is pandas 2's ``object``
+    (``dtypes_pandas2``)."""
+    import pandas as pd
+
+    python = f'{sys.version_info.major}.{sys.version_info.minor}'
+    here = dict(expected.get('by_python', {}).get(python) or expected)
+    if 'calls' in expected:
+        here.setdefault('calls', expected['calls'])
+    if int(pd.__version__.split('.')[0]) < 3 and 'dtypes_pandas2' in expected:
+        here['dtypes'] = expected['dtypes_pandas2']
+    here.pop('by_python', None)
+    here.pop('dtypes_pandas2', None)
+    return here
+
+
+def _registered(name: str) -> bool:
+    r"""Whether the register names ``name`` (in an entry's notes, where
+    vectors are named): a difference from the reference that is known."""
+    text = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
+        encoding='utf-8'
+    )
+    return (
+        re.search(rf'(?<![\w.-]){re.escape(name)}(?![\w-])', text) is not None
+    )
 
 
 def _on_the_core(
@@ -258,6 +293,31 @@ def test_the_recording_is_the_reference_s() -> None:
         'f64': 'nan'
     }
     assert by_name['numeric-text.digit-separator']['outcome'] == 'result'
+    # Across cells, from the reference at each pin: Kawi digits read on
+    # 3.12, refused on 3.10 and 3.11 (Unicode 13 and 14); Arabic-Indic digits
+    # read everywhere; a text column object on pandas 2 and str on pandas 3;
+    # an answer nested 5,000 deep unreadable before 3.12.
+    kawi = by_name['numeric-text.kawi-digits']
+    assert kawi['outcome'] == 'result'
+    assert {
+        python: (o['outcome'], o['code'])
+        for python, o in kawi['by_python'].items()
+    } == {
+        '3.10': ('refused', 'INVALID_RESPONSE'),
+        '3.11': ('refused', 'INVALID_RESPONSE'),
+    }
+    arabic = by_name['numeric-text.arabic-indic-digits']
+    assert arabic['outcome'] == 'result' and 'by_python' not in arabic
+    multiclass = by_name['base.multiclass.given']
+    assert (multiclass['dtypes'][2], multiclass['dtypes_pandas2'][2]) == (
+        'str',
+        'object',
+    )
+    deep = vectors['boundary.deep.metadata-5000']['reference']
+    assert {p: o['code'] for p, o in deep['by_python'].items()} == {
+        '3.10': 'TRANSPORT_ERROR',
+        '3.11': 'TRANSPORT_ERROR',
+    }
     assert by_name['numeric-text.double-separator']['outcome'] == 'refused'
 
 
@@ -265,8 +325,27 @@ def test_the_recording_is_the_reference_s() -> None:
 def test_the_core_s_predict_is_the_reference_s(
     spec: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    expected = spec['expected']
+    expected = _here(spec['expected'])
     got = _on_the_core(spec, monkeypatch)
+    if 'core_outcome' in spec:
+        # A policy, not the reference's outcome (the Unicode policy across
+        # cells): Kawi digits refused INVALID_RESPONSE as a local error on
+        # every interpreter; where this interpreter's reference reads them
+        # (3.12+), the difference is registered.
+        policy = spec['core_outcome']
+        assert (got['outcome'], got.get('code')) == (
+            policy['outcome'],
+            policy['code'],
+        ), f'{spec["name"]}: {got.get("code")}: {got.get("message")}'
+        assert 'endpoint' not in got and got['status_code'] is None, got
+        if expected['outcome'] != policy['outcome']:
+            assert _registered(spec['name']), (
+                f'{spec["name"]}: the reference here gives '
+                f'{expected["outcome"]}, and no register entry names it'
+            )
+        else:
+            assert expected['code'] == policy['code'], expected
+        return
     if spec['covers'] == R.SIZE:
         # The reference's code, and a message that explains the limit as
         # the old route's does (it names 30MB).
@@ -304,7 +383,7 @@ def test_the_core_reads_each_boundary_answer_as_the_reference(
     )
     got = _on_the_core(spec, monkeypatch)
     expected = {
-        **vector['reference'],
+        **_here(vector['reference']),
         'calls': RECORDED_CALLS[vector['answers']],
     }
     if (

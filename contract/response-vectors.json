@@ -497,7 +497,37 @@
               "f64_bits": "3ffdc40000000000"
             }
           ]
-        ]
+        ],
+        "by_python": {
+          "3.10": {
+            "stage": "predict",
+            "outcome": "refused",
+            "class": "StructuredDataError",
+            "code": "TRANSPORT_ERROR",
+            "mro": [
+              "StructuredDataError",
+              "Exception",
+              "BaseException",
+              "object"
+            ],
+            "status_code": null,
+            "rule": null
+          },
+          "3.11": {
+            "stage": "predict",
+            "outcome": "refused",
+            "class": "StructuredDataError",
+            "code": "TRANSPORT_ERROR",
+            "mro": [
+              "StructuredDataError",
+              "Exception",
+              "BaseException",
+              "object"
+            ],
+            "status_code": null,
+            "rule": null
+          }
+        }
       }
     },
     {
@@ -553,7 +583,37 @@
               "f64_bits": "3ffdc40000000000"
             }
           ]
-        ]
+        ],
+        "by_python": {
+          "3.10": {
+            "stage": "predict",
+            "outcome": "refused",
+            "class": "StructuredDataError",
+            "code": "TRANSPORT_ERROR",
+            "mro": [
+              "StructuredDataError",
+              "Exception",
+              "BaseException",
+              "object"
+            ],
+            "status_code": null,
+            "rule": null
+          },
+          "3.11": {
+            "stage": "predict",
+            "outcome": "refused",
+            "class": "StructuredDataError",
+            "code": "TRANSPORT_ERROR",
+            "mro": [
+              "StructuredDataError",
+              "Exception",
+              "BaseException",
+              "object"
+            ],
+            "status_code": null,
+            "rule": null
+          }
+        }
       }
     },
     {
