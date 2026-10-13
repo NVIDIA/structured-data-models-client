@@ -1387,7 +1387,9 @@ entries:
     only on the paths it ports and refuses every other input with
     UNSUPPORTED_REQUEST naming the rule, never a value (fields operation and
     rule): column_type (a struct or a map, P1B-10, and a list of other
-    than integers, floats or text), float_nan, float_signed_zero,
+    than integers, floats or text, P1B-37; from T1.32c binary and a
+    duration are left out with the reference's warning, as the reference
+    leaves them out), float_nan, float_signed_zero,
     text_time, multicategorical, key_type, key_name_order, key_tie,
     key_missing, key_repeats, composite_key (a key of several columns
     named), time_whole_table and empty_table (P1B-11). T1.21d removed
@@ -1797,6 +1799,8 @@ entries:
   affected_inputs: >-
     A DuckDB source holding a UNION column, under a forced core route.
   cases: [nested.union, T1.21e, T1.32c]
+  refs:
+  - 'contract/nested-type-vectors.json#union.* refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
@@ -1825,6 +1829,9 @@ entries:
   affected_inputs: >-
     A DuckDB source holding an INTERVAL column, under a forced core route.
   cases: [time.feature-interval, T1.21e, T1.32e]
+  refs:
+  - 'contract/nested-type-vectors.json#scalar.interval* refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/nested-type-vectors.json#orders.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
@@ -1854,11 +1861,22 @@ entries:
     fixed-size list), and the core reads types from the admitted Arrow, so
     it cannot tell the two apart without reading DuckDB's type text, which
     is sdm-data's. The case reaches predict's result on python-core and
-    rust-host. The default route is unchanged.
+    rust-host. From T1.32c, a fixed-size list of binary is left out too,
+    named a list of text (stringlist), as the reference names a list of
+    binary; a fixed-size list of any other item (booleans, a list, a
+    fixed-size list) is refused as a list of it is (P1B-37). The default
+    route is unchanged.
   affected_inputs: >-
-    A DuckDB source holding a fixed-size list column (an ARRAY type), under
-    a forced core route.
+    A DuckDB source holding a fixed-size list column (an ARRAY type) of
+    integers, floats, text or binary, under a forced core route.
   cases: [nested.fixed-array, T1.23, T1.32c]
+  refs:
+  - 'contract/nested-type-vectors.json#array.bigint-2 refusal UNNAMED -> success'
+  - 'contract/nested-type-vectors.json#array.integer-3 refusal UNNAMED -> success'
+  - 'contract/nested-type-vectors.json#array.double-2 refusal UNNAMED -> success'
+  - 'contract/nested-type-vectors.json#array.varchar-2 refusal UNNAMED -> success'
+  - 'contract/nested-type-vectors.json#array.null refusal UNNAMED -> success'
+  - 'contract/nested-type-vectors.json#orders.array-integer-2 refusal UNNAMED -> success'
   status: proposed
   approved_by: null
   decision_ref: null
@@ -1868,7 +1886,12 @@ entries:
     and the case's probe in contract/refusal-maps/nested.json, which now
     expects success on both runners. A new success, which a reviewer may
     approve (P1B-1's process); T1.32c resolves it when it admits the nested
-    family. Never self-approved.
+    family. Never self-approved. At T1.32c: the vectors it covers are named
+    in refs, each a transition from the reference's unnamed failure to a
+    success, held on both hosts by contract/tests/test_t132c_nested_types.py
+    and sdm-testkit's tests/t132c_nested_types.rs; the old-against-core
+    probe of T1.32c (as-built.md, T1.32c) met it in 18 of 60 generated
+    sources, each a fixed-size list the reference fails unnamed.
 
 - id: P1B-10
   title: nested.map and nested.struct are refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -1896,6 +1919,11 @@ entries:
     text_time over a source of one table, column_type over the shop
     base.
   cases: [nested.map, nested.struct, T1.21e, T1.23, T1.24, T1.32c]
+  refs:
+  - 'contract/nested-type-vectors.json#struct.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#map.* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#orders.struct refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#orders.map refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
@@ -2512,6 +2540,96 @@ entries:
     digits refused, Arabic-Indic and fullwidth read), and by the test
     author's recorded case numeric-text.kawi-digits on both hosts, which
     the reference reads on 3.12 and later and refuses on 3.10 and 3.11.
+
+- id: P1B-36
+  title: A list column DuckDB hands over as a list view is left out as a list where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a DuckDB source whose
+    connection hands lists over as Arrow list views
+    (arrow_output_list_view) raises an unnamed RuntimeError for a list of
+    integers it leaves out when handed over as a list ("unsupported data
+    type").
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the host layer's admission hands a list view over as a list
+    (rust/crates/sdm-host/src/admission.rs, convert), so the column is left
+    out of its table with the warning the reference gives the same list
+    handed over as a list (COLUMNS_LEFT_OUT, "users leaves out f
+    (intlist)"), and the call reaches predict's result. The default route
+    is unchanged.
+  affected_inputs: >-
+    A DuckDB source holding a list column, read through a connection set to
+    hand lists over as list views, under a forced core route.
+  cases: [T1.32c]
+  refs:
+  - 'contract/nested-type-vectors.json#list.integer-view refusal UNNAMED -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
+  notes: >-
+    Measured at T1.32c: the test author's vector list.integer-view
+    (contract/nested-type-vectors.json), held on both hosts by
+    contract/tests/test_t132c_nested_types.py and sdm-testkit's
+    tests/t132c_nested_types.rs. A new success, which a reviewer may
+    approve (P1B-1's process), as P1B-9's fixed-size list; the alternative,
+    a named refusal, would answer the same list two ways by how the driver
+    hands it over. Never self-approved.
+
+- id: P1B-37
+  title: A list column the reference cannot read is refused by name on the core route where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a DuckDB source holding a list
+    of booleans, dates, timestamps (with or without a zone) or times of
+    day, a list of lists, a list of structs or of maps, or a fixed-size
+    list of booleans, of fixed-size lists or of lists, raises an unnamed
+    ValueError ("Encountered unsupported data type for column 'f'") or
+    RuntimeError; a list of intervals an unnamed RuntimeError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the same call is refused at from_source with UnsupportedRequestError,
+    code UNSUPPORTED_REQUEST, fields operation describe_source and rule
+    column_type, naming no value: sdm-schema reads a list as the reference
+    reads a catalog type ending [] (rust/crates/sdm-schema/src/infer.rs,
+    dtype_of), leaving out a list of integers, floats, text or binary and
+    refusing a list of anything else, as P1B-10 refuses a struct or a map.
+    A list of intervals is refused before that by the host layer's
+    admission, StructuredDataError, code UNSUPPORTED_TYPE, naming the
+    column and its Arrow type, as P1B-8 refuses an interval. The default
+    route is unchanged.
+  affected_inputs: >-
+    A DuckDB source holding a list or fixed-size list column of other
+    than integers, floats, text or binary, under a forced core route.
+  cases: [T1.32c]
+  refs:
+  - 'contract/nested-type-vectors.json#list.boolean refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.date refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.timestamp refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.timestamptz refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.time refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.list-* refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.struct refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.map refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#array.boolean-2 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#array.array refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#array.list refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/nested-type-vectors.json#list.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
+  notes: >-
+    Measured at T1.32c: the test author's vectors named in refs
+    (contract/nested-type-vectors.json), held on both hosts by
+    contract/tests/test_t132c_nested_types.py and sdm-testkit's
+    tests/t132c_nested_types.rs. The reference's answer is an unnamed
+    exception and the core's a named refusal, the class E66(b) approves;
+    for the owner or a reviewer, never self-approved. UNSUPPORTED_REQUEST
+    rather than INVALID_REQUEST: the caller's request is valid, and it is
+    the core that does not describe such a column, as P1B-10 (owner
+    approved) has it for a struct or a map. The alternative, leaving such
+    a list out as P1B-9 and P1B-36 leave a list out, is a product choice
+    for the owner; it would make every list column a success.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
