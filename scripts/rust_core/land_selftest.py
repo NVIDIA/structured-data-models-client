@@ -57,6 +57,7 @@ def ci_run(
     conclusion: str = 'success',
     run_id: int = 1,
     created: str = '2026-10-09T00:00:00Z',
+    event: str = 'push',
 ) -> dict[str, Any]:
     return {
         'databaseId': run_id,
@@ -64,7 +65,7 @@ def ci_run(
         'headBranch': branch,
         'status': status,
         'conclusion': conclusion if status == 'completed' else '',
-        'event': 'push',
+        'event': event,
         'url': f'https://example.invalid/runs/{run_id}',
         'createdAt': created,
     }
@@ -253,17 +254,24 @@ class Fake:
     def gh(self, args: list[str]) -> land.Completed:
         if args[:2] == ['run', 'list']:
             sha = args[args.index('--commit') + 1]
-            return land.Completed(0, json.dumps(self.runs.get(sha, [])))
+            listed = self.runs.get(sha, [])
+            for flag, key in (('--event', 'event'), ('--branch', 'headBranch')):
+                if flag in args:
+                    wanted = args[args.index(flag) + 1]
+                    listed = [r for r in listed if r[key] == wanted]
+            return land.Completed(0, json.dumps(listed))
         if args[:2] in (['run', 'watch'], ['run', 'view']):
             run_id = int(args[2])
             for runs in self.runs.values():
                 for run in runs:
                     if run['databaseId'] == run_id:
                         if args[1] == 'watch':
-                            run['status'] = 'completed'
-                            run['conclusion'] = self.landing_conclusion.get(
-                                run['headBranch'], 'success'
-                            )
+                            # A finished run stays as it finished.
+                            if run['status'] != 'completed':
+                                run['status'] = 'completed'
+                                run['conclusion'] = self.landing_conclusion.get(
+                                    run['headBranch'], 'success'
+                                )
                             return land.Completed(
                                 0 if run['conclusion'] == 'success' else 1
                             )
@@ -784,6 +792,115 @@ def _(tmp: Path) -> tuple[bool, str]:
     return c.code == 0, 'landed' if c.code == 0 else c.text
 
 
+# --- only a push run under the phase branch is evidence (T1.20 fix 1) --------
+#
+# CI's gate steps exit early on a pull_request run (ratchet.py names no base
+# there), so a green one never ran the checkpoint gate. Only a push run on
+# the phase branch or a branch under it (a lane, a task or an old topic
+# branch; never an archive branch) counts, for the candidate, the landing
+# run and verify.
+
+#: An archive branch: where an abandoned lane's tip is kept, never a topic.
+ARCHIVED = 'rust-core-phase-1-archive-lane-a-t1.99'
+#: A pull request's ref, as a run on it may name its branch.
+PR_REF = 'refs/pull/7/merge'
+#: Names the missing evidence as a push run.
+PUSH_RUN = re.compile(r'\bpush\b[^\n]*\brun|\brun[^\n]*\bpush\b', re.I)
+
+
+def refused_for_push_evidence(c: Case) -> tuple[bool, str]:
+    """Refused, nothing committed or pushed, naming a missing push run."""
+    ok = c.code == 2 and bool(PUSH_RUN.search(c.text)) and c.untouched()
+    return ok, (
+        'refused for want of a push run, nothing committed or pushed'
+        if ok
+        else f'exit {c.code}, committed {len(c.fake.committed)}, pushes '
+        f'{c.fake.pushes}: {c.text[-600:]}'
+    )
+
+
+for branch in (TOPIC, PR_REF):
+
+    @case(
+        f'refused: the only green run is a pull_request run (on {branch}), '
+        'naming the missing push run'
+    )
+    def _(tmp: Path, branch: str = branch) -> tuple[bool, str]:
+        runs = {CAND: [ci_run(CAND, branch, event='pull_request')]}
+        return refused_for_push_evidence(Case(tmp, Fake(runs=runs)).land())
+
+
+@case('refused: a green pull_request run newer than a failed push run')
+def _(tmp: Path) -> tuple[bool, str]:
+    runs = {
+        CAND: [
+            ci_run(CAND, TOPIC, conclusion='failure', run_id=1),
+            ci_run(
+                CAND,
+                TOPIC,
+                run_id=2,
+                created='2026-10-09T00:09:00Z',
+                event='pull_request',
+            ),
+        ]
+    }
+    return refused(Case(tmp, Fake(runs=runs)).land(), 'not green')
+
+
+@case('refused: the only green push run is on an archive branch')
+def _(tmp: Path) -> tuple[bool, str]:
+    runs = {CAND: [ci_run(CAND, ARCHIVED)]}
+    return refused_for_push_evidence(Case(tmp, Fake(runs=runs)).land())
+
+
+@case('refused: a green archive-branch push run newer than a failed lane run')
+def _(tmp: Path) -> tuple[bool, str]:
+    runs = {
+        CAND: [
+            ci_run(CAND, TOPIC, conclusion='failure', run_id=1),
+            ci_run(CAND, ARCHIVED, run_id=2, created='2026-10-09T00:09:00Z'),
+        ]
+    }
+    return refused(Case(tmp, Fake(runs=runs)).land(), 'not green')
+
+
+@case('refused: the only green push run is on a branch outside the phase')
+def _(tmp: Path) -> tuple[bool, str]:
+    runs = {CAND: [ci_run(CAND, 'main')]}
+    return refused_for_push_evidence(Case(tmp, Fake(runs=runs)).land())
+
+
+@case('lands: a green push run beside a newer red pull_request run')
+def _(tmp: Path) -> tuple[bool, str]:
+    # A pull_request run is no evidence either way.
+    runs = {
+        CAND: [
+            ci_run(CAND, TOPIC, run_id=1),
+            ci_run(
+                CAND,
+                TOPIC,
+                conclusion='failure',
+                run_id=2,
+                created='2026-10-09T00:09:00Z',
+                event='pull_request',
+            ),
+        ]
+    }
+    c = Case(tmp, Fake(runs=runs)).land()
+    ok = c.code == 0 and 'Candidate run 1 green' in ' '.join(
+        (c.fake.committed or [''])[0].split()
+    )
+    return ok, 'landed on the push run' if ok else c.text
+
+
+for branch in (PHASE, 'rust-core-phase-1-t1.19', 'rust-core-phase-1-lane-b'):
+
+    @case(f'lands: a green push run on {branch} counts')
+    def _(tmp: Path, branch: str = branch) -> tuple[bool, str]:
+        c = Case(tmp, Fake(runs={CAND: [ci_run(CAND, branch)]})).land()
+        return c.code == 0, 'landed' if c.code == 0 else c.text
+
+
 # --- the landing commit and the push ------------------------------------------
 
 
@@ -847,6 +964,34 @@ def _(tmp: Path) -> tuple[bool, str]:
 @case('waits: a red landing run leaves the phase branch where it was')
 def _(tmp: Path) -> tuple[bool, str]:
     runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
+    fake = Fake(runs=runs, landing_conclusion={TOPIC: 'failure'})
+    c = Case(tmp, fake).land('--wait-for-landing-run')
+    ok = (
+        c.code == 2
+        and fake.pushes
+        == [('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{TOPIC}')]
+        and fake.remote_phase == BASE
+        and 'was not moved' in c.text
+    )
+    return ok, 'phase untouched' if ok else f'{fake.pushes}: {c.text}'
+
+
+@case('waits: a green pull_request run on the landing commit is not its run')
+def _(tmp: Path) -> tuple[bool, str]:
+    # The push run on the topic branch goes red; a newer green pull_request
+    # run on the same SHA and branch name does not stand for it.
+    runs = {
+        CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')],
+        LAND: [
+            ci_run(
+                LAND,
+                TOPIC,
+                run_id=99,
+                created='2026-10-09T02:00:00Z',
+                event='pull_request',
+            )
+        ],
+    }
     fake = Fake(runs=runs, landing_conclusion={TOPIC: 'failure'})
     c = Case(tmp, fake).land('--wait-for-landing-run')
     ok = (
@@ -950,6 +1095,70 @@ def _(tmp: Path) -> tuple[bool, str]:
         and 'Nothing was reverted' not in c.text
         and not c.fake.pushes
     )
+    return ok, 'rerun asked' if ok else c.text
+
+
+@case('verify: a red pull_request run on the landing commit is no evidence')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp)
+    c.fake.runs[LAND].append(
+        ci_run(
+            LAND,
+            TOPIC,
+            conclusion='failure',
+            run_id=98,
+            created='2026-10-09T02:00:00Z',
+            event='pull_request',
+        )
+    )
+    c.verify()
+    ok = c.code == 0 and f'VERIFIED {LAND}' in c.text
+    return ok, 'verified on the push runs' if ok else c.text
+
+
+@case('verify: a green pull_request run does not stand for a cancelled one')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'})
+    for run in c.fake.runs[CAND]:
+        run['conclusion'] = 'cancelled'
+    c.fake.runs[CAND].append(
+        ci_run(
+            CAND,
+            TOPIC,
+            run_id=97,
+            created='2026-10-09T02:00:00Z',
+            event='pull_request',
+        )
+    )
+    c.fake.runs[LAND].append(
+        ci_run(
+            LAND,
+            TOPIC,
+            run_id=96,
+            created='2026-10-09T02:00:00Z',
+            event='pull_request',
+        )
+    )
+    c.verify()
+    ok = (
+        c.code == 3
+        and 'VERIFY INCOMPLETE' in c.text
+        and 'same tree is green' not in c.text
+        and not c.fake.pushes
+    )
+    return ok, 'rerun asked' if ok else c.text
+
+
+@case('verify: a green archive-branch run does not stand for a cancelled one')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp, landing_conclusion={PHASE: 'cancelled', TOPIC: 'cancelled'})
+    for run in c.fake.runs[CAND]:
+        run['conclusion'] = 'cancelled'
+    c.fake.runs[CAND].append(
+        ci_run(CAND, ARCHIVED, run_id=95, created='2026-10-09T02:00:00Z')
+    )
+    c.verify()
+    ok = c.code == 3 and 'same tree is green' not in c.text
     return ok, 'rerun asked' if ok else c.text
 
 
