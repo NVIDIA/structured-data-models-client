@@ -210,12 +210,23 @@ fn an_answer_reads_non_finite_tokens_as_python_s_reader_does() {
     // The marker's own escaped spelling in the answer moves the marker on:
     // that text stays text.
     let spelled = br#"{"a":"\uE000NaN","b":NaN}"#;
+    // A value after a member's name, in nested objects and arrays, is one.
+    let inner = read_answer(br#"{"a":{"b":[NaN,{"c":-Infinity}]},"d":Infinity}"#).unwrap();
+    assert_eq!(inner.get("d"), Some(&Value::Number("Infinity".into())));
     let value = read_answer(spelled).unwrap();
     assert_eq!(value.get("a"), Some(&Value::Text("\u{e000}NaN".into())));
     assert_eq!(value.get("b"), Some(&Value::Number("NaN".into())));
     // Faults read refuses stay refused: a bare word that is not a token,
     // and a token glued to another.
-    for bad in [&b"[Nan]"[..], b"[NaNx]", b"[-NaN]", b"[Infinityy]"] {
+    for bad in [
+        &b"[Nan]"[..],
+        b"[NaNx]",
+        b"[-NaN]",
+        b"[Infinityy]",
+        // A token where a member's name goes, as Python's reader refuses.
+        b"{NaN: 1}",
+        b"{\"a\": 1, Infinity: 2}",
+    ] {
         assert!(
             read_answer(bad).is_err(),
             "{}",

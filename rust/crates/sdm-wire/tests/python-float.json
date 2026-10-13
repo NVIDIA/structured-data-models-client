@@ -1,0 +1,169 @@
+{
+ "description": "Python's float() of each text (CPython 3.12.13, the reference environment's, Unicode 15.0), recorded: its IEEE-754 bits, or null where float() raises ValueError. sdm-wire's tests/python_float.rs holds sdm_wire::response::python_float to them (T1.28b).",
+ "cases": [
+  {
+   "text": "0.5",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": " 0.5 ",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "\t0.5\n",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "0_0.5",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "1_000.25",
+   "float": "408f420000000000"
+  },
+  {
+   "text": "1__0",
+   "float": null
+  },
+  {
+   "text": "_1",
+   "float": null
+  },
+  {
+   "text": "1_",
+   "float": null
+  },
+  {
+   "text": "1_.5",
+   "float": null
+  },
+  {
+   "text": "1._5",
+   "float": null
+  },
+  {
+   "text": ".5",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "5.",
+   "float": "4014000000000000"
+  },
+  {
+   "text": "+.5",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "-1e-3",
+   "float": "bf50624dd2f1a9fc"
+  },
+  {
+   "text": "1E+05",
+   "float": "40f86a0000000000"
+  },
+  {
+   "text": "1e5_0",
+   "float": "4a511b0ec57e649a"
+  },
+  {
+   "text": "1e_5",
+   "float": null
+  },
+  {
+   "text": "\u0660.\u0665",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "\uff10.\uff15",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "\u00a00.5\u3000",
+   "float": "3fe0000000000000"
+  },
+  {
+   "text": "0.5\u200b",
+   "float": null
+  },
+  {
+   "text": "inf",
+   "float": "7ff0000000000000"
+  },
+  {
+   "text": "-Infinity",
+   "float": "fff0000000000000"
+  },
+  {
+   "text": "nan",
+   "float": "7ff8000000000000"
+  },
+  {
+   "text": "NaN",
+   "float": "7ff8000000000000"
+  },
+  {
+   "text": "+nan",
+   "float": "7ff8000000000000"
+  },
+  {
+   "text": "1e400",
+   "float": "7ff0000000000000"
+  },
+  {
+   "text": "0x1",
+   "float": null
+  },
+  {
+   "text": "1,5",
+   "float": null
+  },
+  {
+   "text": "",
+   "float": null
+  },
+  {
+   "text": "  ",
+   "float": null
+  },
+  {
+   "text": "1.2.3",
+   "float": null
+  },
+  {
+   "text": "e5",
+   "float": null
+  },
+  {
+   "text": ".",
+   "float": null
+  },
+  {
+   "text": "1e",
+   "float": null
+  },
+  {
+   "text": "--1",
+   "float": null
+  },
+  {
+   "text": "\u0661\u0662",
+   "float": "4028000000000000"
+  },
+  {
+   "text": "0.5 0",
+   "float": null
+  },
+  {
+   "text": "\u0660_\u0665",
+   "float": "4014000000000000"
+  },
+  {
+   "text": "1\u001c",
+   "float": null
+  },
+  {
+   "text": "\u0085 2",
+   "float": "4000000000000000"
+  }
+ ]
+}

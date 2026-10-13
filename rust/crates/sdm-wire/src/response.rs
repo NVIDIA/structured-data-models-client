@@ -183,13 +183,12 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 }
 
 /// A probability as the bindings' `_finite` reads one: a number, or text
-/// `float` reads (surrounding whitespace aside), never a boolean, and
-/// finite.
+/// Python's `float` reads ([`python_float`]), never a boolean, and finite.
 fn probability(value: &Value) -> Result<f64, Refused> {
     const FIELD: &str = "prediction.probabilities";
     let read = match value {
         Value::Number(token) => token.parse::<f64>().ok(),
-        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        Value::Text(text) => python_float(text),
         _ => None,
     };
     match read {
@@ -197,4 +196,95 @@ fn probability(value: &Value) -> Result<f64, Refused> {
         Some(p) if !p.is_finite() => Err(refused(FIELD, "not_finite")),
         Some(p) => Ok(p),
     }
+}
+
+/// The first code point of each run of ten Unicode decimal digits (0 to 9)
+/// of the Unicode database Python 3.12 reads (15.0, `unicodedata.decimal`),
+/// which `float` takes as the digits they stand for.
+const DECIMAL_ZEROS: [u32; 68] = [
+    0x30, 0x660, 0x6F0, 0x7C0, 0x966, 0x9E6, 0xA66, 0xAE6, 0xB66, 0xBE6, 0xC66, 0xCE6, 0xD66,
+    0xDE6, 0xE50, 0xED0, 0xF20, 0x1040, 0x1090, 0x17E0, 0x1810, 0x1946, 0x19D0, 0x1A80, 0x1A90,
+    0x1B50, 0x1BB0, 0x1C40, 0x1C50, 0xA620, 0xA8D0, 0xA900, 0xA9D0, 0xA9F0, 0xAA50, 0xABF0, 0xFF10,
+    0x104A0, 0x10D30, 0x11066, 0x110F0, 0x11136, 0x111D0, 0x112F0, 0x11450, 0x114D0, 0x11650,
+    0x116C0, 0x11730, 0x118E0, 0x11950, 0x11C50, 0x11D50, 0x11DA0, 0x11F50, 0x16A60, 0x16AC0,
+    0x16B50, 0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6, 0x1E140, 0x1E2F0, 0x1E4F0, 0x1E950,
+    0x1FBF0,
+];
+
+/// The white space Python 3.12's `float` strips around a number: what
+/// `str.isspace` takes as white space but the four separators 0x1C to 0x1F,
+/// which `float` refuses (measured on the reference's interpreter).
+const WHITE_SPACE: [u32; 25] = [
+    0x9, 0xA, 0xB, 0xC, 0xD, 0x20, 0x85, 0xA0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004,
+    0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+];
+
+/// Text as Python's `float` reads it (the grammar its documentation gives
+/// for a string argument): white space around it, a sign, then `inf`,
+/// `infinity` or `nan` in any case, or a decimal number (digits with an
+/// optional fraction, or a fraction alone, then an optional exponent), any
+/// Unicode decimal digit read as the digit it stands for and a single
+/// underscore allowed between two digits; `None` for any other text.
+pub fn python_float(text: &str) -> Option<f64> {
+    let mut ascii = String::with_capacity(text.len());
+    for c in text.chars() {
+        let code = u32::from(c);
+        if WHITE_SPACE.contains(&code) {
+            ascii.push(' ');
+        } else if let Some(zero) = DECIMAL_ZEROS
+            .iter()
+            .find(|zero| (**zero..**zero + 10).contains(&code))
+        {
+            ascii.push(char::from(b'0' + u8::try_from(code - zero).ok()?));
+        } else if c.is_ascii() {
+            ascii.push(c);
+        } else {
+            return None;
+        }
+    }
+    let trimmed = ascii.trim_matches(' ');
+    let bytes = trimmed.as_bytes();
+    // A single underscore between two digits, and nowhere else.
+    for (at, byte) in bytes.iter().enumerate() {
+        if *byte == b'_'
+            && !(at > 0
+                && bytes[at - 1].is_ascii_digit()
+                && bytes.get(at + 1).is_some_and(u8::is_ascii_digit))
+        {
+            return None;
+        }
+    }
+    let plain: String = trimmed.chars().filter(|c| *c != '_').collect();
+    let unsigned = plain.strip_prefix(['+', '-']).unwrap_or(&plain);
+    let lower = unsigned.to_ascii_lowercase();
+    if matches!(lower.as_str(), "inf" | "infinity" | "nan") {
+        let negative = plain.starts_with('-');
+        return Some(match (lower.as_str(), negative) {
+            ("nan", _) => f64::NAN,
+            (_, false) => f64::INFINITY,
+            (_, true) => f64::NEG_INFINITY,
+        });
+    }
+    // digits [. [digits]] | . digits, then [e [sign] digits]
+    let (mantissa, exponent) = match unsigned.find(['e', 'E']) {
+        Some(at) => (&unsigned[..at], Some(&unsigned[at + 1..])),
+        None => (unsigned, None),
+    };
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    let (whole, fraction) = match mantissa.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (mantissa, None),
+    };
+    let mantissa_ok = match fraction {
+        None => digits(whole),
+        Some(fraction) => {
+            (digits(whole) && (fraction.is_empty() || digits(fraction)))
+                || (whole.is_empty() && digits(fraction))
+        }
+    };
+    let exponent_ok = exponent.is_none_or(|e| digits(e.strip_prefix(['+', '-']).unwrap_or(e)));
+    if !(mantissa_ok && exponent_ok) {
+        return None;
+    }
+    plain.parse::<f64>().ok()
 }

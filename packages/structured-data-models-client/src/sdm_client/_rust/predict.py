@@ -188,6 +188,17 @@ def _refusal(refused: NimRequestError) -> NimRequestError:
     )
 
 
+def _as_answered(row: dict[str, Any]) -> Any:
+    r"""A row's prediction as the answer wrote it: where the core's column
+    changed one (an integer widened among doubles, a missing one as NaN),
+    the core gives each as its JSON text (``prediction_as_answered``), read
+    as the client's transport reads JSON, ``None`` where there was none."""
+    if 'prediction_as_answered' in row:
+        text = row['prediction_as_answered']
+        return None if text is None else json.loads(text)
+    return row.get('prediction')
+
+
 def _adapter(client: SDMClient, model_id: str) -> Any:
     r"""The client's adapter of the model the core checked, which explains
     the endpoint's refusals as on the old route (E47)."""
@@ -307,7 +318,7 @@ def predict(
             PredictionItem(
                 row_index=row['row_index'],
                 id=row['id'],
-                prediction=row.get('prediction'),
+                prediction=_as_answered(row),
                 probabilities=None
                 if row.get('probabilities') is None
                 else dict(row['probabilities']),

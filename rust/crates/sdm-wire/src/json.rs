@@ -131,11 +131,16 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack.windows(needle.len()).any(|w| w == needle)
 }
 
-/// Each `NaN`, `Infinity` and `-Infinity` token outside text: where it
-/// starts, and the token.
+/// Each `NaN`, `Infinity` and `-Infinity` token in a value's place outside
+/// text: where it starts, and the token. One where an object's member name
+/// goes is left as it is, so the reading refuses it, as Python's does.
 fn non_finite_tokens(bytes: &[u8]) -> Vec<(usize, &'static str)> {
     let mut found = Vec::new();
     let (mut in_text, mut escaped) = (false, false);
+    // Whether each open bracket is an object's, and whether a member's
+    // name is due.
+    let mut objects: Vec<bool> = Vec::new();
+    let mut name_due = false;
     let mut at = 0;
     while at < bytes.len() {
         let byte = bytes[at];
@@ -150,7 +155,9 @@ fn non_finite_tokens(bytes: &[u8]) -> Vec<(usize, &'static str)> {
             continue;
         }
         let rest = &bytes[at..];
-        let token = if rest.starts_with(b"NaN") {
+        let token = if name_due {
+            None
+        } else if rest.starts_with(b"NaN") {
             Some("NaN")
         } else if rest.starts_with(b"Infinity") {
             Some("Infinity")
@@ -159,18 +166,30 @@ fn non_finite_tokens(bytes: &[u8]) -> Vec<(usize, &'static str)> {
         } else {
             None
         };
-        match token {
-            Some(token) => {
-                found.push((at, token));
-                at += token.len();
-            }
-            None => {
-                if byte == b'"' {
-                    in_text = true;
-                }
-                at += 1;
-            }
+        if let Some(token) = token {
+            found.push((at, token));
+            at += token.len();
+            continue;
         }
+        match byte {
+            b'"' => in_text = true,
+            b'{' => {
+                objects.push(true);
+                name_due = true;
+            }
+            b'[' => {
+                objects.push(false);
+                name_due = false;
+            }
+            b'}' | b']' => {
+                objects.pop();
+                name_due = false;
+            }
+            b':' => name_due = false,
+            b',' => name_due = objects.last() == Some(&true),
+            _ => {}
+        }
+        at += 1;
     }
     found
 }

@@ -418,6 +418,28 @@ def test_an_overflowing_prediction_is_the_old_route_s_on_the_core(
         pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
 
 
+def test_a_lone_surrogate_in_an_answer_is_refused_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Diagnostic, register P1B-24 (proposed): Python's reader takes a
+    # lone surrogate escape in text, and the old route passes it on; the
+    # core's reader, which holds text as UTF-8, refuses the answer.
+    request = _materialized(monkeypatch)
+    answer = (
+        '{"id": "r1", "model": "kumo-relational", "metadata": {"note": '
+        '"\\ud800"}, "predictions": [{"id": "112", "row_index": 0, '
+        '"prediction": 1.0}, {"id": "113", "row_index": 1, '
+        '"prediction": 1.0}]}'
+    )
+    with _answering(200, answer.encode()) as (url, _):
+        core, old = _both(monkeypatch, request, url)
+    assert not isinstance(old, Exception), old
+    assert old.metadata['note'] == '\ud800'
+    assert isinstance(core, StructuredDataError)
+    assert core.code == 'INVALID_RESPONSE'
+    assert core.details['field'] == 'response'
+
+
 def test_a_failed_transport_is_named_for_what_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

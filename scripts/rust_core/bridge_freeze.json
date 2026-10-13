@@ -35,10 +35,13 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "07304c1ea4a75f7dbe3230c9b73918d95e8ebb6c01e40edfd85a395860628ddd"
+        "fingerprint": "5d5ef4f66190644d8a2793b976f31d8c5db01a8195fa09bf3b457248b9c6c497"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
+      },
+      "_as_answered": {
+        "fingerprint": "4e2da16f138742ace0f2fba35ac329bb91bf7264670a363fa01b21e2c8536c92"
       },
       "_copied": {
         "fingerprint": "58e3fda97077418be3f92af5a1a8e1b816bd21d54d146f4951a4490bd45b8cbb"
@@ -56,7 +59,7 @@
         "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
       },
       "predict": {
-        "fingerprint": "75dbd9ba30c5bcc23cf0374c0b5e65dd006ea6289cee092ac44f02ae95c146b5"
+        "fingerprint": "8e901fe1f3531f11c6df173d238319e6b6b51119d6af2df53bd0361fdf039756"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {

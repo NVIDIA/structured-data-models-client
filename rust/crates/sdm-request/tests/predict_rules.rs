@@ -115,7 +115,7 @@ fn an_absent_output_is_one_no_answer_carries() {
     // An answer with no rows leaves nothing out.
     assert!(absent(&part("", vec![]), &named(&["prediction"])).is_empty());
     // The prediction column is left out when no answer carries one, and a
-    // null among them is NaN, as the reference's frame gives them.
+    // missing one among them is null.
     let batch = table(&unanswered).unwrap();
     let names: Vec<String> = batch
         .schema()
@@ -126,6 +126,74 @@ fn an_absent_output_is_one_no_answer_carries() {
     assert_eq!(names, ["row_index", "id", "answer_index"]);
     let batch = table(&answered).unwrap();
     let column = batch.column(2).as_primitive::<Float64Type>();
-    assert!(column.value(0).is_nan() && column.value(1).is_nan());
-    assert_eq!(column.null_count(), 0);
+    // A missing prediction is null, as the reference's item is None; a NaN
+    // is a NaN (fix round 1).
+    assert!(column.is_null(0) && column.value(1).is_nan());
+    assert_eq!(column.null_count(), 1);
+}
+
+#[test]
+fn a_regression_s_column_is_typed_as_pandas_types_it() {
+    let names = |part: &Part| -> Vec<String> {
+        table(part)
+            .unwrap()
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.name().clone())
+            .collect()
+    };
+    // Every answer an integer: int64, exact past 2**53 and at int64's ends.
+    let ints = part(
+        "r1",
+        vec![
+            row(0, 7, Answer::Int(9_007_199_254_740_993)),
+            row(1, 8, Answer::Int(i64::MIN)),
+            row(2, 9, Answer::Int(i64::MAX)),
+        ],
+    );
+    let batch = table(&ints).unwrap();
+    assert_eq!(
+        batch
+            .column(2)
+            .as_primitive::<Int64Type>()
+            .values()
+            .to_vec(),
+        [9_007_199_254_740_993, i64::MIN, i64::MAX]
+    );
+    assert_eq!(
+        names(&ints),
+        ["row_index", "id", "prediction", "answer_index"]
+    );
+    // Mixed with a float or a missing one: float64, and each answer as
+    // written beside it, so a host's items keep the integer exact.
+    let mixed = part(
+        "r1",
+        vec![
+            row(0, 7, Answer::Int(9_007_199_254_740_993)),
+            row(1, 8, Answer::Float(1.5)),
+            row(2, 9, Answer::None),
+        ],
+    );
+    let batch = table(&mixed).unwrap();
+    assert_eq!(
+        batch.column(2).data_type(),
+        &arrow_schema::DataType::Float64
+    );
+    let written: Vec<Option<&str>> = batch.column(3).as_string::<i32>().iter().collect();
+    assert_eq!(written, [Some("9007199254740993"), Some("1.5"), None]);
+    // A class written as a non-finite number: no value of the target's
+    // type, the item's own the number.
+    let mut nan_class = part(
+        "r1",
+        vec![
+            row(0, 7, Answer::NonFinite(f64::NAN)),
+            row(1, 8, Answer::Bool(true)),
+        ],
+    );
+    nan_class.answers = AnswerType::Bool;
+    let batch = table(&nan_class).unwrap();
+    assert!(batch.column(2).is_null(0));
+    let written: Vec<Option<&str>> = batch.column(3).as_string::<i32>().iter().collect();
+    assert_eq!(written, [Some("NaN"), Some("true")]);
 }

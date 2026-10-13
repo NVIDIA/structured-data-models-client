@@ -13,6 +13,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
       "moved": "T1.28b: on the core route the call goes to the core's bridge after the argument type checks, before _prepare, the empty answer, the merge and _report_absent, which are the core's; the old route's body is as before T1.11d"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_as_answered": {
+      "moved": "T1.28b (fix round 1): the result's items read from the core's prediction_as_answered, the JSON text the core wrote of each answer its prediction column changed, as the client's transport reads JSON; the core decides which answers and what each holds"
     }
   }
 }

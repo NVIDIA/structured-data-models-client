@@ -767,8 +767,9 @@ pub enum Entity {
     Text(String),
 }
 
-/// An answer's prediction as the result gives it: a regression's as a
-/// double (a JSON `null` as `None`), a class as its target's type.
+/// An answer's prediction as the result gives it: a regression's as an
+/// integer or a double, as written (a JSON `null` as `None`), a class as
+/// its target's type.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Answer {
     None,
@@ -776,6 +777,10 @@ pub enum Answer {
     Bool(bool),
     Int(i64),
     Text(String),
+    /// A class's prediction written as a non-finite number, which the
+    /// reference's `as_declared` leaves as it is: no value of the target's
+    /// type, the item's own the number.
+    NonFinite(f64),
 }
 
 /// The type a part's predictions are given back as.
@@ -905,9 +910,11 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
         // an infinity read as the reference reads them; an integer past
         // int64, text, a boolean, an array or an object refused.
         AnswerType::Float => match value {
+            // An integer is kept as the integer it is (the reference's
+            // reader gives a Python int); one past int64 is refused.
             Value::Number(token) if is_integer_token(token) => token
                 .parse::<i64>()
-                .map(|n| Answer::Float(n as f64))
+                .map(Answer::Int)
                 .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
             Value::Number(token) => token
                 .parse::<f64>()
@@ -915,6 +922,12 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
                 .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
             _ => Err(bad_response("prediction.prediction", "not_a_number")),
         },
+        // A class written as a non-finite number is passed through as the
+        // reference passes it (owner decision of 2026-10-12): no target's
+        // type holds it, so `as_declared` leaves it as it is.
+        _ if non_finite(value).is_some() => {
+            Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
+        }
         AnswerType::Bool => as_bool(value)
             .map(Answer::Bool)
             .ok_or_else(|| not_yet("prediction_type")),
@@ -925,6 +938,17 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
             Value::Text(text) => Ok(Answer::Text(text.clone())),
             _ => Err(not_yet("prediction_type")),
         },
+    }
+}
+
+/// The number a token stands for when it is not finite: `NaN`,
+/// `Infinity`, `-Infinity`, or a float token past a double's range.
+fn non_finite(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(token) if !is_integer_token(token) => {
+            token.parse::<f64>().ok().filter(|v| !v.is_finite())
+        }
+        _ => None,
     }
 }
 
@@ -1135,8 +1159,12 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
 /// `PredictionResult.to_pandas` orders them; the order is stable among
 /// equal ones, which a merge of parts holds), with `row_index` (int64),
 /// `id` (int64 for an integer key, utf8 for a text one), `prediction` when
-/// any answer holds one (float64, a `null` as NaN, as the reference's frame
-/// gives it; a class as bool, int64 or utf8, a `null` as null) and
+/// any answer holds one (a regression's as pandas infers it: int64 where
+/// every answer is an integer, else float64, an integer as its double; a
+/// class as bool, int64 or utf8; a missing one as null, a NaN as NaN; with
+/// `prediction_as_answered`, each answer's prediction as the JSON text of
+/// the reference's item value, or null, where the column changed one: an
+/// integer widened, a class written as a non-finite number) and
 /// `probabilities` when any answer holds them (a map of each class, as its
 /// column spells it, to its probability, in the order written), and last
 /// `answer_index` (int64, the answer's place in the endpoint's order, which
@@ -1175,12 +1203,29 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     let mut columns = vec![row_index, ids];
     if rows.iter().any(|r| r.prediction != Answer::None) {
         let (data_type, column): (DataType, ArrayRef) = match part.answers {
+            // A regression's column as pandas infers it from the answers:
+            // int64 where every answer is an integer, else float64, an
+            // integer as the double it reads as; a missing one is null.
+            AnswerType::Float if regression_integers(&rows) => (
+                DataType::Int64,
+                Arc::new(Int64Array::from_iter(rows.iter().map(
+                    |r| match r.prediction {
+                        Answer::Int(n) => Some(n),
+                        _ => None,
+                    },
+                ))),
+            ),
             AnswerType::Float => (
                 DataType::Float64,
-                Arc::new(Float64Array::from_iter_values(rows.iter().map(
+                Arc::new(Float64Array::from_iter(rows.iter().map(
                     |r| match r.prediction {
-                        Answer::Float(v) => v,
-                        _ => f64::NAN,
+                        Answer::Float(v) => Some(v),
+                        #[allow(
+                            clippy::cast_precision_loss,
+                            reason = "as pandas reads an integer among floats"
+                        )]
+                        Answer::Int(n) => Some(n as f64),
+                        _ => None,
                     },
                 ))),
             ),
@@ -1212,13 +1257,26 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
                 ))),
             ),
         };
+        let widened = (data_type == DataType::Float64
+            && rows.iter().any(|r| matches!(r.prediction, Answer::Int(_))))
+            || rows
+                .iter()
+                .any(|r| matches!(r.prediction, Answer::NonFinite(_)));
         fields.push(Field::new("prediction", data_type, true));
         columns.push(column);
+        // Where the column does not hold each answer as the reference's
+        // items do (a regression's integer widened to a double; a class
+        // written as a non-finite number, which no target's type holds),
+        // each answer's prediction as the JSON text of the item's value,
+        // null where it had none.
+        if widened {
+            fields.push(Field::new("prediction_as_answered", DataType::Utf8, true));
+            columns.push(Arc::new(StringArray::from_iter(
+                rows.iter().map(|r| as_answered(&r.prediction)),
+            )));
+        }
     }
-    if rows
-        .iter()
-        .any(|r| r.probabilities.as_ref().is_some_and(|p| !p.is_empty()))
-    {
+    if rows.iter().any(|r| r.probabilities.is_some()) {
         let names = MapFieldNames {
             entry: "entries".to_owned(),
             key: "class".to_owned(),
@@ -1226,8 +1284,9 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         };
         let mut builder = MapBuilder::new(Some(names), StringBuilder::new(), Float64Builder::new());
         for row in &rows {
+            // An empty mapping is one, as the reference's item holds `{}`.
             match &row.probabilities {
-                Some(given) if !given.is_empty() => {
+                Some(given) => {
                     for (class, p) in given {
                         builder.keys().append_value(class);
                         builder.values().append_value(*p);
@@ -1250,6 +1309,36 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         rows.iter().map(|r| r.answer_index),
     )));
     RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| internal_layout())
+}
+
+/// An answer's prediction as the JSON text of the reference's item value,
+/// a non-finite number as the token Python's reader takes; `None` where it
+/// had none.
+fn as_answered(answer: &Answer) -> Option<String> {
+    let float = |v: f64| {
+        if v.is_nan() {
+            Some("NaN".to_owned())
+        } else if v.is_infinite() {
+            Some(if v > 0.0 { "Infinity" } else { "-Infinity" }.to_owned())
+        } else {
+            Value::float(v).map(|f| String::from_utf8_lossy(&f.to_bytes()).into_owned())
+        }
+    };
+    match answer {
+        Answer::None => None,
+        Answer::Float(v) | Answer::NonFinite(v) => float(*v),
+        Answer::Int(n) => Some(n.to_string()),
+        Answer::Bool(b) => Some(b.to_string()),
+        Answer::Text(text) => {
+            Some(String::from_utf8_lossy(&Value::text(text).to_bytes()).into_owned())
+        }
+    }
+}
+
+/// Whether every answer of a regression holds an integer, none missing:
+/// the column pandas infers as int64.
+fn regression_integers(rows: &[&Row]) -> bool {
+    rows.iter().all(|r| matches!(r.prediction, Answer::Int(_)))
 }
 
 fn internal_layout() -> CoreError {
