@@ -1,0 +1,4416 @@
+{
+ "recorded_by": "t128b_predict_result_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cases": [
+  {
+   "name": "layout.regression.given",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression-six.given",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     5,
+     0,
+     7,
+     2,
+     3,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "5"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "7"
+      },
+      {
+       "f64_bits": "4008e40000000000"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "f64_bits": "4011730000000000"
+      }
+     ],
+     [
+      {
+       "int": "4"
+      },
+      {
+       "int": "3"
+      },
+      {
+       "f64_bits": "4016740000000000"
+      }
+     ],
+     [
+      {
+       "int": "5"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "401b750000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"114\", \"row_index\": 2, \"prediction\": 3.111328125}, {\"id\": \"115\", \"row_index\": 3, \"prediction\": 4.3623046875}, {\"id\": \"116\", \"row_index\": 4, \"prediction\": 5.61328125}, {\"id\": \"117\", \"row_index\": 5, \"prediction\": 6.8642578125}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression.reversed",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression-six.reversed",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     5,
+     0,
+     7,
+     2,
+     3,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "5"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "7"
+      },
+      {
+       "f64_bits": "4008e40000000000"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "f64_bits": "4011730000000000"
+      }
+     ],
+     [
+      {
+       "int": "4"
+      },
+      {
+       "int": "3"
+      },
+      {
+       "f64_bits": "4016740000000000"
+      }
+     ],
+     [
+      {
+       "int": "5"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "401b750000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"117\", \"row_index\": 5, \"prediction\": 6.8642578125}, {\"id\": \"116\", \"row_index\": 4, \"prediction\": 5.61328125}, {\"id\": \"115\", \"row_index\": 3, \"prediction\": 4.3623046875}, {\"id\": \"114\", \"row_index\": 2, \"prediction\": 3.111328125}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression.rotated",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:rotated",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression-six.rotated",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     5,
+     0,
+     7,
+     2,
+     3,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:rotated",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "5"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "7"
+      },
+      {
+       "f64_bits": "4008e40000000000"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "f64_bits": "4011730000000000"
+      }
+     ],
+     [
+      {
+       "int": "4"
+      },
+      {
+       "int": "3"
+      },
+      {
+       "f64_bits": "4016740000000000"
+      }
+     ],
+     [
+      {
+       "int": "5"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "401b750000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"114\", \"row_index\": 2, \"prediction\": 3.111328125}, {\"id\": \"115\", \"row_index\": 3, \"prediction\": 4.3623046875}, {\"id\": \"116\", \"row_index\": 4, \"prediction\": 5.61328125}, {\"id\": \"117\", \"row_index\": 5, \"prediction\": 6.8642578125}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression.interleaved",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:interleaved",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.regression-six.interleaved",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     5,
+     0,
+     7,
+     2,
+     3,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:interleaved",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "5"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "7"
+      },
+      {
+       "f64_bits": "4008e40000000000"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "f64_bits": "4011730000000000"
+      }
+     ],
+     [
+      {
+       "int": "4"
+      },
+      {
+       "int": "3"
+      },
+      {
+       "f64_bits": "4016740000000000"
+      }
+     ],
+     [
+      {
+       "int": "5"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "401b750000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}, {\"id\": \"115\", \"row_index\": 3, \"prediction\": 4.3623046875}, {\"id\": \"117\", \"row_index\": 5, \"prediction\": 6.8642578125}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"114\", \"row_index\": 2, \"prediction\": 3.111328125}, {\"id\": \"116\", \"row_index\": 4, \"prediction\": 5.61328125}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.generated-21.reversed",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 60, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 44, 'delta', FALSE), (1, 48, 'beta', FALSE), (2, 48, 'beta', FALSE), (3, 33, 'alpha', TRUE), (4, 77, 'delta', TRUE), (5, 68, 'beta', FALSE), (6, 62, 'alpha', TRUE), (7, 65, 'delta', FALSE), (8, 20, 'gamma', FALSE), (9, 62, 'alpha', FALSE), (10, 78, 'gamma', TRUE), (11, 65, 'alpha', TRUE), (12, 77, 'alpha', TRUE), (13, 53, 'gamma', TRUE), (14, 27, 'beta', FALSE), (15, 48, 'beta', TRUE), (16, 30, 'beta', FALSE), (17, 69, 'alpha', TRUE), (18, 48, 'delta', TRUE), (19, 77, 'beta', FALSE), (20, 44, 'gamma', TRUE), (21, 46, 'delta', TRUE), (22, 49, 'delta', TRUE), (23, 71, 'alpha', TRUE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 15, 14.95, TIMESTAMP '2023-01-01' + to_days(1)), (1, 23, 104.91, TIMESTAMP '2023-01-01' + to_days(306)), (2, 19, 64.41, TIMESTAMP '2023-01-01' + to_days(292)), (3, 3, 36.95, TIMESTAMP '2023-01-01' + to_days(318)), (4, 20, 70.29, TIMESTAMP '2023-01-01' + to_days(87)), (5, 11, 152.61, TIMESTAMP '2023-01-01' + to_days(170)), (6, 7, 21.55, TIMESTAMP '2023-01-01' + to_days(156)), (7, 5, 155.63, TIMESTAMP '2023-01-01' + to_days(33)), (8, 5, 136.99, TIMESTAMP '2023-01-01' + to_days(191)), (9, 16, 179.84, TIMESTAMP '2023-01-01' + to_days(346)), (10, 13, 183.64, TIMESTAMP '2023-01-01' + to_days(123)), (11, 23, 118.51, TIMESTAMP '2023-01-01' + to_days(83)), (12, 15, 101.72, TIMESTAMP '2023-01-01' + to_days(177)), (13, 7, 187.32, TIMESTAMP '2023-01-01' + to_days(341)), (14, 5, 112.8, TIMESTAMP '2023-01-01' + to_days(125)), (15, 13, 155.01, TIMESTAMP '2023-01-01' + to_days(224)), (16, 1, 167.56, TIMESTAMP '2023-01-01' + to_days(247)), (17, 8, 132.03, TIMESTAMP '2023-01-01' + to_days(26)), (18, 13, 50.47, TIMESTAMP '2023-01-01' + to_days(17)), (19, 2, 174.21, TIMESTAMP '2023-01-01' + to_days(201)), (20, 4, 196.71, TIMESTAMP '2023-01-01' + to_days(330)), (21, 23, 96.32, TIMESTAMP '2023-01-01' + to_days(381)), (22, 4, 191.82, TIMESTAMP '2023-01-01' + to_days(129)), (23, 23, 96.33, TIMESTAMP '2023-01-01' + to_days(269)), (24, 11, 159.25, TIMESTAMP '2023-01-01' + to_days(108)), (25, 19, 154.78, TIMESTAMP '2023-01-01' + to_days(188)), (26, 18, 180.62, TIMESTAMP '2023-01-01' + to_days(248)), (27, 9, 28.62, TIMESTAMP '2023-01-01' + to_days(244)), (28, 8, 28.72, TIMESTAMP '2023-01-01' + to_days(301)), (29, 0, 77.09, TIMESTAMP '2023-01-01' + to_days(369)), (30, 22, 5.68, TIMESTAMP '2023-01-01' + to_days(64)), (31, 10, 129.13, TIMESTAMP '2023-01-01' + to_days(303)), (32, 13, 52.18, TIMESTAMP '2023-01-01' + to_days(299)), (33, 4, 27.57, TIMESTAMP '2023-01-01' + to_days(207)), (34, 12, 19.69, TIMESTAMP '2023-01-01' + to_days(48)), (35, 20, 89.92, TIMESTAMP '2023-01-01' + to_days(12)), (36, 2, 173.6, TIMESTAMP '2023-01-01' + to_days(72)), (37, 9, 26.18, TIMESTAMP '2023-01-01' + to_days(335)), (38, 10, 79.86, TIMESTAMP '2023-01-01' + to_days(275)), (39, 19, 34.05, TIMESTAMP '2023-01-01' + to_days(112)), (40, 12, 41.12, TIMESTAMP '2023-01-01' + to_days(94)), (41, 17, 151.65, TIMESTAMP '2023-01-01' + to_days(381)), (42, 22, 101.47, TIMESTAMP '2023-01-01' + to_days(309)), (43, 1, 158.35, TIMESTAMP '2023-01-01' + to_days(381)), (44, 12, 93.31, TIMESTAMP '2023-01-01' + to_days(4)), (45, 12, 153.02, TIMESTAMP '2023-01-01' + to_days(32)), (46, 22, 47.43, TIMESTAMP '2023-01-01' + to_days(89)), (47, 19, 63.41, TIMESTAMP '2023-01-01' + to_days(356)), (48, 7, 78.39, TIMESTAMP '2023-01-01' + to_days(21)), (49, 23, 180.25, TIMESTAMP '2023-01-01' + to_days(158)), (50, 16, 160.81, TIMESTAMP '2023-01-01' + to_days(151)), (51, 18, 20.61, TIMESTAMP '2023-01-01' + to_days(250)), (52, 1, 102.13, TIMESTAMP '2023-01-01' + to_days(307)), (53, 10, 193.46, TIMESTAMP '2023-01-01' + to_days(376)), (54, 9, 140.19, TIMESTAMP '2023-01-01' + to_days(158)), (55, 17, 38.72, TIMESTAMP '2023-01-01' + to_days(269)), (56, 10, 195.39, TIMESTAMP '2023-01-01' + to_days(315)), (57, 2, 64.3, TIMESTAMP '2023-01-01' + to_days(181)), (58, 3, 173.73, TIMESTAMP '2023-01-01' + to_days(215)), (59, 2, 125.68, TIMESTAMP '2023-01-01' + to_days(333)), (60, 14, 101.5, TIMESTAMP '2023-01-01' + to_days(413)), (61, 21, 129.28, TIMESTAMP '2023-01-01' + to_days(10)), (62, 15, 103.97, TIMESTAMP '2023-01-01' + to_days(226)), (63, 12, 15.0, TIMESTAMP '2023-01-01' + to_days(199)), (64, 1, 132.64, TIMESTAMP '2023-01-01' + to_days(12)), (65, 7, 55.84, TIMESTAMP '2023-01-01' + to_days(21)), (66, 12, 145.03, TIMESTAMP '2023-01-01' + to_days(301)), (67, 7, 80.39, TIMESTAMP '2023-01-01' + to_days(233)), (68, 15, 46.33, TIMESTAMP '2023-01-01' + to_days(167)), (69, 2, 8.45, TIMESTAMP '2023-01-01' + to_days(335)), (70, 15, 75.23, TIMESTAMP '2023-01-01' + to_days(88)), (71, 6, 156.12, TIMESTAMP '2023-01-01' + to_days(309)), (72, 20, 151.95, TIMESTAMP '2023-01-01' + to_days(320)), (73, 23, 171.92, TIMESTAMP '2023-01-01' + to_days(342)), (74, 21, 53.18, TIMESTAMP '2023-01-01' + to_days(357)), (75, 15, 77.8, TIMESTAMP '2023-01-01' + to_days(246)), (76, 12, 165.14, TIMESTAMP '2023-01-01' + to_days(314)), (77, 0, 33.21, TIMESTAMP '2023-01-01' + to_days(364)), (78, 9, 175.26, TIMESTAMP '2023-01-01' + to_days(103)), (79, 4, 19.05, TIMESTAMP '2023-01-01' + to_days(366)), (80, 2, 104.95, TIMESTAMP '2023-01-01' + to_days(89)), (81, 12, 148.73, TIMESTAMP '2023-01-01' + to_days(317)), (82, 3, 198.18, TIMESTAMP '2023-01-01' + to_days(236)), (83, 22, 87.22, TIMESTAMP '2023-01-01' + to_days(85)), (84, 10, 75.02, TIMESTAMP '2023-01-01' + to_days(347)), (85, 21, 38.57, TIMESTAMP '2023-01-01' + to_days(297)), (86, 0, 65.1, TIMESTAMP '2023-01-01' + to_days(41)), (87, 4, 180.04, TIMESTAMP '2023-01-01' + to_days(130)), (88, 6, 48.44, TIMESTAMP '2023-01-01' + to_days(259)), (89, 8, 143.52, TIMESTAMP '2023-01-01' + to_days(352)), (90, 12, 93.93, TIMESTAMP '2023-01-01' + to_days(80)), (91, 14, 123.8, TIMESTAMP '2023-01-01' + to_days(223)), (92, 21, 35.69, TIMESTAMP '2023-01-01' + to_days(143)), (93, 19, 55.21, TIMESTAMP '2023-01-01' + to_days(196)), (94, 6, 7.84, TIMESTAMP '2023-01-01' + to_days(96)), (95, 20, 187.02, TIMESTAMP '2023-01-01' + to_days(414)), (96, 11, 4.78, TIMESTAMP '2023-01-01' + to_days(360)), (97, 18, 8.81, TIMESTAMP '2023-01-01' + to_days(256)), (98, 14, 140.38, TIMESTAMP '2023-01-01' + to_days(311)), (99, 0, 188.37, TIMESTAMP '2023-01-01' + to_days(122)), (100, 3, 194.6, TIMESTAMP '2023-01-01' + to_days(75)), (101, 14, 74.74, TIMESTAMP '2023-01-01' + to_days(97)), (102, 11, 34.07, TIMESTAMP '2023-01-01' + to_days(1)), (103, 13, 106.35, TIMESTAMP '2023-01-01' + to_days(292)), (104, 9, 38.33, TIMESTAMP '2023-01-01' + to_days(25)), (105, 17, 49.62, TIMESTAMP '2023-01-01' + to_days(206)), (106, 18, 185.11, TIMESTAMP '2023-01-01' + to_days(294)), (107, 0, 132.08, TIMESTAMP '2023-01-01' + to_days(405)), (108, 2, 87.72, TIMESTAMP '2023-01-01' + to_days(37)), (109, 21, 38.47, TIMESTAMP '2023-01-01' + to_days(382)), (110, 15, 163.23, TIMESTAMP '2023-01-01' + to_days(30)), (111, 17, 124.44, TIMESTAMP '2023-01-01' + to_days(310)), (112, 21, 160.22, TIMESTAMP '2023-01-01' + to_days(241)), (113, 4, 54.68, TIMESTAMP '2023-01-01' + to_days(173)), (114, 9, 60.3, TIMESTAMP '2023-01-01' + to_days(180)), (115, 0, 178.14, TIMESTAMP '2023-01-01' + to_days(321)), (116, 21, 14.46, TIMESTAMP '2023-01-01' + to_days(36)), (117, 3, 135.92, TIMESTAMP '2023-01-01' + to_days(262)), (118, 11, 54.7, TIMESTAMP '2023-01-01' + to_days(97)), (119, 5, 8.39, TIMESTAMP '2023-01-01' + to_days(30)), (120, 8, 136.47, TIMESTAMP '2023-01-01' + to_days(253)), (121, 12, 32.48, TIMESTAMP '2023-01-01' + to_days(334)), (122, 7, 186.24, TIMESTAMP '2023-01-01' + to_days(53)), (123, 8, 82.28, TIMESTAMP '2023-01-01' + to_days(275)), (124, 6, 145.84, TIMESTAMP '2023-01-01' + to_days(353)), (125, 13, 16.58, TIMESTAMP '2023-01-01' + to_days(268)), (126, 6, 101.05, TIMESTAMP '2023-01-01' + to_days(112)), (127, 11, 121.73, TIMESTAMP '2023-01-01' + to_days(372)), (128, 20, 128.87, TIMESTAMP '2023-01-01' + to_days(324)), (129, 22, 74.33, TIMESTAMP '2023-01-01' + to_days(10)), (130, 5, 172.97, TIMESTAMP '2023-01-01' + to_days(244)), (131, 0, 181.37, TIMESTAMP '2023-01-01' + to_days(226)), (132, 1, 44.25, TIMESTAMP '2023-01-01' + to_days(347)), (133, 20, 180.65, TIMESTAMP '2023-01-01' + to_days(398)), (134, 19, 181.79, TIMESTAMP '2023-01-01' + to_days(273)), (135, 12, 42.82, TIMESTAMP '2023-01-01' + to_days(158)), (136, 22, 158.98, TIMESTAMP '2023-01-01' + to_days(237)), (137, 11, 35.5, TIMESTAMP '2023-01-01' + to_days(5)), (138, 19, 5.98, TIMESTAMP '2023-01-01' + to_days(135)), (139, 20, 149.95, TIMESTAMP '2023-01-01' + to_days(192)), (140, 17, 100.6, TIMESTAMP '2023-01-01' + to_days(93)), (141, 6, 46.04, TIMESTAMP '2023-01-01' + to_days(211)), (142, 17, 57.91, TIMESTAMP '2023-01-01' + to_days(263)), (143, 23, 153.65, TIMESTAMP '2023-01-01' + to_days(230)), (144, 2, 48.73, TIMESTAMP '2023-01-01' + to_days(185)), (145, 5, 71.03, TIMESTAMP '2023-01-01' + to_days(306)), (146, 11, 115.01, TIMESTAMP '2023-01-01' + to_days(343)), (147, 13, 190.97, TIMESTAMP '2023-01-01' + to_days(13)), (148, 0, 196.88, TIMESTAMP '2023-01-01' + to_days(386)), (149, 6, 148.61, TIMESTAMP '2023-01-01' + to_days(378)), (150, 17, 105.08, TIMESTAMP '2023-01-01' + to_days(108)), (151, 9, 25.45, TIMESTAMP '2023-01-01' + to_days(263)), (152, 21, 85.43, TIMESTAMP '2023-01-01' + to_days(122)), (153, 14, 154.4, TIMESTAMP '2023-01-01' + to_days(328)), (154, 6, 130.5, TIMESTAMP '2023-01-01' + to_days(384)), (155, 5, 86.6, TIMESTAMP '2023-01-01' + to_days(129)), (156, 7, 98.43, TIMESTAMP '2023-01-01' + to_days(193)), (157, 1, 108.03, TIMESTAMP '2023-01-01' + to_days(135)), (158, 6, 8.07, TIMESTAMP '2023-01-01' + to_days(234)), (159, 18, 88.62, TIMESTAMP '2023-01-01' + to_days(172)), (160, 23, 28.73, TIMESTAMP '2023-01-01' + to_days(154)), (161, 5, 76.0, TIMESTAMP '2023-01-01' + to_days(112)), (162, 1, 1.75, TIMESTAMP '2023-01-01' + to_days(201)), (163, 18, 60.02, TIMESTAMP '2023-01-01' + to_days(340)), (164, 6, 97.72, TIMESTAMP '2023-01-01' + to_days(234)), (165, 17, 162.66, TIMESTAMP '2023-01-01' + to_days(375)), (166, 21, 11.94, TIMESTAMP '2023-01-01' + to_days(247)), (167, 4, 100.47, TIMESTAMP '2023-01-01' + to_days(189)), (168, 11, 78.5, TIMESTAMP '2023-01-01' + to_days(236)), (169, 14, 120.1, TIMESTAMP '2023-01-01' + to_days(321)), (170, 2, 173.19, TIMESTAMP '2023-01-01' + to_days(354)), (171, 3, 75.61, TIMESTAMP '2023-01-01' + to_days(384)), (172, 23, 156.6, TIMESTAMP '2023-01-01' + to_days(128)), (173, 3, 185.7, TIMESTAMP '2023-01-01' + to_days(405))"
+   ],
+   "materialize": {
+    "indices": [
+     23,
+     22,
+     21,
+     20,
+     19,
+     18,
+     17,
+     16,
+     15,
+     14,
+     13,
+     12,
+     11,
+     10,
+     9,
+     8,
+     7,
+     6,
+     5,
+     4
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 21
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "23"
+      },
+      {
+       "f64_bits": "3fe5400000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "22"
+      },
+      {
+       "f64_bits": "3ffea40000000000"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "21"
+      },
+      {
+       "f64_bits": "4009540000000000"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "20"
+      },
+      {
+       "f64_bits": "4011ab0000000000"
+      }
+     ],
+     [
+      {
+       "int": "4"
+      },
+      {
+       "int": "19"
+      },
+      {
+       "f64_bits": "4016ac0000000000"
+      }
+     ],
+     [
+      {
+       "int": "5"
+      },
+      {
+       "int": "18"
+      },
+      {
+       "f64_bits": "401bad0000000000"
+      }
+     ],
+     [
+      {
+       "int": "6"
+      },
+      {
+       "int": "17"
+      },
+      {
+       "f64_bits": "4020570000000000"
+      }
+     ],
+     [
+      {
+       "int": "7"
+      },
+      {
+       "int": "16"
+      },
+      {
+       "f64_bits": "4022d78000000000"
+      }
+     ],
+     [
+      {
+       "int": "8"
+      },
+      {
+       "int": "15"
+      },
+      {
+       "f64_bits": "4025580000000000"
+      }
+     ],
+     [
+      {
+       "int": "9"
+      },
+      {
+       "int": "14"
+      },
+      {
+       "f64_bits": "4027d88000000000"
+      }
+     ],
+     [
+      {
+       "int": "10"
+      },
+      {
+       "int": "13"
+      },
+      {
+       "f64_bits": "402a590000000000"
+      }
+     ],
+     [
+      {
+       "int": "11"
+      },
+      {
+       "int": "12"
+      },
+      {
+       "f64_bits": "402cd98000000000"
+      }
+     ],
+     [
+      {
+       "int": "12"
+      },
+      {
+       "int": "11"
+      },
+      {
+       "f64_bits": "402f5a0000000000"
+      }
+     ],
+     [
+      {
+       "int": "13"
+      },
+      {
+       "int": "10"
+      },
+      {
+       "f64_bits": "4030ed4000000000"
+      }
+     ],
+     [
+      {
+       "int": "14"
+      },
+      {
+       "int": "9"
+      },
+      {
+       "f64_bits": "40322d8000000000"
+      }
+     ],
+     [
+      {
+       "int": "15"
+      },
+      {
+       "int": "8"
+      },
+      {
+       "f64_bits": "40336dc000000000"
+      }
+     ],
+     [
+      {
+       "int": "16"
+      },
+      {
+       "int": "7"
+      },
+      {
+       "f64_bits": "4034ae0000000000"
+      }
+     ],
+     [
+      {
+       "int": "17"
+      },
+      {
+       "int": "6"
+      },
+      {
+       "f64_bits": "4035ee4000000000"
+      }
+     ],
+     [
+      {
+       "int": "18"
+      },
+      {
+       "int": "5"
+      },
+      {
+       "f64_bits": "40372e8000000000"
+      }
+     ],
+     [
+      {
+       "int": "19"
+      },
+      {
+       "int": "4"
+      },
+      {
+       "f64_bits": "40386ec000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"187\", \"row_index\": 19, \"prediction\": 24.4326171875}, {\"id\": \"186\", \"row_index\": 18, \"prediction\": 23.181640625}, {\"id\": \"185\", \"row_index\": 17, \"prediction\": 21.9306640625}, {\"id\": \"184\", \"row_index\": 16, \"prediction\": 20.6796875}, {\"id\": \"183\", \"row_index\": 15, \"prediction\": 19.4287109375}, {\"id\": \"182\", \"row_index\": 14, \"prediction\": 18.177734375}, {\"id\": \"181\", \"row_index\": 13, \"prediction\": 16.9267578125}, {\"id\": \"180\", \"row_index\": 12, \"prediction\": 15.67578125}, {\"id\": \"179\", \"row_index\": 11, \"prediction\": 14.4248046875}, {\"id\": \"178\", \"row_index\": 10, \"prediction\": 13.173828125}, {\"id\": \"177\", \"row_index\": 9, \"prediction\": 11.9228515625}, {\"id\": \"176\", \"row_index\": 8, \"prediction\": 10.671875}, {\"id\": \"175\", \"row_index\": 7, \"prediction\": 9.4208984375}, {\"id\": \"174\", \"row_index\": 6, \"prediction\": 8.169921875}, {\"id\": \"173\", \"row_index\": 5, \"prediction\": 6.9189453125}, {\"id\": \"172\", \"row_index\": 4, \"prediction\": 5.66796875}, {\"id\": \"171\", \"row_index\": 3, \"prediction\": 4.4169921875}, {\"id\": \"170\", \"row_index\": 2, \"prediction\": 3.166015625}, {\"id\": \"169\", \"row_index\": 1, \"prediction\": 1.9150390625}, {\"id\": \"168\", \"row_index\": 0, \"prediction\": 0.6640625}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "layout.generated-22.reversed",
+   "covers": "L1 layout: distinct per-row answers and reordered responses laid out as the reference's result",
+   "query": "PREDICT SUM(orders.price, 0, 60, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 33, 'alpha', FALSE), (1, 46, 'beta', FALSE), (2, 65, 'gamma', FALSE), (3, 23, 'beta', TRUE), (4, 21, 'gamma', FALSE), (5, 29, 'delta', FALSE), (6, 21, 'alpha', FALSE), (7, 37, 'delta', TRUE), (8, 72, 'alpha', FALSE), (9, 78, 'alpha', FALSE), (10, 57, 'gamma', TRUE), (11, 79, 'delta', TRUE), (12, 67, 'beta', TRUE), (13, 35, 'beta', TRUE), (14, 39, 'alpha', TRUE), (15, 34, 'gamma', FALSE), (16, 44, 'delta', FALSE), (17, 76, 'beta', TRUE), (18, 41, 'delta', FALSE), (19, 37, 'delta', FALSE), (20, 75, 'delta', TRUE), (21, 46, 'gamma', TRUE), (22, 67, 'delta', TRUE), (23, 71, 'beta', FALSE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 3, 92.34, TIMESTAMP '2023-01-01' + to_days(3)), (1, 5, 7.0, TIMESTAMP '2023-01-01' + to_days(99)), (2, 11, 36.59, TIMESTAMP '2023-01-01' + to_days(192)), (3, 20, 39.06, TIMESTAMP '2023-01-01' + to_days(182)), (4, 2, 107.56, TIMESTAMP '2023-01-01' + to_days(18)), (5, 20, 148.07, TIMESTAMP '2023-01-01' + to_days(407)), (6, 22, 21.1, TIMESTAMP '2023-01-01' + to_days(335)), (7, 13, 25.28, TIMESTAMP '2023-01-01' + to_days(99)), (8, 18, 92.65, TIMESTAMP '2023-01-01' + to_days(75)), (9, 15, 141.82, TIMESTAMP '2023-01-01' + to_days(61)), (10, 18, 57.56, TIMESTAMP '2023-01-01' + to_days(69)), (11, 23, 171.81, TIMESTAMP '2023-01-01' + to_days(350)), (12, 23, 14.11, TIMESTAMP '2023-01-01' + to_days(243)), (13, 11, 191.0, TIMESTAMP '2023-01-01' + to_days(365)), (14, 19, 52.52, TIMESTAMP '2023-01-01' + to_days(56)), (15, 0, 38.18, TIMESTAMP '2023-01-01' + to_days(61)), (16, 20, 13.75, TIMESTAMP '2023-01-01' + to_days(179)), (17, 5, 126.17, TIMESTAMP '2023-01-01' + to_days(49)), (18, 13, 140.29, TIMESTAMP '2023-01-01' + to_days(305)), (19, 1, 16.21, TIMESTAMP '2023-01-01' + to_days(90)), (20, 11, 136.09, TIMESTAMP '2023-01-01' + to_days(97)), (21, 17, 51.73, TIMESTAMP '2023-01-01' + to_days(110)), (22, 5, 5.64, TIMESTAMP '2023-01-01' + to_days(34)), (23, 3, 116.6, TIMESTAMP '2023-01-01' + to_days(385)), (24, 6, 81.15, TIMESTAMP '2023-01-01' + to_days(316)), (25, 23, 181.73, TIMESTAMP '2023-01-01' + to_days(60)), (26, 5, 8.62, TIMESTAMP '2023-01-01' + to_days(268)), (27, 19, 7.56, TIMESTAMP '2023-01-01' + to_days(193)), (28, 15, 127.37, TIMESTAMP '2023-01-01' + to_days(104)), (29, 22, 143.91, TIMESTAMP '2023-01-01' + to_days(25)), (30, 8, 50.55, TIMESTAMP '2023-01-01' + to_days(237)), (31, 3, 53.99, TIMESTAMP '2023-01-01' + to_days(118)), (32, 21, 113.65, TIMESTAMP '2023-01-01' + to_days(33)), (33, 20, 64.45, TIMESTAMP '2023-01-01' + to_days(91)), (34, 15, 32.51, TIMESTAMP '2023-01-01' + to_days(15)), (35, 1, 169.57, TIMESTAMP '2023-01-01' + to_days(143)), (36, 0, 56.14, TIMESTAMP '2023-01-01' + to_days(358)), (37, 0, 43.85, TIMESTAMP '2023-01-01' + to_days(393)), (38, 14, 169.43, TIMESTAMP '2023-01-01' + to_days(415)), (39, 14, 107.37, TIMESTAMP '2023-01-01' + to_days(119)), (40, 11, 69.12, TIMESTAMP '2023-01-01' + to_days(71)), (41, 22, 2.81, TIMESTAMP '2023-01-01' + to_days(418)), (42, 19, 128.41, TIMESTAMP '2023-01-01' + to_days(194)), (43, 19, 110.73, TIMESTAMP '2023-01-01' + to_days(89)), (44, 8, 169.85, TIMESTAMP '2023-01-01' + to_days(185)), (45, 8, 38.48, TIMESTAMP '2023-01-01' + to_days(262)), (46, 16, 32.67, TIMESTAMP '2023-01-01' + to_days(142)), (47, 16, 99.66, TIMESTAMP '2023-01-01' + to_days(406)), (48, 4, 194.78, TIMESTAMP '2023-01-01' + to_days(255)), (49, 15, 81.74, TIMESTAMP '2023-01-01' + to_days(97)), (50, 2, 77.96, TIMESTAMP '2023-01-01' + to_days(389)), (51, 16, 39.8, TIMESTAMP '2023-01-01' + to_days(335)), (52, 2, 11.07, TIMESTAMP '2023-01-01' + to_days(82)), (53, 10, 47.95, TIMESTAMP '2023-01-01' + to_days(194)), (54, 16, 193.93, TIMESTAMP '2023-01-01' + to_days(265)), (55, 6, 111.98, TIMESTAMP '2023-01-01' + to_days(78)), (56, 0, 105.91, TIMESTAMP '2023-01-01' + to_days(306)), (57, 0, 23.57, TIMESTAMP '2023-01-01' + to_days(393)), (58, 21, 11.24, TIMESTAMP '2023-01-01' + to_days(259)), (59, 2, 20.62, TIMESTAMP '2023-01-01' + to_days(323)), (60, 5, 52.28, TIMESTAMP '2023-01-01' + to_days(34)), (61, 10, 181.95, TIMESTAMP '2023-01-01' + to_days(155)), (62, 18, 124.86, TIMESTAMP '2023-01-01' + to_days(210)), (63, 17, 67.15, TIMESTAMP '2023-01-01' + to_days(378)), (64, 23, 11.4, TIMESTAMP '2023-01-01' + to_days(346)), (65, 16, 130.79, TIMESTAMP '2023-01-01' + to_days(119)), (66, 21, 56.99, TIMESTAMP '2023-01-01' + to_days(164)), (67, 7, 12.42, TIMESTAMP '2023-01-01' + to_days(122)), (68, 9, 177.91, TIMESTAMP '2023-01-01' + to_days(161)), (69, 3, 21.53, TIMESTAMP '2023-01-01' + to_days(161)), (70, 10, 183.85, TIMESTAMP '2023-01-01' + to_days(227)), (71, 15, 57.62, TIMESTAMP '2023-01-01' + to_days(81)), (72, 11, 28.81, TIMESTAMP '2023-01-01' + to_days(201)), (73, 9, 47.72, TIMESTAMP '2023-01-01' + to_days(206)), (74, 19, 191.85, TIMESTAMP '2023-01-01' + to_days(116)), (75, 1, 93.39, TIMESTAMP '2023-01-01' + to_days(191)), (76, 16, 109.03, TIMESTAMP '2023-01-01' + to_days(143)), (77, 4, 164.69, TIMESTAMP '2023-01-01' + to_days(47)), (78, 9, 111.68, TIMESTAMP '2023-01-01' + to_days(384)), (79, 1, 52.18, TIMESTAMP '2023-01-01' + to_days(227)), (80, 4, 23.55, TIMESTAMP '2023-01-01' + to_days(124)), (81, 10, 160.48, TIMESTAMP '2023-01-01' + to_days(246)), (82, 12, 14.77, TIMESTAMP '2023-01-01' + to_days(258)), (83, 6, 76.75, TIMESTAMP '2023-01-01' + to_days(173)), (84, 18, 179.15, TIMESTAMP '2023-01-01' + to_days(341)), (85, 20, 108.2, TIMESTAMP '2023-01-01' + to_days(222)), (86, 21, 92.33, TIMESTAMP '2023-01-01' + to_days(202)), (87, 14, 72.81, TIMESTAMP '2023-01-01' + to_days(343)), (88, 22, 3.02, TIMESTAMP '2023-01-01' + to_days(146)), (89, 3, 31.76, TIMESTAMP '2023-01-01' + to_days(41)), (90, 2, 44.21, TIMESTAMP '2023-01-01' + to_days(232)), (91, 20, 54.21, TIMESTAMP '2023-01-01' + to_days(241)), (92, 0, 152.67, TIMESTAMP '2023-01-01' + to_days(64)), (93, 18, 157.78, TIMESTAMP '2023-01-01' + to_days(82)), (94, 7, 117.68, TIMESTAMP '2023-01-01' + to_days(275)), (95, 10, 147.93, TIMESTAMP '2023-01-01' + to_days(101)), (96, 17, 143.5, TIMESTAMP '2023-01-01' + to_days(229)), (97, 12, 133.84, TIMESTAMP '2023-01-01' + to_days(397)), (98, 17, 160.01, TIMESTAMP '2023-01-01' + to_days(231)), (99, 8, 155.73, TIMESTAMP '2023-01-01' + to_days(217)), (100, 7, 45.86, TIMESTAMP '2023-01-01' + to_days(106)), (101, 8, 136.7, TIMESTAMP '2023-01-01' + to_days(271)), (102, 1, 120.79, TIMESTAMP '2023-01-01' + to_days(293)), (103, 19, 111.23, TIMESTAMP '2023-01-01' + to_days(122)), (104, 14, 159.79, TIMESTAMP '2023-01-01' + to_days(181)), (105, 3, 116.52, TIMESTAMP '2023-01-01' + to_days(190)), (106, 11, 83.73, TIMESTAMP '2023-01-01' + to_days(116)), (107, 23, 28.49, TIMESTAMP '2023-01-01' + to_days(65)), (108, 19, 101.29, TIMESTAMP '2023-01-01' + to_days(281)), (109, 3, 26.23, TIMESTAMP '2023-01-01' + to_days(333)), (110, 16, 143.08, TIMESTAMP '2023-01-01' + to_days(348)), (111, 12, 26.92, TIMESTAMP '2023-01-01' + to_days(119)), (112, 16, 130.15, TIMESTAMP '2023-01-01' + to_days(190)), (113, 0, 2.75, TIMESTAMP '2023-01-01' + to_days(133)), (114, 10, 32.4, TIMESTAMP '2023-01-01' + to_days(226)), (115, 16, 120.02, TIMESTAMP '2023-01-01' + to_days(83)), (116, 3, 53.01, TIMESTAMP '2023-01-01' + to_days(361)), (117, 15, 34.82, TIMESTAMP '2023-01-01' + to_days(61)), (118, 2, 139.32, TIMESTAMP '2023-01-01' + to_days(365)), (119, 8, 137.53, TIMESTAMP '2023-01-01' + to_days(342)), (120, 14, 65.81, TIMESTAMP '2023-01-01' + to_days(275)), (121, 18, 65.08, TIMESTAMP '2023-01-01' + to_days(401)), (122, 23, 171.88, TIMESTAMP '2023-01-01' + to_days(92)), (123, 19, 25.51, TIMESTAMP '2023-01-01' + to_days(25)), (124, 0, 165.43, TIMESTAMP '2023-01-01' + to_days(35)), (125, 13, 125.63, TIMESTAMP '2023-01-01' + to_days(276)), (126, 13, 153.58, TIMESTAMP '2023-01-01' + to_days(171)), (127, 7, 171.26, TIMESTAMP '2023-01-01' + to_days(48)), (128, 8, 9.39, TIMESTAMP '2023-01-01' + to_days(208)), (129, 19, 112.5, TIMESTAMP '2023-01-01' + to_days(175)), (130, 23, 181.18, TIMESTAMP '2023-01-01' + to_days(75)), (131, 16, 20.23, TIMESTAMP '2023-01-01' + to_days(204)), (132, 22, 70.73, TIMESTAMP '2023-01-01' + to_days(15)), (133, 5, 89.22, TIMESTAMP '2023-01-01' + to_days(37)), (134, 0, 90.94, TIMESTAMP '2023-01-01' + to_days(417)), (135, 13, 15.65, TIMESTAMP '2023-01-01' + to_days(197)), (136, 0, 171.12, TIMESTAMP '2023-01-01' + to_days(317)), (137, 6, 58.46, TIMESTAMP '2023-01-01' + to_days(199)), (138, 17, 158.88, TIMESTAMP '2023-01-01' + to_days(313)), (139, 9, 199.9, TIMESTAMP '2023-01-01' + to_days(86)), (140, 1, 93.36, TIMESTAMP '2023-01-01' + to_days(56)), (141, 10, 81.35, TIMESTAMP '2023-01-01' + to_days(103)), (142, 14, 48.18, TIMESTAMP '2023-01-01' + to_days(93)), (143, 0, 198.47, TIMESTAMP '2023-01-01' + to_days(32)), (144, 8, 84.94, TIMESTAMP '2023-01-01' + to_days(98)), (145, 15, 126.61, TIMESTAMP '2023-01-01' + to_days(330)), (146, 19, 133.14, TIMESTAMP '2023-01-01' + to_days(157)), (147, 8, 74.11, TIMESTAMP '2023-01-01' + to_days(375)), (148, 17, 94.31, TIMESTAMP '2023-01-01' + to_days(41)), (149, 4, 38.54, TIMESTAMP '2023-01-01' + to_days(113))"
+   ],
+   "materialize": {
+    "indices": [
+     23,
+     22,
+     21,
+     20,
+     19,
+     18,
+     17,
+     16,
+     15,
+     14,
+     13,
+     12,
+     11,
+     10,
+     9,
+     8,
+     7,
+     6,
+     5,
+     4
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 22
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "23"
+      },
+      {
+       "f64_bits": "3fe5400000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "22"
+      },
+      {
+       "f64_bits": "3ffea40000000000"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "21"
+      },
+      {
+       "f64_bits": "4009540000000000"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "20"
+      },
+      {
+       "f64_bits": "4011ab0000000000"
+      }
+     ],
+     [
+      {
+       "int": "4"
+      },
+      {
+       "int": "19"
+      },
+      {
+       "f64_bits": "4016ac0000000000"
+      }
+     ],
+     [
+      {
+       "int": "5"
+      },
+      {
+       "int": "18"
+      },
+      {
+       "f64_bits": "401bad0000000000"
+      }
+     ],
+     [
+      {
+       "int": "6"
+      },
+      {
+       "int": "17"
+      },
+      {
+       "f64_bits": "4020570000000000"
+      }
+     ],
+     [
+      {
+       "int": "7"
+      },
+      {
+       "int": "16"
+      },
+      {
+       "f64_bits": "4022d78000000000"
+      }
+     ],
+     [
+      {
+       "int": "8"
+      },
+      {
+       "int": "15"
+      },
+      {
+       "f64_bits": "4025580000000000"
+      }
+     ],
+     [
+      {
+       "int": "9"
+      },
+      {
+       "int": "14"
+      },
+      {
+       "f64_bits": "4027d88000000000"
+      }
+     ],
+     [
+      {
+       "int": "10"
+      },
+      {
+       "int": "13"
+      },
+      {
+       "f64_bits": "402a590000000000"
+      }
+     ],
+     [
+      {
+       "int": "11"
+      },
+      {
+       "int": "12"
+      },
+      {
+       "f64_bits": "402cd98000000000"
+      }
+     ],
+     [
+      {
+       "int": "12"
+      },
+      {
+       "int": "11"
+      },
+      {
+       "f64_bits": "402f5a0000000000"
+      }
+     ],
+     [
+      {
+       "int": "13"
+      },
+      {
+       "int": "10"
+      },
+      {
+       "f64_bits": "4030ed4000000000"
+      }
+     ],
+     [
+      {
+       "int": "14"
+      },
+      {
+       "int": "9"
+      },
+      {
+       "f64_bits": "40322d8000000000"
+      }
+     ],
+     [
+      {
+       "int": "15"
+      },
+      {
+       "int": "8"
+      },
+      {
+       "f64_bits": "40336dc000000000"
+      }
+     ],
+     [
+      {
+       "int": "16"
+      },
+      {
+       "int": "7"
+      },
+      {
+       "f64_bits": "4034ae0000000000"
+      }
+     ],
+     [
+      {
+       "int": "17"
+      },
+      {
+       "int": "6"
+      },
+      {
+       "f64_bits": "4035ee4000000000"
+      }
+     ],
+     [
+      {
+       "int": "18"
+      },
+      {
+       "int": "5"
+      },
+      {
+       "f64_bits": "40372e8000000000"
+      }
+     ],
+     [
+      {
+       "int": "19"
+      },
+      {
+       "int": "4"
+      },
+      {
+       "f64_bits": "40386ec000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"187\", \"row_index\": 19, \"prediction\": 24.4326171875}, {\"id\": \"186\", \"row_index\": 18, \"prediction\": 23.181640625}, {\"id\": \"185\", \"row_index\": 17, \"prediction\": 21.9306640625}, {\"id\": \"184\", \"row_index\": 16, \"prediction\": 20.6796875}, {\"id\": \"183\", \"row_index\": 15, \"prediction\": 19.4287109375}, {\"id\": \"182\", \"row_index\": 14, \"prediction\": 18.177734375}, {\"id\": \"181\", \"row_index\": 13, \"prediction\": 16.9267578125}, {\"id\": \"180\", \"row_index\": 12, \"prediction\": 15.67578125}, {\"id\": \"179\", \"row_index\": 11, \"prediction\": 14.4248046875}, {\"id\": \"178\", \"row_index\": 10, \"prediction\": 13.173828125}, {\"id\": \"177\", \"row_index\": 9, \"prediction\": 11.9228515625}, {\"id\": \"176\", \"row_index\": 8, \"prediction\": 10.671875}, {\"id\": \"175\", \"row_index\": 7, \"prediction\": 9.4208984375}, {\"id\": \"174\", \"row_index\": 6, \"prediction\": 8.169921875}, {\"id\": \"173\", \"row_index\": 5, \"prediction\": 6.9189453125}, {\"id\": \"172\", \"row_index\": 4, \"prediction\": 5.66796875}, {\"id\": \"171\", \"row_index\": 3, \"prediction\": 4.4169921875}, {\"id\": \"170\", \"row_index\": 2, \"prediction\": 3.166015625}, {\"id\": \"169\", \"row_index\": 1, \"prediction\": 1.9150390625}, {\"id\": \"168\", \"row_index\": 0, \"prediction\": 0.6640625}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "base.binary.given",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_False",
+     "probability_True"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "base.binary.reversed",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_False",
+     "probability_True"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}, {\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "base.binary.prediction-only",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction"
+    ]
+   },
+   "script": "prediction-only",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\"}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\"}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "base.multiclass.given",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": "base.multiclass",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_IN",
+     "probability_DE",
+     "probability_US"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "DE"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd5555555555555"
+      },
+      {
+       "f64_bits": "3fdc71c71c71c71c"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "US"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd5555555555555"
+      },
+      {
+       "f64_bits": "3fdc71c71c71c71c"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"8\", \"row_index\": 0, \"prediction\": \"DE\", \"probabilities\": {\"IN\": 0.2222222222222222, \"DE\": 0.3333333333333333, \"US\": 0.4444444444444444}}, {\"id\": \"9\", \"row_index\": 1, \"prediction\": \"US\", \"probabilities\": {\"IN\": 0.2222222222222222, \"DE\": 0.3333333333333333, \"US\": 0.4444444444444444}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "base.multiclass.reversed",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": "base.multiclass",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_IN",
+     "probability_DE",
+     "probability_US"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "DE"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd5555555555555"
+      },
+      {
+       "f64_bits": "3fdc71c71c71c71c"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "US"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd5555555555555"
+      },
+      {
+       "f64_bits": "3fdc71c71c71c71c"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"9\", \"row_index\": 1, \"prediction\": \"US\", \"probabilities\": {\"IN\": 0.2222222222222222, \"DE\": 0.3333333333333333, \"US\": 0.4444444444444444}}, {\"id\": \"8\", \"row_index\": 0, \"prediction\": \"DE\", \"probabilities\": {\"IN\": 0.2222222222222222, \"DE\": 0.3333333333333333, \"US\": 0.4444444444444444}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "base.multiclass.prediction-only",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {
+    "outputs": [
+     "prediction"
+    ]
+   },
+   "script": "prediction-only",
+   "rust_case": "base.multiclass",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "DE"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "US"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"8\", \"row_index\": 0, \"prediction\": \"DE\"}, {\"id\": \"9\", \"row_index\": 1, \"prediction\": \"US\"}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "generated-31.boolean-static",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.active FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 25, 'delta', TRUE), (1, 20, 'beta', FALSE), (2, 52, 'beta', FALSE), (3, 26, 'beta', FALSE), (4, 20, 'zeta', TRUE), (5, 32, 'epsilon', FALSE), (6, 51, 'delta', TRUE), (7, 55, 'alpha', TRUE), (8, 67, 'delta', TRUE), (9, 31, 'gamma', TRUE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 3, 145.07, TIMESTAMP '2023-01-01' + to_days(126)), (1, 9, 132.88, TIMESTAMP '2023-01-01' + to_days(213)), (2, 0, 167.9, TIMESTAMP '2023-01-01' + to_days(30)), (3, 2, 41.57, TIMESTAMP '2023-01-01' + to_days(182)), (4, 6, 7.04, TIMESTAMP '2023-01-01' + to_days(407)), (5, 8, 173.8, TIMESTAMP '2023-01-01' + to_days(376)), (6, 3, 42.34, TIMESTAMP '2023-01-01' + to_days(333)), (7, 5, 39.57, TIMESTAMP '2023-01-01' + to_days(221)), (8, 3, 96.94, TIMESTAMP '2023-01-01' + to_days(328)), (9, 5, 59.38, TIMESTAMP '2023-01-01' + to_days(134)), (10, 6, 96.88, TIMESTAMP '2023-01-01' + to_days(292)), (11, 5, 192.3, TIMESTAMP '2023-01-01' + to_days(333)), (12, 1, 158.18, TIMESTAMP '2023-01-01' + to_days(383)), (13, 2, 112.42, TIMESTAMP '2023-01-01' + to_days(156)), (14, 4, 19.61, TIMESTAMP '2023-01-01' + to_days(279)), (15, 0, 184.28, TIMESTAMP '2023-01-01' + to_days(98)), (16, 5, 139.38, TIMESTAMP '2023-01-01' + to_days(307)), (17, 6, 57.68, TIMESTAMP '2023-01-01' + to_days(48)), (18, 3, 23.68, TIMESTAMP '2023-01-01' + to_days(156)), (19, 5, 89.49, TIMESTAMP '2023-01-01' + to_days(103)), (20, 0, 112.77, TIMESTAMP '2023-01-01' + to_days(403)), (21, 4, 20.67, TIMESTAMP '2023-01-01' + to_days(60)), (22, 1, 192.19, TIMESTAMP '2023-01-01' + to_days(326)), (23, 5, 33.31, TIMESTAMP '2023-01-01' + to_days(102)), (24, 7, 12.53, TIMESTAMP '2023-01-01' + to_days(77)), (25, 8, 56.32, TIMESTAMP '2023-01-01' + to_days(313)), (26, 9, 98.56, TIMESTAMP '2023-01-01' + to_days(190)), (27, 0, 171.06, TIMESTAMP '2023-01-01' + to_days(302)), (28, 2, 159.66, TIMESTAMP '2023-01-01' + to_days(248)), (29, 7, 194.66, TIMESTAMP '2023-01-01' + to_days(310)), (30, 0, 51.7, TIMESTAMP '2023-01-01' + to_days(392)), (31, 7, 70.39, TIMESTAMP '2023-01-01' + to_days(391)), (32, 1, 75.66, TIMESTAMP '2023-01-01' + to_days(5)), (33, 7, 36.05, TIMESTAMP '2023-01-01' + to_days(144)), (34, 2, 25.85, TIMESTAMP '2023-01-01' + to_days(23)), (35, 0, 184.75, TIMESTAMP '2023-01-01' + to_days(314)), (36, 3, 189.39, TIMESTAMP '2023-01-01' + to_days(105)), (37, 2, 111.34, TIMESTAMP '2023-01-01' + to_days(152)), (38, 8, 105.35, TIMESTAMP '2023-01-01' + to_days(285)), (39, 6, 46.16, TIMESTAMP '2023-01-01' + to_days(257)), (40, 9, 92.85, TIMESTAMP '2023-01-01' + to_days(99)), (41, 7, 65.87, TIMESTAMP '2023-01-01' + to_days(367)), (42, 1, 105.0, TIMESTAMP '2023-01-01' + to_days(190)), (43, 3, 188.61, TIMESTAMP '2023-01-01' + to_days(177)), (44, 6, 116.37, TIMESTAMP '2023-01-01' + to_days(353)), (45, 0, 170.77, TIMESTAMP '2023-01-01' + to_days(85)), (46, 6, 42.32, TIMESTAMP '2023-01-01' + to_days(60)), (47, 6, 176.61, TIMESTAMP '2023-01-01' + to_days(125)), (48, 6, 178.17, TIMESTAMP '2023-01-01' + to_days(104)), (49, 8, 117.87, TIMESTAMP '2023-01-01' + to_days(157)), (50, 4, 147.29, TIMESTAMP '2023-01-01' + to_days(398)), (51, 0, 94.98, TIMESTAMP '2023-01-01' + to_days(19)), (52, 4, 107.75, TIMESTAMP '2023-01-01' + to_days(140)), (53, 5, 42.9, TIMESTAMP '2023-01-01' + to_days(222)), (54, 7, 77.45, TIMESTAMP '2023-01-01' + to_days(17)), (55, 3, 43.66, TIMESTAMP '2023-01-01' + to_days(101)), (56, 4, 139.88, TIMESTAMP '2023-01-01' + to_days(176)), (57, 1, 154.44, TIMESTAMP '2023-01-01' + to_days(188))"
+   ],
+   "materialize": {
+    "indices": [
+     1,
+     0,
+     2
+    ],
+    "random_seed": 31
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_False",
+     "probability_True"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "True"
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "False"
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "str": "True"
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"12\", \"row_index\": 2, \"prediction\": \"True\", \"probabilities\": {\"False\": 0.4, \"True\": 0.6}}, {\"id\": \"11\", \"row_index\": 1, \"prediction\": \"False\", \"probabilities\": {\"False\": 0.4, \"True\": 0.6}}, {\"id\": \"10\", \"row_index\": 0, \"prediction\": \"True\", \"probabilities\": {\"False\": 0.4, \"True\": 0.6}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "generated-31.multiclass-static",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.segment FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 25, 'delta', TRUE), (1, 20, 'beta', FALSE), (2, 52, 'beta', FALSE), (3, 26, 'beta', FALSE), (4, 20, 'zeta', TRUE), (5, 32, 'epsilon', FALSE), (6, 51, 'delta', TRUE), (7, 55, 'alpha', TRUE), (8, 67, 'delta', TRUE), (9, 31, 'gamma', TRUE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 3, 145.07, TIMESTAMP '2023-01-01' + to_days(126)), (1, 9, 132.88, TIMESTAMP '2023-01-01' + to_days(213)), (2, 0, 167.9, TIMESTAMP '2023-01-01' + to_days(30)), (3, 2, 41.57, TIMESTAMP '2023-01-01' + to_days(182)), (4, 6, 7.04, TIMESTAMP '2023-01-01' + to_days(407)), (5, 8, 173.8, TIMESTAMP '2023-01-01' + to_days(376)), (6, 3, 42.34, TIMESTAMP '2023-01-01' + to_days(333)), (7, 5, 39.57, TIMESTAMP '2023-01-01' + to_days(221)), (8, 3, 96.94, TIMESTAMP '2023-01-01' + to_days(328)), (9, 5, 59.38, TIMESTAMP '2023-01-01' + to_days(134)), (10, 6, 96.88, TIMESTAMP '2023-01-01' + to_days(292)), (11, 5, 192.3, TIMESTAMP '2023-01-01' + to_days(333)), (12, 1, 158.18, TIMESTAMP '2023-01-01' + to_days(383)), (13, 2, 112.42, TIMESTAMP '2023-01-01' + to_days(156)), (14, 4, 19.61, TIMESTAMP '2023-01-01' + to_days(279)), (15, 0, 184.28, TIMESTAMP '2023-01-01' + to_days(98)), (16, 5, 139.38, TIMESTAMP '2023-01-01' + to_days(307)), (17, 6, 57.68, TIMESTAMP '2023-01-01' + to_days(48)), (18, 3, 23.68, TIMESTAMP '2023-01-01' + to_days(156)), (19, 5, 89.49, TIMESTAMP '2023-01-01' + to_days(103)), (20, 0, 112.77, TIMESTAMP '2023-01-01' + to_days(403)), (21, 4, 20.67, TIMESTAMP '2023-01-01' + to_days(60)), (22, 1, 192.19, TIMESTAMP '2023-01-01' + to_days(326)), (23, 5, 33.31, TIMESTAMP '2023-01-01' + to_days(102)), (24, 7, 12.53, TIMESTAMP '2023-01-01' + to_days(77)), (25, 8, 56.32, TIMESTAMP '2023-01-01' + to_days(313)), (26, 9, 98.56, TIMESTAMP '2023-01-01' + to_days(190)), (27, 0, 171.06, TIMESTAMP '2023-01-01' + to_days(302)), (28, 2, 159.66, TIMESTAMP '2023-01-01' + to_days(248)), (29, 7, 194.66, TIMESTAMP '2023-01-01' + to_days(310)), (30, 0, 51.7, TIMESTAMP '2023-01-01' + to_days(392)), (31, 7, 70.39, TIMESTAMP '2023-01-01' + to_days(391)), (32, 1, 75.66, TIMESTAMP '2023-01-01' + to_days(5)), (33, 7, 36.05, TIMESTAMP '2023-01-01' + to_days(144)), (34, 2, 25.85, TIMESTAMP '2023-01-01' + to_days(23)), (35, 0, 184.75, TIMESTAMP '2023-01-01' + to_days(314)), (36, 3, 189.39, TIMESTAMP '2023-01-01' + to_days(105)), (37, 2, 111.34, TIMESTAMP '2023-01-01' + to_days(152)), (38, 8, 105.35, TIMESTAMP '2023-01-01' + to_days(285)), (39, 6, 46.16, TIMESTAMP '2023-01-01' + to_days(257)), (40, 9, 92.85, TIMESTAMP '2023-01-01' + to_days(99)), (41, 7, 65.87, TIMESTAMP '2023-01-01' + to_days(367)), (42, 1, 105.0, TIMESTAMP '2023-01-01' + to_days(190)), (43, 3, 188.61, TIMESTAMP '2023-01-01' + to_days(177)), (44, 6, 116.37, TIMESTAMP '2023-01-01' + to_days(353)), (45, 0, 170.77, TIMESTAMP '2023-01-01' + to_days(85)), (46, 6, 42.32, TIMESTAMP '2023-01-01' + to_days(60)), (47, 6, 176.61, TIMESTAMP '2023-01-01' + to_days(125)), (48, 6, 178.17, TIMESTAMP '2023-01-01' + to_days(104)), (49, 8, 117.87, TIMESTAMP '2023-01-01' + to_days(157)), (50, 4, 147.29, TIMESTAMP '2023-01-01' + to_days(398)), (51, 0, 94.98, TIMESTAMP '2023-01-01' + to_days(19)), (52, 4, 107.75, TIMESTAMP '2023-01-01' + to_days(140)), (53, 5, 42.9, TIMESTAMP '2023-01-01' + to_days(222)), (54, 7, 77.45, TIMESTAMP '2023-01-01' + to_days(17)), (55, 3, 43.66, TIMESTAMP '2023-01-01' + to_days(101)), (56, 4, 139.88, TIMESTAMP '2023-01-01' + to_days(176)), (57, 1, 154.44, TIMESTAMP '2023-01-01' + to_days(188))"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     2,
+     4,
+     6
+    ],
+    "random_seed": 31
+   },
+   "predict": {},
+   "script": "order:interleaved",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_beta",
+     "probability_delta",
+     "probability_epsilon",
+     "probability_alpha",
+     "probability_gamma",
+     "probability_zeta"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "delta"
+      },
+      {
+       "f64_bits": "3fb2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fbc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fc2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fc7b425ed097b42"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd097b425ed097b"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "str": "epsilon"
+      },
+      {
+       "f64_bits": "3fb2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fbc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fc2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fc7b425ed097b42"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd097b425ed097b"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "4"
+      },
+      {
+       "str": "alpha"
+      },
+      {
+       "f64_bits": "3fb2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fbc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fc2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fc7b425ed097b42"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd097b425ed097b"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "6"
+      },
+      {
+       "str": "gamma"
+      },
+      {
+       "f64_bits": "3fb2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fbc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fc2f684bda12f68"
+      },
+      {
+       "f64_bits": "3fc7b425ed097b42"
+      },
+      {
+       "f64_bits": "3fcc71c71c71c71c"
+      },
+      {
+       "f64_bits": "3fd097b425ed097b"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"11\", \"row_index\": 1, \"prediction\": \"epsilon\", \"probabilities\": {\"beta\": 0.07407407407407407, \"delta\": 0.1111111111111111, \"epsilon\": 0.14814814814814814, \"alpha\": 0.18518518518518517, \"gamma\": 0.2222222222222222, \"zeta\": 0.25925925925925924}}, {\"id\": \"13\", \"row_index\": 3, \"prediction\": \"gamma\", \"probabilities\": {\"beta\": 0.07407407407407407, \"delta\": 0.1111111111111111, \"epsilon\": 0.14814814814814814, \"alpha\": 0.18518518518518517, \"gamma\": 0.2222222222222222, \"zeta\": 0.25925925925925924}}, {\"id\": \"10\", \"row_index\": 0, \"prediction\": \"delta\", \"probabilities\": {\"beta\": 0.07407407407407407, \"delta\": 0.1111111111111111, \"epsilon\": 0.14814814814814814, \"alpha\": 0.18518518518518517, \"gamma\": 0.2222222222222222, \"zeta\": 0.25925925925925924}}, {\"id\": \"12\", \"row_index\": 2, \"prediction\": \"alpha\", \"probabilities\": {\"beta\": 0.07407407407407407, \"delta\": 0.1111111111111111, \"epsilon\": 0.14814814814814814, \"alpha\": 0.18518518518518517, \"gamma\": 0.2222222222222222, \"zeta\": 0.25925925925925924}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "generated-31.binary-count",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 25, 'delta', TRUE), (1, 20, 'beta', FALSE), (2, 52, 'beta', FALSE), (3, 26, 'beta', FALSE), (4, 20, 'zeta', TRUE), (5, 32, 'epsilon', FALSE), (6, 51, 'delta', TRUE), (7, 55, 'alpha', TRUE), (8, 67, 'delta', TRUE), (9, 31, 'gamma', TRUE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 3, 145.07, TIMESTAMP '2023-01-01' + to_days(126)), (1, 9, 132.88, TIMESTAMP '2023-01-01' + to_days(213)), (2, 0, 167.9, TIMESTAMP '2023-01-01' + to_days(30)), (3, 2, 41.57, TIMESTAMP '2023-01-01' + to_days(182)), (4, 6, 7.04, TIMESTAMP '2023-01-01' + to_days(407)), (5, 8, 173.8, TIMESTAMP '2023-01-01' + to_days(376)), (6, 3, 42.34, TIMESTAMP '2023-01-01' + to_days(333)), (7, 5, 39.57, TIMESTAMP '2023-01-01' + to_days(221)), (8, 3, 96.94, TIMESTAMP '2023-01-01' + to_days(328)), (9, 5, 59.38, TIMESTAMP '2023-01-01' + to_days(134)), (10, 6, 96.88, TIMESTAMP '2023-01-01' + to_days(292)), (11, 5, 192.3, TIMESTAMP '2023-01-01' + to_days(333)), (12, 1, 158.18, TIMESTAMP '2023-01-01' + to_days(383)), (13, 2, 112.42, TIMESTAMP '2023-01-01' + to_days(156)), (14, 4, 19.61, TIMESTAMP '2023-01-01' + to_days(279)), (15, 0, 184.28, TIMESTAMP '2023-01-01' + to_days(98)), (16, 5, 139.38, TIMESTAMP '2023-01-01' + to_days(307)), (17, 6, 57.68, TIMESTAMP '2023-01-01' + to_days(48)), (18, 3, 23.68, TIMESTAMP '2023-01-01' + to_days(156)), (19, 5, 89.49, TIMESTAMP '2023-01-01' + to_days(103)), (20, 0, 112.77, TIMESTAMP '2023-01-01' + to_days(403)), (21, 4, 20.67, TIMESTAMP '2023-01-01' + to_days(60)), (22, 1, 192.19, TIMESTAMP '2023-01-01' + to_days(326)), (23, 5, 33.31, TIMESTAMP '2023-01-01' + to_days(102)), (24, 7, 12.53, TIMESTAMP '2023-01-01' + to_days(77)), (25, 8, 56.32, TIMESTAMP '2023-01-01' + to_days(313)), (26, 9, 98.56, TIMESTAMP '2023-01-01' + to_days(190)), (27, 0, 171.06, TIMESTAMP '2023-01-01' + to_days(302)), (28, 2, 159.66, TIMESTAMP '2023-01-01' + to_days(248)), (29, 7, 194.66, TIMESTAMP '2023-01-01' + to_days(310)), (30, 0, 51.7, TIMESTAMP '2023-01-01' + to_days(392)), (31, 7, 70.39, TIMESTAMP '2023-01-01' + to_days(391)), (32, 1, 75.66, TIMESTAMP '2023-01-01' + to_days(5)), (33, 7, 36.05, TIMESTAMP '2023-01-01' + to_days(144)), (34, 2, 25.85, TIMESTAMP '2023-01-01' + to_days(23)), (35, 0, 184.75, TIMESTAMP '2023-01-01' + to_days(314)), (36, 3, 189.39, TIMESTAMP '2023-01-01' + to_days(105)), (37, 2, 111.34, TIMESTAMP '2023-01-01' + to_days(152)), (38, 8, 105.35, TIMESTAMP '2023-01-01' + to_days(285)), (39, 6, 46.16, TIMESTAMP '2023-01-01' + to_days(257)), (40, 9, 92.85, TIMESTAMP '2023-01-01' + to_days(99)), (41, 7, 65.87, TIMESTAMP '2023-01-01' + to_days(367)), (42, 1, 105.0, TIMESTAMP '2023-01-01' + to_days(190)), (43, 3, 188.61, TIMESTAMP '2023-01-01' + to_days(177)), (44, 6, 116.37, TIMESTAMP '2023-01-01' + to_days(353)), (45, 0, 170.77, TIMESTAMP '2023-01-01' + to_days(85)), (46, 6, 42.32, TIMESTAMP '2023-01-01' + to_days(60)), (47, 6, 176.61, TIMESTAMP '2023-01-01' + to_days(125)), (48, 6, 178.17, TIMESTAMP '2023-01-01' + to_days(104)), (49, 8, 117.87, TIMESTAMP '2023-01-01' + to_days(157)), (50, 4, 147.29, TIMESTAMP '2023-01-01' + to_days(398)), (51, 0, 94.98, TIMESTAMP '2023-01-01' + to_days(19)), (52, 4, 107.75, TIMESTAMP '2023-01-01' + to_days(140)), (53, 5, 42.9, TIMESTAMP '2023-01-01' + to_days(222)), (54, 7, 77.45, TIMESTAMP '2023-01-01' + to_days(17)), (55, 3, 43.66, TIMESTAMP '2023-01-01' + to_days(101)), (56, 4, 139.88, TIMESTAMP '2023-01-01' + to_days(176)), (57, 1, 154.44, TIMESTAMP '2023-01-01' + to_days(188))"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 31
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] every context row has the same answer to 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id', and a classification needs at least two classes to learn from. Gather a wider context with num_context_samples, or ask about entities whose answers differ",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "generated-32.boolean-static",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.active FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 27, 'gamma', FALSE), (1, 33, 'delta', TRUE), (2, 20, 'alpha', TRUE), (3, 39, 'alpha', FALSE), (4, 78, 'delta', TRUE), (5, 18, 'beta', FALSE), (6, 49, 'beta', FALSE), (7, 79, 'beta', TRUE), (8, 39, 'alpha', TRUE), (9, 51, 'alpha', FALSE), (10, 46, 'alpha', TRUE), (11, 76, 'alpha', FALSE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 7, 62.63, TIMESTAMP '2023-01-01' + to_days(83)), (1, 2, 107.39, TIMESTAMP '2023-01-01' + to_days(252)), (2, 11, 60.56, TIMESTAMP '2023-01-01' + to_days(416)), (3, 9, 17.39, TIMESTAMP '2023-01-01' + to_days(294)), (4, 9, 58.75, TIMESTAMP '2023-01-01' + to_days(16)), (5, 5, 16.66, TIMESTAMP '2023-01-01' + to_days(147)), (6, 6, 168.43, TIMESTAMP '2023-01-01' + to_days(339)), (7, 6, 139.63, TIMESTAMP '2023-01-01' + to_days(148)), (8, 7, 2.81, TIMESTAMP '2023-01-01' + to_days(406)), (9, 7, 33.42, TIMESTAMP '2023-01-01' + to_days(92)), (10, 0, 27.33, TIMESTAMP '2023-01-01' + to_days(46)), (11, 0, 110.85, TIMESTAMP '2023-01-01' + to_days(133)), (12, 6, 12.13, TIMESTAMP '2023-01-01' + to_days(74)), (13, 0, 98.45, TIMESTAMP '2023-01-01' + to_days(301)), (14, 8, 138.05, TIMESTAMP '2023-01-01' + to_days(258)), (15, 7, 96.25, TIMESTAMP '2023-01-01' + to_days(184)), (16, 9, 65.25, TIMESTAMP '2023-01-01' + to_days(127)), (17, 8, 47.4, TIMESTAMP '2023-01-01' + to_days(292)), (18, 6, 116.54, TIMESTAMP '2023-01-01' + to_days(196)), (19, 3, 165.82, TIMESTAMP '2023-01-01' + to_days(189)), (20, 2, 121.23, TIMESTAMP '2023-01-01' + to_days(261)), (21, 5, 129.59, TIMESTAMP '2023-01-01' + to_days(420)), (22, 9, 50.3, TIMESTAMP '2023-01-01' + to_days(70)), (23, 7, 6.45, TIMESTAMP '2023-01-01' + to_days(0)), (24, 9, 171.09, TIMESTAMP '2023-01-01' + to_days(0)), (25, 5, 155.76, TIMESTAMP '2023-01-01' + to_days(85)), (26, 3, 91.81, TIMESTAMP '2023-01-01' + to_days(213)), (27, 5, 87.37, TIMESTAMP '2023-01-01' + to_days(42)), (28, 4, 17.42, TIMESTAMP '2023-01-01' + to_days(187)), (29, 8, 195.93, TIMESTAMP '2023-01-01' + to_days(365)), (30, 2, 156.23, TIMESTAMP '2023-01-01' + to_days(107)), (31, 4, 97.05, TIMESTAMP '2023-01-01' + to_days(299)), (32, 6, 19.52, TIMESTAMP '2023-01-01' + to_days(187)), (33, 0, 121.91, TIMESTAMP '2023-01-01' + to_days(392)), (34, 0, 10.61, TIMESTAMP '2023-01-01' + to_days(93)), (35, 11, 40.44, TIMESTAMP '2023-01-01' + to_days(306)), (36, 5, 76.1, TIMESTAMP '2023-01-01' + to_days(271)), (37, 6, 64.32, TIMESTAMP '2023-01-01' + to_days(58)), (38, 2, 46.77, TIMESTAMP '2023-01-01' + to_days(335)), (39, 0, 90.67, TIMESTAMP '2023-01-01' + to_days(226)), (40, 0, 93.45, TIMESTAMP '2023-01-01' + to_days(13)), (41, 0, 110.28, TIMESTAMP '2023-01-01' + to_days(129)), (42, 5, 17.73, TIMESTAMP '2023-01-01' + to_days(66)), (43, 8, 45.24, TIMESTAMP '2023-01-01' + to_days(61)), (44, 5, 150.73, TIMESTAMP '2023-01-01' + to_days(347)), (45, 4, 118.27, TIMESTAMP '2023-01-01' + to_days(38)), (46, 8, 159.58, TIMESTAMP '2023-01-01' + to_days(118)), (47, 2, 191.08, TIMESTAMP '2023-01-01' + to_days(51)), (48, 0, 50.16, TIMESTAMP '2023-01-01' + to_days(9)), (49, 5, 143.28, TIMESTAMP '2023-01-01' + to_days(163)), (50, 5, 37.92, TIMESTAMP '2023-01-01' + to_days(259)), (51, 9, 138.46, TIMESTAMP '2023-01-01' + to_days(4)), (52, 0, 112.72, TIMESTAMP '2023-01-01' + to_days(5))"
+   ],
+   "materialize": {
+    "indices": [
+     1,
+     0,
+     2
+    ],
+    "random_seed": 32
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_True",
+     "probability_False"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "False"
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "True"
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "str": "False"
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"14\", \"row_index\": 2, \"prediction\": \"False\", \"probabilities\": {\"True\": 0.4, \"False\": 0.6}}, {\"id\": \"13\", \"row_index\": 1, \"prediction\": \"True\", \"probabilities\": {\"True\": 0.4, \"False\": 0.6}}, {\"id\": \"12\", \"row_index\": 0, \"prediction\": \"False\", \"probabilities\": {\"True\": 0.4, \"False\": 0.6}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "generated-32.multiclass-static",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT users.segment FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 27, 'gamma', FALSE), (1, 33, 'delta', TRUE), (2, 20, 'alpha', TRUE), (3, 39, 'alpha', FALSE), (4, 78, 'delta', TRUE), (5, 18, 'beta', FALSE), (6, 49, 'beta', FALSE), (7, 79, 'beta', TRUE), (8, 39, 'alpha', TRUE), (9, 51, 'alpha', FALSE), (10, 46, 'alpha', TRUE), (11, 76, 'alpha', FALSE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 7, 62.63, TIMESTAMP '2023-01-01' + to_days(83)), (1, 2, 107.39, TIMESTAMP '2023-01-01' + to_days(252)), (2, 11, 60.56, TIMESTAMP '2023-01-01' + to_days(416)), (3, 9, 17.39, TIMESTAMP '2023-01-01' + to_days(294)), (4, 9, 58.75, TIMESTAMP '2023-01-01' + to_days(16)), (5, 5, 16.66, TIMESTAMP '2023-01-01' + to_days(147)), (6, 6, 168.43, TIMESTAMP '2023-01-01' + to_days(339)), (7, 6, 139.63, TIMESTAMP '2023-01-01' + to_days(148)), (8, 7, 2.81, TIMESTAMP '2023-01-01' + to_days(406)), (9, 7, 33.42, TIMESTAMP '2023-01-01' + to_days(92)), (10, 0, 27.33, TIMESTAMP '2023-01-01' + to_days(46)), (11, 0, 110.85, TIMESTAMP '2023-01-01' + to_days(133)), (12, 6, 12.13, TIMESTAMP '2023-01-01' + to_days(74)), (13, 0, 98.45, TIMESTAMP '2023-01-01' + to_days(301)), (14, 8, 138.05, TIMESTAMP '2023-01-01' + to_days(258)), (15, 7, 96.25, TIMESTAMP '2023-01-01' + to_days(184)), (16, 9, 65.25, TIMESTAMP '2023-01-01' + to_days(127)), (17, 8, 47.4, TIMESTAMP '2023-01-01' + to_days(292)), (18, 6, 116.54, TIMESTAMP '2023-01-01' + to_days(196)), (19, 3, 165.82, TIMESTAMP '2023-01-01' + to_days(189)), (20, 2, 121.23, TIMESTAMP '2023-01-01' + to_days(261)), (21, 5, 129.59, TIMESTAMP '2023-01-01' + to_days(420)), (22, 9, 50.3, TIMESTAMP '2023-01-01' + to_days(70)), (23, 7, 6.45, TIMESTAMP '2023-01-01' + to_days(0)), (24, 9, 171.09, TIMESTAMP '2023-01-01' + to_days(0)), (25, 5, 155.76, TIMESTAMP '2023-01-01' + to_days(85)), (26, 3, 91.81, TIMESTAMP '2023-01-01' + to_days(213)), (27, 5, 87.37, TIMESTAMP '2023-01-01' + to_days(42)), (28, 4, 17.42, TIMESTAMP '2023-01-01' + to_days(187)), (29, 8, 195.93, TIMESTAMP '2023-01-01' + to_days(365)), (30, 2, 156.23, TIMESTAMP '2023-01-01' + to_days(107)), (31, 4, 97.05, TIMESTAMP '2023-01-01' + to_days(299)), (32, 6, 19.52, TIMESTAMP '2023-01-01' + to_days(187)), (33, 0, 121.91, TIMESTAMP '2023-01-01' + to_days(392)), (34, 0, 10.61, TIMESTAMP '2023-01-01' + to_days(93)), (35, 11, 40.44, TIMESTAMP '2023-01-01' + to_days(306)), (36, 5, 76.1, TIMESTAMP '2023-01-01' + to_days(271)), (37, 6, 64.32, TIMESTAMP '2023-01-01' + to_days(58)), (38, 2, 46.77, TIMESTAMP '2023-01-01' + to_days(335)), (39, 0, 90.67, TIMESTAMP '2023-01-01' + to_days(226)), (40, 0, 93.45, TIMESTAMP '2023-01-01' + to_days(13)), (41, 0, 110.28, TIMESTAMP '2023-01-01' + to_days(129)), (42, 5, 17.73, TIMESTAMP '2023-01-01' + to_days(66)), (43, 8, 45.24, TIMESTAMP '2023-01-01' + to_days(61)), (44, 5, 150.73, TIMESTAMP '2023-01-01' + to_days(347)), (45, 4, 118.27, TIMESTAMP '2023-01-01' + to_days(38)), (46, 8, 159.58, TIMESTAMP '2023-01-01' + to_days(118)), (47, 2, 191.08, TIMESTAMP '2023-01-01' + to_days(51)), (48, 0, 50.16, TIMESTAMP '2023-01-01' + to_days(9)), (49, 5, 143.28, TIMESTAMP '2023-01-01' + to_days(163)), (50, 5, 37.92, TIMESTAMP '2023-01-01' + to_days(259)), (51, 9, 138.46, TIMESTAMP '2023-01-01' + to_days(4)), (52, 0, 112.72, TIMESTAMP '2023-01-01' + to_days(5))"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     2,
+     4,
+     6
+    ],
+    "random_seed": 32
+   },
+   "predict": {},
+   "script": "order:interleaved",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_alpha",
+     "probability_delta",
+     "probability_beta",
+     "probability_gamma"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "delta"
+      },
+      {
+       "f64_bits": "3fc2492492492492"
+      },
+      {
+       "f64_bits": "3fcb6db6db6db6db"
+      },
+      {
+       "f64_bits": "3fd2492492492492"
+      },
+      {
+       "f64_bits": "3fd6db6db6db6db7"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "str": "beta"
+      },
+      {
+       "f64_bits": "3fc2492492492492"
+      },
+      {
+       "f64_bits": "3fcb6db6db6db6db"
+      },
+      {
+       "f64_bits": "3fd2492492492492"
+      },
+      {
+       "f64_bits": "3fd6db6db6db6db7"
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "4"
+      },
+      {
+       "str": "gamma"
+      },
+      {
+       "f64_bits": "3fc2492492492492"
+      },
+      {
+       "f64_bits": "3fcb6db6db6db6db"
+      },
+      {
+       "f64_bits": "3fd2492492492492"
+      },
+      {
+       "f64_bits": "3fd6db6db6db6db7"
+      }
+     ],
+     [
+      {
+       "int": "3"
+      },
+      {
+       "int": "6"
+      },
+      {
+       "str": "alpha"
+      },
+      {
+       "f64_bits": "3fc2492492492492"
+      },
+      {
+       "f64_bits": "3fcb6db6db6db6db"
+      },
+      {
+       "f64_bits": "3fd2492492492492"
+      },
+      {
+       "f64_bits": "3fd6db6db6db6db7"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"13\", \"row_index\": 1, \"prediction\": \"beta\", \"probabilities\": {\"alpha\": 0.14285714285714285, \"delta\": 0.21428571428571427, \"beta\": 0.2857142857142857, \"gamma\": 0.35714285714285715}}, {\"id\": \"15\", \"row_index\": 3, \"prediction\": \"alpha\", \"probabilities\": {\"alpha\": 0.14285714285714285, \"delta\": 0.21428571428571427, \"beta\": 0.2857142857142857, \"gamma\": 0.35714285714285715}}, {\"id\": \"12\", \"row_index\": 0, \"prediction\": \"delta\", \"probabilities\": {\"alpha\": 0.14285714285714285, \"delta\": 0.21428571428571427, \"beta\": 0.2857142857142857, \"gamma\": 0.35714285714285715}}, {\"id\": \"14\", \"row_index\": 2, \"prediction\": \"gamma\", \"probabilities\": {\"alpha\": 0.14285714285714285, \"delta\": 0.21428571428571427, \"beta\": 0.2857142857142857, \"gamma\": 0.35714285714285715}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "generated-32.binary-count",
+   "covers": "classification results: the boolean and text predictions (and their probabilities) over base.binary and base.multiclass equal the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, age INTEGER, segment VARCHAR, active BOOLEAN)",
+    "INSERT INTO users VALUES (0, 27, 'gamma', FALSE), (1, 33, 'delta', TRUE), (2, 20, 'alpha', TRUE), (3, 39, 'alpha', FALSE), (4, 78, 'delta', TRUE), (5, 18, 'beta', FALSE), (6, 49, 'beta', FALSE), (7, 79, 'beta', TRUE), (8, 39, 'alpha', TRUE), (9, 51, 'alpha', FALSE), (10, 46, 'alpha', TRUE), (11, 76, 'alpha', FALSE)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (0, 7, 62.63, TIMESTAMP '2023-01-01' + to_days(83)), (1, 2, 107.39, TIMESTAMP '2023-01-01' + to_days(252)), (2, 11, 60.56, TIMESTAMP '2023-01-01' + to_days(416)), (3, 9, 17.39, TIMESTAMP '2023-01-01' + to_days(294)), (4, 9, 58.75, TIMESTAMP '2023-01-01' + to_days(16)), (5, 5, 16.66, TIMESTAMP '2023-01-01' + to_days(147)), (6, 6, 168.43, TIMESTAMP '2023-01-01' + to_days(339)), (7, 6, 139.63, TIMESTAMP '2023-01-01' + to_days(148)), (8, 7, 2.81, TIMESTAMP '2023-01-01' + to_days(406)), (9, 7, 33.42, TIMESTAMP '2023-01-01' + to_days(92)), (10, 0, 27.33, TIMESTAMP '2023-01-01' + to_days(46)), (11, 0, 110.85, TIMESTAMP '2023-01-01' + to_days(133)), (12, 6, 12.13, TIMESTAMP '2023-01-01' + to_days(74)), (13, 0, 98.45, TIMESTAMP '2023-01-01' + to_days(301)), (14, 8, 138.05, TIMESTAMP '2023-01-01' + to_days(258)), (15, 7, 96.25, TIMESTAMP '2023-01-01' + to_days(184)), (16, 9, 65.25, TIMESTAMP '2023-01-01' + to_days(127)), (17, 8, 47.4, TIMESTAMP '2023-01-01' + to_days(292)), (18, 6, 116.54, TIMESTAMP '2023-01-01' + to_days(196)), (19, 3, 165.82, TIMESTAMP '2023-01-01' + to_days(189)), (20, 2, 121.23, TIMESTAMP '2023-01-01' + to_days(261)), (21, 5, 129.59, TIMESTAMP '2023-01-01' + to_days(420)), (22, 9, 50.3, TIMESTAMP '2023-01-01' + to_days(70)), (23, 7, 6.45, TIMESTAMP '2023-01-01' + to_days(0)), (24, 9, 171.09, TIMESTAMP '2023-01-01' + to_days(0)), (25, 5, 155.76, TIMESTAMP '2023-01-01' + to_days(85)), (26, 3, 91.81, TIMESTAMP '2023-01-01' + to_days(213)), (27, 5, 87.37, TIMESTAMP '2023-01-01' + to_days(42)), (28, 4, 17.42, TIMESTAMP '2023-01-01' + to_days(187)), (29, 8, 195.93, TIMESTAMP '2023-01-01' + to_days(365)), (30, 2, 156.23, TIMESTAMP '2023-01-01' + to_days(107)), (31, 4, 97.05, TIMESTAMP '2023-01-01' + to_days(299)), (32, 6, 19.52, TIMESTAMP '2023-01-01' + to_days(187)), (33, 0, 121.91, TIMESTAMP '2023-01-01' + to_days(392)), (34, 0, 10.61, TIMESTAMP '2023-01-01' + to_days(93)), (35, 11, 40.44, TIMESTAMP '2023-01-01' + to_days(306)), (36, 5, 76.1, TIMESTAMP '2023-01-01' + to_days(271)), (37, 6, 64.32, TIMESTAMP '2023-01-01' + to_days(58)), (38, 2, 46.77, TIMESTAMP '2023-01-01' + to_days(335)), (39, 0, 90.67, TIMESTAMP '2023-01-01' + to_days(226)), (40, 0, 93.45, TIMESTAMP '2023-01-01' + to_days(13)), (41, 0, 110.28, TIMESTAMP '2023-01-01' + to_days(129)), (42, 5, 17.73, TIMESTAMP '2023-01-01' + to_days(66)), (43, 8, 45.24, TIMESTAMP '2023-01-01' + to_days(61)), (44, 5, 150.73, TIMESTAMP '2023-01-01' + to_days(347)), (45, 4, 118.27, TIMESTAMP '2023-01-01' + to_days(38)), (46, 8, 159.58, TIMESTAMP '2023-01-01' + to_days(118)), (47, 2, 191.08, TIMESTAMP '2023-01-01' + to_days(51)), (48, 0, 50.16, TIMESTAMP '2023-01-01' + to_days(9)), (49, 5, 143.28, TIMESTAMP '2023-01-01' + to_days(163)), (50, 5, 37.92, TIMESTAMP '2023-01-01' + to_days(259)), (51, 9, 138.46, TIMESTAMP '2023-01-01' + to_days(4)), (52, 0, 112.72, TIMESTAMP '2023-01-01' + to_days(5))"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 32
+   },
+   "predict": {},
+   "script": "order:reversed",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] every context row has the same answer to 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id', and a classification needs at least two classes to learn from. Gather a wider context with num_context_samples, or ask about entities whose answers differ",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "context.empty-static-all-scored",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ]
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] no context rows are left: every row that could be context is also being scored, and a row carrying the answer being asked for is not sent as context. Score fewer rows, so that the rest are there to learn from",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "context.constant-regression",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT users.age FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)",
+    "CREATE OR REPLACE TABLE users AS SELECT user_id, 30 AS age, country FROM users"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [
+     "every context row has the same users.age, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe0400000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffc240000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"8\", \"row_index\": 0, \"prediction\": 0.5078125}, {\"id\": \"9\", \"row_index\": 1, \"prediction\": 1.7587890625}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "context.constant-multiclass",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)",
+    "CREATE OR REPLACE TABLE users AS SELECT user_id, age, 'US' AS country FROM users"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] every context row has the same users.country, and a classification needs at least two classes to learn from. Gather a wider context with num_context_samples, or ask about entities whose answers differ",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "context.constant-binary",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 1000 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] every context row has the same answer to 'PREDICT COUNT(orders.*, 0, 30, days) > 1000 FOR EACH users.user_id', and a classification needs at least two classes to learn from. Gather a wider context with num_context_samples, or ask about entities whose answers differ",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "context.eleven-classes",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, 'c' || (i % 11)::VARCHAR AS country FROM range(44) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] kumo-relational classifies at most 10 classes, and the gathered context carries 11 distinct values of the target; predict a coarser target, or narrow the context to the classes you care about",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "context.ten-classes",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, 'c' || (i % 10)::VARCHAR AS country FROM range(40) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_c6",
+     "probability_c4",
+     "probability_c1",
+     "probability_c8",
+     "probability_c2",
+     "probability_c7",
+     "probability_c5",
+     "probability_c9",
+     "probability_c0",
+     "probability_c3"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "c4"
+      },
+      {
+       "f64_bits": "3f9f81f81f81f820"
+      },
+      {
+       "f64_bits": "3fa7a17a17a17a18"
+      },
+      {
+       "f64_bits": "3faf81f81f81f820"
+      },
+      {
+       "f64_bits": "3fb3b13b13b13b14"
+      },
+      {
+       "f64_bits": "3fb7a17a17a17a18"
+      },
+      {
+       "f64_bits": "3fbb91b91b91b91c"
+      },
+      {
+       "f64_bits": "3fbf81f81f81f820"
+      },
+      {
+       "f64_bits": "3fc1b91b91b91b92"
+      },
+      {
+       "f64_bits": "3fc3b13b13b13b14"
+      },
+      {
+       "f64_bits": "3fc5a95a95a95a96"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "c1"
+      },
+      {
+       "f64_bits": "3f9f81f81f81f820"
+      },
+      {
+       "f64_bits": "3fa7a17a17a17a18"
+      },
+      {
+       "f64_bits": "3faf81f81f81f820"
+      },
+      {
+       "f64_bits": "3fb3b13b13b13b14"
+      },
+      {
+       "f64_bits": "3fb7a17a17a17a18"
+      },
+      {
+       "f64_bits": "3fbb91b91b91b91c"
+      },
+      {
+       "f64_bits": "3fbf81f81f81f820"
+      },
+      {
+       "f64_bits": "3fc1b91b91b91b92"
+      },
+      {
+       "f64_bits": "3fc3b13b13b13b14"
+      },
+      {
+       "f64_bits": "3fc5a95a95a95a96"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"c4\", \"probabilities\": {\"c6\": 0.03076923076923077, \"c4\": 0.046153846153846156, \"c1\": 0.06153846153846154, \"c8\": 0.07692307692307693, \"c2\": 0.09230769230769231, \"c7\": 0.1076923076923077, \"c5\": 0.12307692307692308, \"c9\": 0.13846153846153847, \"c0\": 0.15384615384615385, \"c3\": 0.16923076923076924}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"c1\", \"probabilities\": {\"c6\": 0.03076923076923077, \"c4\": 0.046153846153846156, \"c1\": 0.06153846153846154, \"c8\": 0.07692307692307693, \"c2\": 0.09230769230769231, \"c7\": 0.1076923076923077, \"c5\": 0.12307692307692308, \"c9\": 0.13846153846153847, \"c0\": 0.15384615384615385, \"c3\": 0.16923076923076924}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "context.no-such-entity",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     999
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] \"The primary keys [999] do not exist in the 'users' table\"",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "absent.probabilities-named",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ]
+   },
+   "script": "prediction-only",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [
+     "kumo-relational answered without ['probabilities'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\"}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\"}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "absent.probabilities-defaulted",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "prediction-only",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\"}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\"}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "absent.prediction-named",
+   "covers": "empty and constant context, a request with no rows, and the parts' result with the absent-output notice, as the reference's",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction"
+    ]
+   },
+   "script": "mutate:no-prediction",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64": "nan"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "prepare.regression.model-tabular",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "model": "kumo-tabular"
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] kumo-tabular cannot answer a request needing multiple_tables, relationships",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.model-unknown",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "model": "no-such-model"
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnknownModelError",
+    "code": "UNKNOWN_MODEL",
+    "mro": [
+     "UnknownModelError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNKNOWN_MODEL] Unknown model 'no-such-model'; this client can send: ['kumo-relational', 'kumo-tabular']. The Universal TFM contract declares these as a closed set, so a new model id has to be added to the contract and the bindings regenerated before it can be sent.",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-empty",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": []
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] outputs must name at least one field",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-string",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": "prediction"
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] outputs must be a sequence of field names, not a single string; pass ['prediction']",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-not-names",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     1
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] outputs must be a sequence of field names, got list",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-unknown",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "bogus"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] kumo-relational does not produce ['bogus']; it produces ['embeddings', 'explanation', 'prediction', 'probabilities', 'quantiles', 'rankings', 'scores']",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-probabilities",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "probabilities"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [
+     "kumo-relational answered without ['probabilities'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}]}",
+      "output": {
+       "fields": [
+        "probabilities"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-quantiles",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "quantiles"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "quantiles"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [
+     "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}]}",
+      "output": {
+       "fields": [
+        "quantiles"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-explanation-two-rows",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction",
+     "explanation"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] an explanation covers exactly 1 entity, and this request scores 2; ask for one at a time",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.regression.outputs-duplicate",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction",
+     "prediction"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.regression",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "prepare.binary.outputs-probabilities-only",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "probabilities"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "probabilities"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_False",
+     "probability_True"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}]}",
+      "output": {
+       "fields": [
+        "probabilities"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "prepare.binary.outputs-quantiles",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction",
+     "quantiles"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": "base.binary",
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "quantiles"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [
+     "kumo-relational answered without ['quantiles'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "probability_False",
+     "probability_True"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "float64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "f64_bits": "3fd999999999999a"
+      },
+      {
+       "f64_bits": "3fe3333333333333"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.4, \"true\": 0.6}}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "quantiles"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "preflight.explanation-one-row",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "outputs": [
+     "prediction",
+     "explanation"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction",
+     "explanation"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [
+     "kumo-relational answered without ['explanation'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}]}",
+      "output": {
+       "fields": [
+        "prediction",
+        "explanation"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "preflight.explanation-larger-context",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0
+    ],
+    "anchor_time": "2024-03-01",
+    "num_context_samples": 2000
+   },
+   "predict": {
+    "outputs": [
+     "prediction",
+     "explanation"
+    ]
+   },
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] an explanation is only produced in the mode the smaller context budget selects, and this request was gathered with num_context_samples above 1,000. Re-materialize with num_context_samples=1000 or fewer",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "prepare.not-a-request",
+   "covers": "the adapter's _preflight and SDMClient._prepare's model and output checks: the reference's refusals and codes",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {
+    "request": "not-a-request"
+   },
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] request must be a Request, got str; build one with Request(context=..., predict=...) or PredictiveQuery(...).materialize(...)",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "carry.longdouble-num-context",
+   "covers": "carry-forward: np.longdouble options and an ndarray target_transforms accepted as the reference accepts them",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01",
+    "num_context_samples": "longdouble:50"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] num_context_samples must be a whole number of labelled examples, got longdouble np.longdouble('50.0')",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "carry.longdouble-num-estimators",
+   "covers": "carry-forward: np.longdouble options and an ndarray target_transforms accepted as the reference accepts them",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01",
+    "inference_config": {
+     "num_estimators": "longdouble:4"
+    }
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "model": "kumo-relational",
+    "outputs": [
+     "prediction"
+    ],
+    "metadata": {
+     "served_by": "scripted",
+     "took_ms": 12
+    },
+    "notices": [],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe3800000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ffdc40000000000"
+      }
+     ]
+    ],
+    "calls": [
+     {
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t128b\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\", \"took_ms\": 12}, \"predictions\": [{\"id\": \"112\", \"row_index\": 0, \"prediction\": 0.609375}, {\"id\": \"113\", \"row_index\": 1, \"prediction\": 1.8603515625}]}",
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "carry.ndarray-target-transforms",
+   "covers": "carry-forward: np.longdouble options and an ndarray target_transforms accepted as the reference accepts them",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01",
+    "inference_config": {
+     "target_transforms": "ndarray:quantile"
+    }
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+    "rule": null,
+    "calls": []
+   }
+  },
+  {
+   "name": "size.one-past-the-limit",
+   "covers": "carry-forward: the size refusal explains the limit, as the reference",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "setup": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)",
+    "CREATE OR REPLACE TABLE users AS SELECT *, repeat('a', 275690) AS note FROM users"
+   ],
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "predict": {},
+   "script": "order:given",
+   "rust_case": null,
+   "divergence": null,
+   "expected": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "status_code": null,
+    "message": "[INVALID_REQUEST] Context size exceeds the 30MB limit. Current context contains 538 nodes and 848 edges across 2 tables. Top-2 tables contributing most to the context size: users: 2.10MB, orders: 0.00MB\nPlease reduce either the number of tables in the graph, their number of columns (e.g., large text columns), neighborhood configuration, or the run mode. If none of this is possible, please create a feature request at 'https://github.com/NVIDIA/structured-data-models-client' if you must go beyond this for your use-case.",
+    "rule": null,
+    "calls": []
+   }
+  }
+ ]
+}
