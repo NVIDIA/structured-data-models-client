@@ -109,7 +109,7 @@ def _encoded(value: Any) -> bytes:
     ``json.dumps`` writes, but each non-finite float Python's reader made of
     the endpoint's text (an overflowing ``1e400``, or the ``NaN`` and
     ``Infinity`` JSON does not hold), wherever it is, as a token the core
-    reads as non-finite and refuses alike on every host: an infinity as
+    reads as the same number, what it means being the core's: an infinity as
     ``1e400`` or ``-1e400``, a NaN as ``NaN``. It writes without recursion,
     and an answer nested past the core's depth is cut at one level past it,
     which the core refuses as too deep."""

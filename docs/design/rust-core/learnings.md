@@ -114,6 +114,26 @@ The first was agreed and the second left open: the plan omitted the data-access 
 At checkpoint 5, three of six packages lost a review round to a difference from the reference that no register entry named.
 **Lesson:** define the supported semantic policy first, and before review classify every differential mismatch to an approved class or a proposed register entry; one committed differential tool (`contract/tools/differential.py`, T1.27) exits non-zero on anything left unclassified.
 
+### 13. A harness cannot approve its own changed assertions (Phase 1, added at checkpoint 8)
+
+The gate judges a candidate with its checkpoint's harness, so a change to a judging file and the product change that needs it cannot land together; four packages found that out in review.
+**Lesson:** split at push, not in review: the judging change lands alone as part 1, and the rest is judged under it.
+
+### 14. Contract-version bumps serialize at integration (Phase 1, added at checkpoint 8)
+
+Two lanes each bumping the contract version collided, and one renumbered and replayed behind the other.
+**Lesson:** whoever lands second renumbers; after the rebase, review the interaction (a range-diff showing only the version changed), not the whole package again.
+
+### 15. Evidence names the exact SHA that lands (Phase 1, added at checkpoint 8)
+
+A review, a measurement or a recorded reference line counts only for the commit it names.
+**Lesson:** reviews name the candidate that lands, landing evidence the landing and its tree's equality with that candidate, and a replay gets a range-diff re-check.
+
+### 16. Separate test authors catch what implementers miss (Phase 1, added at checkpoint 8)
+
+A test author working from the brief, the spec and the reference found defects the implementer's own tests passed, but late findings still came from the interpreter and pandas versions the tests had not run on.
+**Lesson:** keep tests by a separate author, and have them run the supported interpreter and pandas matrix early, not at landing.
+
 ## What held up and is worth keeping
 
 - The no-I/O run loop: the core asks the host to run SQL or call the model, and the host answers.

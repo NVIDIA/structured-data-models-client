@@ -193,7 +193,7 @@ Rows that change [migration-plan.md](../migration-plan.md) are applied there whe
 - The held-out no-go threshold (H11), at T1.20: answered, approved as written (E66(e)).
 - From checkpoint 4 (T1.12b): the entities' cast moved from "stays host" to T1.32a, enacted as an orchestrator reading of E50, owner to confirm (design, "Host-held semantics"); and proposals for the owner, none enacted: E56(d), the freeze's secondary layer retired at T1.28b's landing and the freeze deleted once the ledger holds only "stays host" rows; T1.15 narrowed to `--check` unless a locked check needs `--gate S0`, and T1.31 folded into the type families as T1.30 was (tracker, "Owner check-ins"). Since enacted by the owner (E66(f)): E56(d)'s retirement at T1.28b's landing, T1.15 narrowed to `--check`, T1.31 folded into T1.32a to T1.32e.
 - E6: the instants at or past 9999-12-30T22:00Z that T1.25's time module meets, and whether any path cannot avoid a refusal there (then a case and a register entry, P1B-1).
-- E25: whether a small fix round may use one reviewer.
+- E25: whether a small fix round may use one reviewer: answered, every review round has two reviewers, small re-checks included (E73(c)).
 - A proposal for the owner, not applied: register PK-4's approved `new_behavior` reads "as agreed with the PQL team"; since E18 it could read "as the reference gives them".
 - An option from checkpoint 1, not taken: folding E8's validated-query lock into the contract lock, now that the format is this client's own (E18).
 - The owner's go or no-go at the end of Phase 1b (T1.36).
