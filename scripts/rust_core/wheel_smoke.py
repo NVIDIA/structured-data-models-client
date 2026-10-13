@@ -56,17 +56,18 @@ wheel of their own (a macOS build, in a local Python 3.10, say). Either way:
 
 The binding's tests judge; what they read as the contract, its inputs,
 comes from ``--inputs TREE`` (the checkout itself by default, as in CI's
-own job): the API and PQL distributions built into wheels, the message
-builder (``messages.py``), the contract's version and error codes
-(``sdm-contract``'s ``lib.rs`` and ``error.rs``) and the native module's
-stub. The gate's locked check 3 runs the checkpoint's copy of this script
+own job): the API and PQL distributions built into wheels, the contract's
+version and error codes (``sdm-contract``'s ``lib.rs`` and ``error.rs``)
+and the native module's stub; the message builder (``messages.py``) is
+this checkout's own, its ``CONTRACT`` set to the inputs' version. The gate's locked check 3 runs the checkpoint's copy of this script
 on the candidate's wheels with ``--inputs`` the candidate's tree, so the
 checkpoint's tests, ``EXPECTED``, guard and control judge a candidate at
 the contract version it builds (T1.20, Codex P2): :func:`suite` puts them
 together. ``--commit SHA`` holds each wheel to the identity
-``native_wheel.py`` wrote beside it (:func:`provenance`): built from SHA,
-from a clean tree, the file it describes, and the build it names, so a
-wheel of another commit cannot stand in for the candidate's.
+``native_wheel.py`` wrote beside it (:func:`provenance`), a build
+record, not an attestation: it names SHA, a clean tree, the file's own
+hash and the build, so a wheel recorded as another commit's cannot stand
+in for the candidate's by mistake.
 
 ``environment.json`` in the output directory records the lane, the image,
 the interpreter, the wheels' SHA-256, the versions resolved, each report's
@@ -157,10 +158,12 @@ ORIGINS = ('sdm_client', 'sdm_client._native')
 #: The sibling distributions the client pins, installed from the inputs.
 SIBLINGS = ('structured-data-models-api', 'structured-data-models-pql')
 #: What the binding's tests take from the tree under test, the inputs: the
-#: message builder, and the files they read as the contract (its version,
-#: its error codes) and as the native module's surface (its stub).
+#: files they read as the contract (its version, its error codes) and as
+#: the native module's surface (its stub). The message builder,
+#: ``messages.py``, is this checkout's own, decoding and fixtures included,
+#: so it judges with the tests; only its ``CONTRACT`` takes the inputs'
+#: version (:func:`suite`).
 INPUTS = (
-    f'{TESTS}/messages.py',
     'rust/crates/sdm-contract/src/lib.rs',
     'rust/crates/sdm-contract/src/error.rs',
     'packages/structured-data-models-client/src/sdm_client/_native.pyi',
@@ -255,19 +258,43 @@ def suite(
     own: pathlib.Path, inputs: pathlib.Path, into: pathlib.Path
 ) -> pathlib.Path:
     """The binding's tests as this smoke runs them, under `into`, laid out
-    as the repository is: every file of `own`'s tests directory but the
-    message builder (the test files, ``conftest.py``, the shim), which
-    judge, and `inputs`' :data:`INPUTS` at their own paths, which say what
-    the build under test is. Returns the tests directory. An input
-    missing from `inputs` is refused by name."""
+    as the repository is: every file of `own`'s tests directory (the test
+    files, ``conftest.py``, the shim and the message builder, decoding and
+    fixtures included), which judge, and `inputs`' :data:`INPUTS` at their
+    own paths, which say what the build under test is. The one change to
+    `own`'s files: the message builder's ``CONTRACT`` line is set to the
+    contract version the inputs' ``lib.rs`` declares, so its messages
+    speak the build's version. Returns the tests directory. An input
+    missing from `inputs`, a ``lib.rs`` declaring no version or two, and a
+    builder without exactly one ``CONTRACT`` line are refused by name."""
     missing = [name for name in INPUTS if not (inputs / name).is_file()]
     if missing:
         raise SmokeFailed(f'the inputs {inputs} lack {missing}')
+    declared = re.findall(
+        r'^pub const CONTRACT_VERSION: u32 = (\d+);$',
+        (inputs / INPUTS[0]).read_text(),
+        re.MULTILINE,
+    )
+    if len(declared) != 1:
+        raise SmokeFailed(
+            f'{INPUTS[0]}: {len(declared)} CONTRACT_VERSION declarations, not one'
+        )
     tests = into / TESTS
     tests.mkdir(parents=True, exist_ok=True)
     for path in sorted((own / TESTS).iterdir()):
-        if path.is_file() and path.name != 'messages.py':
+        if path.is_file():
             shutil.copyfile(path, tests / path.name)
+    builder = tests / 'messages.py'
+    text = builder.read_text() if builder.is_file() else ''
+    staged, count = re.subn(
+        r'^CONTRACT = \d+$',
+        f'CONTRACT = {int(declared[0])}',
+        text,
+        flags=re.MULTILINE,
+    )
+    if count != 1:
+        raise SmokeFailed(f'messages.py: {count} CONTRACT lines, not one')
+    builder.write_text(staged)
     for name in INPUTS:
         (into / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(inputs / name, into / name)
