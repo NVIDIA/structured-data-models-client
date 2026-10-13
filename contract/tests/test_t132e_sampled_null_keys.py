@@ -31,9 +31,24 @@ observed and projected by the same code.
   received (``metadata.request_id`` aside) and the warning classes; and
   the core must have been reached. A difference passes only under an
   approved register entry naming the vector with its transition
-  (``contract/sampled-null-key-vectors.json#<id or glob> <from> -> <to>``);
-  ``register.required`` (derived: ``mixed-null-decimal``, INTERNAL_ERROR at
-  materialize) excuses nothing by itself.
+  (``contract/sampled-null-key-vectors.json#<id or glob> <from> -> <to>``),
+  as the other vector tests read it: a ref covers exactly the transition
+  it declares, a proposed entry excuses nothing, and ``success ->
+  success`` is a transition like any other, so a request that differs on
+  a success passes only under an approved entry declaring that for the
+  vector. ``two-nulls-text`` is the case in point: two null keys reached
+  for one example, where P1B-13 (approved, re-approved by the owner on
+  2026-10-13: the reference corrupts null-key requests) makes a null in
+  the walk no link, so the core's request differs from the reference's;
+  it passes once P1B-13 carries
+  ``contract/sampled-null-key-vectors.json#two-nulls-text success ->
+  success``. ``register.required`` (derived: ``mixed-null-decimal``,
+  INTERNAL_ERROR at materialize) excuses nothing by itself.
+- The singletons (:data:`EXACT`: one null key sampled alone, text and
+  decimal, the review's reproduction among them) are held to the
+  reference's exact answer and request: no entry excuses them, whatever
+  it declares, since a single null in the walk is the reference's clean
+  case (np.unique sorts it) and P1B-13 changes nothing there.
 - The case format holds neither ``num_context_samples`` nor
   ``random_seed``, so these vectors are not cases and ``rust-host`` does
   not run them; the core's answer is held through the Python host.
@@ -113,14 +128,25 @@ def transitions() -> tuple[list[tuple[str, str, str, str, str]], list[str]]:
     return out, malformed
 
 
+#: The vectors held to the reference's exact answer, request included,
+#: which no register entry excuses: one null key sampled alone.
+EXACT = frozenset({'singleton-null-text', 'singleton-null-decimal'})
+
+
 def problem_of(vector: dict[str, Any], got: dict[str, Any]) -> str | None:
     r"""Why ``got`` fails the vector: None when it is the reference's
-    answer, or a difference an approved entry declares exactly."""
+    answer, or, outside :data:`EXACT`, a difference an approved entry
+    declares exactly (``success -> success`` included)."""
     want = vector['reference']
     if got == want:
         return None
     old = R.outcome_class(want['outcome'])
     new = R.outcome_class(got['outcome'])
+    if vector['id'] in EXACT:
+        return (
+            f'{vector["id"]}: got {got}, the reference {want} ({old} -> '
+            f'{new}); held exactly, no entry excuses it'
+        )
     for _, status, glob, frm, to in transitions()[0]:
         if (
             status == 'approved'
@@ -241,9 +267,10 @@ def test_the_comparison_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     module = sys.modules[__name__]
     entries: list[tuple[str, str, str, str, str]] = []
     monkeypatch.setattr(module, 'transitions', lambda: (entries, []))
-    singleton = BY_ID['singleton-null-text']
-    want = singleton['reference']
-    assert problem_of(singleton, copy.deepcopy(want)) is None
+    plain = BY_ID['null-text-not-sampled']
+    want = plain['reference']
+    assert plain['id'] not in EXACT
+    assert problem_of(plain, copy.deepcopy(want)) is None
     refused = copy.deepcopy(want)
     refused['outcome'] = {
         'result': 'refusal',
@@ -252,23 +279,101 @@ def test_the_comparison_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
         'code': 'INVALID_REQUEST',
     }
     refused['request'] = None
-    assert problem_of(singleton, refused) is not None
+    assert problem_of(plain, refused) is not None
     entries[:] = [
-        ('P-1', 'proposed', 'singleton-*', 'success', 'refusal INVALID_REQUEST')
+        ('P-1', 'proposed', 'null-text-*', 'success', 'refusal INVALID_REQUEST')
     ]
-    assert problem_of(singleton, refused) is not None
+    assert problem_of(plain, refused) is not None
+    entries[:] = [
+        ('A-1', 'approved', 'null-text-*', 'success', 'refusal INVALID_REQUEST')
+    ]
+    assert problem_of(plain, refused) is None
+    # The same approved transition, for the singleton: held exactly.
     entries[:] = [
         ('A-1', 'approved', 'singleton-*', 'success', 'refusal INVALID_REQUEST')
     ]
-    assert problem_of(singleton, refused) is None
+    singleton = BY_ID['singleton-null-text']
+    refused_singleton = copy.deepcopy(refused)
+    refused_singleton['keys'] = singleton['reference']['keys']
+    refused_singleton['warnings'] = singleton['reference']['warnings']
+    assert problem_of(singleton, refused_singleton) is not None
     entries[:] = []
     # Another request is a difference, however small.
-    other = copy.deepcopy(want)
-    other['request']['metadata']['num_context_examples'] = {'number': '2'}
-    assert problem_of(singleton, other) is not None
-    other = copy.deepcopy(want)
-    other['keys']['payments'] = None
-    assert problem_of(singleton, other) is not None
+    for vector in (plain, singleton):
+        other = copy.deepcopy(vector['reference'])
+        other['request']['metadata']['num_context_examples'] = {'number': '2'}
+        assert problem_of(vector, other) is not None
+        other = copy.deepcopy(vector['reference'])
+        other['keys']['payments'] = None
+        assert problem_of(vector, other) is not None
+
+
+def test_an_approved_success_to_success_ref_excuses_a_request_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""``two-nulls-text``: another request on a success passes only
+    under an approved ``success -> success`` ref naming it; a proposed
+    one, another vector's, or another transition excuses nothing; and no
+    ref excuses a singleton."""
+    module = sys.modules[__name__]
+    entries: list[tuple[str, str, str, str, str]] = []
+    monkeypatch.setattr(module, 'transitions', lambda: (entries, []))
+    two = BY_ID['two-nulls-text']
+    assert R.outcome_class(two['reference']['outcome']) == 'success'
+    other = copy.deepcopy(two['reference'])
+    other['request']['metadata']['num_context_examples'] = {'number': '9'}
+    assert problem_of(two, other) is not None
+    entries[:] = [
+        ('P1B-13', 'proposed', 'two-nulls-text', 'success', 'success')
+    ]
+    assert problem_of(two, other) is not None
+    entries[:] = [
+        ('P1B-13', 'approved', 'mixed-null-text', 'success', 'success'),
+        ('P1B-13', 'approved', 'two-nulls-text', 'success', 'refusal X'),
+    ]
+    assert problem_of(two, other) is not None
+    entries[:] = [
+        ('P1B-13', 'approved', 'two-nulls-text', 'success', 'success')
+    ]
+    assert problem_of(two, other) is None
+    # The same ref excuses no refusal in its place.
+    refused = copy.deepcopy(two['reference'])
+    refused['outcome'] = dict(
+        refused['outcome'],
+        result='refusal',
+        stage='materialize',
+        error='StructuredDataError',
+        code='INVALID_REQUEST',
+    )
+    refused['request'] = None
+    assert problem_of(two, refused) is not None
+    # The singletons are held exactly, under any entry.
+    entries[:] = [
+        ('A-1', 'approved', '*', 'success', 'success'),
+        ('A-2', 'approved', '*', 'success', 'refusal INVALID_REQUEST'),
+    ]
+    for vector_id in sorted(EXACT):
+        singleton = BY_ID[vector_id]
+        assert (
+            problem_of(singleton, copy.deepcopy(singleton['reference'])) is None
+        )
+        changed = copy.deepcopy(singleton['reference'])
+        changed['request']['metadata']['num_context_examples'] = {'number': '9'}
+        assert 'held exactly' in (problem_of(singleton, changed) or '')
+        refused = copy.deepcopy(singleton['reference'])
+        refused['outcome'] = dict(
+            refused['outcome'],
+            result='refusal',
+            stage='materialize',
+            error='StructuredDataError',
+            code='INVALID_REQUEST',
+        )
+        refused['request'] = None
+        assert 'held exactly' in (problem_of(singleton, refused) or '')
+    # Only singletons are exact: both sampled alone, one null each.
+    assert {
+        v['id'] for v in RECORDED['vectors'] if v['id'].startswith('singleton-')
+    } == EXACT
 
 
 def test_every_vector_ref_names_its_transition() -> None:
