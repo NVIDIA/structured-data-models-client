@@ -253,6 +253,14 @@ The histories of landed packages moved verbatim to [fix-round-history.md](fix-ro
 
 **T1.32d, part 1.** Measured before its push: the test author's tests (`T1.32d tests:` commits, unchanged but for the pending ids taken out as they pass). On both hosts, 80 of the 95 vectors answer as the reference does. Nine others are named, each with its transition, in the `refs` of the approved P1B-8 and P1B-11, and pass. The other six stay pending by the orchestrator's decision: the five `null.key-*` (the core's `key_missing`, in the owner's Phase 2 class, E92) and `null.decimal-18-2` (`wire_dtype`, T1.32b's). `edge.no-entities` passes on `rust-host` from the empty entity list. The SQL pins, the counts, the capture on and off, the canary (13 scenarios, on a test-ops build) and the cases' answers on `python-core` pass. Pending and reported: the eight admissions (part 2); `rust_host_answers_each_case_as_python_ref` (`empty.indices` until its case carries `materialize`); the four cell-claim seeds (coverage rule 6, with T1.32a's part 2). The eight cases in the shape part 2 admits them, on copies: `compare.py` reports nothing but `empty.fact-table`'s code (P1B-11) and the copies' digests. E49: no route changes. The differential (seed 32, 60 sources) gives 48 agree, 10 under P1B-11, 1 under P1B-3, and 1 UNCLASSIFIED (`g59`), which this package does not touch: a text column made a time column by an edit, whose source CAST fails, PROVIDER_ERROR against the reference's INTERNAL_ERROR. That is DT-12's transition, but the tool's classifier knows it only for a time of day. No new reader of outside JSON; the new pin fails on a seeded change.
 
+From T1.32e part 2 on, each package writes its notes and fix-round paragraphs in its own subsection below, and edits no other package's.
+
+### T1.32e part 2
+
+None yet.
+
+### T1.32g
+
 **T1.32g, part 1.** Measured before its push: the test author's tests (`T1.32g tests:` commits, unchanged but for the pending ids taken out as they pass): rule 6's own seeds (`tests/test_t132g_cell_claims.py`, 7 passed, the post-landing state among them) and the families' cell-claim seeds (`test_t132a/c/d_cell_claims.py`, 16 passed), their 13 pending ids taken out; `coverage.py --check --checkpoint HEAD` passes on the tip; `register.py validate` passes; `ratchet.py check --checkpoint 43f6bfa` fails only its cases rule on `time.feature-date-and-timestamp-with-null`, until P1B-52 is approved (proposed, for the reviewers, H19), and notes the case's reference line re-recorded, identity only; the cheap prepush tier passes; `pytest contract/tests`: 1,923 passed and 198 failed against a stale local `_native` (contract version 21); rebuilt at 22, the 186 python-core failures pass, and the 12 left (`test_gate_modes.py`'s locked-1a nine, `test_gate_evidence_paths.py`'s three: check 1 "observed in None") fail the same way at 381ea33, before this part. Pending and reported: `tests/test_contract_coverage.py` and `_approval.py` (31 tests) build a repository copy without `contract/reference`, so rule 6 fails every claiming case there; adding `contract/reference` to its `COPIED` makes all 88 pass, a test author's change. E49: no route changes; one new reader of outside JSON, the reference lines, through the depth-guarded `_json`: a line nested 100,000 deep, 100,000 wide, not JSON or not an object is refused by name under `read`; the new rule fails on evidence missing, emptied (no driver, capture, statements, schema or outcome) or retyped (a type as a number, another type or one it does not know, a key retyped): `tests/test_coverage_rule6_evidence.py`, 17 passed.
 
 **T1.32g, part 1, fix round 1** (review of b219884: Codex APPROVE; the subagent one P2; both APPROVE-P1B-52): P1B-52 recorded as approved by both reviewers (H19), clearing the ratchet's only failure; the test author's 1079af49 gives the coverage tests' copy the reference; P2: `cell_type` unwraps dictionary and run-end types in a loop of at most 64 levels, deeper refused by name (`Unevidenced`), where it recursed without a bound (the test author's seeds, `tests/test_t132g_rule6_type_depth.py` at c6a00f3, 2,000 deep, pass and leave the pending list); P3s: a second reference line of one case refused under `read`; a list of tables named as themselves; E96(b)'s weakness stated in as-built. Carried forward, not done: a per-claim subject column, so a claim names the column it is about (subagent P3-2); a shared `cell_type` vector file holding `coverage.py` and `admission.rs` to the same table (subagent P3-1).
@@ -262,6 +270,26 @@ The histories of landed packages moved verbatim to [fix-round-history.md](fix-ro
 **T1.32g, part 2a, fix round 1** (the subagent's review of f504a9e: CHANGES REQUIRED; Codex's still running): on the test author's 7a27137 (`tests/test_t132g_python_old_as_run.py`, python-old's own lines for the seven as run in ref-pandas3 and floor-pandas2.2 in `tests/golden/`, 10 pending ids, all taken out): P1.1, `old_client_crash` matched no real run, since the runner records `host.origins` for python-old and never for python-ref: fixed with P1.2, the orchestrator's reading of "exactly", the semantic projection less `host.warnings` and `host.origins` (E110 says so, and that the reference records no error message); P3.3, the crash matched against the checkpoint's reference line, in `check` and in `accept --checkpoint`; P3.4, `accept` leaves out the fields `availability.yaml` marks `unavailable` for a runner, so one entry text serves rust-host (no seeded test of the test author's; an ad hoc one, not committed, passes); P3.5, `accept` refuses by name an entry whose case or runner is not a string. Measured: the T1.32g, ratchet and register tests with `test_runners.py`: 198 passed; `ratchet.py check --checkpoint e02e836`: ok, naming `scripts/rust_core/ratchet.py`, `contract/tests/t132g-pending.json` and the two `tests/golden/t132g-python-old-*.jsonl` for the landing as protected; `coverage.py --check --checkpoint e02e836`: ok; the cheap prepush tier: every check passed; `pytest contract/tests`: 2,343 passed and the 12 environment-only gate tests failed as before, which pass, all 39 of their files, in `.venv-ref-pandas3`. Rebased onto T1.32b part 2's landing (ea8bef6), with no conflict: `ratchet.py check --checkpoint ea8bef6` and `coverage.py --check --checkpoint ea8bef6` ok; `gate.sh --base ea8bef6 --run python-core,python-old,rust-host` in ref-pandas3 passes every check; the T1.32g, ratchet, register, runner and case tests: 217 passed; the cheap prepush tier passes.
 
 **T1.32g, part 2c.** Rebased onto part 2a's candidate 6e588f5 (on the phase head ea8bef6), on the test author's 2c commit (6b247cd); measured there before review, in a venv at ref-pandas3's versions (pyarrow 25.0.1, NumPy 2.5.3) importing this tree: the test author's tests (unchanged but for the pending ids taken out as they pass: 22 exits, 11 rust-host; `t132g-pending.json` merged with part 2a's, its pending empty, both `authored` sets and notes kept): `contract/tests/test_t132g_map_union_values.py`, with `test_result_vectors.py` and `tests/test_contract_reference.py`, 139 passed; `sdm-testkit`'s `t132g_map_union_values.rs` and `result_vectors.rs`, and the whole crate, ok; `ratchet.py check --checkpoint ea8bef6`: FAIL only on `reference` for nested.map and nested.union, which P1B-54 (proposed) authorizes: with it approved, in a scratch commit, ok; `coverage.py --check` (`--checkpoint ea8bef6` and `HEAD`): ok; the cheap prepush tier: every check passed; `pytest contract/tests -n 4 --dist loadfile`: 2,390 passed. The two python-ref lines were recorded again at the rebased tree (dc437e5), a control at 6b247cd equal to the committed lines in semantic projection; a later rebase records them again.
+
+### T1.32b
+
+None yet.
+
+### T1.32f
+
+None yet.
+
+### T1.33
+
+None yet.
+
+### T1.35
+
+None yet.
+
+### T1.36
+
+None yet.
 
 ## Size-trend reviews
 
