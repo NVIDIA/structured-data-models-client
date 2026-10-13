@@ -1,0 +1,1176 @@
+{
+ "format": "sdm-sampled-null-key-vectors/1",
+ "recorded_by": "contract/tools/sampled_null_key_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "pql": "PREDICT accounts.amount FOR EACH accounts.account_id",
+ "materialize": {
+  "indices": [
+   3
+  ],
+  "num_context_samples": 1,
+  "random_seed": 0
+ },
+ "register_ref": "contract/sampled-null-key-vectors.json#",
+ "vectors": [
+  {
+   "id": "singleton-null-text",
+   "setup": [
+    "CREATE TABLE accounts AS SELECT i AS account_id, i::DOUBLE AS amount FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i=0 THEN NULL ELSE 'k'||i::VARCHAR END AS payment_id, CASE WHEN i=0 THEN 3 ELSE 150 END AS account_id, i::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "keys": {
+     "accounts": "account_id",
+     "payments": "payment_id"
+    },
+    "request": {
+     "model": "kumo-relational",
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": [
+       "accounts"
+      ]
+     },
+     "schema": {
+      "instance_table": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "__kumo_entity_ref_0": {
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        "TARGET": {
+         "dtype": "float32",
+         "stype": "numerical"
+        }
+       },
+       "primary_key": "instance_id"
+      },
+      "related_tables": {
+       "accounts": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "account_id": {
+          "dtype": "int64",
+          "nullable": false
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "account_id"
+        ]
+       },
+       "payments": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__node_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "amount": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "account_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "__node_id"
+        ]
+       }
+      },
+      "relationships": [
+       {
+        "source_columns": [
+         "__kumo_entity_ref_0"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       },
+       {
+        "source_table": "payments",
+        "source_columns": [
+         "account_id"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       }
+      ]
+     },
+     "context": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0",
+        "TARGET"
+       ],
+       "rows": [
+        [
+         {
+          "number": "0"
+         },
+         {
+          "number": "40"
+         },
+         {
+          "number": "40.0"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "40"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": []
+       }
+      }
+     },
+     "predict": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0"
+       ],
+       "rows": [
+        [
+         {
+          "number": "1"
+         },
+         {
+          "number": "3"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       }
+      }
+     },
+     "output": {
+      "fields": [
+       "prediction"
+      ],
+      "prediction_statistic": "median"
+     },
+     "inference": {
+      "run_mode": "fast",
+      "use_prediction_time": false,
+      "inference_config": {
+       "kind": "regression",
+       "num_estimators": {
+        "number": "1"
+       },
+       "column_shuffle": false,
+       "category_shuffle": false,
+       "hop_shuffle": false
+      }
+     },
+     "metadata": {
+      "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
+      "num_context_examples": {
+       "number": "1"
+      },
+      "num_prediction_examples": {
+       "number": "1"
+      }
+     }
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "mixed-null-text",
+   "setup": [
+    "CREATE TABLE accounts AS SELECT i AS account_id, i::DOUBLE AS amount FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i=0 THEN NULL ELSE 'k'||i::VARCHAR END AS payment_id, CASE WHEN i<3 THEN 3 ELSE 150 END AS account_id, i::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "keys": {
+     "accounts": "account_id",
+     "payments": "payment_id"
+    },
+    "request": null,
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "null-text-not-sampled",
+   "setup": [
+    "CREATE TABLE accounts AS SELECT i AS account_id, i::DOUBLE AS amount FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i=0 THEN NULL ELSE 'k'||i::VARCHAR END AS payment_id, CASE WHEN i IN (1, 2) THEN 3 ELSE 150 END AS account_id, i::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "keys": {
+     "accounts": "account_id",
+     "payments": "payment_id"
+    },
+    "request": {
+     "model": "kumo-relational",
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": [
+       "accounts"
+      ]
+     },
+     "schema": {
+      "instance_table": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "__kumo_entity_ref_0": {
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        "TARGET": {
+         "dtype": "float32",
+         "stype": "numerical"
+        }
+       },
+       "primary_key": "instance_id"
+      },
+      "related_tables": {
+       "accounts": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "account_id": {
+          "dtype": "int64",
+          "nullable": false
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "account_id"
+        ]
+       },
+       "payments": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__node_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "amount": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "account_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "__node_id"
+        ]
+       }
+      },
+      "relationships": [
+       {
+        "source_columns": [
+         "__kumo_entity_ref_0"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       },
+       {
+        "source_table": "payments",
+        "source_columns": [
+         "account_id"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       }
+      ]
+     },
+     "context": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0",
+        "TARGET"
+       ],
+       "rows": [
+        [
+         {
+          "number": "0"
+         },
+         {
+          "number": "40"
+         },
+         {
+          "number": "40.0"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "40"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": []
+       }
+      }
+     },
+     "predict": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0"
+       ],
+       "rows": [
+        [
+         {
+          "number": "1"
+         },
+         {
+          "number": "3"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "0"
+          },
+          {
+           "number": "1.0"
+          },
+          {
+           "number": "3"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "1"
+          },
+          {
+           "number": "2.0"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       }
+      }
+     },
+     "output": {
+      "fields": [
+       "prediction"
+      ],
+      "prediction_statistic": "median"
+     },
+     "inference": {
+      "run_mode": "fast",
+      "use_prediction_time": false,
+      "inference_config": {
+       "kind": "regression",
+       "num_estimators": {
+        "number": "1"
+       },
+       "column_shuffle": false,
+       "category_shuffle": false,
+       "hop_shuffle": false
+      }
+     },
+     "metadata": {
+      "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
+      "num_context_examples": {
+       "number": "1"
+      },
+      "num_prediction_examples": {
+       "number": "1"
+      }
+     }
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "singleton-null-decimal",
+   "setup": [
+    "CREATE TABLE accounts AS SELECT i AS account_id, i::DOUBLE AS amount FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i=0 THEN NULL ELSE i::DECIMAL(18, 0) END AS payment_id, CASE WHEN i=0 THEN 3 ELSE 150 END AS account_id, i::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "keys": {
+     "accounts": "account_id",
+     "payments": "payment_id"
+    },
+    "request": {
+     "model": "kumo-relational",
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": [
+       "accounts"
+      ]
+     },
+     "schema": {
+      "instance_table": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "__kumo_entity_ref_0": {
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        "TARGET": {
+         "dtype": "float32",
+         "stype": "numerical"
+        }
+       },
+       "primary_key": "instance_id"
+      },
+      "related_tables": {
+       "accounts": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "account_id": {
+          "dtype": "int64",
+          "nullable": false
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "account_id"
+        ]
+       },
+       "payments": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__node_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "amount": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "account_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "__node_id"
+        ]
+       }
+      },
+      "relationships": [
+       {
+        "source_columns": [
+         "__kumo_entity_ref_0"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       },
+       {
+        "source_table": "payments",
+        "source_columns": [
+         "account_id"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       }
+      ]
+     },
+     "context": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0",
+        "TARGET"
+       ],
+       "rows": [
+        [
+         {
+          "number": "0"
+         },
+         {
+          "number": "40"
+         },
+         {
+          "number": "40.0"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "40"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": []
+       }
+      }
+     },
+     "predict": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0"
+       ],
+       "rows": [
+        [
+         {
+          "number": "1"
+         },
+         {
+          "number": "3"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "0"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       }
+      }
+     },
+     "output": {
+      "fields": [
+       "prediction"
+      ],
+      "prediction_statistic": "median"
+     },
+     "inference": {
+      "run_mode": "fast",
+      "use_prediction_time": false,
+      "inference_config": {
+       "kind": "regression",
+       "num_estimators": {
+        "number": "1"
+       },
+       "column_shuffle": false,
+       "category_shuffle": false,
+       "hop_shuffle": false
+      }
+     },
+     "metadata": {
+      "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
+      "num_context_examples": {
+       "number": "1"
+      },
+      "num_prediction_examples": {
+       "number": "1"
+      }
+     }
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "mixed-null-decimal",
+   "setup": [
+    "CREATE TABLE accounts AS SELECT i AS account_id, i::DOUBLE AS amount FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i=0 THEN NULL ELSE i::DECIMAL(18, 0) END AS payment_id, CASE WHEN i<3 THEN 3 ELSE 150 END AS account_id, i::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR"
+    },
+    "keys": {
+     "accounts": "account_id",
+     "payments": "payment_id"
+    },
+    "request": null,
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with INTERNAL_ERROR at materialize (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "two-nulls-text",
+   "setup": [
+    "CREATE TABLE accounts AS SELECT i AS account_id, i::DOUBLE AS amount FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i<2 THEN NULL ELSE 'k'||i::VARCHAR END AS payment_id, CASE WHEN i<2 THEN 3 ELSE 150 END AS account_id, i::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "keys": {
+     "accounts": "account_id",
+     "payments": "payment_id"
+    },
+    "request": {
+     "model": "kumo-relational",
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": [
+       "accounts"
+      ]
+     },
+     "schema": {
+      "instance_table": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "__kumo_entity_ref_0": {
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        "TARGET": {
+         "dtype": "float32",
+         "stype": "numerical"
+        }
+       },
+       "primary_key": "instance_id"
+      },
+      "related_tables": {
+       "accounts": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "account_id": {
+          "dtype": "int64",
+          "nullable": false
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "account_id"
+        ]
+       },
+       "payments": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__node_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "amount": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "account_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "__node_id"
+        ]
+       }
+      },
+      "relationships": [
+       {
+        "source_columns": [
+         "__kumo_entity_ref_0"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       },
+       {
+        "source_table": "payments",
+        "source_columns": [
+         "account_id"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       }
+      ]
+     },
+     "context": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0",
+        "TARGET"
+       ],
+       "rows": [
+        [
+         {
+          "number": "0"
+         },
+         {
+          "number": "40"
+         },
+         {
+          "number": "40.0"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "40"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": []
+       }
+      }
+     },
+     "predict": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0"
+       ],
+       "rows": [
+        [
+         {
+          "number": "1"
+         },
+         {
+          "number": "3"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "0"
+          },
+          {
+           "number": "1.0"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       }
+      }
+     },
+     "output": {
+      "fields": [
+       "prediction"
+      ],
+      "prediction_statistic": "median"
+     },
+     "inference": {
+      "run_mode": "fast",
+      "use_prediction_time": false,
+      "inference_config": {
+       "kind": "regression",
+       "num_estimators": {
+        "number": "1"
+       },
+       "column_shuffle": false,
+       "category_shuffle": false,
+       "hop_shuffle": false
+      }
+     },
+     "metadata": {
+      "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
+      "num_context_examples": {
+       "number": "1"
+      },
+      "num_prediction_examples": {
+       "number": "1"
+      }
+     }
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  }
+ ]
+}

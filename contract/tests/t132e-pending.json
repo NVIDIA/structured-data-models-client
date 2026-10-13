@@ -1,5 +1,5 @@
 {
- "about": "T1.32e part 1's acceptance tests that failed when the independent test author wrote them, before the implementation, at a4ed935f (contract/tests/test_t132e_time_inference.py, test_t132e_key_inference.py, test_t132e_benchmark_seeds.py, sdm-testkit's tests/t132e_time_inference.rs and t132e_key_inference.rs). 'python-core' and 'rust-host' are time-inference vector ids, 'key-python-core' and 'key-rust-host' key vector ids; 'exits' holds the exits' tests ('py:' the Python test ids, 'rs:' the vectors of rust_host_honours_a_named_time_column_on_a_large_table, 'rs-key:' those of rust_host_refuses_no_table_for_a_null_in_its_key) and the benchmark's seeds. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32e part 1's acceptance tests that failed when the independent test author wrote them, before the implementation, at a4ed935f (contract/tests/test_t132e_time_inference.py, test_t132e_key_inference.py, test_t132e_benchmark_seeds.py, test_t132e_sampled_null_keys.py, sdm-testkit's tests/t132e_time_inference.rs and t132e_key_inference.rs). 'python-core' and 'rust-host' are time-inference vector ids, 'key-python-core' and 'key-rust-host' key vector ids, 'sampled-python-core' sampled null key vector ids (measured at 18bd89d6); 'exits' holds the exits' tests ('py:' the Python test ids, 'rs:' the vectors of rust_host_honours_a_named_time_column_on_a_large_table, 'rs-key:' those of rust_host_refuses_no_table_for_a_null_in_its_key) and the benchmark's seeds. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
   "rust-host": [],
@@ -9,6 +9,12 @@
   ],
   "key-rust-host": [
    "nulls-1-decimal.200"
+  ],
+  "sampled-python-core": [
+   "mixed-null-decimal",
+   "singleton-null-decimal",
+   "singleton-null-text",
+   "two-nulls-text"
   ]
  },
  "authored": {
@@ -389,6 +395,12 @@
    "share-99.5.5000",
    "share-99.5000",
    "text-unique.1000"
+  ],
+  "sampled-python-core": [
+   "mixed-null-decimal",
+   "singleton-null-decimal",
+   "singleton-null-text",
+   "two-nulls-text"
   ]
  }
 }

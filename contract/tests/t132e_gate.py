@@ -7,7 +7,8 @@ independent test author's).
 
 ``t132e-pending.json`` beside this file names, per group (``python-core``
 and ``rust-host`` time-inference vector ids, ``key-python-core`` and
-``key-rust-host`` key vector ids, and ``exits``, test ids), the tests that
+``key-rust-host`` key vector ids, ``sampled-python-core`` sampled null
+key vector ids, and ``exits``, test ids), the tests that
 failed when they were written, before the implementation. :func:`held`
 runs a test's check: a test not listed must pass; a listed one must still
 fail, and once it passes it fails, naming itself, until its id is taken
@@ -30,6 +31,7 @@ GROUPS = (
     'rust-host',
     'key-python-core',
     'key-rust-host',
+    'sampled-python-core',
     'exits',
 )
 
