@@ -160,6 +160,32 @@ fn cells(column: &dyn Array) -> Vec<Value> {
         .collect()
 }
 
+/// The `predict` operation this host starts: the request state attached as
+/// 1 (payload) and 2 (query), `model`, this host's request id, `outputs`
+/// and no inference option asked. Built from its fields by name through the
+/// contract's own reading of the operation, not a struct literal, so a field
+/// the contract adds with a default (`#[serde(default)]`) leaves this test
+/// compiling and running unchanged.
+fn predict_operation(version: u32, model: &str, outputs: &[String]) -> Predict {
+    let fields = json!({
+        "state": RequestState {
+            version,
+            payload: AttachmentId(1),
+            query: AttachmentId(2),
+        },
+        "model": model,
+        "request_id": host::REQUEST_ID,
+        "outputs": outputs,
+        "inference_asked": [],
+    });
+    serde_json::from_value(fields).unwrap_or_else(|e| {
+        panic!(
+            "the contract's Predict is not built from its named fields ({e}); \
+             a field it adds needs a default for this test"
+        )
+    })
+}
+
 /// `id`'s case materialized on this host, then predicted with `model` and
 /// `outputs`, its one model call answered with `status` and `body`.
 fn predict(id: &str, model: &str, outputs: &[String], status: u16, body: &str) -> Ended {
@@ -178,17 +204,7 @@ fn predict(id: &str, model: &str, outputs: &[String], status: u16, body: &str) -
     let start = ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: host::facts().unwrap(),
-        operation: Operation::Predict(Predict {
-            state: RequestState {
-                version: state.version,
-                payload: AttachmentId(1),
-                query: AttachmentId(2),
-            },
-            model: model.to_owned(),
-            request_id: host::REQUEST_ID.into(),
-            outputs: outputs.to_vec(),
-            inference_asked: vec![],
-        }),
+        operation: Operation::Predict(predict_operation(state.version, model, outputs)),
     }));
     let attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(payload)),
