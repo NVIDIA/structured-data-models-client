@@ -14,10 +14,10 @@
 
 use std::sync::Arc;
 
-use arrow_array::builder::{Int32Builder, ListBuilder};
+use arrow_array::builder::{BinaryBuilder, BooleanBuilder, Int32Builder, ListBuilder};
 use arrow_array::{
-    ArrayRef, Date32Array, Int64Array, RecordBatch, Time64MicrosecondArray,
-    TimestampMicrosecondArray,
+    ArrayRef, BinaryArray, Date32Array, DurationMicrosecondArray, Int64Array, RecordBatch,
+    Time64MicrosecondArray, TimestampMicrosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::catalog::CatalogColumn;
@@ -443,6 +443,66 @@ fn a_list_column_is_left_out_and_other_nested_types_stay_refused() {
         None,
     ));
     assert_eq!(of(vec![("s", nested)]).unwrap_err(), "column_type");
+}
+
+/// Binary, a duration and a list of binary have no scalar form on the
+/// wire either: each is left out and named, with the data type the
+/// reference's reading gives it (a list of binary is a list of text to
+/// it). A list of any other item stays refused by name.
+#[test]
+fn binary_a_duration_and_a_list_of_binary_are_left_out_and_other_lists_refused() {
+    let binary: ArrayRef = Arc::new(BinaryArray::from_iter(
+        [Some(&b"a"[..]), None, Some(b"b"), Some(b"c")]
+            .iter()
+            .copied(),
+    ));
+    let duration: ArrayRef = Arc::new(DurationMicrosecondArray::from(vec![
+        Some(1),
+        None,
+        Some(3),
+        Some(4),
+    ]));
+    let mut blobs = ListBuilder::new(BinaryBuilder::new());
+    for i in 0..4 {
+        blobs.values().append_value(b"x");
+        blobs.append(i != 1);
+    }
+    let blobs: ArrayRef = Arc::new(blobs.finish());
+    let table = of(vec![("b", binary), ("d", duration), ("bl", blobs)]).unwrap();
+    let dtype = |name: &str, dtype| LeftOut {
+        name: name.into(),
+        dtype,
+    };
+    use sdm_contract::ops::Dtype;
+    assert_eq!(
+        table.left_out,
+        [
+            dtype("b", Dtype::Binary),
+            dtype("d", Dtype::Timedelta),
+            dtype("bl", Dtype::Stringlist)
+        ]
+    );
+    assert_eq!(table.columns.len(), 1, "only the key is described");
+    // A list of booleans, and a list of lists, stay refused by name.
+    let mut flags = ListBuilder::new(BooleanBuilder::new());
+    for i in 0..4 {
+        flags.values().append_value(i % 2 == 0);
+        flags.append(true);
+    }
+    assert_eq!(
+        of(vec![("l", Arc::new(flags.finish()) as ArrayRef)]).unwrap_err(),
+        "column_type"
+    );
+    let mut nested = ListBuilder::new(ListBuilder::new(Int32Builder::new()));
+    for i in 0..4 {
+        nested.values().values().append_value(i);
+        nested.values().append(true);
+        nested.append(true);
+    }
+    assert_eq!(
+        of(vec![("l", Arc::new(nested.finish()) as ArrayRef)]).unwrap_err(),
+        "column_type"
+    );
 }
 
 #[test]

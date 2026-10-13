@@ -173,7 +173,7 @@ impl TimeChoice {
 }
 
 /// A column whose type has no scalar form on the wire, which the schema
-/// leaves out and names (`_describe_source_table`): a list.
+/// leaves out and names (`_describe_source_table`): a list, binary or a duration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeftOut {
     pub name: String,
@@ -287,9 +287,16 @@ pub fn table(
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
         let dtype = dtype_of(field.data_type())?;
-        if matches!(dtype, Dtype::Intlist | Dtype::Floatlist | Dtype::Stringlist) {
-            // No scalar form on the wire: left out and named, as the
-            // reference's schema leaves it out.
+        if matches!(
+            dtype,
+            Dtype::Intlist
+                | Dtype::Floatlist
+                | Dtype::Stringlist
+                | Dtype::Binary
+                | Dtype::Timedelta
+        ) {
+            // No scalar form on the wire (a list, binary or a duration):
+            // left out and named, as the reference's schema leaves it out.
             left_out.push(LeftOut {
                 name: declared.name.clone(),
                 dtype,
@@ -420,8 +427,16 @@ pub fn table(
 }
 
 /// A column's data type from the Arrow type its preview returned, as the
-/// reference's reading of the catalog's types gives it for the plain types
-/// and the lists of them; any other is refused.
+/// reference's reading of the catalog's types gives it for the plain types,
+/// binary, a duration and the lists of them; any other is refused by name
+/// (`column_type`).
+///
+/// A list is read as the reference reads a catalog type ending `[]`: of
+/// integers, floats or text (binary being text to it, so a list of binary
+/// is a list of text), and refused otherwise, where the reference fails
+/// unnamed (register P1B-37). Admission hands every list over as a
+/// `list`, so a fixed-size list (P1B-9) and a list view (P1B-36) are read
+/// as lists too. A struct and a map are refused (P1B-10).
 fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
     Ok(match data_type {
         DataType::Boolean => Dtype::Bool,
@@ -436,17 +451,15 @@ fn dtype_of(data_type: &DataType) -> Result<Dtype, CoreError> {
         | DataType::Decimal128(_, 0) => Dtype::Int,
         DataType::Float32 | DataType::Float64 | DataType::Decimal128(_, _) => Dtype::Float,
         DataType::Utf8 => Dtype::String,
+        DataType::Binary => Dtype::Binary,
         DataType::Date32 | DataType::Timestamp(_, _) => Dtype::Date,
         DataType::Time64(_) => Dtype::Time,
-        // A list of integers, floats or text, as the reference reads a
-        // catalog type ending `[]`; a list of anything else, a list of a
-        // fixed size, a struct and a map stay refused, as the reference
-        // fails them unnamed (register P1B-9).
+        DataType::Duration(_) => Dtype::Timedelta,
         DataType::List(element) | DataType::LargeList(element) => {
             match dtype_of(element.data_type()) {
                 Ok(Dtype::Int) => Dtype::Intlist,
                 Ok(Dtype::Float) => Dtype::Floatlist,
-                Ok(Dtype::String) => Dtype::Stringlist,
+                Ok(Dtype::String | Dtype::Binary) => Dtype::Stringlist,
                 _ => return Err(not_yet("column_type")),
             }
         }
