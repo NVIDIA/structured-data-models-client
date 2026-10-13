@@ -358,6 +358,10 @@ with=()
 for file in "${given[@]+"${given[@]}"}"; do with+=(--observations "$file"); done
 judge_ratchet() {
   prepare || return 1
+  if [ ${#given[@]} -eq 0 ]; then
+    echo 'no observations: the ratchet judges the tree alone, not the baselines'
+    echo 'or availability (give --run or --observations for those)'
+  fi
   "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
     --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
     --effective-out "$scratch/effective.json" \
@@ -409,17 +413,25 @@ SEEDED=(
   tests/test_contract_coverage_approval.py
   tests/test_contract_compare_depth.py
 )
+# The runtime cell the Python runners observed in, written to $scratch/cell
+# (nothing when they name none or several): the locked checks' reference
+# comparisons gate only in the reference's cell (H1).
 runners_cover() {
-  "$PYTHON" - "${given[@]+"${given[@]}"}" <<'EOF'
+  "$PYTHON" - "$scratch/cell" "${given[@]+"${given[@]}"}" <<'EOF'
 import json, sys
-seen = set()
-for path in sys.argv[1:]:
+seen, cells = set(), set()
+for path in sys.argv[2:]:
     try:
         with open(path, encoding='utf-8') as file:
             for line in file:
-                seen.add(json.loads(line)['identity']['runner'])
-    except (OSError, ValueError, RecursionError, KeyError, TypeError):
+                identity = json.loads(line)['identity']
+                seen.add(identity['runner'])
+                if identity['runner'] != 'rust-host':
+                    cells.add(str(identity.get('cell')))
+    except (OSError, ValueError, RecursionError, KeyError, TypeError, AttributeError):
         sys.exit(f'{path}: not observations it reads')
+with open(sys.argv[1], 'w', encoding='utf-8') as file:
+    file.write(cells.pop() if len(cells) == 1 else '')
 missing = sorted({'python-core', 'python-old', 'rust-host'} - seen)
 if missing:
     sys.exit(f'no observations of {", ".join(missing)}')
@@ -505,30 +517,44 @@ if [ -n "$locked" ]; then
   else
     checks=('4:runners observations ratchet compare l1 inventory' '5:observations ratchet compare inventory')
   fi
-  checks+=("6:l0 ${names[*]}")
+  every=l0
+  for name in "${names[@]}"; do [ "$name" = l0 ] || every+=" $name"; done
+  checks+=("6:$every")
+  # The reference comparisons of checks 1 and 4 gate only in the reference's
+  # cell (H1; compare.py reports them elsewhere): in another, or with no
+  # one cell observed, the check is reported, not gated, and fails.
+  cell=$(cat "$scratch/cell" 2>/dev/null)
+  reference=ref-pandas3
   echo
   echo "locked checks ($locked):"
   table=()
   for entry in "${checks[@]}"; do
     number=${entry%%:*}
     verdict=ok
+    note=''
     for name in ${entry#*:}; do
       [ "$(result_of "$name")" = ok ] || verdict=FAIL
     done
+    if [ "$verdict" = ok ] && { [ "$number" = 1 ] || [ "$number" = 4 ]; } &&
+      [ "$cell" != "$reference" ]; then
+      verdict=FAIL
+      note=" (reported, not gated: observed in ${cell:-no one cell}, gated in $reference)"
+    fi
     [ "$verdict" = ok ] || failed=1
-    printf '  %-4s check %s: %s\n' "$verdict" "$number" "${entry#*:}"
+    printf '  %-4s check %s: %s%s\n' "$verdict" "$number" "${entry#*:}" "$note"
+    if [ -n "$note" ]; then verdict='reported, not gated'; fi
     table+=("$number=$verdict=${entry#*:}")
   done
   steps=()
   for i in "${!names[@]}"; do steps+=("${names[$i]}=${results[$i]}"); done
   mkdir -p "$evidence/gate" &&
     "$PYTHON" - "$evidence/gate/$head.json" "$head" "$locked" "$checkpoint" "$base" \
-      "$failed" "${#steps[@]}" "${steps[@]}" "${table[@]}" <<'EOF'
+      "$cell" "$failed" "${#steps[@]}" "${steps[@]}" "${table[@]}" <<'EOF'
 import json, os, sys
-path, head, half, checkpoint, base, failed, count = sys.argv[1:8]
-steps = dict(item.split('=', 1) for item in sys.argv[8:8 + int(count)])
+path, head, half, checkpoint, base, cell, failed, count = sys.argv[1:9]
+steps = dict(item.split('=', 1) for item in sys.argv[9:9 + int(count)])
 checks = {}
-for item in sys.argv[8 + int(count):]:
+for item in sys.argv[9 + int(count):]:
     number, verdict, names = item.split('=', 2)
     checks[number] = {'result': verdict, 'steps': names.split()}
 found = {'sha': head, 'halves': {}}
@@ -541,7 +567,7 @@ if os.path.exists(path):
     if not isinstance(found, dict) or found.get('sha') != head or not isinstance(
             found.get('halves'), dict):
         sys.exit(f'{path}: not this candidate\'s evidence')
-found['halves'][half] = {'checkpoint': checkpoint, 'base': base,
+found['halves'][half] = {'checkpoint': checkpoint, 'base': base, 'cell': cell or None,
                          'passed': failed == '0', 'checks': checks, 'steps': steps}
 with open(path + '.tmp', 'w', encoding='utf-8') as file:
     json.dump(found, file, indent=2, sort_keys=True)
