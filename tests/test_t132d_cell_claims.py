@@ -22,13 +22,19 @@ check must fail with a ``rule 6:`` problem naming the case. The controls,
 HEAD itself and a seed of the case's own cells, pass.
 
 - ``null.feature-all-null`` (an all-null INTEGER, received as ``int32``)
-  claiming ``utf8/feature``: the type contradicted;
+  claiming ``int16/feature``: the type contradicted;
 - ``null.some-times`` (its time column, received as ``timestamp-us``)
   claiming ``timestamp-us/primary-key``: the role contradicted;
-- ``null.some-foreign-keys`` (a foreign key) claiming
-  ``int64/primary-key``: a foreign key claimed as the key;
+- ``null.some-foreign-keys`` (a foreign key, received as ``int64``)
+  claiming ``int64/time-column``: a foreign key claimed as the time column;
 - ``empty.fact-table`` (refused at ``from_source``, before any role is
   read) claiming ``float64/target``: a refusal claiming a later stage.
+
+T1.32g: a claim is held to every column of the case's source, since no
+case field names one column as its subject. So ``utf8/feature``
+(``users.country``) and ``int64/primary-key`` (``orders.order_id``), which
+this file's first seeds claimed, hold in those cases, and contradict
+nothing. The seeds now claim cells no column of their case holds.
 
 Gating (``contract/tests/t132d_gate.py``): a test named in
 ``t132d-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
@@ -168,9 +174,12 @@ def test_a_seed_with_the_case_s_own_claims_passes(tmp_path: Path) -> None:
 
 
 SEEDS = {
-    'type': ('null.feature-all-null', ['utf8/feature']),
+    'type': ('null.feature-all-null', ['int16/feature']),
     'role': ('null.some-times', ['timestamp-us/primary-key']),
-    'foreign-key-as-key': ('null.some-foreign-keys', ['int64/primary-key']),
+    'foreign-key-as-time-column': (
+        'null.some-foreign-keys',
+        ['int64/time-column'],
+    ),
     'refusal-claims-a-later-stage': ('empty.fact-table', ['float64/target']),
 }
 

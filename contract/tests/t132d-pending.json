@@ -4,7 +4,7 @@
   "python-core": [],
   "rust-host": [],
   "exits": [
-   "py:test_a_contradicted_cell_claim_fails[foreign-key-as-key]",
+   "py:test_a_contradicted_cell_claim_fails[foreign-key-as-time-column]",
    "py:test_a_contradicted_cell_claim_fails[refusal-claims-a-later-stage]",
    "py:test_a_contradicted_cell_claim_fails[role]",
    "py:test_a_contradicted_cell_claim_fails[type]",
@@ -56,7 +56,7 @@
    "null.key-one"
   ],
   "exits": [
-   "py:test_a_contradicted_cell_claim_fails[foreign-key-as-key]",
+   "py:test_a_contradicted_cell_claim_fails[foreign-key-as-time-column]",
    "py:test_a_contradicted_cell_claim_fails[refusal-claims-a-later-stage]",
    "py:test_a_contradicted_cell_claim_fails[role]",
    "py:test_a_contradicted_cell_claim_fails[type]",

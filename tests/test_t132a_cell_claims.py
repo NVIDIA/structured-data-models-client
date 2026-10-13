@@ -20,8 +20,10 @@ control, HEAD itself, passes.
   ``uint16/primary-key`` and ``uint16/foreign-key``: the type contradicted;
 - ``key.uint8`` claiming ``uint8/feature`` and ``uint8/time-column``: the
   roles contradicted (its ``user_id`` is the key and the foreign key);
-- ``key.varchar`` claiming ``int64/primary-key``: a text key claimed as an
-  integer one.
+- ``key.varchar`` claiming ``int32/primary-key``: a text key claimed as an
+  integer one. Not ``int64/primary-key``, which ``orders.order_id`` holds
+  in this case too (T1.32g: a claim is held to every column of the case's
+  source, no case field naming one as its subject).
 
 Gating (``contract/tests/t132a_gate.py``): a test named in
 ``t132a-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
@@ -163,7 +165,7 @@ SEEDS = {
     'role': ('key.uint8', ['uint8/feature', 'uint8/time-column']),
     'text-as-integer': (
         'key.varchar',
-        ['int64/primary-key', 'utf8/foreign-key'],
+        ['int32/primary-key', 'utf8/foreign-key'],
     ),
 }
 
