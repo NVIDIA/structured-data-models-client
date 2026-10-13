@@ -60,7 +60,6 @@
    "py:test_each_case_is_admitted[decimal.class-target-38-18]",
    "py:test_each_case_is_admitted[decimal.feature-38-0-wide]",
    "py:test_each_case_is_admitted[decimal.target-38-18]",
-   "py:test_null_decimal_18_2_is_cleared",
    "py:test_python_core_answers_each_case_as_python_ref[decimal.class-target-38-18]",
    "rust:rust_host_answers_each_case_as_python_ref"
   ]
