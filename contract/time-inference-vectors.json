@@ -30,6 +30,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -120,6 +121,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -210,6 +212,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -300,6 +303,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -392,6 +396,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -484,6 +489,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -576,6 +582,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -668,6 +675,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -758,6 +766,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at, (DATE '2022-06-01' + (i % 400)::INTEGER) AS due_on, (TIME '08:00:00' + to_seconds((i % 3600)::INTEGER)) AS at_time FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -886,6 +895,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at, (DATE '2022-06-01' + (i % 400)::INTEGER) AS due_on, (TIME '08:00:00' + to_seconds((i % 3600)::INTEGER)) AS at_time FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -1014,6 +1024,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at, (DATE '2022-06-01' + (i % 400)::INTEGER) AS due_on, (TIME '08:00:00' + to_seconds((i % 3600)::INTEGER)) AS at_time FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -1142,6 +1153,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS happened_at, (DATE '2022-06-01' + (i % 400)::INTEGER) AS due_on, (TIME '08:00:00' + to_seconds((i % 3600)::INTEGER)) AS at_time FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -1272,6 +1284,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -1402,6 +1415,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -1532,6 +1546,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -1662,6 +1677,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -1792,6 +1808,7 @@
    "time_columns": {
     "events": "due_on"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -1922,6 +1939,7 @@
    "time_columns": {
     "events": "due_on"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -2052,6 +2070,7 @@
    "time_columns": {
     "events": "due_on"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -2182,6 +2201,7 @@
    "time_columns": {
     "events": "due_on"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -2312,6 +2332,7 @@
    "time_columns": {
     "events": "at_time"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -2442,6 +2463,7 @@
    "time_columns": {
     "events": "at_time"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -2572,6 +2594,7 @@
    "time_columns": {
     "events": "at_time"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -2702,6 +2725,7 @@
    "time_columns": {
     "events": "at_time"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -2832,6 +2856,7 @@
    "time_columns": {
     "events": null
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -2962,6 +2987,7 @@
    "time_columns": {
     "events": null
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -3092,6 +3118,7 @@
    "time_columns": {
     "events": null
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -3222,6 +3249,7 @@
    "time_columns": {
     "events": null
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -3350,6 +3378,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMPTZ '2023-01-01 00:00:00+00' + to_minutes(i::INTEGER)) AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -3440,6 +3469,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMPTZ '2023-01-01 00:00:00+00' + to_minutes(i::INTEGER)) AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -3530,6 +3560,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMPTZ '2023-01-01 00:00:00+00' + to_minutes(i::INTEGER)) AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -3620,6 +3651,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMPTZ '2023-01-01 00:00:00+00' + to_minutes(i::INTEGER)) AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -3710,6 +3742,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 3 = 0 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -3800,6 +3833,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 3 = 0 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -3890,6 +3924,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 3 = 0 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -3980,6 +4015,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 3 = 0 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -4072,6 +4108,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -4164,6 +4201,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -4256,6 +4294,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -4348,6 +4387,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -4438,6 +4478,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 5 = 0 THEN TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -4528,6 +4569,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 5 = 0 THEN TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -4618,6 +4660,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 5 = 0 THEN TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -4708,6 +4751,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i % 5 = 0 THEN TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -4798,6 +4842,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -4888,6 +4933,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -4978,6 +5024,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -5068,6 +5115,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -5160,6 +5208,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -5252,6 +5301,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -5344,6 +5394,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -5436,6 +5487,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -5526,6 +5578,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -5616,6 +5669,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -5706,6 +5760,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -5796,6 +5851,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -5888,6 +5944,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -5980,6 +6037,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -6072,6 +6130,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -6164,6 +6223,7 @@
    "time_columns": {
     "events": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -6254,6 +6314,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS shipped_at, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-06-01 00:00:00' + to_minutes(i::INTEGER) ELSE TIMESTAMP '2020-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS billed_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -6362,6 +6423,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS shipped_at, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-06-01 00:00:00' + to_minutes(i::INTEGER) ELSE TIMESTAMP '2020-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS billed_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -6470,6 +6532,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS shipped_at, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-06-01 00:00:00' + to_minutes(i::INTEGER) ELSE TIMESTAMP '2020-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS billed_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -6578,6 +6641,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS shipped_at, (CASE WHEN i < 1000 THEN TIMESTAMP '2023-06-01 00:00:00' + to_minutes(i::INTEGER) ELSE TIMESTAMP '2020-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS billed_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -6688,6 +6752,7 @@
    "time_columns": {
     "events": "shipped_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -6798,6 +6863,7 @@
    "time_columns": {
     "events": "shipped_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -6908,6 +6974,7 @@
    "time_columns": {
     "events": "shipped_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -7018,6 +7085,7 @@
    "time_columns": {
     "events": "shipped_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -7126,6 +7194,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i = 999 - 1 THEN TIMESTAMP '1900-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS shipped_at, (TIMESTAMP '2022-01-01 00:00:00' + to_minutes(i::INTEGER)) AS billed_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -7234,6 +7303,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i = 1000 - 1 THEN TIMESTAMP '1900-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS shipped_at, (TIMESTAMP '2022-01-01 00:00:00' + to_minutes(i::INTEGER)) AS billed_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -7342,6 +7412,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i = 1001 - 1 THEN TIMESTAMP '1900-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS shipped_at, (TIMESTAMP '2022-01-01 00:00:00' + to_minutes(i::INTEGER)) AS billed_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -7450,6 +7521,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i = 5000 - 1 THEN TIMESTAMP '1900-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS shipped_at, (TIMESTAMP '2022-01-01 00:00:00' + to_minutes(i::INTEGER)) AS billed_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -7558,6 +7630,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00') AS happened_at FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -7648,6 +7721,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00') AS happened_at FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -7738,6 +7812,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00') AS happened_at FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -7828,6 +7903,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00') AS happened_at FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -7918,6 +7994,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -8008,6 +8085,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -8098,6 +8176,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -8188,6 +8267,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -8278,6 +8358,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (DATE '2022-06-01' + (i % 900)::INTEGER) AS \"OrderDate\", (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(999) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -8386,6 +8467,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (DATE '2022-06-01' + (i % 900)::INTEGER) AS \"OrderDate\", (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(1000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -8494,6 +8576,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (DATE '2022-06-01' + (i % 900)::INTEGER) AS \"OrderDate\", (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(1001) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -8602,6 +8685,7 @@
     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, (i % 97)::DOUBLE AS amount, (DATE '2022-06-01' + (i % 900)::INTEGER) AS \"OrderDate\", (TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER)) AS \"ModifiedDate\" FROM range(5000) t(i)"
    ],
    "time_columns": null,
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -8712,6 +8796,7 @@
    "time_columns": {
     "events": "OrderDate"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -8822,6 +8907,7 @@
    "time_columns": {
     "events": "OrderDate"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -8932,6 +9018,7 @@
    "time_columns": {
     "events": "OrderDate"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -9042,6 +9129,7 @@
    "time_columns": {
     "events": "OrderDate"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -9152,6 +9240,7 @@
    "time_columns": {
     "events": "no_such_column"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -9223,6 +9312,7 @@
    "time_columns": {
     "events": "no_such_column"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -9294,6 +9384,7 @@
    "time_columns": {
     "events": "no_such_column"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -9365,6 +9456,7 @@
    "time_columns": {
     "events": "no_such_column"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -9436,6 +9528,7 @@
    "time_columns": {
     "events": "event_id"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -9507,6 +9600,7 @@
    "time_columns": {
     "events": "event_id"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -9578,6 +9672,7 @@
    "time_columns": {
     "events": "event_id"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -9649,6 +9744,7 @@
    "time_columns": {
     "events": "event_id"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -9720,6 +9816,7 @@
    "time_columns": {
     "events": "amount"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -9791,6 +9888,7 @@
    "time_columns": {
     "events": "amount"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -9862,6 +9960,7 @@
    "time_columns": {
     "events": "amount"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -9933,6 +10032,7 @@
    "time_columns": {
     "events": "amount"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -10004,6 +10104,7 @@
    "time_columns": {
     "no_such_table": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 999,
     "columns": {
@@ -10075,6 +10176,7 @@
    "time_columns": {
     "no_such_table": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1000,
     "columns": {
@@ -10146,6 +10248,7 @@
    "time_columns": {
     "no_such_table": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 1001,
     "columns": {
@@ -10217,6 +10320,7 @@
    "time_columns": {
     "no_such_table": "happened_at"
    },
+   "tables": null,
    "duckdb": {
     "rows": 5000,
     "columns": {
@@ -10269,6 +10373,576 @@
      "code": "INVALID_REQUEST"
     },
     "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "fallback-plain.200000",
+   "scenario": "fallback-plain",
+   "rows": 200000,
+   "setup": [
+    "SET threads = 1",
+    "DROP TABLE orders",
+    "CREATE SCHEMA hidden",
+    "CREATE TABLE hidden.raw AS SELECT i FROM range(200000) t(i)",
+    "CREATE VIEW events AS SELECT i::BIGINT AS event_id, (i % 8)::BIGINT AS user_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i >= 150000 THEN error('no whole-table read') ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS happened_at FROM hidden.raw"
+   ],
+   "time_columns": null,
+   "tables": {
+    "events": "events",
+    "users": "users"
+   },
+   "duckdb": {
+    "rows": 200000,
+    "columns": {
+     "event_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 200000,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "0"
+      }
+     },
+     "user_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 8,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 8,
+       "min": "0"
+      }
+     },
+     "amount": {
+      "type": "DOUBLE",
+      "whole": {
+       "held": 200000,
+       "distinct": 97,
+       "min": "0.0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 97,
+       "min": "0.0"
+      }
+     },
+     "happened_at": {
+      "type": "TIMESTAMP",
+      "whole": "raises",
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "2023-01-01 00:00:00"
+      }
+     }
+    }
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "from_source",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "columns": [
+      {
+       "name": "event_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "user_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "amount",
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      {
+       "name": "happened_at",
+       "dtype": "timestamp[us]",
+       "stype": "timestamp"
+      }
+     ],
+     "primary_key": "event_id",
+     "time_column": "happened_at",
+     "duplicate_keys": 0
+    },
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "fallback-unconfirmed.200000",
+   "scenario": "fallback-unconfirmed",
+   "rows": 200000,
+   "setup": [
+    "SET threads = 1",
+    "DROP TABLE orders",
+    "CREATE SCHEMA hidden",
+    "CREATE TABLE hidden.raw AS SELECT i FROM range(200000) t(i)",
+    "CREATE VIEW events AS SELECT i::BIGINT AS event_id, (i % 8)::BIGINT AS user_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i >= 150000 THEN error('no whole-table read') ELSE CASE WHEN i < 1000 THEN TIMESTAMP '2023-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END END) AS happened_at FROM hidden.raw"
+   ],
+   "time_columns": null,
+   "tables": {
+    "events": "events",
+    "users": "users"
+   },
+   "duckdb": {
+    "rows": 200000,
+    "columns": {
+     "event_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 200000,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "0"
+      }
+     },
+     "user_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 8,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 8,
+       "min": "0"
+      }
+     },
+     "amount": {
+      "type": "DOUBLE",
+      "whole": {
+       "held": 200000,
+       "distinct": 97,
+       "min": "0.0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 97,
+       "min": "0.0"
+      }
+     },
+     "happened_at": {
+      "type": "TIMESTAMP",
+      "whole": "raises",
+      "preview": {
+       "held": 1000,
+       "distinct": 1,
+       "min": "2023-01-01 00:00:00"
+      }
+     }
+    }
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "from_source",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "columns": [
+      {
+       "name": "event_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "user_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "amount",
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      {
+       "name": "happened_at",
+       "dtype": "timestamp[us]",
+       "stype": "timestamp"
+      }
+     ],
+     "primary_key": "event_id",
+     "time_column": "happened_at",
+     "duplicate_keys": 0
+    },
+    "warnings": [
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "fallback-unconfirmed-empty.200000",
+   "scenario": "fallback-unconfirmed-empty",
+   "rows": 200000,
+   "setup": [
+    "SET threads = 1",
+    "DROP TABLE orders",
+    "CREATE SCHEMA hidden",
+    "CREATE TABLE hidden.raw AS SELECT i FROM range(200000) t(i)",
+    "CREATE VIEW events AS SELECT i::BIGINT AS event_id, (i % 8)::BIGINT AS user_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i >= 150000 THEN error('no whole-table read') ELSE CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END END) AS happened_at FROM hidden.raw"
+   ],
+   "time_columns": null,
+   "tables": {
+    "events": "events",
+    "users": "users"
+   },
+   "duckdb": {
+    "rows": 200000,
+    "columns": {
+     "event_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 200000,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "0"
+      }
+     },
+     "user_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 8,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 8,
+       "min": "0"
+      }
+     },
+     "amount": {
+      "type": "DOUBLE",
+      "whole": {
+       "held": 200000,
+       "distinct": 97,
+       "min": "0.0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 97,
+       "min": "0.0"
+      }
+     },
+     "happened_at": {
+      "type": "TIMESTAMP",
+      "whole": "raises",
+      "preview": {
+       "held": 0,
+       "distinct": 0,
+       "min": null
+      }
+     }
+    }
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "from_source",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "columns": [
+      {
+       "name": "event_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "user_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "amount",
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      {
+       "name": "happened_at",
+       "dtype": "timestamp[us]",
+       "stype": "timestamp"
+      }
+     ],
+     "primary_key": "event_id",
+     "time_column": "happened_at",
+     "duplicate_keys": 0
+    },
+    "warnings": [
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "fallback-doubted-beside-plain.200000",
+   "scenario": "fallback-doubted-beside-plain",
+   "rows": 200000,
+   "setup": [
+    "SET threads = 1",
+    "DROP TABLE orders",
+    "CREATE SCHEMA hidden",
+    "CREATE TABLE hidden.raw AS SELECT i FROM range(200000) t(i)",
+    "CREATE VIEW events AS SELECT i::BIGINT AS event_id, (i % 8)::BIGINT AS user_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i >= 150000 THEN error('no whole-table read') ELSE CASE WHEN i < 1000 THEN TIMESTAMP '2020-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END END) AS shipped_at, (CASE WHEN i >= 150000 THEN error('no whole-table read') ELSE TIMESTAMP '2022-01-01 00:00:00' + to_minutes(i::INTEGER) END) AS billed_at FROM hidden.raw"
+   ],
+   "time_columns": null,
+   "tables": {
+    "events": "events",
+    "users": "users"
+   },
+   "duckdb": {
+    "rows": 200000,
+    "columns": {
+     "event_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 200000,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "0"
+      }
+     },
+     "user_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 8,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 8,
+       "min": "0"
+      }
+     },
+     "amount": {
+      "type": "DOUBLE",
+      "whole": {
+       "held": 200000,
+       "distinct": 97,
+       "min": "0.0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 97,
+       "min": "0.0"
+      }
+     },
+     "shipped_at": {
+      "type": "TIMESTAMP",
+      "whole": "raises",
+      "preview": {
+       "held": 1000,
+       "distinct": 1,
+       "min": "2020-01-01 00:00:00"
+      }
+     },
+     "billed_at": {
+      "type": "TIMESTAMP",
+      "whole": "raises",
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "2022-01-01 00:00:00"
+      }
+     }
+    }
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "from_source",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "columns": [
+      {
+       "name": "event_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "user_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "amount",
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      {
+       "name": "shipped_at",
+       "dtype": "timestamp[us]",
+       "stype": "timestamp"
+      },
+      {
+       "name": "billed_at",
+       "dtype": "timestamp[us]",
+       "stype": "timestamp"
+      }
+     ],
+     "primary_key": "event_id",
+     "time_column": "billed_at",
+     "duplicate_keys": 0
+    },
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "fallback-unconfirmed-named.200000",
+   "scenario": "fallback-unconfirmed-named",
+   "rows": 200000,
+   "setup": [
+    "SET threads = 1",
+    "DROP TABLE orders",
+    "CREATE SCHEMA hidden",
+    "CREATE TABLE hidden.raw AS SELECT i FROM range(200000) t(i)",
+    "CREATE VIEW events AS SELECT i::BIGINT AS event_id, (i % 8)::BIGINT AS user_id, (i % 97)::DOUBLE AS amount, (CASE WHEN i >= 150000 THEN error('no whole-table read') ELSE CASE WHEN i < 1000 THEN TIMESTAMP '2023-01-01 00:00:00' ELSE TIMESTAMP '2023-01-01 00:00:00' + to_minutes(i::INTEGER) END END) AS happened_at FROM hidden.raw"
+   ],
+   "time_columns": {
+    "events": "happened_at"
+   },
+   "tables": {
+    "events": "events",
+    "users": "users"
+   },
+   "duckdb": {
+    "rows": 200000,
+    "columns": {
+     "event_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 200000,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 1000,
+       "min": "0"
+      }
+     },
+     "user_id": {
+      "type": "BIGINT",
+      "whole": {
+       "held": 200000,
+       "distinct": 8,
+       "min": "0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 8,
+       "min": "0"
+      }
+     },
+     "amount": {
+      "type": "DOUBLE",
+      "whole": {
+       "held": 200000,
+       "distinct": 97,
+       "min": "0.0"
+      },
+      "preview": {
+       "held": 1000,
+       "distinct": 97,
+       "min": "0.0"
+      }
+     },
+     "happened_at": {
+      "type": "TIMESTAMP",
+      "whole": "raises",
+      "preview": {
+       "held": 1000,
+       "distinct": 1,
+       "min": "2023-01-01 00:00:00"
+      }
+     }
+    }
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "from_source",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "columns": [
+      {
+       "name": "event_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "user_id",
+       "dtype": "int64",
+       "stype": "ID"
+      },
+      {
+       "name": "amount",
+       "dtype": "float64",
+       "stype": "numerical"
+      },
+      {
+       "name": "happened_at",
+       "dtype": "timestamp[us]",
+       "stype": "timestamp"
+      }
+     ],
+     "primary_key": "event_id",
+     "time_column": "happened_at",
+     "duplicate_keys": 0
+    },
     "warnings": []
    },
    "register": {

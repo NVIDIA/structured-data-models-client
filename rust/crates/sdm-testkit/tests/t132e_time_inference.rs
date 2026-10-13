@@ -36,6 +36,12 @@
 //! - Every vector ref of a proposed or approved entry names a transition
 //!   in that form; a malformed one fails.
 //!
+//! - The owner's decision of 2026-10-13 (P1B-38 rejected): where the query
+//!   over every row fails (a view of 200,000 rows whose time columns raise
+//!   when read whole), the core decides from the preview as the reference
+//!   does: the `fallback-*` vectors, held to the reference's success and
+//!   time column here (the warning's class on the Python host).
+//!
 //! Gating: `contract/tests/t132e-pending.json`'s `pending["rust-host"]`
 //! lists the vectors that failed here when the test was written, and
 //! `pending["exits"]` the exit's (`rs:` ids). Each must still fail
@@ -251,8 +257,23 @@ fn the_case(vector: &Value) -> Case {
         "pql": format!("PREDICT COUNT({TABLE}.*, 0, 30, days) FOR EACH {TABLE}.event_id"),
         "materialize": {"indices": [0, 1], "anchor_time": "2024-03-01"},
     });
+    // Tables named (a fallback vector's view, which is listed only when
+    // named), each by its name and its source's name.
+    let tables = vector["tables"].as_object();
+    let named_tables: Vec<Value> = tables
+        .into_iter()
+        .flatten()
+        .map(|(name, source)| json!({"name": name, "source": source}))
+        .collect();
+    let mut given = serde_json::Map::new();
+    if let Some(tables) = tables {
+        given.insert("tables".into(), Value::Object(tables.clone()));
+    }
     if !vector["time_columns"].is_null() {
-        input["from_source"] = json!({"time_columns": named.clone()});
+        given.insert("time_columns".into(), named.clone());
+    }
+    if !given.is_empty() {
+        input["from_source"] = Value::Object(given);
     }
     let case = json!({
         "format": "sdm-case/1",
@@ -267,7 +288,7 @@ fn the_case(vector: &Value) -> Case {
         "core": {
             "describe_source": {
                 "provider": {"provider": "sql", "dialect": "duckdb"},
-                "source": {"tables": [], "primary_keys": {}, "time_columns": named},
+                "source": {"tables": named_tables, "primary_keys": {}, "time_columns": named},
                 "check_keys": true,
             }
         },
@@ -493,6 +514,7 @@ sizes! {
     rust_host_infers_time_on_a_full_preview_as_the_reference => 1000,
     rust_host_infers_time_one_row_past_a_preview_as_the_reference => 1001,
     rust_host_infers_time_on_5000_rows_as_the_reference => 5000,
+    rust_host_falls_back_to_the_preview_as_the_reference => 200000,
 }
 
 /// The exit: on every vector of 1,000 rows or more whose `time_columns`
@@ -529,10 +551,9 @@ fn rust_host_honours_a_named_time_column_on_a_large_table() {
             _ => {}
         }
     }
-    assert_eq!(
-        ran,
-        BTreeSet::from([1_000, 1_001, 5_000]),
-        "the exit's vectors cover every large size"
+    assert!(
+        ran.is_superset(&BTreeSet::from([1_000, 1_001, 5_000])),
+        "the exit's vectors cover every large size: {ran:?}"
     );
     assert!(
         passing_but_pending.is_empty(),

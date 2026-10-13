@@ -275,7 +275,7 @@ def test_the_vectors_are_the_reference_s() -> None:
     assert [v['id'] for v in RECORDED['vectors']] == [v['id'] for v in made]
     for vector in made:
         recorded = BY_ID[vector['id']]
-        for key in ('scenario', 'rows', 'setup', 'time_columns'):
+        for key in ('scenario', 'rows', 'setup', 'time_columns', 'tables'):
             assert recorded[key] == vector[key], (vector['id'], key)
 
 
@@ -302,10 +302,21 @@ def test_each_vector_is_a_case_the_runner_takes() -> None:
             named = vector['time_columns']
             source = case['core']['describe_source']['source']
             assert source['time_columns'] == (named or {})
-            if named is None:
-                assert 'from_source' not in case['input']
+            given = {}
+            if vector['tables']:
+                given['tables'] = vector['tables']
+                assert source['tables'] == [
+                    {'name': n, 'source': t}
+                    for n, t in vector['tables'].items()
+                ]
             else:
-                assert case['input']['from_source'] == {'time_columns': named}
+                assert source['tables'] == []
+            if named is not None:
+                given['time_columns'] = named
+            if given:
+                assert case['input']['from_source'] == given
+            else:
+                assert 'from_source' not in case['input']
             (Path(tmp) / f'{case["id"]}.json').write_text(
                 json.dumps(case), encoding='utf-8'
             )
@@ -336,7 +347,7 @@ def test_the_vectors_are_not_vacuous() -> None:
     assert any(named_column(v) for v in vectors)
     assert any(v['time_columns'] == {R.TABLE: None} for v in vectors)
     # The exit's vectors: every large size, several scenarios.
-    assert {BY_ID[i]['rows'] for i in HONOURED} == {1_000, 1_001, 5_000}
+    assert {BY_ID[i]['rows'] for i in HONOURED} >= {1_000, 1_001, 5_000}
     assert len({BY_ID[i]['scenario'] for i in HONOURED}) >= 6
     # The time column chosen differs with the size where the brief says it
     # must: a preview would choose otherwise than the whole table.
@@ -381,6 +392,50 @@ def test_the_vectors_are_not_vacuous() -> None:
     ]
     assert placeholder['whole']['min'].startswith('1900-01-01')
     assert not placeholder['preview']['min'].startswith('1900')
+
+
+def test_the_fallback_vectors_are_the_preview_s_choice() -> None:
+    r"""The owner's decision of 2026-10-13 (P1B-38 rejected: the core
+    matches the reference's fallback): where the one query over every row
+    fails, the reference decides from its preview, keeps a column the
+    preview would refuse as unconfirmed, and says so when it takes one.
+    The vectors are seen to be that: a view of 200,000 rows whose time
+    columns raise when read whole, the preview's 1,000 rows readable."""
+    fallback = [
+        v for v in RECORDED['vectors'] if v['scenario'].startswith('fallback-')
+    ]
+    assert {v['scenario'] for v in fallback} == {f['id'] for f in R.FALLBACK}
+    for vector in fallback:
+        assert vector['rows'] == R.FALLBACK_ROWS
+        assert vector['tables'] == {R.TABLE: R.TABLE, 'users': 'users'}
+        assert vector['reference']['outcome']['result'] == 'success'
+        facts = vector['duckdb']
+        assert facts['rows'] == R.FALLBACK_ROWS
+        times = [
+            name
+            for name, column in facts['columns'].items()
+            if column['type'].startswith('TIMESTAMP')
+        ]
+        assert times, vector['id']
+        for name in times:
+            assert facts['columns'][name]['whole'] == 'raises', (
+                vector['id'],
+                name,
+            )
+    chosen = {
+        v['scenario']: (
+            v['reference']['schema']['time_column'],
+            v['reference']['warnings'],
+        )
+        for v in fallback
+    }
+    assert chosen == {
+        'fallback-plain': ('happened_at', []),
+        'fallback-unconfirmed': ('happened_at', ['SDMWarning']),
+        'fallback-unconfirmed-empty': ('happened_at', ['SDMWarning']),
+        'fallback-doubted-beside-plain': ('billed_at', []),
+        'fallback-unconfirmed-named': ('happened_at', []),
+    }
 
 
 # --- the gating ----------------------------------------------------------------

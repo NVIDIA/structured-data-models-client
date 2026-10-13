@@ -1,9 +1,24 @@
 {
  "about": "T1.32e part 1's acceptance tests that failed when the independent test author wrote them, before the implementation, at a4ed935f (contract/tests/test_t132e_time_inference.py, test_t132e_key_inference.py, test_t132e_benchmark_seeds.py, test_t132e_sampled_null_keys.py, sdm-testkit's tests/t132e_time_inference.rs and t132e_key_inference.rs). 'python-core' and 'rust-host' are time-inference vector ids, 'key-python-core' and 'key-rust-host' key vector ids, 'sampled-python-core' sampled null key vector ids (measured at 18bd89d6); 'exits' holds the exits' tests ('py:' the Python test ids, 'rs:' the vectors of rust_host_honours_a_named_time_column_on_a_large_table, 'rs-key:' those of rust_host_refuses_no_table_for_a_null_in_its_key) and the benchmark's seeds. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
-  "python-core": [],
-  "rust-host": [],
-  "exits": [],
+  "python-core": [
+   "fallback-doubted-beside-plain.200000",
+   "fallback-plain.200000",
+   "fallback-unconfirmed-empty.200000",
+   "fallback-unconfirmed-named.200000",
+   "fallback-unconfirmed.200000"
+  ],
+  "rust-host": [
+   "fallback-doubted-beside-plain.200000",
+   "fallback-plain.200000",
+   "fallback-unconfirmed-empty.200000",
+   "fallback-unconfirmed-named.200000",
+   "fallback-unconfirmed.200000"
+  ],
+  "exits": [
+   "py:test_a_named_time_column_is_honoured_on_a_large_table[fallback-unconfirmed-named.200000]",
+   "rs:fallback-unconfirmed-named.200000"
+  ],
   "key-python-core": [
    "nulls-1-decimal.200"
   ],
@@ -34,6 +49,11 @@
    "edit-stamp-only.1000",
    "edit-stamp-only.1001",
    "edit-stamp-only.5000",
+   "fallback-doubted-beside-plain.200000",
+   "fallback-plain.200000",
+   "fallback-unconfirmed-empty.200000",
+   "fallback-unconfirmed-named.200000",
+   "fallback-unconfirmed.200000",
    "late-change-named.1000",
    "late-change-named.1001",
    "late-change-named.5000",
@@ -114,6 +134,11 @@
    "edit-stamp-only.1000",
    "edit-stamp-only.1001",
    "edit-stamp-only.5000",
+   "fallback-doubted-beside-plain.200000",
+   "fallback-plain.200000",
+   "fallback-unconfirmed-empty.200000",
+   "fallback-unconfirmed-named.200000",
+   "fallback-unconfirmed.200000",
    "late-change-named.1000",
    "late-change-named.1001",
    "late-change-named.5000",
@@ -204,6 +229,7 @@
    "py:test_a_named_time_column_is_honoured_on_a_large_table[edit-stamp-and-date-named.1000]",
    "py:test_a_named_time_column_is_honoured_on_a_large_table[edit-stamp-and-date-named.1001]",
    "py:test_a_named_time_column_is_honoured_on_a_large_table[edit-stamp-and-date-named.5000]",
+   "py:test_a_named_time_column_is_honoured_on_a_large_table[fallback-unconfirmed-named.200000]",
    "py:test_a_named_time_column_is_honoured_on_a_large_table[late-change-named.1000]",
    "py:test_a_named_time_column_is_honoured_on_a_large_table[late-change-named.1001]",
    "py:test_a_named_time_column_is_honoured_on_a_large_table[late-change-named.5000]",
@@ -286,6 +312,7 @@
    "rs:edit-stamp-and-date-named.1000",
    "rs:edit-stamp-and-date-named.1001",
    "rs:edit-stamp-and-date-named.5000",
+   "rs:fallback-unconfirmed-named.200000",
    "rs:late-change-named.1000",
    "rs:late-change-named.1001",
    "rs:late-change-named.5000",

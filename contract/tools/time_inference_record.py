@@ -321,6 +321,86 @@ SCENARIOS: list[dict[str, Any]] = [
 ]
 
 
+#: The rows of a fallback vector's view, and the row from which reading
+#: its time columns raises: past the first row group, so a preview of
+#: 1,000 rows (one thread, insertion order) never reads it.
+FALLBACK_ROWS = 200_000
+FALLBACK_FROM = 150_000
+#: The message the view raises with.
+FALLBACK_ERROR = 'no whole-table read'
+
+#: The fallback scenarios (owner, 2026-10-13: P1B-38 rejected, the core
+#: matches the reference's fallback). ``events`` is a view whose every
+#: time column raises from row :data:`FALLBACK_FROM` on, so the
+#: reference's one query over every row (``COUNT(*)`` and each
+#: candidate's ``MIN``, ``MAX`` and ``COUNT``) fails, and it decides from
+#: its preview: a column the preview would refuse for its values is kept
+#: as unconfirmed, behind every column it would not, and, when taken,
+#: warned of (``TimeColumnWarning``, ``taken_unchecked``). Each is one
+#: vector of :data:`FALLBACK_ROWS` rows.
+FALLBACK: list[dict[str, Any]] = [
+    # the preview's choice stands, nothing in doubt
+    {
+        'id': 'fallback-plain',
+        'columns': [('happened_at', _MINUTES)],
+    },
+    # one value in the preview: refused by it, kept unconfirmed, warned of
+    {
+        'id': 'fallback-unconfirmed',
+        'columns': [
+            ('happened_at', _late("TIMESTAMP '2023-01-01 00:00:00'", _MINUTES))
+        ],
+    },
+    # no value in the preview: the same
+    {
+        'id': 'fallback-unconfirmed-empty',
+        'columns': [('happened_at', _late('NULL', _MINUTES))],
+    },
+    # a doubted column beside a plain one: the plain one is taken
+    {
+        'id': 'fallback-doubted-beside-plain',
+        'columns': [
+            ('shipped_at', _late("TIMESTAMP '2020-01-01 00:00:00'", _MINUTES)),
+            (
+                'billed_at',
+                "TIMESTAMP '2022-01-01 00:00:00' + to_minutes(i::INTEGER)",
+            ),
+        ],
+    },
+    # named: no inference asked for
+    {
+        'id': 'fallback-unconfirmed-named',
+        'columns': [
+            ('happened_at', _late("TIMESTAMP '2023-01-01 00:00:00'", _MINUTES))
+        ],
+        'time_columns': {TABLE: 'happened_at'},
+    },
+]
+
+
+def fallback_setup(scenario: dict[str, Any]) -> list[str]:
+    r"""The statements that build the view ``events`` of a fallback
+    scenario (after ``shop``'s, whose ``orders`` they drop): its rows in a
+    table of another schema, which the source does not list, each row
+    referring to one of ``shop``'s ``users``, so the schema has a link
+    and the reference says how it chose (it says nothing of a lone
+    table's time column)."""
+    columns = ', '.join(
+        f'(CASE WHEN i >= {FALLBACK_FROM} THEN error({FALLBACK_ERROR!r}) '
+        f'ELSE {expression} END) AS {name}'
+        for name, expression in scenario['columns']
+    )
+    return [
+        'SET threads = 1',
+        'DROP TABLE orders',
+        'CREATE SCHEMA hidden',
+        f'CREATE TABLE hidden.raw AS SELECT i FROM range({FALLBACK_ROWS}) t(i)',
+        f'CREATE VIEW {TABLE} AS SELECT i::BIGINT AS event_id, '
+        f'(i % 8)::BIGINT AS user_id, (i % 97)::DOUBLE AS amount, '
+        f'{columns} FROM hidden.raw',
+    ]
+
+
 def setup(scenario: dict[str, Any], rows: int) -> list[str]:
     r"""The statements that build ``events`` of ``rows`` rows (after
     ``shop``'s, whose tables they drop)."""
@@ -337,8 +417,10 @@ def setup(scenario: dict[str, Any], rows: int) -> list[str]:
 
 
 def vectors() -> list[dict[str, Any]]:
-    r"""Every scenario at every size: its id (``<scenario>.<rows>``), rows,
-    setup and ``time_columns`` (null when not passed)."""
+    r"""Every scenario at every size, then every fallback scenario at
+    :data:`FALLBACK_ROWS`: its id (``<scenario>.<rows>``), rows,
+    setup, ``time_columns`` (null when not passed) and ``tables`` (the
+    tables named, null when every table is taken)."""
     out = []
     for scenario in SCENARIOS:
         for rows in SIZES:
@@ -349,8 +431,21 @@ def vectors() -> list[dict[str, Any]]:
                     'rows': rows,
                     'setup': setup(scenario, rows),
                     'time_columns': scenario.get('time_columns'),
+                    'tables': None,
                 }
             )
+    for scenario in FALLBACK:
+        out.append(
+            {
+                'id': f'{scenario["id"]}.{FALLBACK_ROWS}',
+                'scenario': scenario['id'],
+                'rows': FALLBACK_ROWS,
+                'setup': fallback_setup(scenario),
+                'time_columns': scenario.get('time_columns'),
+                # A view is listed only when named.
+                'tables': {TABLE: TABLE, 'users': 'users'},
+            }
+        )
     return out
 
 
@@ -384,7 +479,10 @@ def case_for(
             'describe_source': {
                 'provider': {'provider': 'sql', 'dialect': 'duckdb'},
                 'source': {
-                    'tables': [],
+                    'tables': [
+                        {'name': name, 'source': source}
+                        for name, source in (vector.get('tables') or {}).items()
+                    ],
                     'primary_keys': {},
                     'time_columns': dict(named or {}),
                 },
@@ -395,8 +493,13 @@ def case_for(
         'why': f'T1.32e vector {vector["id"]}',
         'source': 'contract/tools/time_inference_record.py',
     }
+    given: dict[str, Any] = {}
+    if vector.get('tables'):
+        given['tables'] = dict(vector['tables'])
     if named is not None:
-        case['input']['from_source'] = {'time_columns': dict(named)}
+        given['time_columns'] = dict(named)
+    if given:
+        case['input']['from_source'] = given
     return case
 
 
@@ -554,10 +657,16 @@ def duckdb_facts(vector: dict[str, Any]) -> dict[str, Any]:
                     f'LIMIT {PREVIEW_ROWS})',
                 ),
             ):
-                held, distinct, low = connection.execute(
-                    f'SELECT count({quoted}), count(DISTINCT {quoted}), '
-                    f'min({quoted})::VARCHAR FROM {source}'
-                ).fetchone()
+                try:
+                    held, distinct, low = connection.execute(
+                        f'SELECT count({quoted}), count(DISTINCT {quoted}), '
+                        f'min({quoted})::VARCHAR FROM {source}'
+                    ).fetchone()
+                except duckdb.Error:
+                    # A fallback vector's time column: reading it whole
+                    # raises, as the vector means it to.
+                    facts[scope] = 'raises'
+                    continue
                 facts[scope] = {'held': held, 'distinct': distinct, 'min': low}
             columns[name] = {'type': kind, **facts}
         return {'rows': rows[0] if rows else 0, 'columns': columns}
