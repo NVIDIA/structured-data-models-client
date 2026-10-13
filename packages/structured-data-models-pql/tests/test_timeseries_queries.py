@@ -103,6 +103,9 @@ ROW_ENTITY_FORECAST = (
     'PREDICT readings.value FORECAST 72 TIMEFRAMES FOR EACH readings.reading_id'
 )
 ANOMALY_QUERY = 'PREDICT readings.* DETECT ANOMALY FOR EACH sensors.sensor_id'
+ROW_ENTITY_ANOMALY = (
+    'PREDICT readings.* DETECT ANOMALY FOR EACH readings.reading_id'
+)
 
 
 def parse(text: str):
@@ -146,6 +149,38 @@ def test_forecast_takes_a_bare_column():
     assert response.errors == []
     assert resolved is not None
     assert resolved.num_forecasts == 72
+
+
+def test_an_anomaly_query_validates_through_the_public_entry_point():
+    """`validate` is what a caller reaches, so it is what is asserted.
+
+    The wildcard rule permits `table.*` only inside COUNT, and an anomaly
+    target is a bare one, so every anomaly query was refused there while the
+    checks below passed on their own.
+    """
+    resolved, response = validate(ROW_ENTITY_ANOMALY, _series_schema(), ANOMALY)
+    assert response.errors == []
+    assert resolved is not None
+    assert resolved.problem_type == ProblemType.ANOMALY
+
+
+def test_a_wildcard_is_still_refused_outside_an_anomaly_target():
+    """The exception is the anomaly target, not wildcards generally."""
+    _, response = validate(
+        'PREDICT readings.* FOR EACH readings.reading_id',
+        _series_schema(),
+        RELATIONAL,
+    )
+    assert [error.code for error in response.errors] == [
+        codes.SCHEMA_WILDCARD_POSITION
+    ]
+
+
+@pytest.mark.parametrize('text', [ROW_ENTITY_ANOMALY, ROW_ENTITY_FORECAST])
+def test_a_query_survives_being_written_back_out(text: str):
+    """Materializers persist `to_string()`, so it has to be valid PQL."""
+    written = parse(text).to_string()
+    assert parse(written).to_string() == written
 
 
 def test_a_series_entity_does_not_resolve_a_bare_column_target():
