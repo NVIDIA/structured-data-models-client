@@ -49,7 +49,10 @@ checkpoint's files, read from git at ``--checkpoint``:
   a removal or demotion, each baselined runner's exact old outcome and
   ``removed`` or ``diagnostic``); ``bases``: a base changed or removed passes
   only under an approved entry naming a case built on it, and one added
-  passes;
+  passes; in both, only an entry this change adds or changes against the
+  checkpoint's register authorizes (:func:`in_this_change`, T1.29): an entry
+  approved by an earlier landing authorized that landing's change, not
+  every later one to the same case or base;
 - ``register``: ``register.py validate``, with the checkpoint's register for
   never-reused IDs; entries added or changed are listed, ``approved_by:
   owner`` ones first, for the owner's check-ins;
@@ -540,6 +543,37 @@ def approved(register: Any) -> list[dict[str, Any]]:
         for entry in register['entries']
         if isinstance(entry, dict) and entry.get('status') == 'approved'
     ]
+
+
+def _this_change(
+    entries: list[dict[str, Any]], checkpoint: Tree
+) -> list[dict[str, Any]]:
+    r""":func:`in_this_change` against the checkpoint's register; none when
+    that register cannot be read, which the register rule fails."""
+    try:
+        theirs = _yaml(checkpoint.read(REGISTER), REGISTER)
+    except Unreadable:
+        return []
+    return in_this_change(entries, theirs)
+
+
+def in_this_change(
+    entries: list[dict[str, Any]], checkpoint_register: Any
+) -> list[dict[str, Any]]:
+    r"""The approved ``entries`` this change adds or changes: those the
+    checkpoint's register does not hold as they are now, by ID (an entry
+    approved here that was proposed there is changed). A checkpoint with
+    no register (the bootstrap) holds none, so every entry counts."""
+    before: dict[Any, Any] = {}
+    if isinstance(checkpoint_register, dict) and isinstance(
+        checkpoint_register.get('entries'), list
+    ):
+        before = {
+            entry.get('id'): entry
+            for entry in checkpoint_register['entries']
+            if isinstance(entry, dict)
+        }
+    return [entry for entry in entries if before.get(entry.get('id')) != entry]
 
 
 def authorized(
@@ -1210,8 +1244,14 @@ def check(
                 json.dumps(outcomes(effective(held, entries)), sort_keys=True),
                 encoding='utf-8',
             )
+        # A case file or base changes only under an entry of this change
+        # (T1.29): an approved entry authorizes the landing that adds it.
         gone, removed = check_cases(
-            report, checkpoint, candidate, entries, held
+            report,
+            checkpoint,
+            candidate,
+            _this_change(entries, checkpoint),
+            held,
         )
         check_protected(
             report, checkpoint, candidate, changed, trailer, bootstrap
