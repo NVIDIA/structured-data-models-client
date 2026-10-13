@@ -346,27 +346,56 @@ def test_a_hand_edited_list_fails(repo: Path, how: str) -> None:
     assert rules(found) == {'rule 4'}, found
 
 
-def test_a_hand_edited_cell_list_fails(repo: Path) -> None:
-    r"""No acceptance case names a cell yet: a cell's list holding a case
-    is not the generated one, even when that case names the cell."""
-    landed = git(repo, 'rev-parse', 'HEAD')
-    named = sorted(
+#: A cell both acceptance and diagnostic cases name (from T1.29, which
+#: admitted the baseline cases).
+KEYED_CELL = 'int64/primary-key'
+
+
+def _cell_cases(repo: Path, status: str) -> list[str]:
+    r"""The cases of ``status`` naming :data:`KEYED_CELL`, sorted by ID:
+    for ``acceptance``, the list ``--write`` would write for the cell."""
+    return sorted(
         each['id']
         for each in corpus(repo)
-        if 'int64/primary-key' in each['cells']
+        if each['status'] == status and KEYED_CELL in each['cells']
     )
-    assert named and all(
-        each['status'] == 'diagnostic'
-        for each in corpus(repo)
-        if each['id'] in named
-    )
+
+
+def test_the_generated_cell_list_passes(repo: Path) -> None:
+    r"""The control for the cell lists (T1.29 tests): a committed list that
+    is exactly the generated one, the acceptance cases naming the cell,
+    passes, so the seeds below fail on their edit alone."""
+    landed = git(repo, 'rev-parse', 'HEAD')
+    listed = _cell_cases(repo, 'acceptance')
+    assert len(listed) > 1, 'no two acceptance cases name the cell'
     commit(
         repo,
-        edit=manifest(
-            PYTHON, update('cells', 'int64/primary-key', cases=named[:1])
-        ),
+        edit=manifest(PYTHON, update('cells', KEYED_CELL, cases=listed)),
     )
-    found = failing(check(repo, landed), 'rule 4', 'int64/primary-key')
+    passing(check(repo, landed))
+
+
+@pytest.mark.parametrize('how', ['a diagnostic', 'a subset', 'out of order'])
+def test_a_hand_edited_cell_list_fails(repo: Path, how: str) -> None:
+    r"""A cell's list that is not the generated one fails rule 4, even when
+    every case it holds names the cell: a diagnostic case naming it (the
+    seed T1.15 wrote, when no acceptance case named a cell), one acceptance
+    case of the several naming it, or the generated cases out of order."""
+    landed = git(repo, 'rev-parse', 'HEAD')
+    listed = _cell_cases(repo, 'acceptance')
+    diagnostic = _cell_cases(repo, 'diagnostic')
+    assert len(listed) > 1, 'no two acceptance cases name the cell'
+    assert diagnostic, 'no diagnostic case names the cell'
+    edited = {
+        'a diagnostic': diagnostic[:1],
+        'a subset': listed[:1],
+        'out of order': listed[::-1],
+    }[how]
+    commit(
+        repo,
+        edit=manifest(PYTHON, update('cells', KEYED_CELL, cases=edited)),
+    )
+    found = failing(check(repo, landed), 'rule 4', KEYED_CELL)
     assert rules(found) == {'rule 4'}, found
 
 
