@@ -17,7 +17,11 @@ a sentinel), on the core route:
   reference's INVALID_REQUEST and INTERNAL_ERROR);
 - range: a ``UBIGINT`` key past int64, planted in the data, the request
   refused as the reference refuses it (``materialize/int64_range``);
-- lookup: a text entity no row of a text key holds.
+- lookup: a text entity no row of a text key holds;
+- round 2, each naming its reason: a text entity and a fraction for a
+  DECIMAL(18, 0) key (not_a_number, inexact), an integer a FLOAT key cannot
+  hold exactly and a text entity for a DOUBLE key (inexact,
+  not_a_number), and bytes and a timestamp for a BIGINT key (type).
 
 The sentinels are the canary's data sentinel, carried by the entities, and
 a number of our own, ``NUMBER``, carried by entities and planted as key
@@ -40,6 +44,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -113,9 +118,23 @@ def _materialize(setup: list[str], indices: list[Any]) -> Callable[[], Any]:
 
 UINT8 = _alter('UTINYINT', 'user_id::UTINYINT')
 TEXT = _alter('VARCHAR', 'user_id::VARCHAR')
+DECIMAL = _alter('DECIMAL(18, 0)', 'user_id::DECIMAL(18, 0)')
+FLOAT = _alter('FLOAT', 'user_id::FLOAT')
+DOUBLE = _alter('DOUBLE', 'user_id::DOUBLE')
 UBIGINT_PAST_INT64 = _alter(
     'UBIGINT', f'user_id::UBIGINT + {PAST_INT64}::UBIGINT'
 )
+
+#: The reason each round-2 scenario's refusal names (the core's
+#: ``details['reason']``), so the canary covers each reason's path.
+REASONS = {
+    'decimal: a text entity a decimal key cannot read': 'not_a_number',
+    'decimal: a fraction a whole decimal key cannot hold': 'inexact',
+    'float: an integer a float32 key cannot hold exactly': 'inexact',
+    'float: a text entity a double key cannot read': 'not_a_number',
+    'type: bytes for an integer key': 'type',
+    'type: a timestamp for an integer key': 'type',
+}
 
 SCENARIOS: dict[str, Callable[[], Any]] = {
     'cast: a text entity an integer key cannot hold': _materialize([], [DATA]),
@@ -130,6 +149,23 @@ SCENARIOS: dict[str, Callable[[], Any]] = {
         UBIGINT_PAST_INT64, [PAST_INT64 + 1]
     ),
     'lookup: a text entity no row holds': _materialize(TEXT, [DATA]),
+    # Round 2: the decimal, float and type reasons (each named below).
+    'decimal: a text entity a decimal key cannot read': _materialize(
+        DECIMAL, [DATA]
+    ),
+    'decimal: a fraction a whole decimal key cannot hold': _materialize(
+        DECIMAL, [Decimal(f'{NUMBER}.5')]
+    ),
+    'float: an integer a float32 key cannot hold exactly': _materialize(
+        FLOAT, [int(NUMBER)]
+    ),
+    'float: a text entity a double key cannot read': _materialize(
+        DOUBLE, [DATA]
+    ),
+    'type: bytes for an integer key': _materialize([], [DATA.encode()]),
+    'type: a timestamp for an integer key': _materialize(
+        [], [pd.Timestamp(int(NUMBER), unit='us')]
+    ),
 }
 
 
@@ -156,6 +192,12 @@ def test_no_sentinel_of_the_keys_family_reaches_anything_written(
         )
         assert error.__cause__ is None and error.__suppress_context__, name
         assert error.code in {'INVALID_REQUEST', 'INTERNAL_ERROR'}, error.code
+        if name in REASONS:
+            assert error.code == 'INVALID_REQUEST', error.code
+            assert (error.details or {}).get('reason') == REASONS[name], (
+                name,
+                error.details,
+            )
 
     G.held('exits', f'canary:{name}', check)
 
