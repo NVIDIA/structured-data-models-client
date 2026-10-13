@@ -2666,14 +2666,17 @@ entries:
   - key.hugeint
   - key.decimal-18-0
   - key.decimal-38-10
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     T1.32a part 1, an input change of the diagnostic cases with no outcome
     of its own, for the reviewers (H19), never self-approved; the ratchet's
     cases rule holds the changed files until it is approved. The outcomes
-    the core's cast changes are P1B-32 to P1B-36.
+    the core's cast changes are P1B-32 to P1B-37. Approved by both
+    reviewers of T1.32a part 1 under H19 (Codex's round 2,
+    APPROVE-P1B-31, and the subagent's), for the seven case-input
+    corrections only, not the product changes.
 
 - id: P1B-32
   title: An entity the key's type cannot hold is the caller's error, INVALID_REQUEST, where the reference fails with INTERNAL_ERROR
@@ -2753,7 +2756,8 @@ entries:
     which could make two keys one (sdm_request::payload::key_dtype; T1.32a
     fix round 1), and the entities, of any decimal width, are cast
     under the core's rule table: a request where they cast and the table
-    holds them, otherwise INVALID_REQUEST at materialize (P1B-32's fields).
+    holds them, otherwise INVALID_REQUEST at materialize (P1B-32's fields;
+    those refusals in place of the reference's failures are P1B-37's).
     The default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize with indices over a DuckDB source under a
@@ -2761,23 +2765,20 @@ entries:
     or text DuckDB hands over as large_string (arrow_large_buffer_size).
   cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint]
   refs:
-  - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-0-wide.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10-wide.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-37.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> success'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
   notes: >-
-    A new success where the reference fails, which a reviewer may approve
-    (P1B-1's process); never self-approved. key.varchar-large-buffers is
+    This entry changes a refusal into success and requires individual owner
+    approval under E66(b) and E73(b); never self-approved. Its refusal-to-refusal
+    vectors are P1B-37's. key.varchar-large-buffers is
     P1B-6's case. Decimal features keep wire_dtype's refusal (T1.32b): no
     question sums a key, so the declared precision a decimal sum is held to
     does not arise for one. A decimal key with a scale, written as text,
@@ -2853,8 +2854,8 @@ entries:
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
   notes: >-
-    A new success where the reference refuses, which a reviewer may
-    approve; never self-approved. The core sees only the column the host
+    This entry changes a refusal into success and requires individual owner
+    approval under E66(b) and E73(b); never self-approved. The core sees only the column the host
     hands over, so it cannot tell a mixed list from the same values given
     as text.
 
@@ -2890,6 +2891,37 @@ entries:
     Found by T1.32a's review of part 1 (Codex P1); the test author's
     midpoint vectors derive each expected float exactly. It changes an
     accepted answer's value, so it is for the owner; never self-approved.
+
+- id: P1B-37
+  title: For a decimal or large-text key, an entity the reference fails on is refused as the caller's error, INVALID_REQUEST
+  kind: change
+  old_behavior: >-
+    The reference's engine fails with INTERNAL_ERROR at materialize for any
+    entity of a decimal key or of a text key DuckDB hands over as
+    large_string, including those no key holds or whose cast fails.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core samples such a key (P1B-33) and refuses each such entity as the
+    caller's error, INVALID_REQUEST at materialize: an entity the key's
+    type cannot hold, naming its position and reason (P1B-32's fields),
+    or one the table does not hold. The default route is unchanged.
+  affected_inputs: >-
+    PredictiveQuery.materialize with indices over a DuckDB source under a
+    forced core route whose entity key is a decimal or large_string, an
+    entity that does not cast or that the table does not hold.
+  cases: [T1.32a]
+  refs:
+  - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
+  notes: >-
+    Split from P1B-33 at T1.32a's fix round 2 (Codex's round 2): a refusal
+    in place of a failure, both refusing (E66(b)'s class), for the
+    reviewers, never self-approved.
 
 # --- The sampler's kept behaviors (T1.27) ------------------------------------
 
