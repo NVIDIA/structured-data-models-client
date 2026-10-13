@@ -216,3 +216,53 @@ pub(crate) fn instants(batches: &[RecordBatch], index: usize) -> Vec<Option<i128
     }
     out
 }
+
+/// Value `row` of `array` as the contract's scalar, for a value the source
+/// hands over to show (a repeated key): a boolean, an integer, a float, a
+/// decimal, text, a date, a timestamp or a time of day; `None` when null or
+/// of another type.
+pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
+    use arrow_array::types::{Date32Type as D, Decimal128Type as Dec};
+    if row >= array.len() || array.is_null(row) {
+        return None;
+    }
+    Some(match array.data_type() {
+        DataType::Boolean => Scalar::Bool(array.as_boolean().value(row)),
+        DataType::Int8 => Scalar::Int8(array.as_primitive::<Int8Type>().value(row)),
+        DataType::Int16 => Scalar::Int16(array.as_primitive::<Int16Type>().value(row)),
+        DataType::Int32 => Scalar::Int32(array.as_primitive::<Int32Type>().value(row)),
+        DataType::Int64 => Scalar::Int64(array.as_primitive::<Int64Type>().value(row)),
+        DataType::UInt8 => Scalar::UInt8(array.as_primitive::<UInt8Type>().value(row)),
+        DataType::UInt16 => Scalar::UInt16(array.as_primitive::<UInt16Type>().value(row)),
+        DataType::UInt32 => Scalar::UInt32(array.as_primitive::<UInt32Type>().value(row)),
+        DataType::UInt64 => Scalar::UInt64(array.as_primitive::<UInt64Type>().value(row)),
+        DataType::Float32 => Scalar::Float32(array.as_primitive::<Float32Type>().value(row)),
+        DataType::Float64 => Scalar::Float64(array.as_primitive::<Float64Type>().value(row)),
+        DataType::Decimal128(precision, scale) => Scalar::Decimal128 {
+            precision: *precision,
+            scale: *scale,
+            value: array.as_primitive::<Dec>().value(row),
+        },
+        DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
+        DataType::Date32 => Scalar::Date32(array.as_primitive::<D>().value(row)),
+        DataType::Timestamp(TimeUnit::Microsecond, zone) => Scalar::Timestamp {
+            unit: Unit::Us,
+            zone: zone.as_ref().map(ToString::to_string),
+            value: array.as_primitive::<TimestampMicrosecondType>().value(row),
+        },
+        DataType::Timestamp(TimeUnit::Nanosecond, zone) => Scalar::Timestamp {
+            unit: Unit::Ns,
+            zone: zone.as_ref().map(ToString::to_string),
+            value: array.as_primitive::<TimestampNanosecondType>().value(row),
+        },
+        DataType::Time64(TimeUnit::Microsecond) => Scalar::Time64 {
+            unit: Unit::Us,
+            value: array.as_primitive::<Time64MicrosecondType>().value(row),
+        },
+        DataType::Time64(TimeUnit::Nanosecond) => Scalar::Time64 {
+            unit: Unit::Ns,
+            value: array.as_primitive::<Time64NanosecondType>().value(row),
+        },
+        _ => return None,
+    })
+}

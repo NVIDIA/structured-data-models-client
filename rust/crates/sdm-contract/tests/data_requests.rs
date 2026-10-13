@@ -222,6 +222,24 @@ fn the_reference_s_union_reads_name_what_they_read() {
         },
         "columns",
     );
+    let repeated = DataRequest::RepeatedKey {
+        table: "orders".into(),
+        key: vec!["order_id".into()],
+    };
+    repeated.check().unwrap();
+    assert_eq!(repeated.name(), "repeated_key");
+    assert_eq!(
+        repeated.optional().map(OptionalRequest::name),
+        Some("repeated_key")
+    );
+    assert_eq!(repeated.expected(), ExpectedSchema::Discover {});
+    refused(
+        &DataRequest::RepeatedKey {
+            table: "orders".into(),
+            key: vec![],
+        },
+        "key",
+    );
 }
 
 #[test]

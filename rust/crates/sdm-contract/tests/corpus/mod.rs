@@ -315,6 +315,16 @@ pub fn messages() -> Vec<ControlMessage> {
                         expect: ExpectedSchema::Discover {},
                     },
                 },
+                FetchStep {
+                    id: ReplyId(9),
+                    request: DataRequest::RepeatedKey {
+                        table: "orders".into(),
+                        key: vec!["order_id".into()],
+                    },
+                    plan: FetchPlan::Host {
+                        expect: ExpectedSchema::Discover {},
+                    },
+                },
             ],
         }),
         ControlMessage::FetchReply(FetchReply {

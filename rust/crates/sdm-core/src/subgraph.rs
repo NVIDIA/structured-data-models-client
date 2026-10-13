@@ -477,6 +477,7 @@ impl Walk<'_> {
             let table = table_named(self.graph, &visit.name)?;
             let mut frame = concat(&visit.frames)?;
             if let Some(key) = &table.primary_key {
+                null_key_sortable(&frame, &table.name, key)?;
                 frame = first_of_each_key(frame, key)?;
             }
             let entity = table.name == self.entity.name;
@@ -592,6 +593,37 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
     let indices = UInt32Array::from_iter_values(rows.iter().map(|r| *r as u32));
     arrow_select::take::take(array.as_ref(), &indices, None)
         .map_err(|_| internal("rows could not be taken"))
+}
+
+/// Refuses a table whose rows reached hold a null key of text or of a
+/// decimal type, `INVALID_REQUEST` naming the table and column (rule
+/// `null_key`): the reference sorts every keyed table's keys reached
+/// (`np.unique` in `_sample_subgraph`), which fails on a null among text
+/// (an unnamed error its client reports as `INVALID_REQUEST`) or among
+/// decimals (`INTERNAL_ERROR`, register P1B-40), so no request it would
+/// send exists to build. A null integer or float key sorts, and is read.
+fn null_key_sortable(frame: &RecordBatch, table: &str, key: &str) -> Result<(), CoreError> {
+    let column = named(frame, key)?;
+    let unsortable = matches!(
+        column.data_type(),
+        arrow_schema::DataType::Utf8
+            | arrow_schema::DataType::LargeUtf8
+            | arrow_schema::DataType::Utf8View
+            | arrow_schema::DataType::Decimal128(_, _)
+            | arrow_schema::DataType::Decimal256(_, _)
+    );
+    if unsortable && column.null_count() > 0 {
+        return Err(CoreError::new(
+            sdm_contract::ErrorKind::InvalidRequest,
+            sdm_contract::ErrorCode::InvalidRequest,
+            "a table's rows reached hold no value for its text or decimal key, which cannot be ordered",
+        )
+        .with_field("operation", sdm_contract::Detail::text("materialize"))
+        .with_field("rule", sdm_contract::Detail::text("null_key"))
+        .with_field("table", sdm_contract::Detail::text(table))
+        .with_field("column", sdm_contract::Detail::text(key)));
+    }
+    Ok(())
 }
 
 /// `frame`, its rows repeating a key past 1.05 times its distinct keys

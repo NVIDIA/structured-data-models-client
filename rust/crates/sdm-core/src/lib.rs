@@ -34,10 +34,11 @@ pub use sdm_engine::time::{UnknownZone, Zones};
 
 /// Every warning the core gives, with the variants of each (none: one
 /// sentence), for a host to word each (decision E59(d)): the schema's,
-/// then the sampler's, then the PQL adapter's, then predict's (T1.28b).
+/// the key rules', then the sampler's, then the PQL adapter's, then predict's (T1.28b).
 pub fn warning_codes() -> Vec<(&'static str, &'static [&'static str])> {
     sdm_schema::assemble::WARNINGS
         .iter()
+        .chain(sdm_schema::keys::WARNINGS)
         .chain(materialize::WARNINGS)
         .chain(pql::WARNINGS)
         .chain(predict::WARNINGS)

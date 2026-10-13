@@ -234,6 +234,37 @@ SAID: dict[str, dict[str | None, str]] = {
         },
     },
     'COLUMNS_LEFT_OUT': {None: '{column} ({dtype})'},
+    # The key rules (T1.32e): the reference's `_warn_a_key_has_no_value`,
+    # `_warn_a_key_repeats` and `_warn_a_key_was_declined`.
+    'KEY_NO_VALUE': {
+        None: (
+            '{table}.{column} identifies a row, but {missing:,} row(s) have '
+            'no value for it. Those rows cannot be scored and the model will '
+            'not see them; fill or drop them, or name a different primary key.'
+        )
+    },
+    'KEY_REPEATS': {
+        None: (
+            '{table}.{column} identifies a row {repeats:,} time(s) it has '
+            'already been used, e.g. {example!r}. Those rows are '
+            'indistinguishable to the model. Name a different primary key if '
+            'this column is a foreign key rather than an identifier.'
+        )
+    },
+    'KEY_DECLINED': {
+        None: (
+            '{table}.{column} is named like a key and another table names it '
+            'too, but {repeats:,} of {rows:,} rows repeat a value already '
+            'used, e.g. {example!r}, so it does not identify a row and '
+            '{table!r} gets no primary key. Nothing can link to a table '
+            'without one: every relationship pointing at {table!r} is '
+            'dropped, so nothing is gathered through it, and a question about '
+            'another table reaches it only where {table!r} names that table '
+            'itself. Keep one row per {column!r} in the source, or name a '
+            'column that does identify a row with '
+            'primary_keys={{{table!r}: ...}}.'
+        )
+    },
     'TIME_VALUES_UNREAD': {
         None: (
             'Could not parse {unread:,} of {rows:,} value(s) of time column '

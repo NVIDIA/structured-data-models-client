@@ -217,6 +217,30 @@ fn the_column_ranges_are_the_reference_s_whole_table_query() {
 }
 
 #[test]
+fn a_repeated_key_is_read_as_the_reference_reads_one() {
+    // T1.32e: the reference's `_repeated_key_sql` at b413e9ad, one value a
+    // key several rows hold, to show it.
+    let text = rendered(&DataRequest::RepeatedKey {
+        table: "payments".into(),
+        key: vec!["payment_id".into()],
+    });
+    assert_eq!(
+        text,
+        "SELECT \"payment_id\"\nFROM \"payments\"\nWHERE \"payment_id\" IS NOT NULL\nGROUP BY \"payment_id\"\nHAVING COUNT(*) > 1\nLIMIT 1"
+    );
+    let err = Data::new()
+        .plan(
+            &DataRequest::RepeatedKey {
+                table: "payments".into(),
+                key: vec![],
+            },
+            &duckdb(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+}
+
+#[test]
 fn a_part_read_per_table_or_whole_is_refused_otherwise() {
     for part in [
         DescribePart::Columns,

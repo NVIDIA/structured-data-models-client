@@ -34,20 +34,16 @@ whether the core answers as well as the old route.
     ``--write``; this script never downloads.
   - ``rel-hm``: RelBench's H&M (``DIR/rel-hm/``: ``article.parquet``,
     ``customer.parquet``, ``transactions.parquet``), a local sample or the
-    full tables, described by inference (keys, time column and links by
-    name) but for ``transactions``' key: it has none, and the core refuses
-    to read neighbors from a keyless table (``keyless_neighbors``, a Phase 2
-    rule, E64(a)), so each row is numbered ``transaction_id``, the same
-    table on both routes.
+    full tables, described by inference alone (keys, time column and links
+    by name; ``transactions`` has no key, and is read by foreign key as the
+    reference reads a keyless table).
 
 - **Tasks** (:data:`TASKS`), fixed before any data is read, each with its
   labels computed in DuckDB from the rows past the anchor time as the
   core's labels read them (a window's rows after its start and not after
   its end), or a static target's own value: on AdventureWorks the
   quickstart's regression (``SUM(OrderQty)`` over 30 days per product), a
-  binary (will a product sell within 90 days: a customer's question
-  walks to the order headers, keyless in the quickstart's schema, which
-  the core refuses, ``keyless_neighbors``) and a multiclass (a
+  binary (will a product sell within 90 days) and a multiclass (a
   product's ``Color``); on H&M a regression (``SUM(price)`` over 30 days
   per customer), a binary (will a customer buy within 30 days) and a
   multiclass (an article's ``index_group_name``).
@@ -376,23 +372,11 @@ def load_adventureworks(directory: Path, database: Any) -> None:
 
 def load_hm(directory: Path, database: Any) -> None:
     r"""RelBench H&M's three tables into ``database``, as the files hold
-    them, but for ``transactions``' key: the table has none, and the core
-    refuses to read neighbors from a keyless table (``keyless_neighbors``,
-    E64(a), Phase 2), so each row is numbered ``transaction_id`` in the
-    order of all its columns, the same on both routes."""
+    them."""
     for name in HM_FILES:
         path = directory / f'{name}.parquet'
         if not path.is_file():
             raise MissingData(f'rel-hm: {name}.parquet is missing')
-        if name == 'transactions':
-            database.execute(
-                'CREATE TABLE transactions AS SELECT ROW_NUMBER() OVER '
-                '(ORDER BY t_dat, customer_id, article_id, price, '
-                'sales_channel_id)::BIGINT AS transaction_id, * FROM '
-                'read_parquet(?)',
-                [str(path)],
-            )
-            continue
         database.execute(
             f'CREATE TABLE {name} AS SELECT * FROM read_parquet(?)',
             [str(path)],
@@ -414,8 +398,7 @@ def dataset(name: str, data_dir: Path, scratch: Path) -> Any:
             from_source, edits = given['from_source'], given['edits']
         else:
             load_hm(data_dir / 'rel-hm', database)
-            from_source = {'primary_keys': {'transactions': 'transaction_id'}}
-            edits = []
+            from_source, edits = {}, []
     finally:
         database.close()
     return base.Dataset(

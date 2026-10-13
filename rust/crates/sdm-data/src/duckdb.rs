@@ -31,7 +31,8 @@
 //! names (decision H9 gates on the results, not the text).
 //!
 //! From T1.32e it renders `column_ranges`, the reference's one query over
-//! every row of a table for its time column's choice, in its text.
+//! every row of a table for its time column's choice, and `repeated_key`,
+//! its read of one value a key repeats, each in its text.
 //!
 //! From T1.21c it reads its catalog's answers too ([`read`], decision E54):
 //! the columns of `PRAGMA table_info`, `duckdb_tables()`,
@@ -91,6 +92,7 @@ const RENDERED: &[OptionalRequest] = &[
     OptionalRequest::KeyCounts,
     OptionalRequest::TimeBounds,
     OptionalRequest::ColumnRanges,
+    OptionalRequest::RepeatedKey,
     OptionalRequest::SampleEntities,
     OptionalRequest::Neighbors,
     OptionalRequest::Lookup,
@@ -181,6 +183,16 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 ));
             }
             column_ranges(table, columns)
+        }
+        DataRequest::RepeatedKey { table, key } => {
+            if key.is_empty() {
+                return Err(sdm_contract::data::refused(
+                    request,
+                    "key",
+                    "a repeated key names no columns",
+                ));
+            }
+            repeated_key(table, key)
         }
         DataRequest::SampleEntities {
             table,
@@ -804,6 +816,21 @@ fn column_ranges(table: &str, columns: &[String]) -> String {
         selects.push(format!("MIN({quoted}), MAX({quoted}), COUNT({quoted})"));
     }
     format!("SELECT {}\nFROM {}", selects.join(", "), identifier(table))
+}
+
+/// The reference's read of one value of a key that several rows hold, to
+/// show it (`Table._repeated_key_sql`), in its text.
+fn repeated_key(table: &str, key: &[String]) -> String {
+    let quoted = identifiers(key);
+    let present = key
+        .iter()
+        .map(|c| format!("{} IS NOT NULL", identifier(c)))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    format!(
+        "SELECT {quoted}\nFROM {}\nWHERE {present}\nGROUP BY {quoted}\nHAVING COUNT(*) > 1\nLIMIT 1",
+        identifier(table)
+    )
 }
 
 fn identifier(name: &str) -> String {

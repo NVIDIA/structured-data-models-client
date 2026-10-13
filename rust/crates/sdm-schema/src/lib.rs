@@ -47,6 +47,7 @@ pub mod assemble;
 pub mod catalog;
 pub mod edit;
 pub mod infer;
+pub mod keys;
 mod names;
 mod values;
 

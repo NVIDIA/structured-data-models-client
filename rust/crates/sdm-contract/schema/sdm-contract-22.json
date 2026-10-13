@@ -3182,6 +3182,7 @@
         "key_counts",
         "time_bounds",
         "column_ranges",
+        "repeated_key",
         "sample_entities",
         "neighbors",
         "lookup"
@@ -3677,6 +3678,31 @@
             "request",
             "table",
             "columns"
+          ]
+        },
+        {
+          "description": "At most one row: a value of `key` that more than one row of `table`\nholds, among the rows holding every part of it, as the reference\nreads one to show a repeated key (`_repeated_key_sql`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "repeated_key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key"
           ]
         },
         {

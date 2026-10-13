@@ -154,9 +154,12 @@ pub fn seeds(keys: ArrayRef, times: Vec<(&str, Vec<i64>)>) -> Result<RecordBatch
 /// with no key, every other non-list column by name. The reference writes
 /// no null order, so each term's is the source's own, `nulls`, which the
 /// provider declares (`ProviderCapabilities::null_order`), never a
-/// dialect's default written here. Without a key the order is not sampled
-/// yet.
-pub fn tie_break(table: &Table, nulls: NullOrder) -> Result<TieBreak, CoreError> {
+/// dialect's default written here. Without a key, every column of the
+/// table but the time column and lists, in name order, each ascending
+/// (`_neighbor_order_by`'s keyless order, from T1.29: a fact table left
+/// without a key, its key's nulls declining it, is read so), and the
+/// foreign key alone where no column is left.
+pub fn tie_break(table: &Table, fkey: &str, nulls: NullOrder) -> Result<TieBreak, CoreError> {
     let nulls_last = match nulls {
         NullOrder::First => false,
         NullOrder::Last => true,
@@ -171,7 +174,31 @@ pub fn tie_break(table: &Table, nulls: NullOrder) -> Result<TieBreak, CoreError>
         });
     }
     let Some(key) = &table.primary_key else {
-        return Err(crate::not_yet("keyless_neighbors"));
+        let mut names: Vec<&str> = table
+            .columns
+            .iter()
+            .filter(|c| {
+                Some(&c.name) != table.time_column.as_ref()
+                    && !matches!(
+                        c.dtype,
+                        sdm_contract::ops::Dtype::Floatlist
+                            | sdm_contract::ops::Dtype::Intlist
+                            | sdm_contract::ops::Dtype::Stringlist
+                    )
+            })
+            .map(|c| c.name.as_str())
+            .collect();
+        names.sort_unstable();
+        if names.is_empty() {
+            names.push(fkey);
+        }
+        terms.extend(names.into_iter().map(|name| TieTerm {
+            column: name.to_owned(),
+            as_timestamp: false,
+            descending: false,
+            nulls_last,
+        }));
+        return Ok(TieBreak(terms));
     };
     terms.push(TieTerm {
         column: key.clone(),
@@ -213,7 +240,7 @@ pub fn by_fkey(
                 }),
             }),
         per_seed: Some(per_seed),
-        order: Some(tie_break(table, nulls)?),
+        order: Some(tie_break(table, fkey, nulls)?),
     })
 }
 

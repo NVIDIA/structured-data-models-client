@@ -221,6 +221,13 @@ pub enum DataRequest {
         table: String,
         columns: Vec<String>,
     },
+    /// At most one row: a value of `key` that more than one row of `table`
+    /// holds, among the rows holding every part of it, as the reference
+    /// reads one to show a repeated key (`_repeated_key_sql`).
+    RepeatedKey {
+        table: String,
+        key: Vec<String>,
+    },
     /// A seeded sample of `n` entities of `table` by `key`: `columns` in
     /// order, from the rows meeting every filter.
     SampleEntities {
@@ -268,6 +275,7 @@ impl DataRequest {
             DataRequest::KeyCounts { .. } => "key_counts",
             DataRequest::TimeBounds { .. } => "time_bounds",
             DataRequest::ColumnRanges { .. } => "column_ranges",
+            DataRequest::RepeatedKey { .. } => "repeated_key",
             DataRequest::SampleEntities { .. } => "sample_entities",
             DataRequest::Neighbors { .. } => "neighbors",
             DataRequest::Lookup { .. } => "lookup",
@@ -284,6 +292,7 @@ impl DataRequest {
             DataRequest::KeyCounts { .. } => Some(OptionalRequest::KeyCounts),
             DataRequest::TimeBounds { .. } => Some(OptionalRequest::TimeBounds),
             DataRequest::ColumnRanges { .. } => Some(OptionalRequest::ColumnRanges),
+            DataRequest::RepeatedKey { .. } => Some(OptionalRequest::RepeatedKey),
             DataRequest::SampleEntities { .. } => Some(OptionalRequest::SampleEntities),
             DataRequest::Neighbors { .. } => Some(OptionalRequest::Neighbors),
             DataRequest::Lookup { .. } => Some(OptionalRequest::Lookup),
@@ -308,6 +317,9 @@ impl DataRequest {
             }
             DataRequest::ColumnRanges { columns, .. } if columns.is_empty() => {
                 return Err(refused(self, "columns", "no column is named"));
+            }
+            DataRequest::RepeatedKey { key, .. } if key.is_empty() => {
+                return Err(refused(self, "key", "a key names no columns"));
             }
             DataRequest::Neighbors {
                 seeds,
@@ -404,6 +416,7 @@ pub enum OptionalRequest {
     KeyCounts,
     TimeBounds,
     ColumnRanges,
+    RepeatedKey,
     SampleEntities,
     Neighbors,
     Lookup,
@@ -418,6 +431,7 @@ impl OptionalRequest {
             OptionalRequest::KeyCounts => "key_counts",
             OptionalRequest::TimeBounds => "time_bounds",
             OptionalRequest::ColumnRanges => "column_ranges",
+            OptionalRequest::RepeatedKey => "repeated_key",
             OptionalRequest::SampleEntities => "sample_entities",
             OptionalRequest::Neighbors => "neighbors",
             OptionalRequest::Lookup => "lookup",
@@ -696,7 +710,8 @@ impl DataRequest {
     /// those whose columns are the source's own (a preview, a scan, a
     /// sample, neighbors, a lookup, the column ranges, whose smallest and
     /// largest values are of each column's type, which the core checks the
-    /// shape of itself) and for a count no provider renders yet. A SQL dialect's plan expects the same, but for a `describe`,
+    /// shape of itself, and a repeated key, of the key's types) and for a
+    /// count no provider renders yet. A SQL dialect's plan expects the same, but for a `describe`,
     /// whose answer is its own catalog's (decision E54).
     pub fn expected(&self) -> ExpectedSchema {
         use ColumnType::{Bool, Int32, Int64, Utf8};
@@ -747,6 +762,7 @@ impl DataRequest {
             | DataRequest::Preview { .. }
             | DataRequest::CountRows { .. }
             | DataRequest::ColumnRanges { .. }
+            | DataRequest::RepeatedKey { .. }
             | DataRequest::SampleEntities { .. }
             | DataRequest::Neighbors { .. }
             | DataRequest::Lookup { .. } => return ExpectedSchema::Discover {},

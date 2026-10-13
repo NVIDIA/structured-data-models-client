@@ -335,6 +335,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
             OptionalRequest::KeyCounts,
             OptionalRequest::TimeBounds,
             OptionalRequest::ColumnRanges,
+            OptionalRequest::RepeatedKey,
             OptionalRequest::SampleEntities,
             OptionalRequest::Neighbors,
             OptionalRequest::Lookup,

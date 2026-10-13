@@ -40,7 +40,7 @@ use sdm_engine::time::text::Reader;
 use sdm_schema::assemble::{self, Assembled, Given};
 use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
-use sdm_schema::not_yet;
+use sdm_schema::keys;
 
 use crate::run::{
     ArrowData, Ask, Asker, Attachment, FetchResult, Reply, internal, schema_mismatch,
@@ -243,18 +243,25 @@ pub(crate) async fn run(
     // The keys and time columns named, between the reading and the count.
     assemble::apply_keys_and_times(&mut tables, &spec.primary_keys, &spec.time_columns)?;
 
-    let duplicates = if check_keys {
-        count_keys(&asker, &tables).await?;
-        Some(Scalar::UInt64(0))
+    // The keys counted and held to the reference's rules, before the links
+    // are inferred: a declined key is one no link can point at.
+    let counted = if check_keys {
+        let stated = spec.primary_keys.keys().cloned().collect();
+        let held = count_keys(&asker, &mut tables, &stated, given.is_none()).await?;
+        for warning in held.warnings {
+            asker.warn(warning);
+        }
+        Some(held.duplicates)
     } else {
         None
     };
+    let duplicates = counted.as_ref().map(|_| Scalar::UInt64(0));
 
     // The schema as the reference's client assembles it: the links, the
     // edit stamps they settle, the columns joined on marked, and the
     // warnings, given in the reference's order (decision E55).
     let Assembled {
-        description,
+        mut description,
         warnings,
     } = assemble::assemble(
         tables,
@@ -267,6 +274,12 @@ pub(crate) async fn run(
     )?;
     for warning in warnings {
         asker.warn(warning);
+    }
+    // Each table's repeated keys, as the reference's count sets them.
+    if let Some(counted) = counted {
+        for (table, repeats) in description.tables.iter_mut().zip(counted) {
+            table.duplicate_keys = Some(Scalar::UInt64(repeats));
+        }
     }
     let bytes = serde_json::to_vec(&description)
         .map_err(|_| internal("a source description does not serialize"))?;
@@ -463,41 +476,94 @@ fn declared_links(
     links
 }
 
-/// Counts every key the source does not enforce in one request: a key
-/// whose rows repeat a value or miss one is held to rules the reference
-/// warns, declines or refuses by, which are not ported yet.
-async fn count_keys(asker: &Asker, tables: &[InferredTable]) -> Result<(), CoreError> {
-    let keys: Vec<TableKey> = tables
-        .iter()
-        .filter_map(|table| {
-            let key = vec![table.primary_key.clone()?];
-            (!table.enforces(&key)).then(|| TableKey {
-                table: table.source.clone(),
-                columns: key,
-            })
+/// Counts every key the source does not enforce in one request, then, for
+/// each that repeats a value, reads one such value (`repeated_key`), in
+/// table order, as the reference's `count_keys` does, and holds the keys to
+/// the reference's rules ([`keys::hold`]): a named key holding a null or a
+/// named or declared key repeating in more than 1% of its rows refused, an
+/// inferred key under 99% distinct declined, a key kept with nulls or
+/// repeats said. `stated` names the tables whose key `primary_keys` named;
+/// `infer_links` says whether the links are inferred.
+async fn count_keys(
+    asker: &Asker,
+    tables: &mut [InferredTable],
+    stated: &std::collections::BTreeSet<String>,
+    infer_links: bool,
+) -> Result<keys::Held, CoreError> {
+    let positions: Vec<usize> = (0..tables.len())
+        .filter(|&i| {
+            tables[i]
+                .primary_key
+                .clone()
+                .is_some_and(|key| !tables[i].enforces(&[key]))
         })
         .collect();
-    if keys.is_empty() {
-        return Ok(());
+    if positions.is_empty() {
+        return keys::hold(tables, &[], stated, infer_links);
     }
-    let counted = ask(asker, DataRequest::KeyCounts { keys: keys.clone() }).await?;
-    let counts = catalog::key_counts(&counted.batches)?;
-    if counts.len() != keys.len() {
+    let asked: Vec<TableKey> = positions
+        .iter()
+        .map(|&i| TableKey {
+            table: tables[i].source.clone(),
+            columns: tables[i].primary_key.clone().into_iter().collect(),
+        })
+        .collect();
+    let answered = ask(
+        asker,
+        DataRequest::KeyCounts {
+            keys: asked.clone(),
+        },
+    )
+    .await?;
+    let mut counts = catalog::key_counts(&answered.batches)?;
+    // One row per key, each read by its position, as the reference reads
+    // each row by its label.
+    counts.sort_by_key(|c| c.position);
+    if counts.len() != asked.len()
+        || counts
+            .iter()
+            .enumerate()
+            .any(|(at, c)| usize::try_from(c.position).ok() != Some(at))
+    {
         return Err(schema_mismatch(
             "expected",
             None,
             "a key count does not hold one row per key",
         ));
     }
-    for count in counts {
-        if count.missing > 0 {
-            return Err(not_yet("key_missing"));
+    let mut counted = Vec::with_capacity(counts.len());
+    for ((&at, key), count) in positions.iter().zip(&asked).zip(counts) {
+        let number = |n: i64| {
+            u64::try_from(n)
+                .map_err(|_| schema_mismatch("expected", None, "a key count is negative"))
+        };
+        let mut found = keys::Counted {
+            rows: number(count.rows)?,
+            distinct: number(count.distinct)?,
+            missing: number(count.missing)?,
+            example: None,
+        };
+        if found.distinct + found.missing > found.rows {
+            return Err(schema_mismatch(
+                "expected",
+                None,
+                "a key count holds more values than rows",
+            ));
         }
-        if count.rows - count.missing - count.distinct > 0 {
-            return Err(not_yet("key_repeats"));
+        if found.repeats() > 0 {
+            let read = ask(
+                asker,
+                DataRequest::RepeatedKey {
+                    table: key.table.clone(),
+                    key: key.columns.clone(),
+                },
+            )
+            .await?;
+            found.example = keys::example(&read.batches);
         }
+        counted.push((at, found));
     }
-    Ok(())
+    keys::hold(tables, &counted, stated, infer_links)
 }
 
 /// The data a request's answer holds, or the provider's error.
