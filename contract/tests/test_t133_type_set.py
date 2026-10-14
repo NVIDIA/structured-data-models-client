@@ -76,6 +76,10 @@ def _module(name: str, path: Path) -> ModuleType:
 G = _module('t133p2_gate', ROOT / 'contract/tests/t133p2_gate.py')
 FILE: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
 ALL: list[dict[str, Any]] = FILE['vectors']
+#: The forms DuckDB hands over only under a session setting, or as an
+#: extension type, that no vector is: each through real DuckDB alone.
+REACHED: list[dict[str, Any]] = FILE['reached']
+NESTED = ROOT / 'contract/nested-type-vectors.json'
 
 
 def _register() -> dict[str, Any]:
@@ -198,6 +202,96 @@ def test_the_types_a_review_found_reachable_are_reached() -> None:
     assert 'timestamp.us.utc' not in differing
 
 
+# --- through real DuckDB: witnesses, recordings and settings ---------------------
+
+
+def _from_source_class(answer: dict[str, Any]) -> str:
+    r"""The reference's answer where ``describe_source`` answers."""
+    outcome = answer['outcome']
+    if outcome['result'] == 'refusal' and outcome['stage'] == 'from_source':
+        return f'refusal {outcome["code"] or "UNNAMED"}'
+    return 'success'
+
+
+def test_ids_are_unique_across_vectors_and_reached_rows() -> None:
+    ids = [row['id'] for row in ALL + REACHED]
+    assert len(ids) == len(set(ids))
+
+
+def test_every_reachable_row_has_its_witness_and_its_recording() -> None:
+    assert FILE['recorded']['by'] == 'contract/tools/type_set_record.py'
+    rows = [
+        v
+        for v in ALL
+        if v['reference'] != 'not reachable' and not v.get('covered_by')
+    ]
+    for row in rows + REACHED:
+        witness = row.get('witness')
+        assert witness, f'{row["id"]}: no witness'
+        assert row['duckdb_arrow'], row['id']
+        answer = row['reference_answer']
+        assert answer['outcome']['result'] in ('success', 'refusal'), row['id']
+        assert row['reference'] == _from_source_class(answer), row['id']
+    for row in ALL:
+        if 'probe' in row['evidence'] and row['reference'] != 'not reachable':
+            assert row.get('witness'), f'{row["id"]}: a probe with no setup'
+
+
+@pytest.mark.parametrize('row', REACHED, ids=[r['id'] for r in REACHED])
+def test_each_reached_row_is_a_form_admission_sees(row: dict[str, Any]) -> None:
+    assert row['witness'][-1].startswith('CREATE OR REPLACE TABLE users AS ')
+    assert row['extension'] is None or row['extension'].startswith('arrow.')
+    if row['extension']:
+        assert f'extension<{row["extension"]}' in row['duckdb_arrow']
+    inference = row['inference']
+    assert len(inference) == 1 and next(iter(inference)) in (
+        'dtype',
+        'left_out',
+        'refusal',
+    )
+    refusal = inference.get('refusal')
+    want = 'success' if refusal is None else f'refusal {refusal["code"]}'
+    assert row['core'] == want
+
+
+def test_every_form_a_session_setting_gives_has_a_row() -> None:
+    nested = json.loads(NESTED.read_text(encoding='utf-8'))['vectors']
+    rows = {r['duckdb_arrow'] for r in ALL + REACHED if r.get('duckdb_arrow')}
+    rows |= {v['duckdb_arrow'] for v in nested}
+    measured = FILE['duckdb_arrow_by_setting']
+    assert 'arrow_lossless_conversion' in measured['BOOLEAN']
+    missing = sorted(
+        f'{name} under {setting}: {form}'
+        for name, by in measured.items()
+        for setting, form in by.items()
+        if form not in rows
+    )
+    assert missing == [], missing
+
+
+def test_varint_is_a_difference_to_register() -> None:
+    by_id = {r['id']: r for r in REACHED}
+    for row_id in ('varint', 'varint.large', 'varint.view'):
+        row = by_id[row_id]
+        assert row['extension'] == 'arrow.opaque'
+        assert 'type_name=bignum' in row['duckdb_arrow']
+        assert row['reference'] == 'refusal UNNAMED'
+        assert row['core'] == 'success'
+        assert row in DIFFERING
+
+
+def test_a_lossless_connection_is_described() -> None:
+    by_id = {r['id']: r for r in REACHED}
+    plain = by_id['lossless.integer']
+    assert plain['witness'][0] == 'SET arrow_lossless_conversion = true'
+    assert plain['reference'] == plain['core'] == 'success'
+    assert _reference_described(plain) == _core_described(plain) == 'int64'
+    assert by_id['lossless.boolean']['inference'] == {'dtype': 'bool'}
+    uuid = {v['id']: v for v in ALL}['fixed-size-binary.16']
+    assert uuid['witness'][0] == 'SET arrow_lossless_conversion = true'
+    assert uuid['inference'] == {'left_out': 'binary'}
+
+
 # --- the register --------------------------------------------------------------
 
 #: A vector ref and the transition it declares, in any vectors file.
@@ -243,13 +337,45 @@ def _covering(vector: dict[str, Any]) -> list[str]:
     ]
 
 
-DIFFERING = [
-    v
-    for v in ALL
-    if v['core'] is not None
-    and v['reference'] != 'not reachable'
-    and v['reference'] != v['core']
-]
+def _wire(dtype: str) -> str:
+    r"""A data type as the wire names it, as the reference describes one."""
+    return {
+        'int': 'int64',
+        'float': 'float64',
+        'date': 'timestamp[us]',
+        'time': 'timestamp[us]',
+    }.get(dtype, dtype)
+
+
+def _core_described(row: dict[str, Any]) -> str | None:
+    r"""What the row expects the core to describe ``f`` as."""
+    inference = row['inference'] or {}
+    if 'dtype' in inference:
+        return _wire(inference['dtype'])
+    if 'left_out' in inference:
+        return 'left out'
+    return None
+
+
+def _reference_described(row: dict[str, Any]) -> str | None:
+    r"""What the reference described ``f`` as, where it was recorded."""
+    described = (row.get('reference_answer') or {}).get('described')
+    if isinstance(described, dict):
+        return str(described['dtype'])
+    return described if isinstance(described, str) else None
+
+
+def _differs(row: dict[str, Any]) -> bool:
+    if row['core'] is None or row['reference'] in ('not reachable', None):
+        return False
+    if row['reference'] != row['core']:
+        return True
+    # Both describe f: a difference in what they describe it as is one too.
+    theirs, ours = _reference_described(row), _core_described(row)
+    return theirs is not None and ours is not None and theirs != ours
+
+
+DIFFERING = [row for row in ALL + REACHED if _differs(row)]
 
 
 @pytest.mark.parametrize('vector', DIFFERING, ids=[v['id'] for v in DIFFERING])
@@ -273,7 +399,7 @@ def test_a_difference_from_the_reference_is_registered(
 def test_a_refusal_of_a_type_the_reference_reads_is_the_owner_s() -> None:
     new_refusals = [
         v
-        for v in ALL
+        for v in ALL + REACHED
         if v['reference'] == 'success'
         and (v['core'] or '').startswith('refusal')
     ]
@@ -284,8 +410,20 @@ def test_a_refusal_of_a_type_the_reference_reads_is_the_owner_s() -> None:
         assert owners, f"{vector['id']}: a new refusal, not the owner's"
 
 
+def test_a_new_success_is_the_owner_s() -> None:
+    # E66(b): the core reading what the reference refuses is kept for the
+    # owner's individual decision; an entry a reviewer approved does not
+    # cover it.
+    for row in DIFFERING:
+        if row['reference'].startswith('refusal') and row['core'] == 'success':
+            for entry in _covering(row):
+                assert _entry(entry)['approved_by'] == 'owner', (
+                    f"{row['id']}: a new success under {entry}, not the owner's"
+                )
+
+
 def test_every_vector_ref_names_a_vector_and_a_transition() -> None:
-    ids = {v['id'] for v in ALL}
+    ids = {v['id'] for v in ALL + REACHED}
     for entry in _register()['entries']:
         for ref in entry.get('refs') or []:
             if not str(ref).startswith(REF):

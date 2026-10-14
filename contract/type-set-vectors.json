@@ -1,6 +1,6 @@
 {
  "format": "sdm-type-set-vectors/1",
- "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed, and `witness`, where given, the DuckDB statements that hand it over, run after contract/bases.yaml's `shop` and adding the column `f` to `users`, as contract/tools/nested_type_record.py's vectors' `setup` is run). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json.",
+ "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed, and `witness`, where given, the DuckDB statements that hand it over, run after contract/bases.yaml's `shop` and adding the column `f` to `users`, as contract/tools/nested_type_record.py's vectors' `setup` is run). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json. `reached` holds the Arrow forms DuckDB 1.5.6 hands over that no vector is: those only a session setting gives (`duckdb_arrow_by_setting`, measured for each DuckDB type under each setting that changes what DuckDB hands over), and extension types (`extension`, the field's ARROW:extension:name), each with `type`, the storage type admission sees, and its `inference` derived as the vectors' are, but for `arrow.bool8`, a boolean, read as one. They run through real DuckDB only (sdm-testkit's tests/t133_type_reach.rs, which runs every witnessed row there). `recorded` names the recorder of every `duckdb_arrow`, `reference_answer` and witnessed `reference`: contract/tools/type_set_record.py, under the reference's interpreter.",
  "arrow_schema": "58.4.0",
  "derived_from": [
   "rust/crates/sdm-host/src/admission.rs:9-22 (the admission table) and :101-149 (convert_type)",
@@ -88,7 +88,23 @@
    "core": "success",
    "reach": "BOOLEAN",
    "reference": "success",
-   "evidence": "inventory feature.bool"
+   "evidence": "inventory feature.bool",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id % 2 = 0 AS f FROM users"
+   ],
+   "duckdb_arrow": "bool",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "bool",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "int8",
@@ -104,7 +120,23 @@
    "core": "success",
    "reach": "TINYINT",
    "reference": "success",
-   "evidence": "probe: TINYINT described int64"
+   "evidence": "probe: TINYINT described int64",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::TINYINT AS f FROM users"
+   ],
+   "duckdb_arrow": "int8",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "int16",
@@ -120,7 +152,23 @@
    "core": "success",
    "reach": "SMALLINT",
    "reference": "success",
-   "evidence": "probe: SMALLINT described int64"
+   "evidence": "probe: SMALLINT described int64",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::SMALLINT AS f FROM users"
+   ],
+   "duckdb_arrow": "int16",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "int32",
@@ -136,7 +184,23 @@
    "core": "success",
    "reach": "INTEGER",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::INTEGER AS f FROM users"
+   ],
+   "duckdb_arrow": "int32",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "int64",
@@ -152,7 +216,23 @@
    "core": "success",
    "reach": "BIGINT",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id + 1 AS f FROM users"
+   ],
+   "duckdb_arrow": "int64",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "uint8",
@@ -168,7 +248,23 @@
    "core": "success",
    "reach": "UTINYINT",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UTINYINT AS f FROM users"
+   ],
+   "duckdb_arrow": "uint8",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "uint16",
@@ -184,7 +280,23 @@
    "core": "success",
    "reach": "USMALLINT",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::USMALLINT AS f FROM users"
+   ],
+   "duckdb_arrow": "uint16",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "uint32",
@@ -200,7 +312,23 @@
    "core": "success",
    "reach": "UINTEGER",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UINTEGER AS f FROM users"
+   ],
+   "duckdb_arrow": "uint32",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "uint64",
@@ -216,7 +344,23 @@
    "core": "success",
    "reach": "UBIGINT",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UBIGINT AS f FROM users"
+   ],
+   "duckdb_arrow": "uint64",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "float16",
@@ -248,7 +392,23 @@
    "core": "success",
    "reach": "FLOAT",
    "reference": "success",
-   "evidence": "contract/key-cast-vectors.json"
+   "evidence": "contract/key-cast-vectors.json",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id + 0.5)::FLOAT AS f FROM users"
+   ],
+   "duckdb_arrow": "float",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "float64",
@@ -264,7 +424,23 @@
    "core": "success",
    "reach": "DOUBLE",
    "reference": "success",
-   "evidence": "inventory DOUBLE features"
+   "evidence": "inventory DOUBLE features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id + 0.5)::DOUBLE AS f FROM users"
+   ],
+   "duckdb_arrow": "double",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "timestamp.s.naive",
@@ -290,7 +466,23 @@
    "core": "success",
    "reach": "TIMESTAMP_S",
    "reference": "success",
-   "evidence": "inventory time.timestamp-s; probe"
+   "evidence": "inventory time.timestamp-s; probe",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER))::TIMESTAMP_S AS f FROM users"
+   ],
+   "duckdb_arrow": "timestamp[s]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "timestamp.s.utc",
@@ -342,7 +534,23 @@
    "core": "success",
    "reach": "TIMESTAMP_MS",
    "reference": "success",
-   "evidence": "probe: TIMESTAMP_MS described timestamp"
+   "evidence": "probe: TIMESTAMP_MS described timestamp",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER))::TIMESTAMP_MS AS f FROM users"
+   ],
+   "duckdb_arrow": "timestamp[ms]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "timestamp.ms.utc",
@@ -389,7 +597,23 @@
    "core": "success",
    "reach": "TIMESTAMP",
    "reference": "success",
-   "evidence": "inventory time.* cases"
+   "evidence": "inventory time.* cases",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER) AS f FROM users"
+   ],
+   "duckdb_arrow": "timestamp[us]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "timestamp.us.utc",
@@ -414,7 +638,20 @@
    "witness": [
     "SET TimeZone = 'UTC'",
     "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' AS f FROM users"
-   ]
+   ],
+   "duckdb_arrow": "timestamp[us, tz=UTC]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "timestamp.ns.naive",
@@ -435,7 +672,23 @@
    "core": "success",
    "reach": "TIMESTAMP_NS",
    "reference": "success",
-   "evidence": "inventory time.timestamp-ns"
+   "evidence": "inventory time.timestamp-ns",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER))::TIMESTAMP_NS AS f FROM users"
+   ],
+   "duckdb_arrow": "timestamp[ns]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "timestamp.ns.utc",
@@ -477,7 +730,24 @@
    "core": "success",
    "reach": "TIMESTAMPTZ (session zone)",
    "reference": "success",
-   "evidence": "inventory time.timestamptz; probe"
+   "evidence": "inventory time.timestamptz; probe",
+   "witness": [
+    "SET TimeZone = 'America/Los_Angeles'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' + to_days(user_id::INTEGER) AS f FROM users"
+   ],
+   "duckdb_arrow": "timestamp[us, tz=America/Los_Angeles]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "timestamp.us.offset-zone",
@@ -561,7 +831,23 @@
    "core": "success",
    "reach": "DATE",
    "reference": "success",
-   "evidence": "inventory time.date; probe"
+   "evidence": "inventory time.date; probe",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, DATE '2024-01-01' + user_id::INTEGER AS f FROM users"
+   ],
+   "duckdb_arrow": "date32[day]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "date64",
@@ -724,7 +1010,23 @@
    "core": "success",
    "reach": "TIME",
    "reference": "success",
-   "evidence": "inventory time.feature-time-of-day"
+   "evidence": "inventory time.feature-time-of-day",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, TIME '12:00:00' AS f FROM users"
+   ],
+   "duckdb_arrow": "time64[us]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "time64.ns",
@@ -742,7 +1044,23 @@
    "core": "success",
    "reach": "TIME_NS",
    "reference": "success",
-   "evidence": "probe: TIME_NS described timestamp"
+   "evidence": "probe: TIME_NS described timestamp",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, '12:00:00'::TIME_NS AS f FROM users"
+   ],
+   "duckdb_arrow": "time64[ns]",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   }
   },
   {
    "id": "duration.s",
@@ -905,10 +1223,23 @@
     "left_out": "binary"
    },
    "core": "success",
-   "reach": "BLOB; BIT; BIGNUM (VARINT) as binary with the extension arrow.opaque",
+   "reach": "BLOB; BIT",
    "reference": "success",
-   "evidence": "nested scalar.blob: left out; probe: BIT left out. BIGNUM, the same Arrow type under extension metadata, the reference refuses unnamed at from_source (probe), where the core leaves it out: a difference of field metadata, not of type",
-   "covered_by": "contract/nested-type-vectors.json#scalar.blob"
+   "evidence": "nested scalar.blob: left out; BIT arrives as binary too (duckdb_arrow_by_setting); VARINT, binary under the extension arrow.opaque, is the reached row varint",
+   "covered_by": "contract/nested-type-vectors.json#scalar.blob",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, '\\xAA'::BLOB AS f FROM users"
+   ],
+   "duckdb_arrow": "binary",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out"
+   }
   },
   {
    "id": "fixed-size-binary.16",
@@ -926,7 +1257,21 @@
    "core": "success",
    "reach": "UUID with arrow_lossless_conversion (extension arrow.uuid)",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: lossless UUID, RuntimeError at from_source"
+   "evidence": "probe: lossless UUID, RuntimeError at from_source",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, uuid() AS f FROM users"
+   ],
+   "duckdb_arrow": "extension<arrow.uuid>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "large-binary",
@@ -942,7 +1287,21 @@
    "core": "success",
    "reach": "BLOB with arrow_large_buffer_size",
    "reference": "success",
-   "evidence": "probe: large BLOB left out"
+   "evidence": "probe: large BLOB left out",
+   "witness": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, '\\xAA'::BLOB AS f FROM users"
+   ],
+   "duckdb_arrow": "large_binary",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out"
+   }
   },
   {
    "id": "binary-view",
@@ -958,7 +1317,22 @@
    "core": "success",
    "reach": "BLOB with arrow_output_version '1.4' and produce_arrow_string_view",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET produce_arrow_string_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, '\\xAA'::BLOB AS f FROM users"
+   ],
+   "duckdb_arrow": "binary_view",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "utf8",
@@ -974,7 +1348,23 @@
    "core": "success",
    "reach": "VARCHAR",
    "reference": "success",
-   "evidence": "inventory text features"
+   "evidence": "inventory text features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+   ],
+   "duckdb_arrow": "string",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "string",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "large-utf8",
@@ -990,7 +1380,24 @@
    "core": "success",
    "reach": "VARCHAR with arrow_large_buffer_size",
    "reference": "success",
-   "evidence": "probe: described string; a large_string key is key.varchar-large-buffers, P1B-6"
+   "evidence": "probe: described string; a large_string key is key.varchar-large-buffers, P1B-6",
+   "witness": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+   ],
+   "duckdb_arrow": "large_string",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "string",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "utf8-view",
@@ -1006,7 +1413,22 @@
    "core": "success",
    "reach": "VARCHAR with arrow_output_version '1.4' and produce_arrow_string_view",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET produce_arrow_string_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+   ],
+   "duckdb_arrow": "string_view",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "list.int32",
@@ -1333,7 +1755,23 @@
    "core": "success",
    "reach": "INTEGER[] with arrow_output_list_view, version '1.4' and arrow_large_buffer_size",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET arrow_output_list_view = true",
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, 1]::INTEGER[] AS f FROM users"
+   ],
+   "duckdb_arrow": "large_list_view<l: int32>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "fixed-size-list.int32-3",
@@ -1479,7 +1917,17 @@
    "witness": [
     "SET arrow_large_buffer_size = true",
     "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 'value' || user_id} AS f FROM users"
-   ]
+   ],
+   "duckdb_arrow": "struct<a: large_string>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "struct.interval",
@@ -1510,7 +1958,20 @@
    "core": "refusal UNSUPPORTED_TYPE",
    "reach": "STRUCT(a INTERVAL)",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': INTERVAL 1 DAY} AS f FROM users"
+   ],
+   "duckdb_arrow": "struct<a: month_day_nano_interval>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "struct.empty",
@@ -1614,7 +2075,17 @@
    "witness": [
     "SET arrow_large_buffer_size = true",
     "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
-   ]
+   ],
+   "duckdb_arrow": "map<large_string, int64>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "union.sparse",
@@ -1839,7 +2310,21 @@
    "core": "refusal UNSUPPORTED_REQUEST",
    "reach": "ENUM('a', 'b', 'c')",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: ENUM, RuntimeError at from_source"
+   "evidence": "probe: ENUM, RuntimeError at from_source",
+   "witness": [
+    "CREATE TYPE mood AS ENUM ('a', 'b', 'c')",
+    "CREATE OR REPLACE TABLE users AS SELECT *, (['a', 'b', 'c'])[user_id % 3 + 1]::mood AS f FROM users"
+   ],
+   "duckdb_arrow": "dictionary<values=string, indices=uint8, ordered=0>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "dictionary.uint16-utf8",
@@ -1867,7 +2352,17 @@
    "witness": [
     "CREATE TYPE probe_enum AS ENUM (SELECT 'v' || range FROM range(300))",
     "CREATE OR REPLACE TABLE users AS SELECT *, 'v1'::probe_enum AS f FROM users"
-   ]
+   ],
+   "duckdb_arrow": "dictionary<values=string, indices=uint16, ordered=0>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "dictionary.uint32-utf8",
@@ -1895,7 +2390,17 @@
    "witness": [
     "CREATE TYPE probe_enum AS ENUM (SELECT 'v' || range FROM range(70000))",
     "CREATE OR REPLACE TABLE users AS SELECT *, 'v1'::probe_enum AS f FROM users"
-   ]
+   ],
+   "duckdb_arrow": "dictionary<values=string, indices=uint32, ordered=0>",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "dictionary.uint64-utf8",
@@ -2146,7 +2651,21 @@
    "core": "success",
    "reach": "DECIMAL(9,2) with arrow_output_version '1.5'",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "SET arrow_output_version = '1.5'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(9,2) AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal32(9, 2)",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "decimal64.18-2",
@@ -2172,7 +2691,21 @@
    "core": "success",
    "reach": "DECIMAL(18,2) with arrow_output_version '1.5'",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "SET arrow_output_version = '1.5'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,2) AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal64(18, 2)",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "decimal64.18-0",
@@ -2198,7 +2731,21 @@
    "core": "success",
    "reach": "DECIMAL(18,0) with arrow_output_version '1.5'",
    "reference": "refusal UNNAMED",
-   "evidence": "probe: RuntimeError at from_source"
+   "evidence": "probe: RuntimeError at from_source",
+   "witness": [
+    "SET arrow_output_version = '1.5'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,0) AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal64(18, 0)",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   }
   },
   {
    "id": "decimal128.38-10",
@@ -2219,7 +2766,23 @@
    "core": "success",
    "reach": "DECIMAL(38,10)",
    "reference": "success",
-   "evidence": "inventory decimal.* features"
+   "evidence": "inventory decimal.* features",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(38,10) AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal128(38, 10)",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "decimal128.38-0",
@@ -2240,7 +2803,23 @@
    "core": "success",
    "reach": "HUGEINT, UHUGEINT, DECIMAL(38,0)",
    "reference": "success",
-   "evidence": "inventory decimal.feature-38-0-wide; probe: UHUGEINT described int64"
+   "evidence": "inventory decimal.feature-38-0-wide; probe: UHUGEINT described int64",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal128(38, 0)",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "decimal128.18-2",
@@ -2261,7 +2840,23 @@
    "core": "success",
    "reach": "DECIMAL(18,2)",
    "reference": "success",
-   "evidence": "probe: described float64"
+   "evidence": "probe: described float64",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,2) AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal128(18, 2)",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "decimal128.18-0",
@@ -2282,7 +2877,23 @@
    "core": "success",
    "reach": "DECIMAL(18,0)",
    "reference": "success",
-   "evidence": "probe: described int64 (a feature; the key is key.decimal-18-0)"
+   "evidence": "probe: described int64 (a feature; the key is key.decimal-18-0)",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,0) AS f FROM users"
+   ],
+   "duckdb_arrow": "decimal128(18, 0)",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   }
   },
   {
    "id": "decimal128.38-negative-scale",
@@ -2569,5 +3180,967 @@
    "reference": "not reachable",
    "evidence": "DuckDB 1.5.6 hands no such type over"
   }
- ]
+ ],
+ "reached": [
+  {
+   "id": "lossless.integer",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::INTEGER AS f FROM users"
+   ],
+   "type": "Int32",
+   "extension": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "a plain column on a connection with arrow_lossless_conversion: the setting turns the catalog's booleans into arrow.bool8",
+   "reference": "success",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
+   },
+   "duckdb_arrow": "int32"
+  },
+  {
+   "id": "lossless.boolean",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id % 2 = 0 AS f FROM users"
+   ],
+   "type": "Int8",
+   "extension": "arrow.bool8",
+   "inference": {
+    "dtype": "bool"
+   },
+   "core": "success",
+   "reach": "BOOLEAN under arrow_lossless_conversion: int8 storage of the extension arrow.bool8, a boolean",
+   "reference": "success",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "bool",
+     "stype": "categorical"
+    }
+   },
+   "duckdb_arrow": "extension<arrow.bool8>"
+  },
+  {
+   "id": "lossless.hugeint",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "HUGEINT under arrow_lossless_conversion: arrow.opaque (type_name hugeint) of fixed_size_binary(16)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "lossless.uhugeint",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "UHUGEINT under arrow_lossless_conversion: arrow.opaque (type_name uhugeint) of fixed_size_binary(16)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=uhugeint, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "lossless.bit",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, '101'::BIT AS f FROM users"
+   ],
+   "type": "Binary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "BIT under arrow_lossless_conversion: arrow.opaque (type_name bit) of binary",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bit, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "lossless.json",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ('{\"a\": ' || user_id || '}')::JSON AS f FROM users"
+   ],
+   "type": "Utf8",
+   "extension": "arrow.json",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "JSON under arrow_lossless_conversion: utf8 storage of the extension arrow.json",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.json>"
+  },
+  {
+   "id": "lossless.timetz",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, '12:00:00+01'::TIMETZ AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 8
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "TIMETZ under arrow_lossless_conversion: arrow.opaque (type_name time_tz) of fixed_size_binary(8)",
+   "reference": "success",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "timestamp[us]",
+     "stype": "timestamp"
+    }
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[8], type_name=time_tz, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "varint",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT AS f FROM users"
+   ],
+   "type": "Binary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "VARINT (BIGNUM) with no setting: arrow.opaque (type_name bignum) of binary",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "varint.large",
+   "witness": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT AS f FROM users"
+   ],
+   "type": "LargeBinary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "VARINT under arrow_large_buffer_size: arrow.opaque of large_binary",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=large_binary, type_name=bignum, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "varint.view",
+   "witness": [
+    "SET arrow_output_version = '1.5'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT AS f FROM users"
+   ],
+   "type": "BinaryView",
+   "extension": "arrow.opaque",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "VARINT under arrow_output_version '1.5': arrow.opaque of binary_view",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary_view, type_name=bignum, vendor_name=DuckDB]>"
+  },
+  {
+   "id": "view.list-utf8",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET produce_arrow_string_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ['w' || user_id::VARCHAR] AS f FROM users"
+   ],
+   "type": {
+    "List": "Utf8View"
+   },
+   "extension": null,
+   "inference": {
+    "left_out": "stringlist"
+   },
+   "core": "success",
+   "reach": "VARCHAR[] under string views: list<string_view>",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "list<l: string_view>"
+  },
+  {
+   "id": "list-view.utf8",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET arrow_output_list_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ['w' || user_id::VARCHAR] AS f FROM users"
+   ],
+   "type": {
+    "ListView": "Utf8"
+   },
+   "extension": null,
+   "inference": {
+    "left_out": "stringlist"
+   },
+   "core": "success",
+   "reach": "VARCHAR[] under list views: list_view<string>",
+   "reference": "success",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": "left out"
+   },
+   "duckdb_arrow": "list_view<l: string>"
+  },
+  {
+   "id": "view.struct",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET produce_arrow_string_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 'w' || user_id::VARCHAR} AS f FROM users"
+   ],
+   "type": {
+    "Struct": [
+     [
+      "a",
+      "Utf8View"
+     ]
+    ]
+   },
+   "extension": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "STRUCT(a VARCHAR) under string views: struct<a: string_view>",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "struct<a: string_view>"
+  },
+  {
+   "id": "view.map",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET produce_arrow_string_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
+   ],
+   "type": {
+    "Map": [
+     "Utf8View",
+     "Int64"
+    ]
+   },
+   "extension": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "MAP(VARCHAR, BIGINT) under string views: map<string_view, int64>",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "map<string_view, int64>"
+  },
+  {
+   "id": "large.union",
+   "witness": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+   ],
+   "type": {
+    "Union": [
+     "Sparse",
+     [
+      [
+       0,
+       "n",
+       "Int32"
+      ],
+      [
+       1,
+       "s",
+       "LargeUtf8"
+      ]
+     ]
+    ]
+   },
+   "extension": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Union": [
+       "Sparse",
+       [
+        [
+         0,
+         "n",
+         "Int32"
+        ],
+        [
+         1,
+         "s",
+         "LargeUtf8"
+        ]
+       ]
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "UNION under arrow_large_buffer_size: sparse_union<n: int32, s: large_string>",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "sparse_union<n: int32=0, s: large_string=1>"
+  },
+  {
+   "id": "view.union",
+   "witness": [
+    "SET arrow_output_version = '1.4'",
+    "SET produce_arrow_string_view = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+   ],
+   "type": {
+    "Union": [
+     "Sparse",
+     [
+      [
+       0,
+       "n",
+       "Int32"
+      ],
+      [
+       1,
+       "s",
+       "Utf8View"
+      ]
+     ]
+    ]
+   },
+   "extension": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Union": [
+       "Sparse",
+       [
+        [
+         0,
+         "n",
+         "Int32"
+        ],
+        [
+         1,
+         "s",
+         "Utf8View"
+        ]
+       ]
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "UNION under string views: sparse_union<n: int32, s: string_view>",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "sparse_union<n: int32=0, s: string_view=1>"
+  },
+  {
+   "id": "decimal128.9-2",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(9,2) AS f FROM users"
+   ],
+   "type": {
+    "Decimal128": [
+     9,
+     2
+    ]
+   },
+   "extension": null,
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "DECIMAL(9,2) with no setting: decimal128(9, 2)",
+   "reference": "success",
+   "reference_answer": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
+   },
+   "duckdb_arrow": "decimal128(9, 2)"
+  },
+  {
+   "id": "map.utf8-int64",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
+   ],
+   "type": {
+    "Map": [
+     "Utf8",
+     "Int64"
+    ]
+   },
+   "extension": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "MAP(VARCHAR, BIGINT) with no setting: map<string, int64>",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "map<string, int64>"
+  }
+ ],
+ "duckdb_arrow_by_setting": {
+  "BOOLEAN": {
+   "default": "bool",
+   "arrow_lossless_conversion": "extension<arrow.bool8>",
+   "arrow_large_buffer_size": "bool",
+   "string_views": "bool",
+   "list_views": "bool",
+   "arrow_output_version_1.5": "bool",
+   "TimeZone_UTC": "bool"
+  },
+  "TINYINT": {
+   "default": "int8",
+   "arrow_lossless_conversion": "int8",
+   "arrow_large_buffer_size": "int8",
+   "string_views": "int8",
+   "list_views": "int8",
+   "arrow_output_version_1.5": "int8",
+   "TimeZone_UTC": "int8"
+  },
+  "SMALLINT": {
+   "default": "int16",
+   "arrow_lossless_conversion": "int16",
+   "arrow_large_buffer_size": "int16",
+   "string_views": "int16",
+   "list_views": "int16",
+   "arrow_output_version_1.5": "int16",
+   "TimeZone_UTC": "int16"
+  },
+  "INTEGER": {
+   "default": "int32",
+   "arrow_lossless_conversion": "int32",
+   "arrow_large_buffer_size": "int32",
+   "string_views": "int32",
+   "list_views": "int32",
+   "arrow_output_version_1.5": "int32",
+   "TimeZone_UTC": "int32"
+  },
+  "BIGINT": {
+   "default": "int64",
+   "arrow_lossless_conversion": "int64",
+   "arrow_large_buffer_size": "int64",
+   "string_views": "int64",
+   "list_views": "int64",
+   "arrow_output_version_1.5": "int64",
+   "TimeZone_UTC": "int64"
+  },
+  "HUGEINT": {
+   "default": "decimal128(38, 0)",
+   "arrow_lossless_conversion": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>",
+   "arrow_large_buffer_size": "decimal128(38, 0)",
+   "string_views": "decimal128(38, 0)",
+   "list_views": "decimal128(38, 0)",
+   "arrow_output_version_1.5": "decimal128(38, 0)",
+   "TimeZone_UTC": "decimal128(38, 0)"
+  },
+  "UTINYINT": {
+   "default": "uint8",
+   "arrow_lossless_conversion": "uint8",
+   "arrow_large_buffer_size": "uint8",
+   "string_views": "uint8",
+   "list_views": "uint8",
+   "arrow_output_version_1.5": "uint8",
+   "TimeZone_UTC": "uint8"
+  },
+  "USMALLINT": {
+   "default": "uint16",
+   "arrow_lossless_conversion": "uint16",
+   "arrow_large_buffer_size": "uint16",
+   "string_views": "uint16",
+   "list_views": "uint16",
+   "arrow_output_version_1.5": "uint16",
+   "TimeZone_UTC": "uint16"
+  },
+  "UINTEGER": {
+   "default": "uint32",
+   "arrow_lossless_conversion": "uint32",
+   "arrow_large_buffer_size": "uint32",
+   "string_views": "uint32",
+   "list_views": "uint32",
+   "arrow_output_version_1.5": "uint32",
+   "TimeZone_UTC": "uint32"
+  },
+  "UBIGINT": {
+   "default": "uint64",
+   "arrow_lossless_conversion": "uint64",
+   "arrow_large_buffer_size": "uint64",
+   "string_views": "uint64",
+   "list_views": "uint64",
+   "arrow_output_version_1.5": "uint64",
+   "TimeZone_UTC": "uint64"
+  },
+  "UHUGEINT": {
+   "default": "decimal128(38, 0)",
+   "arrow_lossless_conversion": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=uhugeint, vendor_name=DuckDB]>",
+   "arrow_large_buffer_size": "decimal128(38, 0)",
+   "string_views": "decimal128(38, 0)",
+   "list_views": "decimal128(38, 0)",
+   "arrow_output_version_1.5": "decimal128(38, 0)",
+   "TimeZone_UTC": "decimal128(38, 0)"
+  },
+  "VARINT": {
+   "default": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "arrow_lossless_conversion": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "arrow_large_buffer_size": "extension<arrow.opaque[storage_type=large_binary, type_name=bignum, vendor_name=DuckDB]>",
+   "string_views": "extension<arrow.opaque[storage_type=binary_view, type_name=bignum, vendor_name=DuckDB]>",
+   "list_views": "extension<arrow.opaque[storage_type=binary_view, type_name=bignum, vendor_name=DuckDB]>",
+   "arrow_output_version_1.5": "extension<arrow.opaque[storage_type=binary_view, type_name=bignum, vendor_name=DuckDB]>",
+   "TimeZone_UTC": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>"
+  },
+  "FLOAT": {
+   "default": "float",
+   "arrow_lossless_conversion": "float",
+   "arrow_large_buffer_size": "float",
+   "string_views": "float",
+   "list_views": "float",
+   "arrow_output_version_1.5": "float",
+   "TimeZone_UTC": "float"
+  },
+  "DOUBLE": {
+   "default": "double",
+   "arrow_lossless_conversion": "double",
+   "arrow_large_buffer_size": "double",
+   "string_views": "double",
+   "list_views": "double",
+   "arrow_output_version_1.5": "double",
+   "TimeZone_UTC": "double"
+  },
+  "DECIMAL(9,2)": {
+   "default": "decimal128(9, 2)",
+   "arrow_lossless_conversion": "decimal128(9, 2)",
+   "arrow_large_buffer_size": "decimal128(9, 2)",
+   "string_views": "decimal128(9, 2)",
+   "list_views": "decimal128(9, 2)",
+   "arrow_output_version_1.5": "decimal32(9, 2)",
+   "TimeZone_UTC": "decimal128(9, 2)"
+  },
+  "DECIMAL(18,2)": {
+   "default": "decimal128(18, 2)",
+   "arrow_lossless_conversion": "decimal128(18, 2)",
+   "arrow_large_buffer_size": "decimal128(18, 2)",
+   "string_views": "decimal128(18, 2)",
+   "list_views": "decimal128(18, 2)",
+   "arrow_output_version_1.5": "decimal64(18, 2)",
+   "TimeZone_UTC": "decimal128(18, 2)"
+  },
+  "DECIMAL(38,10)": {
+   "default": "decimal128(38, 10)",
+   "arrow_lossless_conversion": "decimal128(38, 10)",
+   "arrow_large_buffer_size": "decimal128(38, 10)",
+   "string_views": "decimal128(38, 10)",
+   "list_views": "decimal128(38, 10)",
+   "arrow_output_version_1.5": "decimal128(38, 10)",
+   "TimeZone_UTC": "decimal128(38, 10)"
+  },
+  "VARCHAR": {
+   "default": "string",
+   "arrow_lossless_conversion": "string",
+   "arrow_large_buffer_size": "large_string",
+   "string_views": "string_view",
+   "list_views": "string",
+   "arrow_output_version_1.5": "string",
+   "TimeZone_UTC": "string"
+  },
+  "BLOB": {
+   "default": "binary",
+   "arrow_lossless_conversion": "binary",
+   "arrow_large_buffer_size": "large_binary",
+   "string_views": "binary_view",
+   "list_views": "binary_view",
+   "arrow_output_version_1.5": "binary_view",
+   "TimeZone_UTC": "binary"
+  },
+  "BIT": {
+   "default": "binary",
+   "arrow_lossless_conversion": "extension<arrow.opaque[storage_type=binary, type_name=bit, vendor_name=DuckDB]>",
+   "arrow_large_buffer_size": "large_binary",
+   "string_views": "binary_view",
+   "list_views": "binary_view",
+   "arrow_output_version_1.5": "binary_view",
+   "TimeZone_UTC": "binary"
+  },
+  "UUID": {
+   "default": "string",
+   "arrow_lossless_conversion": "extension<arrow.uuid>",
+   "arrow_large_buffer_size": "large_string",
+   "string_views": "string",
+   "list_views": "string",
+   "arrow_output_version_1.5": "string",
+   "TimeZone_UTC": "string"
+  },
+  "JSON": {
+   "default": "string",
+   "arrow_lossless_conversion": "extension<arrow.json>",
+   "arrow_large_buffer_size": "large_string",
+   "string_views": "string_view",
+   "list_views": "string",
+   "arrow_output_version_1.5": "string",
+   "TimeZone_UTC": "string"
+  },
+  "DATE": {
+   "default": "date32[day]",
+   "arrow_lossless_conversion": "date32[day]",
+   "arrow_large_buffer_size": "date32[day]",
+   "string_views": "date32[day]",
+   "list_views": "date32[day]",
+   "arrow_output_version_1.5": "date32[day]",
+   "TimeZone_UTC": "date32[day]"
+  },
+  "TIME": {
+   "default": "time64[us]",
+   "arrow_lossless_conversion": "time64[us]",
+   "arrow_large_buffer_size": "time64[us]",
+   "string_views": "time64[us]",
+   "list_views": "time64[us]",
+   "arrow_output_version_1.5": "time64[us]",
+   "TimeZone_UTC": "time64[us]"
+  },
+  "TIME_NS": {
+   "default": "time64[ns]",
+   "arrow_lossless_conversion": "time64[ns]",
+   "arrow_large_buffer_size": "time64[ns]",
+   "string_views": "time64[ns]",
+   "list_views": "time64[ns]",
+   "arrow_output_version_1.5": "time64[ns]",
+   "TimeZone_UTC": "time64[ns]"
+  },
+  "TIMETZ": {
+   "default": "time64[us]",
+   "arrow_lossless_conversion": "extension<arrow.opaque[storage_type=fixed_size_binary[8], type_name=time_tz, vendor_name=DuckDB]>",
+   "arrow_large_buffer_size": "time64[us]",
+   "string_views": "time64[us]",
+   "list_views": "time64[us]",
+   "arrow_output_version_1.5": "time64[us]",
+   "TimeZone_UTC": "time64[us]"
+  },
+  "TIMESTAMP": {
+   "default": "timestamp[us]",
+   "arrow_lossless_conversion": "timestamp[us]",
+   "arrow_large_buffer_size": "timestamp[us]",
+   "string_views": "timestamp[us]",
+   "list_views": "timestamp[us]",
+   "arrow_output_version_1.5": "timestamp[us]",
+   "TimeZone_UTC": "timestamp[us]"
+  },
+  "TIMESTAMP_S": {
+   "default": "timestamp[s]",
+   "arrow_lossless_conversion": "timestamp[s]",
+   "arrow_large_buffer_size": "timestamp[s]",
+   "string_views": "timestamp[s]",
+   "list_views": "timestamp[s]",
+   "arrow_output_version_1.5": "timestamp[s]",
+   "TimeZone_UTC": "timestamp[s]"
+  },
+  "TIMESTAMP_MS": {
+   "default": "timestamp[ms]",
+   "arrow_lossless_conversion": "timestamp[ms]",
+   "arrow_large_buffer_size": "timestamp[ms]",
+   "string_views": "timestamp[ms]",
+   "list_views": "timestamp[ms]",
+   "arrow_output_version_1.5": "timestamp[ms]",
+   "TimeZone_UTC": "timestamp[ms]"
+  },
+  "TIMESTAMP_NS": {
+   "default": "timestamp[ns]",
+   "arrow_lossless_conversion": "timestamp[ns]",
+   "arrow_large_buffer_size": "timestamp[ns]",
+   "string_views": "timestamp[ns]",
+   "list_views": "timestamp[ns]",
+   "arrow_output_version_1.5": "timestamp[ns]",
+   "TimeZone_UTC": "timestamp[ns]"
+  },
+  "TIMESTAMPTZ": {
+   "default": "timestamp[us, tz=America/Los_Angeles]",
+   "arrow_lossless_conversion": "timestamp[us, tz=America/Los_Angeles]",
+   "arrow_large_buffer_size": "timestamp[us, tz=America/Los_Angeles]",
+   "string_views": "timestamp[us, tz=America/Los_Angeles]",
+   "list_views": "timestamp[us, tz=America/Los_Angeles]",
+   "arrow_output_version_1.5": "timestamp[us, tz=America/Los_Angeles]",
+   "TimeZone_UTC": "timestamp[us, tz=UTC]"
+  },
+  "INTERVAL": {
+   "default": "month_day_nano_interval",
+   "arrow_lossless_conversion": "month_day_nano_interval",
+   "arrow_large_buffer_size": "month_day_nano_interval",
+   "string_views": "month_day_nano_interval",
+   "list_views": "month_day_nano_interval",
+   "arrow_output_version_1.5": "month_day_nano_interval",
+   "TimeZone_UTC": "month_day_nano_interval"
+  },
+  "ENUM(3)": {
+   "default": "dictionary<values=string, indices=uint8, ordered=0>",
+   "arrow_lossless_conversion": "dictionary<values=string, indices=uint8, ordered=0>",
+   "arrow_large_buffer_size": "dictionary<values=string, indices=uint8, ordered=0>",
+   "string_views": "dictionary<values=string, indices=uint8, ordered=0>",
+   "list_views": "dictionary<values=string, indices=uint8, ordered=0>",
+   "arrow_output_version_1.5": "dictionary<values=string, indices=uint8, ordered=0>",
+   "TimeZone_UTC": "dictionary<values=string, indices=uint8, ordered=0>"
+  },
+  "ENUM(300)": {
+   "default": "dictionary<values=string, indices=uint16, ordered=0>",
+   "arrow_lossless_conversion": "dictionary<values=string, indices=uint16, ordered=0>",
+   "arrow_large_buffer_size": "dictionary<values=string, indices=uint16, ordered=0>",
+   "string_views": "dictionary<values=string, indices=uint16, ordered=0>",
+   "list_views": "dictionary<values=string, indices=uint16, ordered=0>",
+   "arrow_output_version_1.5": "dictionary<values=string, indices=uint16, ordered=0>",
+   "TimeZone_UTC": "dictionary<values=string, indices=uint16, ordered=0>"
+  },
+  "ENUM(70000)": {
+   "default": "dictionary<values=string, indices=uint32, ordered=0>",
+   "arrow_lossless_conversion": "dictionary<values=string, indices=uint32, ordered=0>",
+   "arrow_large_buffer_size": "dictionary<values=string, indices=uint32, ordered=0>",
+   "string_views": "dictionary<values=string, indices=uint32, ordered=0>",
+   "list_views": "dictionary<values=string, indices=uint32, ordered=0>",
+   "arrow_output_version_1.5": "dictionary<values=string, indices=uint32, ordered=0>",
+   "TimeZone_UTC": "dictionary<values=string, indices=uint32, ordered=0>"
+  },
+  "INTEGER[]": {
+   "default": "list<l: int32>",
+   "arrow_lossless_conversion": "list<l: int32>",
+   "arrow_large_buffer_size": "large_list<l: int32>",
+   "string_views": "list<l: int32>",
+   "list_views": "list_view<l: int32>",
+   "arrow_output_version_1.5": "list<l: int32>",
+   "TimeZone_UTC": "list<l: int32>"
+  },
+  "VARCHAR[]": {
+   "default": "list<l: string>",
+   "arrow_lossless_conversion": "list<l: string>",
+   "arrow_large_buffer_size": "large_list<l: large_string>",
+   "string_views": "list<l: string_view>",
+   "list_views": "list_view<l: string>",
+   "arrow_output_version_1.5": "list<l: string>",
+   "TimeZone_UTC": "list<l: string>"
+  },
+  "INTEGER[2]": {
+   "default": "fixed_size_list<: int32>[2]",
+   "arrow_lossless_conversion": "fixed_size_list<: int32>[2]",
+   "arrow_large_buffer_size": "fixed_size_list<: int32>[2]",
+   "string_views": "fixed_size_list<: int32>[2]",
+   "list_views": "fixed_size_list<: int32>[2]",
+   "arrow_output_version_1.5": "fixed_size_list<: int32>[2]",
+   "TimeZone_UTC": "fixed_size_list<: int32>[2]"
+  },
+  "STRUCT(a VARCHAR)": {
+   "default": "struct<a: string>",
+   "arrow_lossless_conversion": "struct<a: string>",
+   "arrow_large_buffer_size": "struct<a: large_string>",
+   "string_views": "struct<a: string_view>",
+   "list_views": "struct<a: string>",
+   "arrow_output_version_1.5": "struct<a: string>",
+   "TimeZone_UTC": "struct<a: string>"
+  },
+  "MAP(VARCHAR, BIGINT)": {
+   "default": "map<string, int64>",
+   "arrow_lossless_conversion": "map<string, int64>",
+   "arrow_large_buffer_size": "map<large_string, int64>",
+   "string_views": "map<string_view, int64>",
+   "list_views": "map<string, int64>",
+   "arrow_output_version_1.5": "map<string, int64>",
+   "TimeZone_UTC": "map<string, int64>"
+  },
+  "UNION(n INTEGER, s VARCHAR)": {
+   "default": "sparse_union<n: int32=0, s: string=1>",
+   "arrow_lossless_conversion": "sparse_union<n: int32=0, s: string=1>",
+   "arrow_large_buffer_size": "sparse_union<n: int32=0, s: large_string=1>",
+   "string_views": "sparse_union<n: int32=0, s: string_view=1>",
+   "list_views": "sparse_union<n: int32=0, s: string=1>",
+   "arrow_output_version_1.5": "sparse_union<n: int32=0, s: string=1>",
+   "TimeZone_UTC": "sparse_union<n: int32=0, s: string=1>"
+  }
+ },
+ "recorded": {
+  "by": "contract/tools/type_set_record.py",
+  "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+  "cell": "ref-pandas3",
+  "environment": {
+   "python": "3.12.13",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "numpy": "2.5.3",
+   "duckdb": "1.5.6"
+  }
+ }
 }

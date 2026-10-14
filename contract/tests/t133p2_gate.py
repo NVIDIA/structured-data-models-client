@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 FILE = Path(__file__).with_name('t133p2-pending.json')
-GROUPS = ('rust-host', 'exits')
+GROUPS = ('rust-host', 'rust-host-duckdb', 'exits')
 
 
 def gating() -> dict[str, Any]:
