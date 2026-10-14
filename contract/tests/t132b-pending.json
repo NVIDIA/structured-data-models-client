@@ -5,9 +5,7 @@
   "rust-host": [],
   "exits": [
    "py:test_a_contradicted_cell_claim_fails[type]",
-   "py:test_each_case_is_admitted[decimal.class-target-38-18]",
-   "py:test_each_case_is_admitted[decimal.feature-38-0-wide]",
-   "py:test_each_case_is_admitted[decimal.target-38-18]"
+   "py:test_each_case_is_admitted[decimal.class-target-38-18]"
   ]
  },
  "authored": {
