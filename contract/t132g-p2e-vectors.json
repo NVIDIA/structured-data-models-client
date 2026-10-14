@@ -1,0 +1,291 @@
+{
+ "format": "sdm-result-vectors/1",
+ "about": "T1.32g part 2e's vectors, written by the independent test author: an Arrow month_day_nano_interval's canonical cell, which run_python's arrow_values and sdm-testkit's values must both give: [\"interval\", months, days, nanoseconds], months and days JSON integers (int32), nanoseconds a decimal string (int64, as every 64-bit count of the form is: 'i', 'ts', 'dur'), a null interval null. Inside a list, a struct, a map or a chosen union member alike. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by each test (the fields' limits; a date64, which the form still does not hold, stays [\"?\", \"arrow:date64[ms]\"] and is listed unencodable). Arrow's year-month and day-time intervals, which neither DuckDB nor pyarrow writes, stay unencodable (the Rust test builds them).",
+ "vectors": [
+  {
+   "name": "intervals: zero, negative, mixed and null",
+   "sql": "SELECT INTERVAL 0 DAY AS a, -INTERVAL '14 months 3 days 5 microseconds' AS b, INTERVAL '1 month 2 days 3 seconds 4 microseconds' AS c, NULL::INTERVAL AS d",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "month_day_nano_interval"
+    },
+    {
+     "name": "b",
+     "type": "month_day_nano_interval"
+    },
+    {
+     "name": "c",
+     "type": "month_day_nano_interval"
+    },
+    {
+     "name": "d",
+     "type": "month_day_nano_interval"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b",
+     "c",
+     "d"
+    ],
+    "types": [
+     "INTERVAL",
+     "INTERVAL",
+     "INTERVAL",
+     "INTERVAL"
+    ],
+    "ordered": "ad34036b656047ef53c3b55ef3b31264320e997d0cff73acdeb654c021c7d353",
+    "unordered": "ad34036b656047ef53c3b55ef3b31264320e997d0cff73acdeb654c021c7d353",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "interval",
+      0,
+      0,
+      "0"
+     ],
+     [
+      "interval",
+      -14,
+      -3,
+      "-5000"
+     ],
+     [
+      "interval",
+      1,
+      2,
+      "3000004000"
+     ],
+     null
+    ]
+   ]
+  },
+  {
+   "name": "a nanosecond count past JSON's safe integers",
+   "sql": "SELECT to_microseconds(9007199254741) AS a",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "month_day_nano_interval"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a"
+    ],
+    "types": [
+     "INTERVAL"
+    ],
+    "ordered": "172d42e220ef5c7c3b154bb2b195c30771a650b8d2b1ab6bc9f47106b9a7d353",
+    "unordered": "172d42e220ef5c7c3b154bb2b195c30771a650b8d2b1ab6bc9f47106b9a7d353",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "interval",
+      0,
+      0,
+      "9007199254741000"
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "intervals in a list and a struct",
+   "sql": "SELECT [INTERVAL 1 DAY, NULL] AS a, struct_pack(i := INTERVAL 2 MONTH) AS b",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "list<l: month_day_nano_interval>"
+    },
+    {
+     "name": "b",
+     "type": "struct<i: month_day_nano_interval>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b"
+    ],
+    "types": [
+     "INTERVAL[]",
+     "STRUCT(i INTERVAL)"
+    ],
+    "ordered": "b722af89e2ca9ae58b1ced13f7ef7cf98e2fd334f01684664c4ea1b4259b5d9d",
+    "unordered": "b722af89e2ca9ae58b1ced13f7ef7cf98e2fd334f01684664c4ea1b4259b5d9d",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "list",
+      [
+       [
+        "interval",
+        0,
+        1,
+        "0"
+       ],
+       null
+      ]
+     ],
+     [
+      "struct",
+      [
+       [
+        "i",
+        [
+         "interval",
+         2,
+         0,
+         "0"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "an interval as a chosen union member and in a map",
+   "sql": "SELECT union_value(v := INTERVAL 1 DAY)::UNION(n INTEGER, v INTERVAL) AS a, MAP {'k': INTERVAL 3 MONTH} AS b",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "sparse_union<n: int32=0, v: month_day_nano_interval=1>"
+    },
+    {
+     "name": "b",
+     "type": "map<string, month_day_nano_interval>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b"
+    ],
+    "types": [
+     "UNION(n INTEGER, v INTERVAL)",
+     "MAP(VARCHAR, INTERVAL)"
+    ],
+    "ordered": "64a2b805e0b17f32242ef3fd28ea09365c12261d26c92f96b54a44ce2640122d",
+    "unordered": "64a2b805e0b17f32242ef3fd28ea09365c12261d26c92f96b54a44ce2640122d",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "union",
+      1,
+      "v",
+      [
+       "interval",
+       0,
+       1,
+       "0"
+      ]
+     ],
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "k"
+        ],
+        [
+         "interval",
+         3,
+         0,
+         "0"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "intervals at their fields' limits",
+   "build": "intervals at their fields' limits",
+   "arrow": [
+    {
+     "name": "v",
+     "type": "month_day_nano_interval"
+    }
+   ],
+   "values": {
+    "columns": [
+     "v"
+    ],
+    "types": null,
+    "ordered": "9218a3cc80386f13a3e2a22e0ce9542ea19cfab8912b8e78fc9f67fba38ae40d",
+    "unordered": "05feeb48ae3bccf1bb292fb44033aca65ce639535f97f96acbc8a8d52929d2ca",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "interval",
+      2147483647,
+      -2147483648,
+      "9223372036854775807"
+     ]
+    ],
+    [
+     [
+      "interval",
+      -1,
+      0,
+      "-9223372036854775808"
+     ]
+    ],
+    [
+     null
+    ]
+   ]
+  },
+  {
+   "name": "a date64 stays unencodable",
+   "build": "a date64 stays unencodable",
+   "arrow": [
+    {
+     "name": "d",
+     "type": "date64[ms]"
+    }
+   ],
+   "values": {
+    "columns": [
+     "d"
+    ],
+    "types": null,
+    "ordered": "f7c98c931ece6184bd8d4c703ea939c85f0a7de718b38952b4616a52726f7b70",
+    "unordered": "f7c98c931ece6184bd8d4c703ea939c85f0a7de718b38952b4616a52726f7b70",
+    "unencodable": [
+     "arrow:date64[ms]"
+    ]
+   },
+   "rows": [
+    [
+     [
+      "?",
+      "arrow:date64[ms]"
+     ]
+    ],
+    [
+     null
+    ]
+   ]
+  }
+ ]
+}

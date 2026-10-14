@@ -16,8 +16,8 @@
 //! one with `build` is built here as Arrow (DuckDB writes no duplicate map
 //! key and no dense union), as the Python test builds it with pyarrow. Each
 //! must give the vector's Arrow schema as pyarrow spells it, its digests
-//! and its unencodable names; an interval stays unencodable, inside a map
-//! or a chosen member too.
+//! and its unencodable names. An interval in a map or a chosen member has
+//! its own cell since part 2e (`tests/t132g_interval_values.rs`).
 //!
 //! Gating: `contract/tests/t132g-pending.json`'s `pending["rust-host"]`
 //! lists the vectors (by name) that failed here when the test was written.
@@ -201,10 +201,18 @@ fn the_pending_list_only_shrinks() {
         "pending names added: {:?}",
         now.difference(&authored)
     );
-    let all: BTreeSet<String> = vectors()
+    // The rust-host list names part 2c's vectors and part 2e's
+    // (`contract/t132g-p2e-vectors.json`, `tests/t132g_interval_values.rs`).
+    let mut all: BTreeSet<String> = vectors()
         .iter()
         .map(|v| v["name"].as_str().unwrap().to_owned())
         .collect();
+    for vector in read_json("contract/t132g-p2e-vectors.json")["vectors"]
+        .as_array()
+        .unwrap()
+    {
+        all.insert(vector["name"].as_str().unwrap().to_owned());
+    }
     assert!(now.is_subset(&all), "pending names that are no vector");
 }
 
@@ -235,14 +243,36 @@ fn each_map_and_union_vector_reads_as_the_python_runner_reads_it() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// The older vectors (`contract/result-vectors.json`, which
-/// `tests/result_vectors.rs` holds this host to) still name an interval
-/// alone as unencodable: the form grows by maps and unions only.
+/// Arrow's year-month and day-time intervals, which neither DuckDB nor
+/// pyarrow writes, stay unencodable: part 2e gives a form to the
+/// month-day-nano interval only.
 #[test]
-fn an_interval_alone_stays_unencodable() {
-    let connection = duck::open().unwrap();
-    let fetched = duck::run(&connection, "SELECT INTERVAL 1 DAY AS i").unwrap();
-    let fields: Vec<&Field> = fetched.schema.fields().iter().map(|f| f.as_ref()).collect();
-    let got = values(&fields, &fetched.batches);
-    assert_eq!(got["unencodable"], json!(["arrow:month_day_nano_interval"]));
+fn year_month_and_day_time_intervals_stay_unencodable() {
+    use duckdb::arrow::array::{IntervalDayTimeArray, IntervalYearMonthArray};
+    use duckdb::arrow::datatypes::IntervalDayTime;
+    let months = batch(
+        "m",
+        Arc::new(IntervalYearMonthArray::from(vec![Some(14), None])),
+    );
+    let days = batch(
+        "d",
+        Arc::new(IntervalDayTimeArray::from(vec![
+            Some(IntervalDayTime::new(1, 2)),
+            None,
+        ])),
+    );
+    for (made, name) in [
+        (months, "arrow:month_interval"),
+        (days, "arrow:day_time_interval"),
+    ] {
+        let fields: Vec<Field> = made
+            .schema()
+            .fields()
+            .iter()
+            .map(|f| f.as_ref().clone())
+            .collect();
+        let refs: Vec<&Field> = fields.iter().collect();
+        let got = values(&refs, &[made]);
+        assert_eq!(got["unencodable"], json!([name]), "{name}");
+    }
 }

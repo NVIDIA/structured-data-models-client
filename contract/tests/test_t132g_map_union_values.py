@@ -29,9 +29,12 @@ t132g_map_union_values.rs``, so the two encoders agree through the file.
 - the comparator, through ``compare.compare``: a statement result holding
   maps or unions equals itself, and differs from one with another value,
   the same entries in another order, or another union member;
-- an interval stays unencodable, inside a map or a chosen member too, and
-  a result holding one still fails ``sql.result`` (fails closed); a map or
-  a union read as rows (``fetchall``) stays unencodable;
+- a value the form does not hold stays unencodable, inside a map or a
+  chosen member too, and a result holding one still fails ``sql.result``
+  (fails closed): an interval was the seed until part 2e gave intervals a
+  form (``contract/t132g-p2e-vectors.json``); DuckDB's ``VARINT``, which
+  it writes as an opaque Arrow extension, is now; a map or a union read
+  as rows (``fetchall``) stays unencodable;
 - ``contract/result-vectors.json``'s map and union vectors take the form;
 - the committed reference's nested.map and nested.union samples hold no
   unencodable value, so neither fails ``sql.result`` against itself (their
@@ -199,7 +202,7 @@ def test_the_vector_file_is_what_it_says() -> None:
         texts = [_text(row) for row in vector['rows']]
         assert vector['values']['ordered'] == _digest(texts)
         assert vector['values']['unordered'] == _digest(sorted(texts))
-    assert {'map', 'union', 'list', 'struct', '?'} <= kinds
+    assert {'map', 'union', 'list', 'struct', 'interval'} <= kinds
     arrow = {f['type'] for v in vectors for f in v['arrow']}
     # Not vacuous: sparse and dense unions, a map of maps, a duplicate key.
     assert any(t.startswith('dense_union<') for t in arrow)
@@ -406,21 +409,22 @@ def test_the_comparator_takes_a_different_map_or_union_as_different(
     G.held('exits', f'py:{request.node.name}', different)
 
 
-INTERVALS = {
-    'in a map': "SELECT MAP {'k': INTERVAL 1 DAY} AS m",
+#: A value the form does not hold: DuckDB's VARINT, which it writes as an
+#: opaque Arrow extension (an interval was this seed until part 2e).
+UNHELD = {
+    'in a map': "SELECT MAP {'k': 1::VARINT} AS m",
     'a chosen union member': (
-        'SELECT union_value(v := INTERVAL 1 DAY)::UNION(n INTEGER, v INTERVAL)'
-        ' AS u'
+        'SELECT union_value(v := 1::VARINT)::UNION(n INTEGER, v VARINT) AS u'
     ),
-    'alone': 'SELECT INTERVAL 1 DAY AS i',
+    'alone': 'SELECT 1::VARINT AS i',
 }
 
 
-@pytest.mark.parametrize('seed', sorted(INTERVALS))
-def test_a_result_holding_an_interval_still_fails_closed(
+@pytest.mark.parametrize('seed', sorted(UNHELD))
+def test_a_result_holding_an_unencodable_value_still_fails_closed(
     tmp_path: Path, seed: str
 ) -> None:
-    sql = INTERVALS[seed]
+    sql = UNHELD[seed]
     found = _sql_result_texts(_compared(tmp_path, sql, sql))
     assert any('canonical form does not hold' in t for t in found), found
 

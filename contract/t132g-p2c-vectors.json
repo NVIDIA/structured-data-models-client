@@ -1,6 +1,6 @@
 {
  "format": "sdm-result-vectors/1",
- "about": "T1.32g part 2c's vectors, written by the independent test author: a map's and a union's canonical cells, which run_python's arrow_values and sdm-testkit's values must both give. A map is [\"map\", [[key, value], ...]], its entries in the order Arrow holds them (duplicates kept), a null map null, an empty one [\"map\", []]. A union is [\"union\", type code, member name, the member's cell], never null itself: a null member, or a union DuckDB writes as null (a null under its first member), is the member's tag with a null cell. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by each test (DuckDB writes no duplicate map key and no dense union). A value of a type the form still does not hold (an interval) stays [\"?\", \"arrow:<type>\"] and is listed unencodable, inside a map or a chosen member too; a member not chosen names nothing.",
+ "about": "T1.32g part 2c's vectors, written by the independent test author: a map's and a union's canonical cells, which run_python's arrow_values and sdm-testkit's values must both give. A map is [\"map\", [[key, value], ...]], its entries in the order Arrow holds them (duplicates kept), a null map null, an empty one [\"map\", []]. A union is [\"union\", type code, member name, the member's cell], never null itself: a null member, or a union DuckDB writes as null (a null under its first member), is the member's tag with a null cell. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by each test (DuckDB writes no duplicate map key and no dense union). A value of a type the form does not hold stays [\"?\", \"arrow:<type>\"] and is listed unencodable, inside a map or a chosen member too; a member not chosen names nothing. An interval is [\"interval\", months, days, nanoseconds] since part 2e (contract/t132g-p2e-vectors.json).",
  "vectors": [
   {
    "name": "maps: entries in order, empty, null, a null value",
@@ -505,7 +505,7 @@
    ]
   },
   {
-   "name": "an interval inside a map and a chosen union member stays unencodable",
+   "name": "an interval inside a map and as a chosen union member",
    "sql": "SELECT MAP {'k': INTERVAL 1 DAY} AS a, union_value(v := INTERVAL 1 DAY)::UNION(n INTEGER, v INTERVAL) AS b",
    "fetchall": "unencodable",
    "arrow": [
@@ -527,11 +527,9 @@
      "MAP(VARCHAR, INTERVAL)",
      "UNION(n INTEGER, v INTERVAL)"
     ],
-    "ordered": "d2c7a4949b1b0b0cf4c732f2ba1e260cb909d7274839fb71a0afdf7640fcd724",
-    "unordered": "d2c7a4949b1b0b0cf4c732f2ba1e260cb909d7274839fb71a0afdf7640fcd724",
-    "unencodable": [
-     "arrow:month_day_nano_interval"
-    ]
+    "ordered": "b672782d64384cd7705cdcdb82d8e80d5249811270730e9cfb5cbc215220230c",
+    "unordered": "b672782d64384cd7705cdcdb82d8e80d5249811270730e9cfb5cbc215220230c",
+    "unencodable": []
    },
    "rows": [
     [
@@ -544,8 +542,10 @@
          "k"
         ],
         [
-         "?",
-         "arrow:month_day_nano_interval"
+         "interval",
+         0,
+         1,
+         "0"
         ]
        ]
       ]
@@ -555,8 +555,10 @@
       1,
       "v",
       [
-       "?",
-       "arrow:month_day_nano_interval"
+       "interval",
+       0,
+       1,
+       "0"
       ]
      ]
     ]
