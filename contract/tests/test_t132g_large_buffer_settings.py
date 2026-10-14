@@ -2,31 +2,45 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.32g part 2d, fix 2: the large buffers' setting as DuckDB reads it.
+"""T1.32g part 2d, fixes 2 and 4: the large buffers' setting as DuckDB
+reads it, or refused by name.
 
 Written by the package's independent test author, after Codex's round 2
-review of part 2d (P2). ``compare.py``'s ``large_buffers`` infers whether
-DuckDB writes Arrow's large buffers for a case's statements from its
-base's statements and its setup; a setting statement spelled otherwise
-than its pattern was silently skipped, leaving the mode stale both ways.
+and round 3 reviews of part 2d. ``compare.py``'s ``large_buffers`` infers
+whether DuckDB writes Arrow's large buffers for a case's statements from
+its base's statements and its setup. Parsing SQL to find the setting was
+whack-a-mole (a quoted value, a trailing comment, several statements in
+one element, then nested block comments and dollar quotes), so the rule
+is now strict (the orchestrator's decision):
 
-The rule (the orchestrator's decision): bounded, failing closed. The
-ordinary spellings are read: ``SET`` (``SESSION``/``GLOBAL`` too) or
-``RESET``, an optional ``=`` or ``TO``, ``true``/``false`` quoted or not,
-any case, surrounding whitespace, a trailing ``--`` or ``/* */`` comment,
-and several statements in one element, split on ``;`` outside quotes. A
-base or setup statement mentioning ``arrow_large_buffer_size`` in any
-other form fails the comparison by name ("unsupported setting
-statement"), never guessed.
+- a base or setup ELEMENT whose raw text contains
+  ``arrow_large_buffer_size`` anywhere (comments, strings and dollar
+  quotes included) must be, after trimming whitespace and one optional
+  trailing ``;``, exactly one canonical statement, matched in any case:
+  ``SET [SESSION|GLOBAL] arrow_large_buffer_size (=|TO)? <bool>``, the
+  bool ``true`` or ``false`` unquoted or single-quoted, or ``RESET
+  [SESSION|GLOBAL] arrow_large_buffer_size``;
+- any other such element fails the comparison by name ("unsupported
+  setting statement"); an element without the name is ignored; the last
+  canonical statement, the base's and then the setup's, wins. No
+  splitting, no comment stripping.
 
-- controls on real DuckDB: for each spelling, in the case's setup and in
-  its base, the inferred mode is what DuckDB does: the Arrow type of a
-  ``VARCHAR`` it returns after running the statements;
+The tests:
+
+- controls on real DuckDB: for each canonical form, in the case's setup
+  and in its base, the inferred mode is DuckDB's: the Arrow type of a
+  ``VARCHAR`` it returns after running the elements;
 - the comparator on the real large-buffer fixture
   (``tests/golden/t132g-later-stage``): a quoted ``'false'`` after the
-  case's ``true`` means DuckDB writes small types, so the fixture's large
-  catalog reads differ from the reference's rows' types;
-- an unsupported form, in the setup or the base, fails by name.
+  case's ``true`` holds its large catalog reads to small types;
+- every other element naming the setting, in the setup or the base, fails
+  the comparison by name: comments, several statements in one element, a
+  quoted ``;``, nested block comments, dollar quotes, the name in a
+  comment or a string, a read of it, another value. Fix 2's controls for
+  a trailing comment and for several statements in one element now
+  expect this instead of a parse: failing closed can only fail a case
+  falsely, never pass one falsely, since a refused element infers no mode
+  at all.
 
 Gating (``contract/tests/t132g_gate.py``): a test named in
 ``t132g-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
@@ -69,43 +83,40 @@ G = _module('t132g_gate', ROOT / 'contract/tests/t132g_gate.py')
 run_python = _module('run_python', ROOT / 'contract/runners/run_python.py')
 compare = _module('compare', ROOT / 'scripts/rust_core/compare.py')
 
-#: Each a run of statements, as setup elements; each ends in a mode
-#: DuckDB itself decides (:func:`duckdb_says`).
+#: Each a run of canonical elements (or ones not naming the setting);
+#: each ends in a mode DuckDB itself decides (:func:`duckdb_says`). Scopes
+#: are not mixed: an unscoped SET is DuckDB's global value, which a
+#: ``RESET SESSION`` leaves standing (see the package's report).
 SPELLINGS: dict[str, list[str]] = {
     'unquoted true': [ON],
     'nothing': [],
+    'elements without the name are ignored': [
+        "SELECT 1; SELECT 'a;b' /* c */",
+        ON,
+        'SELECT 2 -- d',
+    ],
     'quoted false after true': [ON, "SET arrow_large_buffer_size = 'false'"],
     'quoted true': ["SET arrow_large_buffer_size = 'true'"],
-    'a trailing line comment': [
-        ON,
-        'SET arrow_large_buffer_size = false -- small again',
-    ],
-    'a trailing block comment': [
-        ON,
-        'SET arrow_large_buffer_size = false /* small again */',
-    ],
-    'a reset and a select in one element': [
-        ON,
-        'RESET arrow_large_buffer_size; SELECT 1',
-    ],
-    'a quoted semicolon, then a set, in one element': [
-        "SELECT 'a;b'; SET arrow_large_buffer_size TO 'true'",
-    ],
-    'true then false in one element': [
-        "SET arrow_large_buffer_size = 'true'; SET arrow_large_buffer_size = false",
-    ],
-    'false then true in one element': [
-        'SET arrow_large_buffer_size = false; SET arrow_large_buffer_size = TRUE',
-    ],
     'any case and to': ['set Arrow_Large_Buffer_Size to TRUE'],
     'no spaces': ['SET arrow_large_buffer_size=true'],
-    'surrounding whitespace': [
+    'surrounding whitespace and a semicolon': [
         '   SET   arrow_large_buffer_size   =   true   ;  '
     ],
     'session': ["SET SESSION arrow_large_buffer_size = 'true'"],
-    'a reset in any case with a comment': [
+    'global false after true': [
         ON,
-        'reset ARROW_LARGE_BUFFER_SIZE -- back to small',
+        'SET GLOBAL arrow_large_buffer_size = false',
+    ],
+    'global to a quoted TRUE': ["SET GLOBAL arrow_large_buffer_size TO 'TRUE'"],
+    'reset': [ON, 'RESET arrow_large_buffer_size'],
+    'reset in any case with a semicolon': [
+        ON,
+        'reset ARROW_LARGE_BUFFER_SIZE;',
+    ],
+    'reset global': [ON, 'RESET GLOBAL arrow_large_buffer_size'],
+    'false then true over two elements': [
+        'SET arrow_large_buffer_size = false',
+        'SET arrow_large_buffer_size = TRUE',
     ],
 }
 
@@ -136,7 +147,7 @@ def test_the_controls_are_not_vacuous() -> None:
     said = {name: duckdb_says(steps) for name, steps in SPELLINGS.items()}
     assert any(said.values()) and not all(said.values())
     assert said['quoted false after true'] is False
-    assert said['a trailing line comment'] is False
+    assert said['reset'] is False
     assert said['quoted true'] is True
 
 
@@ -242,7 +253,39 @@ def test_a_quoted_false_after_true_holds_the_large_reads_to_small_types(
 # --- an unsupported form fails by name ------------------------------------------------
 
 
+#: Elements naming the setting that are not one canonical statement; each
+#: fails the comparison by name. Fix 2 read the first seven; the rule now
+#: refuses them.
 FORMS = {
+    'a trailing line comment': (
+        'SET arrow_large_buffer_size = false -- small again'
+    ),
+    'a trailing block comment': (
+        'SET arrow_large_buffer_size = false /* small again */'
+    ),
+    'a reset and a select in one element': (
+        'RESET arrow_large_buffer_size; SELECT 1'
+    ),
+    'a quoted semicolon, then a set, in one element': (
+        "SELECT 'a;b'; SET arrow_large_buffer_size TO 'true'"
+    ),
+    'true then false in one element': (
+        "SET arrow_large_buffer_size = 'true'; "
+        'SET arrow_large_buffer_size = false'
+    ),
+    'false then true in one element': (
+        'SET arrow_large_buffer_size = false; '
+        'SET arrow_large_buffer_size = TRUE'
+    ),
+    'a reset with a comment': (
+        'reset ARROW_LARGE_BUFFER_SIZE -- back to small'
+    ),
+    'a nested block comment': (
+        'SELECT 1 /* outer /* inner */ SET arrow_large_buffer_size = true */'
+    ),
+    'a dollar quote': 'SELECT $$SET arrow_large_buffer_size = true$$',
+    'the name in a comment alone': '-- arrow_large_buffer_size\nSELECT 1',
+    'the name in a string': "SELECT 'arrow_large_buffer_size'",
     'a number': 'SET arrow_large_buffer_size = 1',
     'another word': "SET arrow_large_buffer_size = 'yes'",
     'a read of it': "SELECT current_setting('arrow_large_buffer_size')",
