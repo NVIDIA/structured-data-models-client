@@ -22,12 +22,14 @@
 #   replay_jobs.py (the last two on temporary git repositories) and
 #   prune_caches.py.
 #
-# The cheap tier runs each of those four self-tests only when the push
-# changes its script, its self-test or what it imports or runs (lane.py's
-# imports land.py and installs this hook), measured from the merge base with
-# the phase branch (origin/rust-core-phase-1, else rust-core-phase-1) to the
-# worktree, untracked files included; it prints one line naming those it
-# skipped. With no phase branch to measure against, or with --full, all run.
+# The cheap tier skips those four self-tests only when no file under
+# scripts/rust_core/ differs between the merge base with the phase branch
+# (origin/rust-core-phase-1, else rust-core-phase-1) and the worktree,
+# committed, uncommitted or untracked, nor, under the hook, between each ref
+# pushed and its own merge base; any change there runs all four, since the
+# tools import and run one another. A skip prints one line naming the merge
+# base. With no phase branch to measure against, or with --full, all four
+# run.
 #
 # --full adds the L0 self-tests (selftest.py), the contract schema lock test,
 # and replay_jobs.py: a clean virtual environment per CI job the change
@@ -145,7 +147,7 @@ check() {
 
 # What this push changes: the files that differ between the merge base with
 # the phase branch and the worktree, committed or not, and untracked files.
-# Without a phase branch to measure against, every self-test runs.
+# Without a phase branch to measure against, the self-tests all run.
 phase_ref=
 base=
 changed=
@@ -164,25 +166,40 @@ if [ -n "$base" ]; then
     git ls-files --others --exclude-standard
   )
 fi
+# Under the hook, each ref pushed counts too, from its own merge base with
+# the phase branch: a lane ref pushed from another HEAD is measured, not
+# assumed to be HEAD. A ref whose merge base cannot be found runs them all;
+# a deletion changes nothing.
+if [ -n "$base" ] && [ "$pushed_refs" = 1 ]; then
+  while read -r _ local_sha _ _; do
+    [ -n "${local_sha:-}" ] || continue
+    [[ "$local_sha" =~ ^0+$ ]] && continue
+    if pushed_base=$(git merge-base "$local_sha" "$phase_ref" 2>/dev/null); then
+      changed+=$'\n'$(git diff --name-only "$pushed_base" "$local_sha" --)
+    else
+      base=
+    fi
+  done <"$logdir/pushed-refs"
+fi
+# The tooling self-tests run unless there is a merge base, the tier is
+# cheap and nothing under scripts/rust_core/ changed.
+run_selftests=1
+if [ "$full" = 0 ] && [ -n "$base" ] &&
+  ! grep -q '^scripts/rust_core/' <<<"$changed"; then
+  run_selftests=0
+fi
 skipped=()
 
-# selftest NAME 'FILE...' COMMAND...: a self-test, run like check when the
-# push changes any FILE under scripts/rust_core/ (or there is no merge base,
-# or the tier is full), else named in the line saying what was skipped.
+# selftest NAME COMMAND...: a tooling self-test, run like check when
+# run_selftests is 1, else named in the line saying what was skipped.
 selftest() {
-  local name=$1 files=$2 file
-  shift 2
-  if [ "$full" = 1 ] || [ -z "$base" ]; then
+  local name=$1
+  shift
+  if [ "$run_selftests" = 1 ]; then
     check "$name" . "$@"
-    return
+  else
+    skipped+=("$name")
   fi
-  for file in $files; do
-    if grep -qxF "scripts/rust_core/$file" <<<"$changed"; then
-      check "$name" . "$@"
-      return
-    fi
-  done
-  skipped+=("$name")
 }
 
 check 'lane: one package (lane.py check)' . "${py[@]}" "${lane_check[@]}"
@@ -200,17 +217,15 @@ check 'rust_notices.py --check' . "${py[@]}" scripts/rust_core/rust_notices.py -
 check 'hygiene' . "${py[@]}" scripts/check_repo_hygiene.py all
 check 'ruff check' . "${ruff[@]}" check .
 check 'ruff format --check' . "${ruff[@]}" format --check .
-selftest 'land.py self-tests' 'land.py land_selftest.py' \
-  "${py[@]}" scripts/rust_core/land_selftest.py
-selftest 'lane.py self-tests' 'lane.py lane_selftest.py land.py prepush.sh' \
-  "${py[@]}" scripts/rust_core/lane_selftest.py
-selftest 'replay_jobs.py self-tests' 'replay_jobs.py replay_selftest.py' \
+selftest 'land.py self-tests' "${py[@]}" scripts/rust_core/land_selftest.py
+selftest 'lane.py self-tests' "${py[@]}" scripts/rust_core/lane_selftest.py
+selftest 'replay_jobs.py self-tests' \
   uv run --quiet --no-project --python 3.12 --with pyyaml \
   python3 scripts/rust_core/replay_selftest.py
-selftest 'prune_caches.py self-tests' 'prune_caches.py' \
+selftest 'prune_caches.py self-tests' \
   "${py[@]}" scripts/rust_core/prune_caches.py --selftest
 if [ "${#skipped[@]}" -gt 0 ]; then
-  echo "skipped, unchanged since the merge base ${base:0:10} with $phase_ref:" \
+  echo "skipped, nothing under scripts/rust_core/ changed since the merge base ${base:0:10} with $phase_ref:" \
     "$(IFS=,; echo "${skipped[*]}" | sed 's/,/, /g')"
 fi
 

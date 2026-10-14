@@ -2,11 +2,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""`scripts/rust_core/prepush.sh`'s cheap tier runs a tooling self-test only
-when the push changes what it tests: run in a temporary repository, with
-stand-ins for `uv`, `uvx` and `cargo` that record what they were asked to
-run, a lane that changes nothing skips `lane.py`'s self-test and says so, and
-a lane that changes `lane.py` runs it again."""
+"""The implementer's unit tests of `scripts/rust_core/prepush.sh`'s cheap
+tier skipping the tooling self-tests; the acceptance tests are the test
+author's, in `tests/test_t132e_prepush_selftests.py`. Run in a temporary
+repository, with stand-ins for `uv`, `uvx` and `cargo` that record what they
+were asked to run: a lane that changes nothing skips them and says so, a lane
+that changes `lane.py` runs all four, and under the hook a pushed ref that
+changes `lane.py` runs them though HEAD changes nothing."""
 
 from __future__ import annotations
 
@@ -62,14 +64,19 @@ def _lane(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     return repo, env
 
 
-def _prepush(repo: Path, env: dict[str, str]) -> tuple[str, str]:
-    """prepush.sh's output and what the stand-ins were asked to run."""
+def _prepush(
+    repo: Path, env: dict[str, str], pushed: str | None = None
+) -> tuple[str, str]:
+    """prepush.sh's output and what the stand-ins were asked to run; given
+    `pushed`, as the hook runs it, with `pushed` as git's list of refs."""
     log = repo.parent / 'ran.log'
     log.unlink(missing_ok=True)
+    args = [] if pushed is None else ['--pushed-refs']
     done = subprocess.run(
-        ['bash', 'scripts/rust_core/prepush.sh'],
+        ['bash', 'scripts/rust_core/prepush.sh', *args],
         cwd=repo,
         env=env,
+        input=pushed if pushed is not None else '',
         capture_output=True,
         text=True,
         check=False,
@@ -91,7 +98,7 @@ def test_an_unchanged_lane_py_skips_its_self_test_and_says_why(
     assert 'rust-core-phase-1' in skipped[0]
 
 
-def test_changing_lane_py_runs_its_self_test_again(tmp_path: Path) -> None:
+def test_changing_lane_py_runs_all_four(tmp_path: Path) -> None:
     repo, env = _lane(tmp_path)
     (repo / 'scripts/rust_core/lane.py').write_text('# changed\n')
     subprocess.run(
@@ -102,8 +109,31 @@ def test_changing_lane_py_runs_its_self_test_again(tmp_path: Path) -> None:
         capture_output=True,
     )
     out, ran = _prepush(repo, env)
-    assert 'scripts/rust_core/lane_selftest.py' in ran
-    assert 'land_selftest.py' not in ran
-    assert 'lane.py self-tests' not in ''.join(
-        line for line in out.splitlines() if line.startswith('skipped')
+    for selftest in SELFTESTS:
+        assert f'scripts/rust_core/{selftest}.py' in ran
+    assert 'prune_caches.py --selftest' in ran
+    assert not any(line.startswith('skipped') for line in out.splitlines())
+
+
+def test_a_pushed_ref_that_changes_lane_py_runs_them_from_an_unchanged_head(
+    tmp_path: Path,
+) -> None:
+    repo, env = _lane(tmp_path)
+    git = {'cwd': repo, 'env': env, 'check': True, 'capture_output': True}
+    subprocess.run(['git', 'checkout', '-q', '-b', 'other'], **git)
+    (repo / 'scripts/rust_core/lane.py').write_text('# changed\n')
+    subprocess.run(['git', 'commit', '-qam', 'lane.py changed'], **git)
+    sha = subprocess.run(
+        ['git', 'rev-parse', 'HEAD'], text=True, **git
+    ).stdout.strip()
+    subprocess.run(
+        ['git', 'checkout', '-q', 'rust-core-phase-1-lane-1a'], **git
     )
+    pushed = f'refs/heads/other {sha} refs/heads/other {"0" * 40}\n'
+    out, ran = _prepush(repo, env, pushed)
+    assert 'scripts/rust_core/lane_selftest.py' in ran
+    assert 'scripts/rust_core/land_selftest.py' in ran
+    # The control: HEAD alone, unchanged, skips them.
+    out, ran = _prepush(repo, env, '')
+    assert 'lane_selftest.py' not in ran
+    assert any(line.startswith('skipped') for line in out.splitlines())
