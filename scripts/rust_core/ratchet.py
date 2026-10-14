@@ -869,27 +869,26 @@ def moves(
     (``before``) refuses at a stage, and an entry moves the runner from
     there to its effective expectation (:func:`approved_move`); where the
     case's reference line changes in this change (``after``, in semantic
-    projection), only the entries this change adds or changes count
-    (``this_change``). A move made now and one held since in a baseline
-    are held to the same rule."""
+    projection), the new line's refusal and outcome are the ones judged
+    (fix 2, the comparator relaxing from it) and only the entries this
+    change adds or changes count (``this_change``); a case with no line at
+    either side relaxes nothing. A move made now and one held since in a
+    baseline are held to the same rule."""
     found: dict[str, list[str]] = {}
     for case, by_runner in sorted(projected.items()):
-        line = before.get(case)
-        if line is None:
+        line, now = before.get(case), after.get(case)
+        if line is None or now is None:
             continue
-        stop = projection(line, list(OUTCOME_FIELDS))
+        changed = semantic(line, ordered) != semantic(now, ordered)
+        # Where this change re-records the line, its stop and outcome are
+        # the new line's, the one the comparator relaxes from (fix 2).
+        stop = projection(now if changed else line, list(OUTCOME_FIELDS))
         if (
             stop['outcome.result'] != 'refusal'
             or stop['outcome.stage'] not in STAGES
         ):
             continue
-        now = after.get(case)
-        counted = (
-            entries
-            if now is not None
-            and semantic(line, ordered) == semantic(now, ordered)
-            else this_change
-        )
+        counted = this_change if changed else entries
         runners = sorted(
             runner
             for runner, want in by_runner.items()

@@ -1129,21 +1129,78 @@ _DECIMAL = re.compile(r'DECIMAL\((\d+),(\d+)\)')
 #: arrow_large_buffer_size = true``: text and blobs, and a list as
 #: ``large_list`` (E112).
 DUCKDB_ARROW_LARGE = {'VARCHAR': 'large_string', 'BLOB': 'large_binary'}
+#: The setting whose statements :func:`large_buffers` reads.
+LARGE_BUFFER_SETTING = 'arrow_large_buffer_size'
+#: The forms of a statement on it that are read (E112, fix 2): ``SET``
+#: (``SESSION`` or ``GLOBAL`` too), an optional ``=`` or ``TO``,
+#: ``true`` or ``false`` quoted or not, or ``RESET``; any case. A statement
+#: is one of :func:`_statements`, its comments gone.
 _LARGE_BUFFERS = re.compile(
-    r'\s*(?:SET\s+(?:GLOBAL\s+|SESSION\s+)?arrow_large_buffer_size\s*'
-    r'(?:=|TO)\s*(?P<value>true|false)'
-    r'|RESET\s+(?:GLOBAL\s+|SESSION\s+)?arrow_large_buffer_size)\s*;?\s*',
+    r'(?:SET\s+(?:(?:SESSION|GLOBAL)\s+)?arrow_large_buffer_size'
+    r'(?:\s*=\s*|\s+TO\s+|\s+)'
+    r"(?P<value>true|false|'true'|'false')"
+    r'|RESET\s+(?:(?:SESSION|GLOBAL)\s+)?arrow_large_buffer_size)',
     re.IGNORECASE,
 )
+
+
+class UnsupportedSetting(ValueError):
+    r"""A base or setup statement on :data:`LARGE_BUFFER_SETTING` in a form
+    :func:`large_buffers` does not read: failing the comparison by name,
+    never guessed."""
+
+
+def _statements(step: str) -> list[str]:
+    r"""One base or setup element as its statements: split on ``;``
+    outside quotes, ``--`` and ``/* */`` comments outside quotes left out,
+    each stripped, empty ones dropped. An unterminated quote or comment
+    leaves the rest as it is, so a mention of the setting in it is
+    unsupported."""
+    found: list[str] = []
+    text: list[str] = []
+    at, end = 0, len(step)
+    while at < end:
+        char = step[at]
+        if char in ("'", '"'):
+            close = step.find(char, at + 1)
+            while close != -1 and step[close + 1 : close + 2] == char:
+                close = step.find(char, close + 2)
+            if close == -1:
+                text.append(step[at:])
+                break
+            text.append(step[at : close + 1])
+            at = close + 1
+        elif step.startswith('--', at):
+            newline = step.find('\n', at)
+            at = end if newline == -1 else newline
+        elif step.startswith('/*', at):
+            close = step.find('*/', at + 2)
+            if close == -1:
+                text.append(step[at:])
+                break
+            text.append(' ')
+            at = close + 2
+        elif char == ';':
+            found.append(''.join(text))
+            text = []
+            at += 1
+        else:
+            text.append(char)
+            at += 1
+    found.append(''.join(text))
+    return [each.strip() for each in found if each.strip()]
 
 
 def large_buffers(
     case: dict[str, Any], bases: dict[str, list[str]] | None = None
 ) -> bool:
     r"""Whether DuckDB writes Arrow's large buffers for the case's
-    statements: the last word on ``arrow_large_buffer_size`` in its base's
+    statements: the last word on :data:`LARGE_BUFFER_SETTING` in its base's
     statements (``bases``) and then its own setup, as DuckDB runs them,
-    says ``true``; a ``RESET`` or ``false`` after it turns it off."""
+    says ``true``; a ``RESET`` or ``false`` after it turns it off. Bounded
+    and failing closed (E112, fix 2): a statement mentioning the setting
+    in any form :data:`_LARGE_BUFFERS` does not read raises
+    :class:`UnsupportedSetting`; no other SQL is interpreted."""
     spec = case.get('input') or {}
     steps = [
         *(bases or {}).get(spec.get('base'), []),
@@ -1151,11 +1208,17 @@ def large_buffers(
     ]
     found = False
     for step in steps:
-        setting = (
-            _LARGE_BUFFERS.fullmatch(step) if isinstance(step, str) else None
-        )
-        if setting:
-            found = (setting.group('value') or '').lower() == 'true'
+        if not isinstance(step, str):
+            continue
+        for statement in _statements(step):
+            if LARGE_BUFFER_SETTING not in statement.lower():
+                continue
+            setting = _LARGE_BUFFERS.fullmatch(statement)
+            if setting is None:
+                raise UnsupportedSetting(
+                    f'unsupported setting statement on {LARGE_BUFFER_SETTING}'
+                )
+            found = (setting.group('value') or '').strip("'").lower() == 'true'
     return found
 
 
@@ -1548,7 +1611,13 @@ def compare(
         if name not in every:
             report.fail(f'compare-policy.yaml: {name} is not a case')
     for case in cases:
-        large = large_buffers(case, bases)
+        try:
+            large = large_buffers(case, bases)
+        except UnsupportedSetting as problem:
+            # Neither mode is assumed: the rows' types are not taken for
+            # either, and the case fails by name.
+            report.fail(f'{case["id"]}: {problem}', 'sql.result')
+            large = False
         gating = case['status'] == 'acceptance'
         reach = policy['reach'].get(case['id'])
         ordered = policy['ordered'].get(case['id'], {})

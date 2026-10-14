@@ -3,33 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_quoted_false_after_true_holds_the_large_reads_to_small_types",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a number-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a number-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a read of it-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a read of it-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[another word-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[another word-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a quoted semicolon, then a set, in one element-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a quoted semicolon, then a set, in one element-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset and a select in one element-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset and a select in one element-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset in any case with a comment-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset in any case with a comment-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing block comment-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing block comment-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing line comment-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing line comment-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[false then true in one element-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[false then true in one element-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted false after true-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted false after true-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted true-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted true-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[session-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[session-setup]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
