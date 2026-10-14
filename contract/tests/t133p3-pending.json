@@ -1,8 +1,16 @@
 {
- "about": "T1.33 part 3's acceptance tests that failed when the independent test author wrote them, before the implementation, on lane 1a's 03896356 (T1.33 part 2 with its catalog fix), on the owner's answers of 2026-10-14 (items 24 and 26) and the orchestrator's big-integer rule. 'rust-host': rows through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs): contract/type-set-vectors.json's rows with `cells` (the lossless types read, not left out; HUGEINT, UHUGEINT and VARINT as int64, decimal128(38, 0) or text by the big-integer rule, each cell DuckDB's exact text) and contract/t133p3-vectors.json's text_time rows (rel-trial's time-named text, refused text_time today). 'exits': packages/structured-data-models-client/tests/test_the_schema_route.py's text_time cases flipped to text ('py:test_the_schema_route::<test id>'). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. Added on 9de3d1dc (the test author's): the big-integer tier decided for the whole column, rows lossless.hugeint-wide-after-preview and varint-wide-after-preview (a 1,200-row users whose values past int64 come after the 1,000 a preview reads; today received int64); and the differential's text_time read under DT-15, approved, never pending the owner (contract/tests/test_t133_umbrellas.py and test_t133_differential_classes.py, 'py:<file stem>::<test id>').",
+ "about": "T1.33 part 3's acceptance tests that failed when the independent test author wrote them, before the implementation, on lane 1a's 03896356 (T1.33 part 2 with its catalog fix), on the owner's answers of 2026-10-14 (items 24 and 26) and the orchestrator's big-integer rule. 'rust-host': rows through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs): contract/type-set-vectors.json's rows with `cells` (the lossless types read, not left out; HUGEINT, UHUGEINT and VARINT as int64, decimal128(38, 0) or text by the big-integer rule, each cell DuckDB's exact text) and contract/t133p3-vectors.json's text_time rows (rel-trial's time-named text, refused text_time today). 'exits': packages/structured-data-models-client/tests/test_the_schema_route.py's text_time cases flipped to text ('py:test_the_schema_route::<test id>'). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. Added on 9de3d1dc (the test author's): the big-integer tier decided for the whole column, rows lossless.hugeint-wide-after-preview and varint-wide-after-preview (a 1,200-row users whose values past int64 come after the 1,000 a preview reads; today received int64); and the differential's text_time read under DT-15, approved, never pending the owner (contract/tests/test_t133_umbrellas.py and test_t133_differential_classes.py, 'py:<file stem>::<test id>'). Added on 08c531b5 (the test author's, fix round 1): the row varint-key.decimal of contract/t133p3-vectors.json (rust-host), a VARINT key (users.user_id and orders.user_id) received decimal128(38, 0), which materialize fails with an unnamed PROVIDER_ERROR today, its int64 and text controls passing; and 'host-vendor', the tests of rust/crates/sdm-host/tests/t133p3_vendor.rs (by test name), an arrow.opaque field of another vendor or none decoded by DuckDB's layout through sdm_host::admit today, where it must be admitted as its storage is, as before part 3.",
  "pending": {
-  "rust-host": [],
-  "exits": []
+  "rust-host": [
+   "varint-key.decimal"
+  ],
+  "exits": [],
+  "host-vendor": [
+   "another_vendor_s_hugeint_is_not_read_as_a_number",
+   "a_hugeint_naming_no_vendor_is_not_read_as_a_number",
+   "another_vendor_s_opaque_types_are_admitted_as_before_part_3",
+   "opaque_types_naming_no_vendor_are_admitted_as_before_part_3"
+  ]
  },
  "authored": {
   "rust-host": [
@@ -24,7 +32,8 @@
    "text-time.time-frame",
    "text-time.time-perspective",
    "lossless.hugeint-wide-after-preview",
-   "varint-wide-after-preview"
+   "varint-wide-after-preview",
+   "varint-key.decimal"
   ],
   "exits": [
    "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+24:00-False-False]",
@@ -40,6 +49,12 @@
    "py:test_t133_differential_classes::test_text_time_is_the_only_described_rule",
    "py:test_t133_differential_classes::test_a_core_refusing_text_time_is_dt_15_s",
    "py:test_t133_differential_classes::test_a_text_time_refusal_fails_closed"
+  ],
+  "host-vendor": [
+   "another_vendor_s_hugeint_is_not_read_as_a_number",
+   "a_hugeint_naming_no_vendor_is_not_read_as_a_number",
+   "another_vendor_s_opaque_types_are_admitted_as_before_part_3",
+   "opaque_types_naming_no_vendor_are_admitted_as_before_part_3"
   ]
  }
 }

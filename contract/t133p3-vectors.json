@@ -1,6 +1,6 @@
 {
  "format": "sdm-t133p3-vectors/1",
- "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). The types' rows (P1B-43, the big-integer rule) are contract/type-set-vectors.json's, those with `cells`, read by the same test; these are its controls and the text_time rows. Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
+ "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). The types' rows (P1B-43, the big-integer rule) are contract/type-set-vectors.json's, those with `cells`, read by the same test; these are its controls and the text_time rows. Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. The varint-key rows (fix round 1) instead make the key itself, users.user_id and orders.user_id, a VARINT, `column` the key, so materialize's seed joins run on it in each big-integer tier. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
  "rows": [
   {
    "id": "text.control",
@@ -82,6 +82,56 @@
     "time_column": "time_frame"
    },
    "why": "kept: a time-named column whose values read as times is still a time column; the reference describes it string, timestamp, the time column"
+  },
+  {
+   "id": "varint-key.int64",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 7 THEN '7' ELSE user_id::VARCHAR END)::VARINT AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 7 THEN '7' ELSE user_id::VARCHAR END)::VARINT AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "int64"
+    }
+   },
+   "why": "a control: users.user_id and orders.user_id VARINT (no setting), every value fitting int64: the key received int64, materialize's seed joins on DuckDB succeed, each key cell exact (passed at 08c531b5, the subagent's probe)"
+  },
+  {
+   "id": "varint-key.decimal",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 7 THEN '100000000000000000000' ELSE user_id::VARCHAR END)::VARINT AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 7 THEN '100000000000000000000' ELSE user_id::VARCHAR END)::VARINT AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "decimal128",
+     "precision": 38,
+     "scale": 0
+    }
+   },
+   "why": "the subagent's P2-1 (T1.33 part 3 review): the same VARINT key with user 7's id 10^20, so the key is received decimal128(38, 0); the seeds reach DuckDB in that tier, and the seed join ON t.user_id = s.seed_key (sdm-data/src/duckdb.rs's neighbors and lookup) has no DECIMAL(38,0) -> BIGNUM cast: materialize must succeed with each key cell exact, never an unnamed PROVIDER_ERROR"
+  },
+  {
+   "id": "varint-key.text",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 7 THEN '1000000000000000000000000000000000000000000' ELSE user_id::VARCHAR END)::VARINT AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 7 THEN '1000000000000000000000000000000000000000000' ELSE user_id::VARCHAR END)::VARINT AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast",
+    "received": {
+     "type": "utf8"
+    }
+   },
+   "why": "a control: the same VARINT key with user 7's id 10^42, past 38 digits, so received utf8; VARINT against VARCHAR compares in DuckDB, so materialize succeeds, each key cell exact (passed at 08c531b5, the subagent's probe)"
   }
  ]
 }

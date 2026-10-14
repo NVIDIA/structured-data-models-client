@@ -131,3 +131,28 @@ def test_a_time_named_column_of_no_times_is_text() -> None:
     kept = by_id['text-time.time-frame-dates']['want']
     assert kept['stype'] == 'timestamp'
     assert kept['time_column'] == 'time_frame'
+
+
+def test_a_varint_key_has_each_tier() -> None:
+    # The subagent's P2-1 (fix round 1): a VARINT key, users.user_id and
+    # orders.user_id, in each tier; materialize's seed joins run on it.
+    by_id = {r['id']: r for r in ROWS}
+    tiers = {
+        'varint-key.int64': (I64, 'int64'),
+        'varint-key.decimal': (D38, 'int64'),
+        'varint-key.text': (UTF8, 'string'),
+    }
+    for row_id, (received, dtype) in tiers.items():
+        row = by_id[row_id]
+        assert row['column'] == 'user_id', row_id
+        assert row['want'] == {
+            'dtype': dtype,
+            'cells': 'cast',
+            'received': received,
+        }, row_id
+        orders, users = row['witness']
+        assert orders.startswith('CREATE OR REPLACE TABLE orders ')
+        assert (
+            '::VARINT AS user_id' in orders and '::VARINT AS user_id' in users
+        )
+        assert not any(s.startswith('SET ') for s in row['witness'])
