@@ -55,6 +55,15 @@ uv run --no-project --with maturin==1.15.0 \
 .venv/bin/python -m pytest rust/bindings/sdm-py/tests -q --native-build test-ops
 ```
 
+The Rust core's contract suite, `contract/tests`, runs in parallel with
+pytest-xdist, which the client's `test` extra installs. `--dist loadfile`
+keeps each test file on one worker, so its module fixtures are built once;
+the results match a serial run's, test by test, in about a third of the time:
+
+```bash
+.venv/bin/python -m pytest contract/tests -q -n 4 --dist loadfile
+```
+
 `tests/` at the root is the cross-package suite: that the five distributions
 agree on a version and a licence, that the recorded public surface and wire
 payloads still match, and that the claims the configuration files make about

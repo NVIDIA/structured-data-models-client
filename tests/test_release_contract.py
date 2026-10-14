@@ -1281,6 +1281,7 @@ class TestDistributionCoherence:
                 # transport, so the client is the distribution that declares it.
                 assert name in known or name in {
                     'pytest',
+                    'pytest-xdist',
                     'requests-mock',
                     'databricks-sdk',
                 }, (
