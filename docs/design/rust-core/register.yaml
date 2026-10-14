@@ -3523,15 +3523,21 @@ entries:
   title: Arrow types admission still refuses, which the reference fails unnamed
   kind: change
   old_behavior: >-
-    The reference reads any Arrow type DuckDB returns into pandas
-    (to_pandas with pd.ArrowDtype) and maps float16, any timedelta unit and
-    any categorical, among others.
+    The reference reads the Arrow DuckDB returns into pandas (to_pandas with
+    pd.ArrowDtype) and takes each column's dtype from its catalog type, or
+    infers it from the sample where that gives none. It fails unnamed at
+    from_source on a column it cannot type: an interval and a union, and also,
+    as contract/type-set-vectors.json records (T1.33), an ENUM, the view
+    types, decimal32 and decimal64, the extension types of a lossless
+    connection and a VARINT.
   new_behavior: >-
     Admission widens losslessly into the closed set (Phase 1 decisions H16
     and H27): float16, decimal32 and decimal64, duration and time32 at s or
     ms, date64 (as timestamp[us]), view types, fixed_size_binary and any
     dictionary are admitted, keeping the received type, and from T1.7d
-    (decision E17) a run_end_encoded column is decoded to its value type;
+    (decision E17) a run_end_encoded column is decoded to its value type,
+    and from T1.33 an int8 carrying the canonical extension arrow.bool8
+    (DuckDB's booleans under arrow_lossless_conversion) is read as boolean;
     a batch whose values pass int32 offsets is split between rows.
     Proposed: what still cannot convert is refused by name. Generated at
     T1.7d from the admission tests' family table (sdm-host
@@ -3548,11 +3554,17 @@ entries:
     year-month or day-time interval), and `union`, not reference-accepted
     (marked at T1.33: the reference fails a UNION column unnamed at
     from_source, contract/nested-type-vectors.json's union.integer-varchar
-    and case nested.union; DuckDB hands over no dense union). No public
-    call reaches the reference's explicit-dtype path that would skip its
-    inference (rfm/base/table.py:262-296): Schema.from_source takes no column
-    dtype (sdm_client/schema.py:1070-1079), and the call fails before any
-    Schema exists whose column could be given one. The values still
+    and case nested.union; DuckDB hands over no dense union).
+    No public call reaches the engine's explicit-dtype path that would skip
+    that inference (rfm/base/table.py:262-296). The client builds every engine
+    table through engine_graph (sdm_client/materializers/sources.py:125-170),
+    whose specs carry a table's name and source name and never a column's
+    dtype (:147-153), so the engine reads every column of the source table and
+    types each as above, the columns a gather does not want removed only
+    afterwards (:80-87). That holds for Schema.from_source (schema.py:1194)
+    and for a Schema built by its constructor from SourceTable objects
+    (schema.py:715, :851), which materialize reads through the same
+    engine_graph (sources.py:42-77). The values still
     refused are a timestamp, duration or date64 at s or ms whose value
     passes int64 microseconds, and a single string, binary or list value
     past int32 offsets; any type T1.33 finds no lossless row for joins
@@ -3940,43 +3952,75 @@ entries:
     recorded at the T1.32g bundle, E99(b), not here).
 
 - id: P1B-43
-  title: A UUID DuckDB hands over as fixed_size_binary(16) is left out as binary where the reference fails unnamed
+  title: A column DuckDB hands over as an Arrow extension type is read by its storage, where the reference fails unnamed or reads it as a time
   kind: change
   old_behavior: >-
-    Under SET arrow_lossless_conversion = true DuckDB hands a UUID column over
-    as fixed_size_binary(16) (the arrow.uuid extension); the reference's
-    Schema.from_source fails such a column with an unnamed RuntimeError (its
-    catalog type UUID reads as no dtype, and inference from the sample fails).
-    By default DuckDB hands a UUID over as text.
+    DuckDB hands some types over as Arrow extension types: under SET
+    arrow_lossless_conversion = true a UUID as arrow.uuid
+    (fixed_size_binary(16)), a HUGEINT, a UHUGEINT and a TIMETZ as
+    arrow.opaque over fixed_size_binary, a BIT as arrow.opaque over binary, a
+    JSON as arrow.json over utf8 (and a BOOLEAN as arrow.bool8); with any
+    setting a VARINT (BIGNUM) as arrow.opaque over binary, large_binary under
+    arrow_large_buffer_size, or binary_view under arrow_output_version 1.5 or
+    string views. The reference's Schema.from_source fails the UUID, HUGEINT,
+    UHUGEINT, BIT, JSON and VARINT columns with an unnamed RuntimeError, and
+    describes the lossless TIMETZ column as a timestamp (dtype timestamp[us],
+    stype timestamp).
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    host layer admits fixed_size_binary as binary without loss (sdm-host's
-    admission table; H16 and H27), and the column is left out of its table
-    with the warning the reference gives a BLOB column (COLUMNS_LEFT_OUT), the
-    table described. The default route is unchanged.
+    host layer admits each by its storage type (sdm-host's admission table;
+    H16 and H27): the UUID, HUGEINT, UHUGEINT, TIMETZ, BIT and VARINT columns
+    as binary, left out of their table with the warning the reference gives a
+    BLOB column (COLUMNS_LEFT_OUT), the table described; the JSON column as
+    text (dtype string). The lossless TIMETZ column is the one changed answer:
+    the reference describes it as a timestamp, the core leaves it out. A
+    lossless connection is described as any other (T1.33's fix of the catalog
+    read: arrow.bool8 admitted as boolean), a BOOLEAN column as bool as the
+    reference reads it and a plain INTEGER as without the setting, so neither
+    is a difference. The default route is unchanged.
   affected_inputs: >-
     Schema.from_source over a DuckDB connection with arrow_lossless_conversion
-    set, holding a UUID column, under a forced core route.
+    set, holding a UUID, HUGEINT, UHUGEINT, BIT, JSON or TIMETZ column, or
+    over any DuckDB connection holding a VARINT column, under a forced core
+    route.
   cases: [T1.33]
   refs:
   - 'contract/type-set-vectors.json#fixed-size-binary.16 refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#lossless.hugeint refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#lossless.uhugeint refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#lossless.bit refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#lossless.json refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#varint refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#varint.large refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#varint.view refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#lossless.timetz success -> success'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
   notes: >-
-    The reference fails it unnamed and the core reads it: a new success, which
-    E66(b) keeps for individual decision (the core accepting what the
+    The reference fails each unnamed and the core reads it: a new success,
+    which E66(b) keeps for individual decision (the core accepting what the
     reference refuses), as P1B-9's fixed-size lists and P1B-50's list views
-    were; so the owner's. Approver: owner. Recommendation: approve, the column
-    read as the type it is admitted as. Measured by T1.33's test author
-    (contract/type-set-vectors.json, the reference's answers recorded through
-    DuckDB 1.5.6 in the reference environment, the core's held on the
-    pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
-    to its transition by contract/tests/test_t133_type_set.py, pending until
-    an approved entry names it. Never self-approved.
+    were; so the owner's. Approver: owner. lossless.timetz changes an answer
+    the reference gives (a TIMETZ column described from its catalog type as a
+    time), which is the owner's too. Recommendation: approve, the columns read
+    as the types they are admitted as; the alternative for TIMETZ, decoding
+    DuckDB's opaque bytes as a time with a zone, would read a storage format
+    of DuckDB's own. Rewritten at T1.33's fix round 1, after the subagent's
+    review measured that a lossless connection was refused
+    PROVIDER_SCHEMA_MISMATCH before the catalog fix, so the UUID's leave-out
+    it first stated was not reached. Measured by T1.33's test author:
+    contract/type-set-vectors.json's rows, the reference's answers recorded
+    through each row's witness (the DuckDB statements that hand the type over)
+    by contract/tools/type_set_record.py in the reference environment (DuckDB
+    1.5.6), the core's held through real DuckDB on rust-host by sdm-testkit's
+    tests/t133_type_reach.rs and, for a vector, on the pure-Rust host by
+    sdm-host's tests/t133_type_set.rs; each transition held by
+    contract/tests/test_t133_type_set.py, pending until an approved entry
+    names it. Never self-approved.
 
 - id: P1B-44
-  title: Text and binary DuckDB hands over as view types are read as text and binary where the reference fails unnamed
+  title: Text and binary DuckDB hands over as view types, and lists of text views, are read as text and binary where the reference fails unnamed
   kind: change
   old_behavior: >-
     Under SET arrow_output_version = '1.4' with produce_arrow_string_view
@@ -3988,15 +4032,17 @@ entries:
     host layer admits utf8_view as utf8 and binary_view as binary without loss
     (H16 and H27): a utf8_view column is described as text (dtype string), as
     VARCHAR is, and a binary_view column left out with the warning the
-    reference gives a BLOB column (COLUMNS_LEFT_OUT). The default route is
-    unchanged.
+    reference gives a BLOB column (COLUMNS_LEFT_OUT). A list of string views
+    is left out as a list of text (stringlist, COLUMNS_LEFT_OUT), as a list of
+    utf8 is. The default route is unchanged.
   affected_inputs: >-
     Schema.from_source over a DuckDB connection producing Arrow string views,
-    holding a VARCHAR or BLOB column, under a forced core route.
+    holding a VARCHAR, BLOB or VARCHAR[] column, under a forced core route.
   cases: [T1.33]
   refs:
   - 'contract/type-set-vectors.json#utf8-view refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#binary-view refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#view.list-utf8 refusal UNNAMED -> success'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
@@ -4011,6 +4057,9 @@ entries:
     pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
     to its transition by contract/tests/test_t133_type_set.py, pending until
     an approved entry names it. Never self-approved.
+    From T1.33's fix round 1 also view.list-utf8 (a VARCHAR[] under
+    produce_arrow_string_view, list<string_view>), which the subagent's review
+    found reachable: the same new success.
 
 - id: P1B-45
   title: A list DuckDB hands over as a large list view is left out as a list where the reference fails unnamed
@@ -4121,10 +4170,11 @@ entries:
   title: An ENUM column is refused by name where the reference fails unnamed
   kind: change
   old_behavior: >-
-    DuckDB hands an ENUM('a', 'b', 'c') column over as dictionary<uint8,
-    utf8>; the reference's Schema.from_source fails it with an unnamed
-    RuntimeError (its catalog type reads as no dtype, and inference from the
-    sample fails).
+    DuckDB hands an ENUM column over as dictionary<uint8, utf8> (ENUM('a',
+    'b', 'c')), dictionary<uint16, utf8> from 256 members and
+    dictionary<uint32, utf8> from 65,536; the reference's Schema.from_source
+    fails it with an unnamed RuntimeError (its catalog type reads as no dtype,
+    and inference from the sample fails).
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     host layer admits the dictionary of text as it is (the closed set's
@@ -4138,6 +4188,8 @@ entries:
   cases: [T1.33]
   refs:
   - 'contract/type-set-vectors.json#dictionary.uint8-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#dictionary.uint16-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#dictionary.uint32-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
@@ -4151,6 +4203,58 @@ entries:
     held on the pure-Rust host by sdm-host's tests/t133_type_set.rs, which
     passes); held to its transition by contract/tests/test_t133_type_set.py,
     pending until an approved entry names it. Never self-approved.
+    From T1.33's fix round 1 its refs also name the uint16 and uint32 ENUMs
+    (300 and 70,000 members), which both reviews found reachable: the same
+    transition. Codex's APPROVE-P1B-48 of review round 1 covered the uint8 ref
+    alone, so the entry, changed, waits for both reviewers.
+
+- id: P1B-49
+  title: A struct, map or union DuckDB hands over in another Arrow form is refused by name where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source fails a STRUCT, MAP or UNION column
+    with an unnamed RuntimeError in whatever Arrow form DuckDB hands it over:
+    its children as large_string under arrow_large_buffer_size, as string_view
+    under produce_arrow_string_view, or a MAP(VARCHAR, BIGINT) with no
+    setting.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, each
+    is refused as its default form is (P1B-10, P1B-7): a struct or a map with
+    UnsupportedRequestError, code UNSUPPORTED_REQUEST, fields operation
+    describe_source and rule column_type, its children admitted as utf8 first;
+    a union by the host layer's admission, StructuredDataError, code
+    UNSUPPORTED_TYPE, naming the column and its Arrow type. The default route
+    is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source holding a STRUCT, MAP or UNION
+    column, under arrow_large_buffer_size or produce_arrow_string_view, or a
+    MAP(VARCHAR, BIGINT) column, under a forced core route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#struct.large-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#map.large-utf8-int64 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#view.struct refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#view.map refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#map.utf8-int64 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#large.union refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/type-set-vectors.json#view.union refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    A named refusal where the reference fails unnamed, E66(b)'s class, for the
+    reviewer to check it fits; the behavior is P1B-10's and P1B-7's
+    (approved), reached through other Arrow forms, written as an entry of its
+    own rather than as new refs on those approved entries, which would reopen
+    them. Approver: reviewer. Measured by T1.33's test author:
+    contract/type-set-vectors.json's rows, the reference's answers recorded
+    through each row's witness (the DuckDB statements that hand the type over)
+    by contract/tools/type_set_record.py in the reference environment (DuckDB
+    1.5.6), the core's held through real DuckDB on rust-host by sdm-testkit's
+    tests/t133_type_reach.rs and, for a vector, on the pure-Rust host by
+    sdm-host's tests/t133_type_set.rs; each transition held by
+    contract/tests/test_t133_type_set.py, pending until an approved entry
+    names it. Never self-approved.
 
 # --- lane 1b entries (P1B-52..69) ---
 
