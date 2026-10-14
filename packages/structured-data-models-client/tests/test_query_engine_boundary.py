@@ -134,29 +134,107 @@ def test_an_entity_that_is_not_in_the_table_is_a_structured_data_error():
         query().materialize(indices=[-1, -2], num_context_samples=20)
 
 
-def test_the_entity_ceiling_is_named_by_this_client_before_gathering():
-    """The engine's own message names a `batch_size=` this client has not got."""
-    with pytest.raises(StructuredDataError) as error:
-        query().materialize(indices=list(range(1_001)), num_context_samples=20)
-    message = str(error.value)
-    assert error.value.code == 'UNSUPPORTED_REQUEST'
-    assert '1,000' in message
-    assert 'batch_size' not in message
+def linked() -> Schema:
+    items = pd.DataFrame(
+        {'item_id': range(5), 'price': [1.0, 2.0, 3.0, 4.0, 5.0]}
+    )
+    bought = orders().assign(item_id=[index % 5 for index in range(80)])
+    return Schema.from_data(
+        {'users': users(), 'items': items, 'orders': bought}
+    )
 
 
-def test_the_ceiling_is_refused_before_the_engine_is_reached():
-    built = query()
-    called = False
+@pytest.mark.parametrize(
+    ('text', 'data', 'sizes'),
+    [
+        ('PREDICT users.age FOR EACH users.user_id', schema, [2, 2, 1]),
+        (
+            'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) '
+            'FOR EACH users.user_id',
+            linked,
+            [1, 1, 1, 1, 1],
+        ),
+    ],
+    ids=['regression', 'link_prediction'],
+)
+def test_more_entities_than_one_call_scores_are_gathered_in_batches(
+    monkeypatch, text, data, sizes
+):
+    from sdm_client.models import RELATIONAL_LIMITS
 
-    def _fail(*args, **kwargs):
-        nonlocal called
-        called = True
-        raise AssertionError('the engine was reached')
+    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    monkeypatch.setitem(
+        RELATIONAL_LIMITS, 'predict_rows_temporal_link_prediction', 1
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = PredictiveQuery(text, data()).materialize(
+            indices=[5, 6, 7, 8, 9], num_context_samples=20
+        )
+    assert [
+        len(payload['predict']['instance_table']['rows'])
+        for payload in request.payloads
+    ] == sizes
 
-    built._relational_materializer._get_model = _fail  # type: ignore[method-assign]
-    with pytest.raises(StructuredDataError):
-        built.materialize(indices=list(range(1_001)), num_context_samples=20)
-    assert not called
+
+class Echo:
+    """Answers each call about every row it was sent, numbered from zero."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def predict(self, payload: dict) -> dict:
+        self.calls += 1
+        table = payload['predict']['instance_table']
+        at = table['columns'].index('instance_id')
+        return {
+            'id': f'call-{self.calls}',
+            'model': 'kumo-relational',
+            'metadata': {},
+            'predictions': [
+                {'row_index': index, 'id': str(row[at]), 'prediction': 1.0}
+                for index, row in enumerate(table['rows'])
+            ],
+        }
+
+    def create_session(self, payload: dict) -> dict:
+        return {'session_id': 'pinned'}
+
+    def session_predict(self, session_id: str, payload: dict) -> dict:
+        return self.predict(payload)
+
+    def delete_session(self, session_id: str) -> None:
+        pass
+
+
+@pytest.mark.parametrize('pinned', [False, True], ids=['one_shot', 'session'])
+def test_a_request_asked_in_several_calls_is_answered_as_one(
+    monkeypatch, pinned
+):
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    asked = query('PREDICT users.age FOR EACH users.user_id')
+    scored = [5, 6, 7, 8, 9]
+    client = SDMClient(url='http://localhost:8000')
+    client._transport = transport = Echo()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = asked.materialize(indices=scored, num_context_samples=20)
+        if pinned:
+            fitted = client.fit(
+                asked.materialize(indices=[30], num_context_samples=20),
+                model=KumoRelational(),
+                holdout=scored,
+            )
+            result = fitted.predict(request)
+        else:
+            result = client.predict(request, model=KumoRelational())
+    frame = result.to_pandas()
+    assert transport.calls == 3
+    assert list(frame['row_index']) == [0, 1, 2, 3, 4]
+    assert list(frame['id']) == scored
 
 
 def test_a_dropped_row_is_explained_rather_than_only_counted():
@@ -178,34 +256,6 @@ def test_a_dropped_row_is_explained_rather_than_only_counted():
 def test_an_ordinary_call_is_unaffected():
     request = query().materialize(indices=[1, 2], num_context_samples=20)
     assert request.payloads
-
-
-def test_a_temporal_link_prediction_is_capped_lower_than_everything_else():
-    """The second call to `_check_entity_count` is why it takes a task kind.
-
-    Only the 1,000 ceiling was covered, so the whole reason the argument
-    exists went unexercised: a temporal link prediction is capped at 200, and
-    a count between the two has to be refused for that task and allowed for
-    every other one.
-    """
-    from predictive_query import TaskType
-
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    temporal = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
-    between = list(range(temporal + 1))
-
-    RelationalMaterializer._check_entity_count(
-        between, TaskType.BINARY_CLASSIFICATION
-    )
-    RelationalMaterializer._check_entity_count(between, None)
-
-    with pytest.raises(StructuredDataError) as error:
-        RelationalMaterializer._check_entity_count(
-            between, TaskType.TEMPORAL_LINK_PREDICTION
-        )
-    assert str(temporal) in str(error.value)
-    assert error.value.code == 'UNSUPPORTED_REQUEST'
 
 
 def test_the_two_ceilings_are_the_engine_s_own():

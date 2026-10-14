@@ -108,7 +108,9 @@ class PredictiveQuery:
 
         Args:
             indices: Keys of rows already present in the tables. Mutually
-                exclusive with ``predict``.
+                exclusive with ``predict``. On the relational route, more than
+                the endpoint scores in one call are gathered as several calls,
+                and :meth:`~sdm_client.SDMClient.predict` answers them as one.
             predict: Rows supplied directly for scoring. Supported for
                 single-table schemas and mutually exclusive with ``indices``.
             num_context_samples: For ``indices`` requests, the maximum number

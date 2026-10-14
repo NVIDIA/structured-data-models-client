@@ -43,7 +43,7 @@ from sdm_client.schema import (
 from sdm_client.wire.dtypes import arrow_decimal_type
 
 if TYPE_CHECKING:
-    from predictive_query import TaskType, ValidatedPredictiveQuery
+    from predictive_query import ValidatedPredictiveQuery
     from sdm_relational_engine.rfm import (
         Graph,
         KumoRelational,
@@ -75,6 +75,15 @@ def _warn_of_a_context_the_default_mode_capped(
         category=SDMWarning,
         stacklevel=caller_stacklevel(),
     )
+
+
+def _rows_per_call(
+    kind: object, limits: Mapping[str, int] = RELATIONAL_LIMITS
+) -> int:
+    r"""How many entities the endpoint scores in one call of a task ``kind``."""
+    if str(kind) == 'temporal_link_prediction':
+        return limits['predict_rows_temporal_link_prediction']
+    return limits['predict_rows_max']
 
 
 class RelationalMaterializer:
@@ -180,9 +189,13 @@ class RelationalMaterializer:
         num_context_samples: int | None,
         options: dict[str, Any],
     ) -> tuple[dict[str, Any], ...]:
-        r"""Sample and encode using the engine's own materializer."""
+        r"""Sample and encode using the engine's own materializer.
+
+        More entities than the endpoint scores in one call are gathered as
+        several payloads of at most that many, which `predict()` sends one at
+        a time and answers as one result.
+        """
         run_mode = self._run_mode_for(num_context_samples)
-        self._check_entity_count(indices)
         self._check_shape(options, RELATIONAL_LIMITS)
         with self._engine_errors():
             model = self._get_model()
@@ -209,14 +222,16 @@ class RelationalMaterializer:
         if not hasattr(task, 'task_type'):
             raise StructuredDataError(
                 'the resolved task does not say what kind it is, so the '
-                'entity limit for it cannot be checked',
+                'entities it scores per call cannot be known',
                 code='INTERNAL_ERROR',
             )
-        self._check_entity_count(indices, task.task_type)
         _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
         task = self._narrow_context(task, num_context_samples)
 
-        with self._engine_errors(model):
+        with (
+            self._engine_errors(model),
+            model.batch_mode(batch_size=_rows_per_call(task.task_type)),
+        ):
             parts = model.materialize_task(
                 task,
                 run_mode=run_mode,
@@ -553,23 +568,6 @@ class RelationalMaterializer:
         return f' [{"; ".join(reasons)}]' if reasons else ''
 
     @staticmethod
-    def _check_entity_count(
-        indices: Sequence[object], task_kind: TaskType | None = None
-    ) -> None:
-        r"""Refuse more entities than the endpoint will score."""
-        ceiling = RELATIONAL_LIMITS['predict_rows_max']
-        described = 'the endpoint scores at most'
-        if task_kind is not None and 'link_prediction' in str(task_kind):
-            ceiling = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
-            described = 'a temporal link prediction scores at most'
-        if len(indices) > ceiling:
-            raise StructuredDataError(
-                f'{len(indices):,} entities were asked for, and {described} '
-                f'{ceiling:,} at a time; split them across calls',
-                code='UNSUPPORTED_REQUEST',
-            )
-
-    @staticmethod
     def _narrow_context(
         task: TaskTable, num_context_samples: int | None
     ) -> TaskTable:
@@ -610,11 +608,7 @@ class RelationalMaterializer:
         if rows is None:
             return
         kind = payload.get('task', {}).get('kind')
-        cap = (
-            limits['predict_rows_temporal_link_prediction']
-            if kind == 'temporal_link_prediction'
-            else limits['predict_rows_max']
-        )
+        cap = _rows_per_call(kind, limits)
         if len(rows) > cap:
             raise StructuredDataError(
                 f'this batch scores {len(rows)} rows and the endpoint accepts at '

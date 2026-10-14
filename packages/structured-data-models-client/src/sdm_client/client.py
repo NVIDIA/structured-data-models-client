@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 import warnings
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -41,6 +41,7 @@ from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
     Request,
+    _envelope_rows,
     warn_of_rows_scored_from_their_own_answers,
 )
 from sdm_client.result import PredictionResult
@@ -185,18 +186,18 @@ class FittedModel:
             self._pinned_over_a_window,
             _pinned_dtypes(self._pinned),
         )
-        parts = [
-            self._adapter.normalize(
+        parts = _numbered_across_calls(
+            self._adapter.session_prediction_plan(
+                request, self._outputs, self._pinned
+            ),
+            lambda payload: self._adapter.normalize(
                 self._client._transport.session_predict(
                     self._session_id, payload
                 ),
                 self._outputs,
                 {**self._pinned, **payload},
-            )
-            for payload in self._adapter.session_prediction_plan(
-                request, self._outputs, self._pinned
-            )
-        ]
+            ),
+        )
         if not parts:
             raise StructuredDataError(
                 'the adapter produced no scoring call for this request',
@@ -437,10 +438,12 @@ class SDMClient:
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
-        parts = [
-            adapter.normalize(self._send(adapter, payload), fields, payload)
-            for payload in adapter.prediction_plan(request, fields)
-        ]
+        parts = _numbered_across_calls(
+            adapter.prediction_plan(request, fields),
+            lambda payload: adapter.normalize(
+                self._send(adapter, payload), fields, payload
+            ),
+        )
         if not parts:
             raise StructuredDataError(
                 'the adapter produced no call for this request',
@@ -516,12 +519,11 @@ class SDMClient:
         call sends none for those, names them all at once, and refuses a
         ranking with nothing left before it spends a call.
 
-        A candidate is scored or not for the whole ranking, because each
-        candidate is one call: this client never asks the engine to batch, and
-        it caps the entities below the size a batch would split at. Were a
-        ranking ever split, the engine would sample a context per batch, and
-        one cold batch would drop the candidate from every row rather than
-        from its own, which the result has no way to say.
+        A candidate is scored or not for the whole ranking. A ranking over
+        more entities than one call scores asks each candidate in several
+        batches, and one batch whose context holds one class leaves the
+        candidate out of every row, because ``unscored_candidates`` names a
+        candidate for the whole result rather than per row.
         """
         positions = []
         for position, (part, (_, about)) in enumerate(
@@ -770,6 +772,44 @@ class SDMClient:
 
     def __repr__(self) -> str:
         return f'SDMClient(url={redact_url(self._transport.url)!r})'
+
+
+def _numbered_across_calls(
+    plan: Iterable[dict[str, Any]],
+    answer: Callable[[dict[str, Any]], PredictionResult],
+) -> list[PredictionResult]:
+    r"""Answer each call, numbering its rows from where the last call's ended.
+
+    The endpoint numbers every call's rows from zero, so a request sent in
+    several calls would otherwise give each ``row_index`` once per call, and
+    ``to_pandas()``, which orders by it, would interleave the batches.
+    """
+    answers = []
+    start: int | None = 0
+    for payload in plan:
+        if start is None:
+            raise StructuredDataError(
+                'a request sent in several calls has a call whose rows could '
+                'not be counted, so the rows of the calls after it cannot be '
+                'numbered',
+                code='INTERNAL_ERROR',
+            )
+        answers.append(_numbered_from(answer(payload), start))
+        rows = _envelope_rows(payload, 'predict')
+        start = None if rows is None else start + rows
+    return answers
+
+
+def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
+    r"""``result`` with each row numbered ``start`` places further on."""
+    if start:
+        result.items = tuple(
+            dataclasses.replace(item, row_index=item.row_index + start)
+            if item.row_index is not None
+            else item
+            for item in result.items
+        )
+    return result
 
 
 def _report_absent(

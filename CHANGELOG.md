@@ -9,6 +9,12 @@ these packages. All five distributions share one version and one entry.
 
 ### Changed
 
+- A relational `materialize()` takes any number of entities. More than the
+  endpoint scores in one call, 1,000 or 200 for a link prediction, are
+  gathered in batches of that size, and `predict()` sends one call per batch
+  and returns one result in the order the indices were given. It used to
+  refuse them and ask for the calls to be split by hand.
+
 - The Databricks example notebook is now a get-started notebook,
   `examples/databricks/kumo_relational_quickstart.ipynb`, in place of
   `adventureworks_relational.ipynb`. It deploys the model to a serving

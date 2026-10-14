@@ -22,11 +22,18 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 |---|---|---|---|
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
-| rows scored per call | relational | 1,000, or 200 for link prediction | at `materialize()` |
+| rows scored per call | relational | 1,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
 | an explanation | relational | exactly one entity | before sending |
 | an explanation | relational | only within the 1,000-row context budget | before sending |
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
+
+A relational request for more entities than one call scores is not refused.
+`materialize()` gathers it in batches of at most that many, each carrying its
+own copy of the context, and `predict()` sends one call per batch and returns
+one result. Its `row_index` counts across the whole request, in the order the
+indices were given. A session scores those batches against the context it
+pinned, so the context is uploaded once rather than once per call.
 
 The tabular cap was measured at the boundary rather than read from a document:
 10,000 context rows are answered and 10,001 come back as
