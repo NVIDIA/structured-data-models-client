@@ -36,10 +36,11 @@ from sdm_client.decompose import (
     Decomposition,
     about_the_part,
     parts_of,
-    refuse_the_calls_a_batched_part_would_make,
+    refuse_a_part_that_would_take_several_calls,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
+from sdm_client.materializers.relational import rows_one_call_scores
 from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
@@ -133,9 +134,14 @@ class PredictiveQuery:
                 settle it. Authoritative, and single-table only: passing it
                 with a relational or decomposed query is refused.
             **options: Relational sampling options, such as ``num_neighbors``
-                and ``anchor_time``, and ``prediction_statistic``: what a
+                and ``anchor_time``; ``prediction_statistic``: what a
                 regression's prediction reports of its predicted distribution,
-                ``'median'`` (the default) or ``'mean'``.
+                ``'median'`` (the default) or ``'mean'``; and
+                ``rows_per_call``: how many entities one call scores, which
+                defaults to the 10,000 the endpoint takes and may only be
+                lowered. Lower it for a graph wide enough that a full batch
+                outruns the 30 MiB body, or for a deployment holding to less
+                than this client knows of.
 
         Returns:
             A :class:`~sdm_client.Request` carrying the data.
@@ -389,10 +395,19 @@ class PredictiveQuery:
         its own labels come from: what was true in the second window is not
         what was true in the first, and whether an entity reached one
         candidate is not whether it reached another.
+
+        A part is one call, which is what makes the fan-out countable, so a
+        question over more entities than one call scores is refused here
+        rather than gathered as parts that each batch.
         """
         import copy
 
         how = {name: value for name, value in how.items() if value is not None}
+        refuse_a_part_that_would_take_several_calls(
+            rewritten,
+            len(how.get('indices') or ()),
+            rows_one_call_scores(how.get('rows_per_call')),
+        )
         # How many candidates to keep belongs to the whole ranking. Each part
         # is one yes-or-no question, and a task that ranks nothing is refused
         # by the endpoint for carrying an option it cannot act on.
@@ -407,7 +422,6 @@ class PredictiveQuery:
                 raise
             except StructuredDataError as error:
                 raise about_the_part(error, rewritten, step) from error
-            refuse_the_calls_a_batched_part_would_make(gathered[-1], rewritten)
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])

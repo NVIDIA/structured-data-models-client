@@ -163,12 +163,16 @@ would break rather than letting the endpoint return a 500.
 
 **More rows than one call scores are not refused.** They are gathered in
 batches of at most that many, and `predict()` sends one call per batch and
-returns one result, numbered and ordered as the indices were given. Every
-batch is built before the first is sent, so more than ten batches of one
-question is refused rather than held at once. A ranking is never batched: it
-is already a call per candidate, and a candidate is scored or not for the
-whole ranking. A forecast's steps may each be batched, and what is counted is
-the steps times the batches.
+returns one result, numbered and ordered as the indices were given. The
+10,000 is the deployment's `TFM_MAX_TEST_ROWS`, not a property of the
+protocol; pass `rows_per_call=` to ask in smaller batches, which is what a
+graph too wide for a full one needs. It only goes down.
+
+Every batch is built before the first is sent, so more than 100,000 entities
+in one `materialize()` is refused rather than held at once. A question asked
+in parts is not batched at all: a ranking is already a call per candidate and
+a forecast one per step, and batching a part would send that many times as
+many calls.
 
 **The table limit is on the graph a request carries, not on the schema.** A
 schema may describe far more than fifteen tables; what counts is how many the
@@ -257,9 +261,8 @@ change. The ones worth knowing:
 |---|---|
 | every candidate's context holds one class | each gathered entity reached it, or none did, so there is nothing to tell apart and nothing is sent; widen with `num_context_samples` or ask over a table of pairs. One such candidate among several is dropped with a warning instead, and named on `result.unscored_candidates` |
 | no entity existed at the anchor | the entity table's time column starts after the anchor, so nothing existed to ask about |
-| more entities than ten batches hold | every batch is built before any is sent; ask about fewer at a time |
-| more entities than one call scores, on a ranking | each candidate is already a call, and a candidate is scored or not for the whole ranking; ask about fewer at a time |
-| a forecast whose steps times batches outrun the fan-out budget | the calls are what is counted, not the steps; ask about fewer entities or fewer steps |
+| more than 100,000 entities at once | every batch is built before any is sent; ask about fewer at a time |
+| more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |

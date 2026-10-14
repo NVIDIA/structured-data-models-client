@@ -17,12 +17,16 @@ these packages. All five distributions share one version and one entry.
   30 MiB body is still refused at `materialize()`; ask for fewer entities at a
   time on a wide graph.
 
+  `materialize()` takes `rows_per_call` to ask in smaller batches than the
+  endpoint's cap, which is what a graph wide enough to outrun the 30 MiB body
+  needs, and what a deployment holding to less than 10,000 needs. It only goes
+  down: a larger call buys a refusal rather than a bigger call.
+
   Two things are still refused. Every batch is built before the first is sent,
-  so more than ten batches of one question is refused rather than held in
-  memory at once; and a ranking is not batched at all, because a candidate is
-  reported unscored for the whole ranking rather than per batch. A forecast's
-  steps are batched, and the fan-out budget counts the calls they come to
-  rather than the steps.
+  so more than 100,000 entities in one `materialize()` is refused rather than
+  held in memory at once; and a question asked in parts, a ranking or a
+  forecast, is not batched, because each part is already a call and the
+  fan-out budget counts those.
 
 - A call that fails part way through a batched `predict()` carries the answers
   already paid for on the error, as `details['answered']` and

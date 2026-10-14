@@ -78,14 +78,14 @@ def _warn_of_a_context_the_default_mode_capped(
     )
 
 
-#: More calls than this and a request is gathered in pieces that no longer fit
-#: in memory together. Every batch is built before any is sent, each carrying
-#: its own context, and a batch may be as large as the endpoint's 30 MiB body.
-#: A caller with the memory for it can raise this. It is reached at ten times
-#: whatever one call scores: 100,000 entities, or 2,000 for a temporal link
-#: prediction, both well past what this client refused before it batched at
-#: all.
-MOST_CALLS = 10
+#: More entities than this in one `materialize()` and the request is gathered
+#: in pieces that no longer fit in memory together. Every batch is built
+#: before any is sent, each carrying its own context, and a batch may be as
+#: large as the endpoint's 30 MiB body. Counted in entities rather than in
+#: batches, because that is what the caller asked for and what the memory
+#: follows; a smaller `rows_per_call` spends it on more, smaller batches, each
+#: still carrying a context. A caller with the memory for it can raise this.
+MOST_ENTITIES = 100_000
 
 
 def _rows_per_call(
@@ -97,10 +97,47 @@ def _rows_per_call(
     return limits['predict_rows_max']
 
 
-def _refuse_more_calls_than_fit_in_memory(
+def rows_one_call_scores(
+    asked: Any = None,
+    kind: object = None,
+    limits: Mapping[str, int] = RELATIONAL_LIMITS,
+) -> int:
+    r"""How many entities one call will score, as the caller asked or as the
+    endpoint allows.
+
+    ``rows_per_call`` only ever goes down. The endpoint refuses a call past
+    its own cap, so a larger number would buy a 422 rather than a bigger call;
+    a smaller one is how a graph too wide for a full batch, or a deployment
+    holding to less than this client knows of, is asked in pieces that fit.
+    """
+    cap = _rows_per_call(kind, limits)
+    if asked is None:
+        return cap
+    return min(int(asked), cap)
+
+
+def _rows_per_call_asked_for(options: Mapping[str, Any]) -> int | None:
+    r"""The batch size the caller chose, refused if it is not a size."""
+    if 'rows_per_call' not in options:
+        return None
+    given = options['rows_per_call']
+    if (
+        not isinstance(given, Integral)
+        or isinstance(given, bool)
+        or int(given) < 1
+    ):
+        raise StructuredDataError(
+            f'rows_per_call is {given!r}, and a call scores a whole number of '
+            f'rows, at least one',
+            code='INVALID_REQUEST',
+        )
+    return int(given)
+
+
+def _refuse_more_entities_than_fit_in_memory(
     task: TaskTable, per_call: int
 ) -> None:
-    r"""Refuse a request that would be gathered as more batches than fit.
+    r"""Refuse a population too large to hold as gathered batches.
 
     The engine builds every batch before the first is sent, so the cost of a
     population is paid in memory up front. This is the ceiling that the old
@@ -110,20 +147,21 @@ def _refuse_more_calls_than_fit_in_memory(
     asked = getattr(task, 'num_prediction_examples', None)
     if not isinstance(asked, Integral) or per_call <= 0:
         return
-    calls = math.ceil(int(asked) / per_call)
-    if calls <= MOST_CALLS:
+    asked = int(asked)
+    if asked <= MOST_ENTITIES:
         return
     raise StructuredDataError(
-        f'{int(asked):,} entities are gathered as {calls:,} calls of '
-        f'{per_call:,}, and every one is built, with its own context, before '
-        f'any is sent. That is past the {MOST_CALLS} this will hold at once; '
-        f'ask about fewer entities at a time, or raise '
-        f'sdm_client.materializers.relational.MOST_CALLS if the memory is '
+        f'{asked:,} entities are gathered as '
+        f'{math.ceil(asked / per_call):,} calls of {per_call:,}, and every '
+        f'one is built, with its own context, before any is sent. That is '
+        f'past the {MOST_ENTITIES:,} this will hold at once; ask about fewer '
+        f'entities at a time, or raise '
+        f'sdm_client.materializers.relational.MOST_ENTITIES if the memory is '
         f'yours to spend',
         code='UNSUPPORTED_REQUEST',
         details={
-            'entities': int(asked),
-            'calls': calls,
+            'entities': asked,
+            'calls': math.ceil(asked / per_call),
             'rows_per_call': per_call,
         },
     )
@@ -147,6 +185,7 @@ class RelationalMaterializer:
             'return_embeddings',
             'top_k',
             'prediction_statistic',
+            'rows_per_call',
         }
     )
 
@@ -190,6 +229,7 @@ class RelationalMaterializer:
             )
 
         statistic = _statistic_asked_for(options)
+        _rows_per_call_asked_for(options)
         self._refuse_a_name_the_wire_reserves()
         self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
         _warn_the_filter_chose_only_the_examples(query, indices)
@@ -234,9 +274,10 @@ class RelationalMaterializer:
     ) -> tuple[dict[str, Any], ...]:
         r"""Sample and encode using the engine's own materializer.
 
-        More entities than the endpoint scores in one call are gathered as
-        several payloads of at most that many, which `predict()` sends one at
-        a time and answers as one result.
+        More entities than one call scores are gathered as several payloads
+        of at most that many, which `predict()` sends one at a time and
+        answers as one result. One call scores what the endpoint takes, or
+        the smaller ``rows_per_call`` the caller asked for.
         """
         run_mode = self._run_mode_for(num_context_samples)
         self._check_shape(options, RELATIONAL_LIMITS)
@@ -271,8 +312,10 @@ class RelationalMaterializer:
         _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
         task = self._narrow_context(task, num_context_samples)
 
-        per_call = _rows_per_call(task.task_type)
-        _refuse_more_calls_than_fit_in_memory(task, per_call)
+        per_call = rows_one_call_scores(
+            _rows_per_call_asked_for(options), task.task_type
+        )
+        _refuse_more_entities_than_fit_in_memory(task, per_call)
         with (
             self._engine_errors(model),
             model.batch_mode(batch_size=per_call),

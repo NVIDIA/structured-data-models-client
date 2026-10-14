@@ -133,50 +133,41 @@ def _ended(message: Any) -> str:
     return text if not text or text[-1] in '.!?' else f'{text}.'
 
 
-def refuse_the_calls_a_batched_part_would_make(
-    part: Any, rewritten: Decomposition
+def refuse_a_part_that_would_take_several_calls(
+    rewritten: Decomposition, asked: int, per_call: int
 ) -> None:
-    r"""Refuse a decomposed question that batching would fan out too far.
+    r"""Refuse a question asked in parts over more rows than one call scores.
 
-    A part was one call when the guard above counted parts. Batching one makes
-    the calls the parts times the batches, so a ranking over 200 candidates
-    and 50,000 entities passed that guard as 200 calls and made 1,000. The
-    count is what is held to the budget, not the parts it was read off.
+    A part is one call. The guard above counts parts on that basis, so a
+    batched part would make the parts times the batches: a ranking over 200
+    candidates and 50,000 entities passes as 200 calls and sends 1,000.
 
-    A ranking is refused outright rather than counted. Each batch samples its
-    own context, and a batch whose context holds one class leaves the
-    candidate out of every row rather than out of its own, because a candidate
-    is reported unscored for the whole ranking. A forecast's steps are
-    ordinary regressions, merged per step, so batching one is only ever a
-    question of how many calls it comes to.
+    A ranking could not be batched in any case. Each batch samples its own
+    context, and a batch whose context holds one class leaves the candidate
+    out of every row rather than out of its own, because a candidate is
+    reported unscored for the whole ranking.
+
+    Checked before anything is gathered, from the count the caller gave, so a
+    refusal costs nothing and arrives before the ceilings that are about what
+    gathering holds.
     """
-    calls = len(getattr(part, 'payloads', ()) or ())
-    if calls <= 1:
+    if per_call <= 0 or asked <= per_call:
         return
-    asked = len(getattr(part, 'indices', ()) or ())
-    parts = len(rewritten.parts)
-    if rewritten.kind == RANKING:
-        raise StructuredDataError(
-            f'{asked:,} entities are more than one call scores, and this '
-            f'ranking is asked as {parts:,} questions, one per candidate. A '
-            f'candidate is reported unscored for the whole ranking, so a '
-            f'batch whose context taught it nothing would drop it from every '
-            f'row rather than from its own. Ask about fewer entities at a '
-            f'time',
-            code='UNSUPPORTED_REQUEST',
-            details={'entities': asked, 'calls_per_part': calls},
-        )
-    if parts * calls <= MOST_PARTS:
-        return
+    each = 'candidate' if rewritten.kind == RANKING else 'step'
+    why = (
+        'and a candidate is reported unscored for the whole ranking, so one '
+        'cold batch would drop it from every row rather than from its own'
+        if rewritten.kind == RANKING
+        else 'and the calls would be the batches times the steps rather than '
+        'the steps that were counted'
+    )
     raise StructuredDataError(
-        f'{asked:,} entities are more than one call scores, so each of the '
-        f'{parts:,} steps this forecast is asked as takes {calls:,} calls, '
-        f'which is {parts * calls:,} in all. That is past the {MOST_PARTS} '
-        f'this will do without being told to; ask about fewer entities or '
-        f'fewer steps, or raise sdm_client.decompose.MOST_PARTS if the wait '
-        f'is what you want',
-        code='INVALID_REQUEST',
-        details={'entities': asked, 'calls': parts * calls},
+        f'{asked:,} entities are more than the {per_call:,} one call scores, '
+        f'and this question is asked as {len(rewritten.parts):,} of them, one '
+        f'per {each}. A part is not batched, {why}. Ask about fewer entities '
+        f'at a time',
+        code='UNSUPPORTED_REQUEST',
+        details={'entities': asked, 'rows_per_call': per_call},
     )
 
 

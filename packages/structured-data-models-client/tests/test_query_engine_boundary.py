@@ -237,7 +237,35 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
     assert list(frame['id']) == scored
 
 
-def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
+@pytest.mark.parametrize(
+    ('asked', 'sizes'),
+    [(None, [5]), (2, [2, 2, 1]), (10, [5])],
+    ids=['default', 'smaller', 'larger_than_asked_for'],
+)
+def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
+    """It only ever goes down: the endpoint refuses a call past its own cap,
+    so a larger number would buy a 422 rather than a bigger call."""
+    how = {} if asked is None else {'rows_per_call': asked}
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = query().materialize(
+            indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
+        )
+    assert [
+        len(payload['predict']['instance_table']['rows'])
+        for payload in request.payloads
+    ] == sizes
+
+
+@pytest.mark.parametrize('given', [0, -1, 2.5, True, 'two'])
+def test_a_rows_per_call_that_is_not_a_size_is_refused(given):
+    with pytest.raises(StructuredDataError) as refused:
+        query().materialize(indices=[5], rows_per_call=given)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'rows_per_call' in str(refused.value)
+
+
+def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
     monkeypatch,
 ):
     """Every batch is built, with its own context, before any is sent, so
@@ -246,12 +274,13 @@ def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
     from sdm_client.models import RELATIONAL_LIMITS
 
     monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
+    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with pytest.raises(StructuredDataError) as refused:
             query().materialize(indices=[5, 6, 7, 8, 9], num_context_samples=20)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['entities'] == 5
     assert refused.value.details['calls'] == 3
 
 

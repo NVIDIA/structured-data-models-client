@@ -38,9 +38,18 @@ from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 from sdm_client.base import ModelSpec, RuntimeContract
 from sdm_client.errors import StructuredDataError, UnknownModelError
 
-# Sizes the relational endpoint enforces. It refuses past them, so the client
-# refuses first with a message that names the limit. See the architecture note
-# on inference knobs: `run_mode` is derived from these rather than being set.
+# Sizes the relational endpoint enforces. `predict_rows_max` is the serving
+# layer's own `TFM_MAX_TEST_ROWS`, measured at the boundary rather than read
+# from a document: 10,000 rows to score are answered, and 10,001 come back
+#
+#   [422 UNSUPPORTED_SHAPE] N_test 10001 exceeds limit 10000.
+#
+# A deployment may be configured to hold to less, which is what the
+# `rows_per_call` option on materialize() is for.
+#
+# The endpoint refuses past these, so the client refuses first with a message
+# that names the limit. See the architecture note on inference knobs:
+# `run_mode` is derived from these rather than being set.
 #
 # `predict_rows_max` and `predict_rows_temporal_link_prediction` restate the
 # engine's own `_MAX_PRED_SIZE`, which defaults to the first and holds the

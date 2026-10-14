@@ -23,6 +23,7 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
 | rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
+| entities one `materialize()` gathers | relational | 100,000 | at `materialize()` |
 | request body | relational | 30 MiB per call | at `materialize()` |
 | request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
 | calls one question is gathered as | relational | 10 | at `materialize()` |
@@ -39,19 +40,38 @@ Its `row_index` counts across the whole request, in the order the indices were
 given. A session scores those batches against the context it
 pinned, so the context is uploaded once rather than once per call.
 
+**The 10,000 is the deployment's, not this client's.** It is the serving
+layer's `TFM_MAX_TEST_ROWS`, whose default it is, so a deployment may hold to
+less. Measured at the boundary rather than read from a document: 10,000 rows
+to score are answered and 10,001 come back as
+
+```
+422 UNSUPPORTED_SHAPE N_test 10001 exceeds limit 10000
+```
+
+The earlier `kumo-relational` container holds to 1,000 instead, through a
+model-specific admission check of its own, so a request gathered at this
+default is refused there on its first call.
+
+Pass `rows_per_call` to `materialize()` to ask in smaller batches than that.
+It only ever goes down, since a larger call buys a 422 rather than a bigger
+call. Two reasons to reach for it: a graph wide enough that a full batch
+outruns the 30 MiB body, and a deployment whose cap is lower than the one
+above.
+
 Every batch is built before the first is sent, each with its own context, so
-the whole population is held in memory at once. More than ten batches of one
-question is refused at `materialize()` for that reason rather than by the
-endpoint; ask about fewer entities at a time, or raise
-`sdm_client.materializers.relational.MOST_CALLS`. Each part of a question
-asked in parts is gathered on its own and held to that same ten; the whole is
-held to `sdm_client.decompose.MOST_PARTS`, counting the calls its parts come
-to rather than the parts.
+the whole population is held in memory at once. More than 100,000 entities in
+one `materialize()` is refused for that reason rather than by the endpoint;
+ask about fewer at a time, or raise
+`sdm_client.materializers.relational.MOST_ENTITIES`.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as
 `details['rows_answered']`, so the rest can be asked for again without buying
-the whole population twice.
+the whole population twice. A forecast keeps its answered steps the same way,
+numbered by step, under `details['parts_answered']`; a ranking keeps only the
+count, because an order over some of its candidates is a different answer
+rather than part of the one that was asked for.
 
 **Batch size is chosen from the row count, not from the bytes.** The 30 MiB
 body is checked per batch at `materialize()`, before anything is sent.
@@ -59,15 +79,14 @@ Databricks model serving weighs its own wrapped envelope against a smaller
 16 MB, and only at send time, so a wide graph can pass `materialize()` and be
 refused on the first call. Ask about fewer entities at a time there.
 
-**A ranking is never batched.** It is asked as one call per candidate, and a
+**A question asked in parts is not batched.** A ranking is asked as one call
+per candidate and a forecast as one per step, and `MOST_PARTS` counts those
+calls, so a batched part would send the parts times the batches: a ranking
+over 200 candidates and 50,000 entities would pass as 200 calls and make
+1,000. More entities than one call scores is refused for both, before
+anything is gathered. A ranking could not be batched in any case, since a
 candidate is reported unscored for the whole ranking rather than per batch, so
 one batch whose context held a single class would drop it from every row.
-More entities than one call scores is refused for a ranking.
-
-**A forecast is batched, and counted.** Its steps are ordinary regressions,
-merged per step, so a step may be asked in several calls. What is held to
-`MOST_PARTS` is the steps times the batches, because that is what is sent: a
-four-step forecast over three batches is twelve calls, not four.
 
 The tabular cap was measured at the boundary rather than read from a document:
 10,000 context rows are answered and 10,001 come back as

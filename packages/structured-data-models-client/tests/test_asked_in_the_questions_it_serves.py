@@ -88,23 +88,46 @@ def test_a_ranking_is_one_question_per_candidate():
     )
 
 
-def test_a_ranking_over_more_entities_than_one_call_scores_is_refused(
-    monkeypatch,
+@pytest.mark.parametrize(
+    ('query', 'how'),
+    [(RANK, {'candidates': [0, 1]}), (FORECAST, {})],
+    ids=['ranking', 'forecast'],
+)
+def test_more_entities_than_one_call_scores_is_refused_before_gathering(
+    monkeypatch, query, how
 ):
-    """A candidate is reported unscored for the whole ranking, so a batch
-    whose context taught it nothing would drop it from every row."""
+    """A part is one call, which is what makes the fan-out countable. The
+    refusal reads the count it was given, so it costs no gathering."""
     pytest.importorskip('sdm_relational_engine')
+    from sdm_client.materializers.relational import RelationalMaterializer
     from sdm_client.models import RELATIONAL_LIMITS
 
     monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    monkeypatch.setattr(
+        RelationalMaterializer,
+        '_get_model',
+        lambda self: pytest.fail('the engine was reached'),
+    )
     with pytest.raises(StructuredDataError) as refused:
-        built(RANK, indices=[1, 2, 3, 4, 5], candidates=[0, 1])
+        built(query, indices=[1, 2, 3, 4, 5], **how)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['entities'] == 5
     assert 'fewer entities' in str(refused.value)
 
 
+def test_a_smaller_batch_lowers_what_a_part_may_ask_for(monkeypatch):
+    """`rows_per_call` only goes down, and a part is one call, so asking for a
+    smaller one asks for fewer entities rather than for more calls."""
+    pytest.importorskip('sdm_relational_engine')
+
+    with pytest.raises(StructuredDataError) as refused:
+        built(FORECAST, indices=[1, 2, 3], rows_per_call=2)
+    assert refused.value.details['rows_per_call'] == 2
+    assert built(FORECAST, indices=[1, 2], rows_per_call=2).parts
+
+
 def test_a_step_that_fails_keeps_the_steps_already_paid_for():
-    """A question asked in parts pays per part, and the parts answered before
+    """A question asked in parts pays per part, and the steps answered before
     a failure are as bought as the batches of one are."""
     pytest.importorskip('sdm_relational_engine')
     from sdm_client import KumoRelational, SDMClient
@@ -136,26 +159,12 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
         warnings.simplefilter('ignore')
         with pytest.raises(StructuredDataError) as failed:
             client.predict(request, model=KumoRelational())
-    assert failed.value.details['calls_answered'] == 2
-    assert failed.value.details['rows_answered'] == 4
-
-
-def test_a_batched_forecast_is_held_to_the_calls_it_comes_to(monkeypatch):
-    """Steps are merged per step, so batching one is only a question of how
-    many calls it makes: counted, not refused on sight."""
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client import decompose
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-    request = built(FORECAST, indices=[1, 2, 3, 4, 5])
-    assert len(request.parts) == 4
-    assert len(request.parts[0].payloads) == 3
-
-    monkeypatch.setattr(decompose, 'MOST_PARTS', 4)
-    with pytest.raises(StructuredDataError) as refused:
-        built(FORECAST, indices=[1, 2, 3, 4, 5])
-    assert refused.value.details['calls'] == 12
+    assert failed.value.details['parts_answered'] == 2
+    kept = failed.value.details['answered'].to_pandas()
+    # Two steps of two entities, told apart by the step rather than by a row
+    # number, which each step counts from its own zero.
+    assert len(kept) == 4
+    assert sorted(kept['forecast_step'].unique()) == [1, 2]
 
 
 @pytest.fixture(scope='module')

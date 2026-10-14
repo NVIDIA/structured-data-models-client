@@ -481,20 +481,20 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
-        answers = []
+        answers: list[PredictionResult] = []
+        answered: list[int] = []
         for position, (part, (_, about)) in enumerate(
             zip(request.parts or (), rewritten.parts, strict=True)
         ):
             if position in unscored:
                 continue
+            answered.append(position)
             try:
                 answers.append(self.predict(part, model=model, outputs=wanted))
             except StructuredDataError as error:
-                # The parts already answered were paid for as surely as the
-                # batches of one were, and the question is asked in parts for
-                # reasons of the endpoint's rather than the caller's.
-                _carry_the_answers_already_paid_for(
-                    error, answers, sum(len(one.items) for one in answers)
+                answered.pop()
+                _carry_the_steps_already_paid_for(
+                    error, answers, rewritten, answered, ranking
                 )
                 raise about_the_part(error, rewritten, about) from error
         if ranking:
@@ -819,6 +819,44 @@ def _numbered_across_calls(
             raise
         start += rows or 0
     return answers
+
+
+def _carry_the_steps_already_paid_for(
+    error: StructuredDataError,
+    answers: list[PredictionResult],
+    rewritten: Decomposition,
+    answered: Sequence[int],
+    ranking: bool,
+) -> None:
+    r"""Record on ``error`` the parts answered before the one that failed.
+
+    A forecast's steps are kept as the answer they would have been: numbered
+    by step, since a step's rows are numbered from its own zero and only the
+    step tells two of them apart.
+
+    A ranking's are counted and not kept. Its parts are not an answer until
+    they are all in: what a caller asked for is an order over the candidates,
+    and an order over some of them is a different claim, not a partial one.
+    """
+    if not answers:
+        return
+    error.details = {
+        **error.details,
+        'parts_answered': len(answers),
+        **(
+            {}
+            if ranking
+            else {
+                'answered': _by_step(
+                    answers,
+                    dataclasses.replace(
+                        rewritten,
+                        parts=tuple(rewritten.parts[at] for at in answered),
+                    ),
+                )
+            }
+        ),
+    }
 
 
 def _carry_the_answers_already_paid_for(

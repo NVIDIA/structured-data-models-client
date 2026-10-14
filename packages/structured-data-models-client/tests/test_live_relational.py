@@ -164,6 +164,48 @@ def test_an_aggregation_wider_than_the_history_is_refused_locally(client):
 
 
 @requires_relational
+def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
+    """The per-call cap is the endpoint's, and batching is sized from it, so a
+    drift sends batches it refuses. Asked at the boundary: the cap is answered
+    and one row past it is not, and the refusal names the cap it holds to."""
+    import copy
+
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    cap = RELATIONAL_LIMITS['predict_rows_max']
+    payload = copy.deepcopy(query.materialize(indices=[0, 1]).payloads[0])
+    rows = payload['predict']['instance_table']['rows']
+    payload['predict']['instance_table']['rows'] = [
+        list(rows[i % len(rows)]) for i in range(cap + 1)
+    ]
+    with pytest.raises(StructuredDataError) as refused:
+        client._transport.predict(payload)
+    assert str(cap) in str(refused.value)
+
+
+@requires_relational
+def test_more_entities_than_one_call_scores_come_back_as_one_answer(
+    client, query
+):
+    """Batching is the one thing a mock cannot show is sound: that every call
+    was accepted, that no row was dropped, and that the merged answer is in
+    the order the indices were given rather than interleaved."""
+    import warnings
+
+    rows = 2
+    asked = list(range(N_USERS))
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        built = query.materialize(indices=asked, rows_per_call=rows)
+        answer = client.predict(built, model=KumoRelational())
+    assert len(built.payloads) == len(asked) // rows
+    frame = answer.to_pandas()
+    assert list(frame['row_index']) == list(range(len(asked)))
+    assert [int(i) for i in frame['id']] == asked
+    assert not frame['prediction'].isna().any()
+
+
+@requires_relational
 def test_materialize_refuses_to_score_a_whole_table_by_default(query):
     with pytest.raises(StructuredDataError) as error:
         query.materialize()
