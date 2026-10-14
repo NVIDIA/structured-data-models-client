@@ -153,6 +153,55 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     return problems
 
 
+#: The inventory cases T1.29 admitted, before the families' test authors
+#: wrote admission exits.
+ADMITTED_AT_T129 = frozenset(
+    {'base.regression', 'base.binary', 'base.multiclass'}
+)
+#: A family's admission exit, as its pending list names it: the test id of
+#: a ``test_each_..._is_admitted`` parametrized by the case.
+_ADMISSION_EXIT = re.compile(r'^py:test_each_[a-z_]*is_admitted\[(.+)\]$')
+
+
+def _admission_exits(
+    directory: Path = ROOT / 'contract/tests',
+) -> dict[str, bool]:
+    r"""Each case a family's test author wrote an admission exit for
+    (``contract/tests/t132*-pending.json``'s ``authored``), and whether
+    that exit has passed (it is no longer ``pending``). A pending list is
+    the test author's and only shrinks (each family's ``only_shrinks``), so
+    a case is admitted when its exit has cleared, and only then."""
+    found: dict[str, bool] = {}
+    for path in sorted(directory.glob('t132*-pending.json')):
+        loaded = json.loads(path.read_text(encoding='utf-8'))
+
+        def ids(group: dict[str, Any]) -> set[str]:
+            return {
+                name
+                for names in group.values()
+                if isinstance(names, list)
+                for name in names
+                if isinstance(name, str)
+            }
+
+        pending = ids(loaded['pending'])
+        for name in sorted(ids(loaded['authored'])):
+            match = _ADMISSION_EXIT.match(name)
+            if match:
+                case = match.group(1)
+                assert case not in found, f'{case}: two admission exits'
+                found[case] = name not in pending
+    return found
+
+
+def admitted_inventory_cases() -> set[str]:
+    r"""The inventory cases that are acceptance cases: T1.29's three, and
+    each case whose family's admission exit has cleared."""
+    return set(ADMITTED_AT_T129) | {
+        case for case, cleared in _admission_exits().items() if cleared
+    }
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -179,16 +228,13 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     }
     # From T1.29 the inventory's three baseline cases are acceptance cases
     # with their routes and paths, keeping its input and expectation; from
-    # T1.32b the decimal family's two the reference answers (its static
-    # decimal target stays diagnostic: python-old answers it with the
-    # reference's INTERNAL_ERROR, which no baseline holds).
-    admitted = {
-        'base.regression',
-        'base.binary',
-        'base.multiclass',
-        'decimal.feature-38-0-wide',
-        'decimal.target-38-18',
+    # T1.32 so is each case whose family's admission exit has cleared, and
+    # no other (admitted_inventory_cases). Every admission exit names an
+    # inventory case.
+    assert set(_admission_exits()) <= {
+        entry['id'] for entry in inventory['cases']
     }
+    admitted = admitted_inventory_cases()
     for entry in inventory['cases']:
         case = committed[entry['id']]
         assert case['status'] == (
@@ -220,6 +266,42 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         case = copy.deepcopy(committed['time.text-declared'])
         change(case['core'])
         assert _held_to_its_input(case) != [], change
+
+
+def test_the_admitted_set_follows_the_families_admission_exits(
+    tmp_path: Path,
+) -> None:
+    # Seeded: an admission exit admits its case once it has left pending,
+    # and not before; another exit admits nothing; an exit written twice
+    # is refused.
+    def written(name: str, pending: list[str], authored: list[str]) -> None:
+        (tmp_path / name).write_text(
+            json.dumps(
+                {
+                    'pending': {'exits': pending, 'rust-host': []},
+                    'authored': {'exits': authored, 'rust-host': ['x']},
+                }
+            ),
+            encoding='utf-8',
+        )
+
+    cleared = 'py:test_each_case_is_admitted[key.uint8]'
+    waiting = 'py:test_each_nested_case_is_admitted[nested.map]'
+    other = 'py:test_null_decimal_18_2_is_cleared'
+    written('t132x-pending.json', [waiting], [cleared, waiting, other])
+    assert _admission_exits(tmp_path) == {
+        'key.uint8': True,
+        'nested.map': False,
+    }
+    written('t132y-pending.json', [], [cleared])
+    with pytest.raises(AssertionError, match='two admission exits'):
+        _admission_exits(tmp_path)
+    # The committed lists: T1.29's three, and only cleared exits beside.
+    exits = _admission_exits()
+    assert exits, 'no admission exit read'
+    assert admitted_inventory_cases() == set(ADMITTED_AT_T129) | {
+        case for case, done in exits.items() if done
+    }
 
 
 def test_the_bases_are_the_inventorys_and_adventureworks() -> None:
