@@ -135,8 +135,18 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     }:
         problems.append('describe_source is not of its source')
     materialize = core.get('materialize')
-    if (materialize is None) != (case['id'] in _DESCRIBE_ONLY):
-        problems.append('materialize present where it cannot be, or absent')
+    # An acceptance case the reference refuses at from_source carries
+    # materialize only where the core reaches it (compare.py's inputs rule
+    # holds a core runner to every operation a case names); which, its
+    # family's admission test says (the nested family's REACHED).
+    stops = case['status'] == 'acceptance' and case['expect']['stage'] == (
+        'from_source'
+    )
+    if case['id'] in _DESCRIBE_ONLY:
+        if materialize is not None:
+            problems.append('materialize present where it cannot be')
+    elif materialize is None and not stops:
+        problems.append('materialize absent')
     if materialize is not None:
         call = given['materialize']
         if [_written(index) for index in materialize['indices']] != [
@@ -266,6 +276,20 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         case = copy.deepcopy(committed['time.text-declared'])
         change(case['core'])
         assert _held_to_its_input(case) != [], change
+    # A case the reference refuses at from_source may stop at
+    # describe_source only once admitted (its family's test says where);
+    # diagnostic, it still carries its whole call.
+    case = copy.deepcopy(committed['nested.map'])
+    assert case['expect']['stage'] == 'from_source'
+    case['core'].pop('predict')
+    case['core'].pop('materialize')
+    case['status'] = 'diagnostic'
+    assert _held_to_its_input(case) != []
+    case['status'] = 'acceptance'
+    assert _held_to_its_input(case) == []
+    case['core'].pop('describe_source')
+    with pytest.raises(KeyError):
+        _held_to_its_input(case)
 
 
 def test_the_admitted_set_follows_the_families_admission_exits(

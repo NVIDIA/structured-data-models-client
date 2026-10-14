@@ -17,8 +17,13 @@ of ``Schema.from_source``, ``materialize`` and ``predict``, forced on a
 copy).
 
 - Admission ("the ``nested.*`` cases admitted"): each case is an acceptance
-  case with routes, carrying its inputs to the core (``describe_source``,
-  ``materialize`` and ``predict``).
+  case with routes, carrying its inputs to the core for the operations its
+  call reaches there and no others (``REACHED``; ``compare.py``'s ``inputs``
+  rule holds a core runner to every operation a case names): a list, of a
+  fixed size or not, reaches ``predict`` (``describe_source``,
+  ``materialize`` and ``predict``; P1B-9 for the fixed size), and a map, a
+  struct (P1B-10) and a union (P1B-7) are refused at ``from_source``
+  (``describe_source`` alone).
 - "Each with its reference observation" and the cases' expectations: each
   case's ``expect`` is what ``python-ref`` observed
   (``contract/reference/<commit>.jsonl``), and ``python-core``'s outcome
@@ -89,6 +94,24 @@ R = _module('nested_type_record', ROOT / 'contract/tools/nested_type_record.py')
 def gated(request: pytest.FixtureRequest, check: Any) -> None:
     r"""Runs ``check`` held to the pending list, as ``py:<test id>``."""
     G.held('exits', f'py:{request.node.name}', check)
+
+
+#: The public call each case reaches on the core, by the register's
+#: approved entries where the reference's differs (reviewed with the
+#: refusal map, ``contract/refusal-maps/nested.json``).
+REACHED = {
+    'nested.fixed-array': 'predict',  # P1B-9: the list left out, a success
+    'nested.list-int': 'predict',
+    'nested.map': 'from_source',  # P1B-10: describe_source's column_type
+    'nested.struct': 'from_source',  # P1B-10
+    'nested.union': 'from_source',  # P1B-7: the host's admission
+}
+#: The core operations each public call starts, in order, up to it.
+OPERATIONS = {
+    'from_source': ('describe_source',),
+    'materialize': ('describe_source', 'materialize'),
+    'predict': ('describe_source', 'materialize', 'predict'),
+}
 
 
 def per_case() -> list[Any]:
@@ -222,10 +245,16 @@ def test_each_nested_case_is_admitted(
         assert loaded['status'] == 'acceptance', loaded['status']
         assert loaded['routes'], 'an admitted case names its routes'
         core = loaded.get('core') or {}
-        for operation in ('describe_source', 'materialize', 'predict'):
-            assert core.get(operation), (
-                f'the case carries {operation} to the core'
-            )
+        assert sorted(REACHED) == IDS, 'each case has the call it reaches'
+        wanted = OPERATIONS[REACHED[case]]
+        carried = tuple(op for op in OPERATIONS['predict'] if op in core)
+        assert carried == wanted, (
+            f'the case carries {carried} to the core; its call reaches '
+            f'{REACHED[case]} there, so {wanted}'
+        )
+        assert set(core) == set(wanted), sorted(core)
+        for operation in wanted:
+            assert core[operation], f'{operation} carries no inputs'
 
     gated(request, check)
 
