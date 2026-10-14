@@ -1,14 +1,21 @@
 {
- "about": "CI3's acceptance tests (land.py --moved-from: a candidate C moved over landing commits only lands on its source X's two reviews and X's green CI run; owner's decision, 2026-10-14) that failed when the independent test author wrote them, before the implementation, at 367d1368 (scripts/rust_core/land_selftest.py, the 'moved:' cases; their interface in the comment above them). 'cases' holds self-test names. land_selftest.py's main holds each listed case to failing (strict): once one passes it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "CI3's acceptance tests (land.py --moved-from: a candidate C moved over landing commits only lands on its source X's two reviews and X's green CI run; owner's decision, 2026-10-14) that failed when the independent test author wrote them, before the implementation, at 367d1368 (scripts/rust_core/land_selftest.py, the 'moved:' cases; their interface in the comment above them). 'cases' holds self-test names. land_selftest.py's main holds each listed case to failing (strict): once one passes it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', which is the test author's. The test author added the coordinator's cases on e0b081aa (chained moves under the generalized rule replacing conditions 3 and 4; the subagent review's lone carriage return and whitespace-only intermediate commit, refused by a per-commit tree check; the Moved-from and Moved-from-run trailers, asserted in the renamed landing-message case); those failing on e0b081aa are pending. land_selftest.py's moved cases now run land.py's own command runner in the repository, and the condition-4 cases accept a refusal naming the landing commits, the patches or the trees.",
  "pending": {
-  "cases": []
+  "cases": [
+   "moved: the landing message names X, its green run, and the move, with Moved-from and Moved-from-run trailers",
+   "chained: a stack of 2 packages, each moved, lands the last",
+   "chained: a stack of 3 packages, each moved, lands the last",
+   "chained: a package of two commits, moved, then the next lands",
+   "moved: refused, C's first commit differs after a lone carriage return",
+   "moved: refused, C's intermediate commit differs in whitespace only"
+  ]
  },
  "authored": {
   "cases": [
    "moved: lands C on X's reviews and green run over a landing commit",
    "moved: lands over several landing commits",
    "moved: lands a package of several commits, moved in order",
-   "moved: the landing message names X, its green run, and the move",
+   "moved: the landing message names X, its green run, and the move, with Moved-from and Moved-from-run trailers",
    "moved: --dry-run checks and changes nothing",
    "moved: refused, the reviews name C instead of X",
    "moved: refused, the reviews name neither C nor X",
@@ -32,7 +39,17 @@
    "moved: refused, X..H has a merge commit",
    "moved: refused, C is X itself, not moved onto the phase head",
    "moved: refused, a dirty worktree",
-   "moved: refused, --moved-from is not a commit"
+   "moved: refused, --moved-from is not a commit",
+   "chained: a stack of 2 packages, each moved, lands the last",
+   "chained: a stack of 3 packages, each moved, lands the last",
+   "chained: a package of two commits, moved, then the next lands",
+   "chained: refused, H's copy of P1 differs from P1, C fixes the tree",
+   "chained: refused, H has a non-landing commit X lacks, C undoes it",
+   "chained: refused, X has a commit of P1's that H lacks, C carries it",
+   "chained: refused, H has P1's commits in another order",
+   "chained: refused, C has the last package's commits in another order",
+   "moved: refused, C's first commit differs after a lone carriage return",
+   "moved: refused, C's intermediate commit differs in whitespace only"
   ]
  }
 }

@@ -32,7 +32,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -1396,18 +1396,22 @@ def _(tmp: Path) -> tuple[bool, str]:
 # Interface the cases hold land.py to:
 # - ``--moved-from REV`` names X; without it nothing changes.
 # - The checks are made in the order the decision lists them: X's evidence,
-#   the same tree, the same patches, only landing commits in X..H; each
-#   refusal names its condition: the reviews' refusal X's SHA (its first
-#   twelve digits), X's CI refusal X's run id or X's SHA, the tree refusal
-#   the word "tree", the patch refusal "patch" (or, for an empty commit,
-#   "empty"), and the X..H refusal "landing commit" and the offending
-#   commit's SHA (its first twelve digits).
+#   the same tree, then the patches; each refusal names its condition: the
+#   reviews' refusal X's SHA (its first twelve digits), X's CI refusal X's
+#   run id or X's SHA, the tree refusal the word "tree", the patch refusal
+#   "patch" (or, for an empty commit, "empty").
+# - The patches are the generalized rule's (the chained cases below): a
+#   commit on H's side that is not a landing commit is an extra patch, so
+#   its refusal names the landing commits, the patches or the trees, and an
+#   empty commit, 'Landed' or a merge also its SHA; a commit whose tree
+#   parts from its pair's is named, with "tree" or "patch".
 # - The landing commit's message names X by its full SHA, X's green run by
 #   its id, and says C was moved over landing commits only (the words
-#   "moved" and "landing commits only").
+#   "moved" and "landing commits only"), with the trailers ``Moved-from: X``
+#   (the full SHA) and ``Moved-from-run: <id>``.
 #
-# Cases listed in ci3-pending.json failed when they were written, before
-# land.py had --moved-from; ``main`` holds each listed case to failing.
+# Cases listed in land_selftest-pending.json fail until land.py does what
+# they hold it to; ``main`` holds each listed case to failing.
 
 MOVED_TOPIC = f'{PHASE}-t1.99'
 #: X's green run.
@@ -1535,21 +1539,31 @@ class Real:
         self.fake = Fake(runs=runs)
 
     def __call__(
-        self, argv: Sequence[str], *_: Any, **kw: Any
+        self, argv: Sequence[str], *args: Any, **kw: Any
     ) -> land.Completed:
-        args = list(argv)
-        if args[0] == 'gh':
-            return self.fake.gh(args[1:])
-        stdin = kw.get('input', kw.get('stdin'))
-        proc = subprocess.run(
-            args,
-            cwd=self.repo.work,
-            env=self.repo.env,
-            capture_output=True,
-            text=True,
-            input=stdin if isinstance(stdin, str) else None,
-        )
-        return land.Completed(proc.returncode, proc.stdout, proc.stderr)
+        if argv[0] == 'gh':
+            return self.fake.gh(list(argv[1:]))
+        # land.py's own runner, so its handling of the output (text mode,
+        # a lone carriage return) is what is tested; ``in_repo`` puts it in
+        # the repository with the test's git environment.
+        return land.run_command(argv, *args, **kw)
+
+
+@contextlib.contextmanager
+def in_repo(repo: Repo) -> Iterator[None]:
+    """Runs land.py in the repository's worktree with its git
+    environment, restoring the directory and environment after."""
+    cwd = os.getcwd()
+    saved = dict(os.environ)
+    try:
+        os.chdir(repo.work)
+        os.environ.clear()
+        os.environ.update(repo.env)
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+        os.chdir(cwd)
 
 
 class MovedCase:
@@ -1596,7 +1610,10 @@ class MovedCase:
             run=Real(self.m.repo, self.runs), sleep=lambda _: None, repo='o/r'
         )
         try:
-            with contextlib.redirect_stderr(io.StringIO()) as err:
+            with (
+                in_repo(self.m.repo),
+                contextlib.redirect_stderr(io.StringIO()) as err,
+            ):
                 self.code = land.main([*argv, *extra], tools, self.lines.append)
         except SystemExit as error:  # argparse: an unknown option
             self.code = f'SystemExit({error.code})'
@@ -1622,23 +1639,42 @@ class MovedCase:
     def message(self) -> str:
         return self.m.repo.git('log', '-1', '--format=%B', 'HEAD')
 
+    def trailers(self) -> dict[str, str]:
+        """The landing commit's trailers, as git reads them."""
+        text = self.m.repo.git(
+            'log', '-1', '--format=%(trailers:only,unfold)', 'HEAD'
+        )
+        return {
+            key: value
+            for key, sep, value in (
+                line.partition(': ') for line in text.splitlines()
+            )
+            if sep
+        }
+
 
 def refused_naming(
-    c: MovedCase, *every: str, one_of: Sequence[str] = ()
+    c: MovedCase,
+    *every: str,
+    one_of: Sequence[str] = (),
+    and_one_of: Sequence[str] = (),
 ) -> tuple[bool, str]:
     why = c.refusal
     ok = (
         c.code == 2
         and bool(why)
         and all(f in why for f in every)
-        and (not one_of or any(f in why for f in one_of))
+        and all(
+            not group or any(f in why for f in group)
+            for group in (one_of, and_one_of)
+        )
         and c.untouched()
     )
     return ok, (
         'refused naming the condition, nothing committed or pushed'
         if ok
-        else f'exit {c.code}, wanted {list(every)} {list(one_of)}: '
-        f'{c.text[-600:]}'
+        else f'exit {c.code}, wanted {list(every)} {list(one_of)} '
+        f'{list(and_one_of)}: {c.text[-600:]}'
     )
 
 
@@ -1687,12 +1723,16 @@ def _(tmp: Path) -> tuple[bool, str]:
     return c.code == 0, 'landed' if c.code == 0 else c.text[-600:]
 
 
-@case('moved: the landing message names X, its green run, and the move')
+@case(
+    'moved: the landing message names X, its green run, and the move, '
+    'with Moved-from and Moved-from-run trailers'
+)
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
     c = MovedCase(tmp, m).land()
     message = c.message() if c.code == 0 else ''
     flat = ' '.join(message.split())
+    trailers = c.trailers() if c.code == 0 else {}
     ok = (
         m.x in flat
         and re.search(rf'(?<!\d){X_RUN}(?!\d)', flat) is not None
@@ -1700,6 +1740,8 @@ def _(tmp: Path) -> tuple[bool, str]:
         and 'landing commits only' in flat
         and f'Base-SHA: {m.h}' in message
         and f'Checkpoint-SHA: {m.h}' in message
+        and trailers.get('Moved-from') == m.x
+        and trailers.get('Moved-from-run') == str(X_RUN)
     )
     return (
         ok,
@@ -1871,8 +1913,14 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 
 # Condition 4: only landing commits in X..H. Each seeded commit that changes
-# files is undone by another, so C's tree and patches are X's and only this
-# condition fails; the refusal names either offending commit.
+# files is undone by another, so C's tree and patches are X's. Under the
+# generalized rule (X's patches are H's non-landing commits' then C's) such
+# a commit is an extra patch on H's side, so the refusal names the landing
+# commits, the patches or the trees; an empty commit, 'Landed' or a merge
+# is named by its SHA.
+
+#: The words a refusal of H's side may name its condition by.
+H_SIDE = ('landing commit', 'patch', 'Patch', 'tree', 'empty', 'merge')
 
 ADD_Z = {'z.txt': 'z\n'}
 DROP_Z: dict[str, str | None] = {'z.txt': None}
@@ -1888,10 +1936,7 @@ def _(tmp: Path) -> tuple[bool, str]:
             ('T1.97 fix 2: undone', DROP_Z),
         ),
     )
-    stray = (m.between[0][:12], m.between[2][:12])
-    return refused_naming(
-        MovedCase(tmp, m).land(), 'landing commit', one_of=stray
-    )
+    return refused_naming(MovedCase(tmp, m).land(), one_of=H_SIDE)
 
 
 @case("moved: refused, X..H has a commit titled 'Land' that changes files")
@@ -1903,10 +1948,7 @@ def _(tmp: Path) -> tuple[bool, str]:
             ('Land T1.96: another lane', DROP_Z),
         ),
     )
-    stray = (m.between[0][:12], m.between[1][:12])
-    return refused_naming(
-        MovedCase(tmp, m).land(), 'landing commit', one_of=stray
-    )
+    return refused_naming(MovedCase(tmp, m).land(), one_of=H_SIDE)
 
 
 @case("moved: refused, X..H has an empty commit not titled 'Land '")
@@ -1919,7 +1961,7 @@ def _(tmp: Path) -> tuple[bool, str]:
         ),
     )
     return refused_naming(
-        MovedCase(tmp, m).land(), 'landing commit', m.between[1][:12]
+        MovedCase(tmp, m).land(), m.between[1][:12], one_of=H_SIDE
     )
 
 
@@ -1927,7 +1969,7 @@ def _(tmp: Path) -> tuple[bool, str]:
 def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp, between=(('Landed T1.98: the earlier package', None),))
     return refused_naming(
-        MovedCase(tmp, m).land(), 'landing commit', m.between[0][:12]
+        MovedCase(tmp, m).land(), m.between[0][:12], one_of=H_SIDE
     )
 
 
@@ -1947,7 +1989,194 @@ def _(tmp: Path) -> tuple[bool, str]:
     r.git('cherry-pick', f'{m.a}..{m.x}')
     r.git('fetch', '-q', 'origin')
     m = Moved(r, m.a, m.x, h, r.git('rev-parse', 'HEAD'), [h])
-    return refused_naming(MovedCase(tmp, m).land(), 'landing commit', h[:12])
+    return refused_naming(MovedCase(tmp, m).land(), h[:12], one_of=H_SIDE)
+
+
+# Chained moves (the coordinator's generalized rule, replacing conditions 3
+# and 4): a stack H0 -> P1 (X1) -> P2 (X2), each package reviewed and green
+# on its original commits. P1 lands moved: its copies on H, then its landing
+# commit. P2, moved onto H, lands with --moved-from X2, whose history holds
+# P1's original commits while H holds P1's moved copies and landing commits.
+# With B = merge-base(X, H): patch-ids(B..X) == patch-ids(B..H without its
+# landing commits) ++ patch-ids(H..C), no merge, no empty commit in B..X or
+# H..C, and, commit by commit, the trees of B..X equal those of the commits
+# paired with them. A refusal names the patches or the trees.
+
+#: The words a refusal of a chained move may name its condition by.
+CHAIN_SIDE = ('patch', 'Patch', 'tree')
+
+
+def package(n: int, *parts: str) -> Commits:
+    """Package T1.9<n>: one commit per part, each adding its own file."""
+    return tuple(
+        (f'T1.9{n}{" " + part if part else ""}: package {n}',
+         {f'p{n}{part.replace(" ", "")}.txt': f'p{n} {part}\n'})
+        for part in (parts or ('',))
+    )  # fmt: skip
+
+
+def stack(
+    tmp: Path,
+    packages: Sequence[Commits],
+    landed: dict[int, Commits] | None = None,
+    onto: Commits | None = None,
+) -> Moved:
+    """X: the packages stacked on H0, each on the one before. H: H0, an
+    earlier lane's landing commit, then each package but the last moved
+    there (its commits cherry-picked, or ``landed[i]`` in their place) and
+    its landing commit. C: the last package moved onto H (cherry-picked, or
+    ``onto``)."""
+    r = Repo(tmp)
+    r.git('checkout', '-q', '-b', 'start')
+    h0 = r.commit('Land T1.89: the phase so far', {'base.txt': 'base\n'})
+    r.git('checkout', '-q', '-b', 'x', h0)
+    tips = [h0]
+    for commits in packages:
+        for subject, files in commits:
+            r.commit(subject, files)
+        tips.append(r.git('rev-parse', 'HEAD'))
+    r.git('checkout', '-q', '-b', 'phase', h0)
+    seeded = [r.commit('Land T1.90: an earlier lane', None)]
+    for i in range(len(packages) - 1):
+        if landed and i in landed:
+            for subject, files in landed[i]:
+                seeded.append(r.commit(subject, files))
+        else:
+            r.git('cherry-pick', f'{tips[i]}..{tips[i + 1]}')
+        seeded.append(r.commit(f'Land T1.9{i + 1}: package {i + 1}', None))
+    h = r.git('rev-parse', 'HEAD')
+    r.git('push', '-q', 'origin', f'{h}:refs/heads/{PHASE}')
+    r.git('checkout', '-q', '-b', MOVED_TOPIC, h)
+    if onto is None:
+        r.git('cherry-pick', f'{tips[-2]}..{tips[-1]}')
+    else:
+        for subject, files in onto:
+            r.commit(subject, files)
+    r.git('fetch', '-q', 'origin')
+    return Moved(r, h0, tips[-1], h, r.git('rev-parse', 'HEAD'), seeded)
+
+
+LAST = (('T1.99: a test package', {'a.txt': 'a\n'}),)
+
+for depth in (2, 3):
+
+    @case(f'chained: a stack of {depth} packages, each moved, lands the last')
+    def _(tmp: Path, depth: int = depth) -> tuple[bool, str]:
+        m = stack(tmp, [*(package(n) for n in range(1, depth)), LAST])
+        c = MovedCase(tmp, m).land()
+        r = m.repo
+        sha = r.git('rev-parse', 'HEAD')
+        ok = (
+            c.code == 0
+            and r.git('rev-parse', 'HEAD^') == m.c
+            and r.remote(PHASE) == sha
+            and f'Base-SHA: {m.h}' in c.message()
+        )
+        return ok, 'landed' if ok else f'exit {c.code}: {c.text[-600:]}'
+
+
+@case('chained: a package of two commits, moved, then the next lands')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = stack(tmp, [package(1, 'a', 'b'), package(2), LAST])
+    c = MovedCase(tmp, m).land()
+    return c.code == 0, 'landed' if c.code == 0 else c.text[-600:]
+
+
+@case("chained: refused, H's copy of P1 differs from P1, C fixes the tree")
+def _(tmp: Path) -> tuple[bool, str]:
+    changed = (('T1.91: package 1', {'p1.txt': 'p1 changed\n'}),)
+    fixup = ('T1.99 fix 1: P1 as reviewed', {'p1.txt': 'p1 \n'})
+    m = stack(tmp, [package(1), LAST], landed={0: changed}, onto=(*LAST, fixup))
+    return refused_naming(MovedCase(tmp, m).land(), one_of=CHAIN_SIDE)
+
+
+@case('chained: refused, H has a non-landing commit X lacks, C undoes it')
+def _(tmp: Path) -> tuple[bool, str]:
+    stray = ('T1.91 fix 1: not reviewed in X', ADD_Z)
+    m = stack(
+        tmp,
+        [package(1), LAST],
+        landed={0: (*package(1), stray)},
+        onto=(*LAST, ('T1.99 fix 1: drop z', DROP_Z)),
+    )
+    return refused_naming(MovedCase(tmp, m).land(), one_of=CHAIN_SIDE)
+
+
+@case("chained: refused, X has a commit of P1's that H lacks, C carries it")
+def _(tmp: Path) -> tuple[bool, str]:
+    p1 = package(1, 'a', 'b')
+    m = stack(
+        tmp,
+        [p1, LAST],
+        landed={0: p1[:1]},
+        onto=(
+            ('T1.99: a test package', {'a.txt': 'a\n', 'p1b.txt': 'p1 b\n'}),
+        ),
+    )
+    return refused_naming(MovedCase(tmp, m).land(), one_of=CHAIN_SIDE)
+
+
+@case("chained: refused, H has P1's commits in another order")
+def _(tmp: Path) -> tuple[bool, str]:
+    p1 = package(1, 'a', 'b')
+    m = stack(tmp, [p1, LAST], landed={0: (p1[1], p1[0])})
+    return refused_naming(MovedCase(tmp, m).land(), one_of=CHAIN_SIDE)
+
+
+@case("chained: refused, C has the last package's commits in another order")
+def _(tmp: Path) -> tuple[bool, str]:
+    last = package(9, 'a', 'b')
+    m = stack(tmp, [package(1), last], onto=(last[1], last[0]))
+    return refused_naming(MovedCase(tmp, m).land(), one_of=CHAIN_SIDE)
+
+
+# Patch-ids that agree where the code does not (the subagent review): the
+# intermediate trees differ, the final trees are equal, and the move is
+# refused, naming the trees and the commit, X's or C's, where they part.
+
+
+@case("moved: refused, C's first commit differs after a lone carriage return")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        work=(
+            ('T1.99: a test package', {'f.txt': 'a\rX\n'}),
+            ('T1.99 fix 1: settle f', {'f.txt': 'b\n'}),
+        ),
+        onto=(
+            ('T1.99: a test package', {'f.txt': 'a\rY\n'}),
+            ('T1.99 fix 1: settle f', {'f.txt': 'b\n'}),
+        ),
+    )
+    x1 = m.repo.git('rev-parse', f'{m.x}^')
+    c1 = m.repo.git('rev-parse', f'{m.c}^')
+    return refused_naming(
+        MovedCase(tmp, m).land(),
+        one_of=CHAIN_SIDE,
+        and_one_of=(x1[:12], c1[:12]),
+    )
+
+
+@case("moved: refused, C's intermediate commit differs in whitespace only")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        work=(
+            ('T1.99: a test package', {'f.txt': 'x = 1\n'}),
+            ('T1.99 fix 1: settle f', {'f.txt': 'y\n'}),
+        ),
+        onto=(
+            ('T1.99: a test package', {'f.txt': 'x  =  1 \n'}),
+            ('T1.99 fix 1: settle f', {'f.txt': 'y\n'}),
+        ),
+    )
+    x1 = m.repo.git('rev-parse', f'{m.x}^')
+    c1 = m.repo.git('rev-parse', f'{m.c}^')
+    return refused_naming(
+        MovedCase(tmp, m).land(),
+        one_of=CHAIN_SIDE,
+        and_one_of=(x1[:12], c1[:12]),
+    )
 
 
 # Condition 5: the rest of land.py's checks still hold C.
