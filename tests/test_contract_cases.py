@@ -430,6 +430,76 @@ def test_the_admitted_set_follows_the_families_admission_exits(
     }
 
 
+#: A statement that names the time zone, in any case and spacing.
+_ZONE = re.compile(r'time\s*_?\s*zone', re.IGNORECASE)
+#: The one form a case may set it in: for the whole database, so every
+#: cursor the source reads through takes it, not the process's local zone.
+_GLOBAL_ZONE = re.compile(
+    r"^\s*SET\s+GLOBAL\s+TimeZone\s*(=|TO)\s*'[^']+'\s*;?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _zone_problems(where: str, statements: list[str]) -> list[str]:
+    r"""Each statement of ``statements`` that names the time zone other
+    than as ``SET GLOBAL TimeZone = '...'``."""
+    return [
+        f'{where}: {statement!r}'
+        for statement in statements
+        if _ZONE.search(statement) and not _GLOBAL_ZONE.match(statement)
+    ]
+
+
+def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
+    # The source reads through cursors, which take the process's local zone
+    # unless the database's is set: a session SET applies to the setup's
+    # connection alone, so the reference recorded the recorder's machine
+    # zone (time.timestamptz, found by the bundle's landing CI). Every case,
+    # inventory entry and refusal-map probe setup that names the zone sets
+    # it with SET GLOBAL, so no answer depends on the recorder's TZ.
+    problems = []
+    named = 0
+    for case, _ in run_python.load_cases([CASES]):
+        setup = case['input'].get('setup', [])
+        named += sum(bool(_ZONE.search(each)) for each in setup)
+        problems += _zone_problems(case['id'], setup)
+    for entry in _inventory()['cases']:
+        problems += _zone_problems(
+            f'inventory {entry["id"]}', entry.get('setup', [])
+        )
+    for path in sorted((ROOT / 'contract/refusal-maps').glob('*.json')):
+        for probe in json.loads(path.read_text(encoding='utf-8'))['probes']:
+            for runner in ('python-core', 'rust-host'):
+                spec = probe.get(runner) or {}
+                setup = (
+                    (spec.get('input') or {}).get('setup')
+                    or spec.get('setup')
+                    or []
+                )
+                problems += _zone_problems(
+                    f'{path.name} {probe["id"]} {runner}', setup
+                )
+    assert problems == []
+    assert named, 'no case names the zone: the check reads nothing'
+    # Seeded: every other way to name it fails, and the global form passes.
+    for statement in (
+        "SET TimeZone = 'America/New_York'",
+        "SET SESSION TimeZone = 'UTC'",
+        "set timezone to 'UTC'",
+        'RESET TimeZone',
+        "SET LOCAL TimeZone = 'UTC'",
+        "SELECT set_config('TimeZone', 'UTC')",
+        "SET GLOBAL TimeZone = 'UTC'; SET TimeZone = 'Asia/Tokyo'",
+    ):
+        assert _zone_problems('seed', [statement]), statement
+    for statement in (
+        "SET GLOBAL TimeZone = 'America/New_York'",
+        "set global timezone to 'UTC'",
+        'ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ',
+    ):
+        assert not _zone_problems('seed', [statement]), statement
+
+
 def test_the_bases_are_the_inventorys_and_adventureworks() -> None:
     # The inventory's bases, and E27's AdventureWorks base beside them, in
     # addition to the inventory (E31; T1.21b).
