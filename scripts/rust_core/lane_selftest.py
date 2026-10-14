@@ -972,20 +972,13 @@ def _(w: World) -> tuple[bool, str]:
 
 @case('land.py: a red landing run, a fix, a second landing, the next start')
 def _(w: World) -> tuple[bool, str]:
+    # The earlier landing commit a red --wait-for-landing-run left on the
+    # lane, made here by hand: land.py refuses that flag as obsolete since
+    # E131, but a lane may still hold such a commit, which the package owns.
     sha = candidate(w)
-    state = w.gh_state()
-    state['conclusion'] = 'failure'
-    w.gh_state(state)
-    red = w.land(
-        *land_args(w, sha, 'Land T1.11e: the work'), '--wait-for-landing-run'
-    )
-    earlier = w.git('rev-parse', 'HEAD', cwd=w.worktree).strip()
-    stuck = (
-        red.code == 2
-        and 'not green' in red.text
-        and w.tip(BRANCH) == earlier != sha
-        and w.tip(PHASE) == w.phase
-    )
+    earlier = landing_commit(w, 'Land T1.11e: the work', w.phase)
+    w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
+    stuck = w.tip(BRANCH) == earlier != sha and w.tip(PHASE) == w.phase
     fix = w.commit(w.worktree, 'T1.11e fix 1: what the red run found')
     checked = w.lane('check', cwd=w.worktree)
     w.git('push', '--quiet', 'origin', f'HEAD:{BRANCH}', cwd=w.worktree)
@@ -1014,7 +1007,7 @@ def _(w: World) -> tuple[bool, str]:
     return verdict(
         ok,
         'stuck, fixed, landed again on the fix, the next package started',
-        f'{red.text}\n{checked.text}\n{again.text}\n{nxt.text}',
+        f'{checked.text}\n{again.text}\n{nxt.text}',
     )
 
 

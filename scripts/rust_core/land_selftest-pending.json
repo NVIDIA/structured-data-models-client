@@ -1,21 +1,7 @@
 {
  "about": "CI4's acceptance tests (decision 30, the owner's of 2026-10-14: ci.yml skips the empty landing commits, so land.py no longer requires a landing commit's own runs to be green; verify stands on the candidate's green exact-SHA push run, or a moved landing's Moved-from commit's, and --wait-for-landing-run is refused as obsolete) that failed when the independent test author wrote them, before the implementation, at e1e49e8a (scripts/rust_core/land_selftest.py, the 'CI4' cases; their interface in the comment above them). 'cases' holds self-test names. land_selftest.py's main holds each listed case to failing (strict): once one passes it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', which is the test author's. 'CI4 verify: fails, a run on the landing commit ran and failed' passed at e1e49e8a and is not pending. The same commit took out the cases decision 30 contradicts: the four 'waits:' cases (--wait-for-landing-run landing on the landing commit's own run; the lane's read-back after the push stays covered by the normal path's case) and 'verify: no run on the phase branch fails'; 'verify: both runs green' now asks for at least two 'ok' lines, so verify may also report the candidate's run. CI3's list is in git history (ee9029f6..30b545bf).",
  "pending": {
-  "cases": [
-   "CI4 verify: a landing with no runs of its own passes on the candidate",
-   "CI4 verify: a landing whose own runs were skipped passes on the candidate",
-   "CI4 verify: a moved landing with no runs of its own passes on X's run",
-   "CI4 verify: a moved landing whose own runs were skipped passes on X's run",
-   "CI4 verify: fails, the landing commit changes a file",
-   "CI4 verify: fails, a moved landing's tree is not X's, X green",
-   "CI4 verify: fails, the candidate's newest run is red after a green one",
-   "CI4 verify: fails, the candidate's newest run was cancelled",
-   "CI4 verify: fails, X's newest run is red after the green one landed on",
-   "CI4 verify: fails, the candidate's only green run is a pull request's",
-   "CI4 land: --wait-for-landing-run is refused as obsolete (candidate run success)",
-   "CI4 land: --wait-for-landing-run is refused as obsolete (candidate run cancelled)",
-   "CI4 land: a cancelled candidate run is refused without the old advice"
-  ]
+  "cases": []
  },
  "authored": {
   "cases": [

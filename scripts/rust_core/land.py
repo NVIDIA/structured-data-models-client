@@ -9,14 +9,15 @@ Decision E43 (b) and the design's "One gate run per work package": the
 only commit after approval is an empty landing commit carrying the
 trailers (E25), and the phase branch fast-forwards to it at once when its
 tree is the candidate's and the candidate's own exact-SHA CI run
-concluded success. The landing commit's runs are recorded afterwards
-(``land.py verify``), not waited on.
+concluded success. CI skips the landing commit's own runs (decision E131):
+its tree was tested on the candidate's exact SHA, and ``land.py verify``
+stands on that run.
 
     land.py --candidate SHA --topic-branch NAME --review FILE --review FILE \\
         --title 'T1.12: the S0 case corpus' --protected-paths TEXT \\
         [--checkpoint SHA] [--phase-branch rust-core-phase-1] \\
         [--reviewer TEXT] [--summary TEXT] [--dry-run]
-        [--wait-for-landing-run | --moved-from SHA]
+        [--moved-from SHA]
     land.py verify LANDING_SHA [--phase-branch rust-core-phase-1]
 
 Before it changes anything it refuses, naming the reason, unless:
@@ -37,7 +38,7 @@ Before it changes anything it refuses, naming the reason, unless:
   (``Refs: T1.11e``) is not ownership, so a commit whose subject is another
   package's, or names no package, never lands under this title. The one
   other commit owned is an earlier landing commit of the same package, left
-  on the lane by a red ``--wait-for-landing-run``: subject ``Land <ID>:
+  on the lane by a red ``--wait-for-landing-run`` (obsolete since E131): subject ``Land <ID>:
   ...``, one parent, no file changed, and a ``Base-SHA`` in the phase
   branch. A fix builds on it, and the new landing commit's parent is that
   fix and its ``Base-SHA`` the current phase head, so the phase branch
@@ -58,9 +59,10 @@ Before it changes anything it refuses, naming the reason, unless:
   with conclusion success; a cancelled, failed or unfinished run does not
   count (T1.8b's candidate run was cancelled). Only a push run on the
   phase branch or a topic branch under it (an archive branch never) counts
-  as evidence, here, for the landing runs and in ``verify``: a run of
-  another event (a pull request's) skips the checkpoint's gate, which CI
-  runs only on such pushes (T1.20, Codex P2).
+  as evidence, here and in ``verify``: a run of another event (a pull
+  request's) skips the checkpoint's gate, which CI runs only on such
+  pushes (T1.20, Codex P2). A candidate whose run is not green is rerun or
+  waited on, then landed.
 
 It then commits the landing commit (``git commit --allow-empty -s``) with
 ``Reviewed-by``, ``Protected-paths``, ``Base-SHA`` (the phase head) and
@@ -72,23 +74,26 @@ it to the topic branch and the phase branch in one atomic push, which the
 remote refuses if the phase branch moved. On a lane it then reads both
 branches back from the remote and reports, exiting 1, if the lane is not
 the phase head, since the lane's next package starts from there. It
-prints the landing SHA and the landing runs once they appear.
+prints the landing SHA; it does not wait for the landing commit's runs,
+which CI skips.
 
 The landing commit's message names the CI evidence it lands on: the
-candidate's green run, by id and SHA, or, on the other path, the
-candidate's run that was not green and the landing run that must be.
+candidate's green run, by id and SHA.
 
-``--wait-for-landing-run`` is the decision's other path, for a candidate
-whose run is not green: the CI check is reported rather than required, the
-landing commit is pushed to the topic branch only, and the phase branch is
-fast-forwarded only after the landing commit's own run concludes success.
+``--wait-for-landing-run``, which pushed the landing commit to the topic
+branch and moved the phase branch only once that commit's own run was
+green, is refused as obsolete (E131): CI skips that run, so it would never
+come.
 
-``verify`` waits for the runs on a landing SHA (the topic branch's and the
-phase branch's) and reports each. A cancelled run is reported as cancelled,
-not failed: it passes when another run on the same SHA, or on the
-candidate, whose tree the landing commit shares, is green, and otherwise
-asks for a rerun. On a failure it prints how to revert the fast-forward and
-changes nothing: it never reverts by itself.
+``verify`` (decision E131) checks that the landing commit changes no file
+and carries its trailers, and stands on the run it landed on: the newest
+gating run on the candidate (the landing commit's parent), or, for a moved
+landing, on its ``Moved-from`` commit, whose tree must be the landing's.
+That run must be green; a red one fails, and a cancelled or unfinished one
+asks for a rerun. The landing commit's own runs, which CI skips, are
+reported and need not exist; one that ran and failed fails. On a failure
+it prints how to revert the fast-forward and changes nothing: it never
+reverts by itself.
 
 ``--moved-from X`` (decision E130, the owner's of 2026-10-14) lands a
 candidate C on X's reviews and X's green run, with no reviewer re-run and
@@ -115,13 +120,11 @@ condition, unless:
   empty; for a stack of packages, the earlier packages' moved commits);
 - no merge in ``B..X``, ``B..H`` or ``H..C``.
 
-X that is C itself, or is already in the phase branch, is refused, and so
-is ``--moved-from`` with ``--wait-for-landing-run``, which lands without a
-green run. The landing commit names X, X's green run by id and SHA, and
-that C was moved over landing commits only, and adds the trailers
-``Moved-from`` (X) and ``Moved-from-run`` (the run's id); ``verify``
-passes a cancelled run of such a landing on a green run of X when X's
-tree is the landing's.
+X that is C itself, or is already in the phase branch, is refused. The
+landing commit names X, X's green run by id and SHA, and that C was moved
+over landing commits only, and adds the trailers ``Moved-from`` (X) and
+``Moved-from-run`` (the run's id); ``verify`` stands on X's newest gating
+run, which must be green, when X's tree is the landing's.
 
 ``--dry-run`` makes every check, prints the landing commit it would make,
 and commits and pushes nothing.
@@ -163,7 +166,7 @@ SUBJECT_OWNER = re.compile(rf'({PACKAGE_ID.pattern})(?=[: ])')
 #: (``xT1.11f``), so a subject naming a second package is refused.
 SUBJECT_ID = re.compile(rf'(?<![0-9.])({PACKAGE_ID.pattern})(?![A-Za-z0-9])')
 #: An earlier landing commit's subject, left on the lane when its landing
-#: run was red (``--wait-for-landing-run``); owned only when it is what
+#: run was red (the former ``--wait-for-landing-run``); owned only when it is what
 #: land.py makes (see ``landing_problem``).
 LANDING_SUBJECT = re.compile(rf'Land ({PACKAGE_ID.pattern}): ')
 #: Where ``lane.py start`` records a lane worktree's package.
@@ -171,8 +174,6 @@ PACKAGE_KEY = 'sdm.package'
 WORKFLOW = 'ci.yml'
 APPROVE = 'APPROVE'
 MIN_PREFIX = 7
-#: How long to wait for a pushed commit's runs to appear, in seconds.
-APPEAR_TIMEOUT = 180
 RUN_FIELDS = (
     'databaseId,headSha,headBranch,status,conclusion,event,url,createdAt'
 )
@@ -397,8 +398,9 @@ def landing_problem(
     makes one: subject ``Land <package>: ...``, one parent, the parent's
     tree (it changes no file), and a ``Base-SHA`` trailer naming a commit
     of the phase branch (an ancestor of ``base``, the phase head checked
-    against). Such a commit stays on the lane when its landing run was
-    red; the package's fixes build on it and land again."""
+    against). Such a commit stayed on the lane when its landing run was
+    red under the former ``--wait-for-landing-run`` (obsolete since E131);
+    the package's fixes build on it and land again."""
     match = LANDING_SUBJECT.match(
         tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
     )
@@ -663,14 +665,10 @@ def check_candidate_ci(
         newest.get('status') != 'completed'
         or newest.get('conclusion') != 'success'
     ):
-        advice = (
-            'Wait for or rerun it, or land with --wait-for-landing-run'
-            if what == 'the candidate'
-            else 'Wait for or rerun it'
-        )
         raise Refusal(
             f'the newest CI run on {what} is not green ({describe(newest)}); '
-            f'a cancelled, failed or unfinished run does not count. {advice}'
+            'a cancelled, failed or unfinished run does not count. Wait for '
+            'or rerun it'
         )
     return newest
 
@@ -971,27 +969,6 @@ def make_landing(tools: Tools, landing: Landing, candidate: str) -> str:
     return sha
 
 
-def wait_for_runs(
-    tools: Tools,
-    sha: str,
-    branches: Sequence[str],
-    timeout: float = APPEAR_TIMEOUT,
-) -> dict[str, dict[str, object]]:
-    """The newest run on ``sha`` for each branch, waiting for them to
-    appear; a branch whose run has not appeared in time is left out."""
-    waited = 0.0
-    while True:
-        found: dict[str, dict[str, object]] = {}
-        for run in runs_on(tools, sha):
-            branch = str(run.get('headBranch'))
-            if branch in branches and branch not in found:
-                found[branch] = run
-        if len(found) == len(branches) or waited >= timeout:
-            return found
-        tools.sleep(10)
-        waited += 10
-
-
 def watch(tools: Tools, run_id: object) -> dict[str, object]:
     """Waits for a run to finish and returns its final state."""
     repo = ('--repo', tools.repo) if tools.repo else ()
@@ -1007,12 +984,14 @@ def watch(tools: Tools, run_id: object) -> dict[str, object]:
 def land(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
-    check_branches(args.phase_branch, args.topic_branch)
-    if args.moved_from is not None and args.wait_for_landing_run:
+    if args.wait_for_landing_run:
         raise Refusal(
-            "--moved-from lands on the moved-from commit's green run, and "
-            '--wait-for-landing-run lands without a green run; give one'
+            '--wait-for-landing-run is obsolete (decision E131): CI skips an '
+            "empty landing commit's own runs, so that run would never come. "
+            "A landing stands on the candidate's green exact-SHA run: wait "
+            "for or rerun the candidate's run, then land without the flag"
         )
+    check_branches(args.phase_branch, args.topic_branch)
     title = one_line(args.title, '--title')
     package = package_of(title)
     on_lane = lane_of(args.topic_branch) is not None
@@ -1061,23 +1040,7 @@ def land(
             'commit(s)'
         )
     out(f'ok   {len(args.review)} reviews approve {evidenced[:12]}')
-    if args.wait_for_landing_run:
-        newest = (runs_on(tools, candidate) or [None])[0]
-        state = (
-            'no run'
-            if newest is None
-            else f'run {newest.get("databaseId")}: '
-            f'{newest.get("conclusion") or newest.get("status")}'
-        )
-        out(
-            f"note the candidate's CI ({state}) is not relied on; landing waits"
-        )
-        evidence = (
-            f'Candidate CI not relied on ({state} at {candidate}); the phase '
-            "branch moves only when this commit's own exact-SHA run is "
-            'green (E43 (b), --wait-for-landing-run).'
-        )
-    elif moved:
+    if moved:
         out(f'ok   {describe(green)}, on {moved[:12]} itself')
         evidence = (
             f'Moved from {moved}: its run {green.get("databaseId")} is green '
@@ -1086,7 +1049,7 @@ def land(
             "only (each commit with its partner's tree in order, only "
             'landing commits added), so it lands on that evidence (E130); '
             'this commit changes no file, so the phase branch moves at once '
-            'and its own runs are recorded afterwards (E43 (b)).'
+            'and CI skips its own runs (E43 (b), E131).'
         )
     else:
         green = check_candidate_ci(tools, candidate)
@@ -1094,7 +1057,7 @@ def land(
         evidence = (
             f'Candidate run {green.get("databaseId")} green at {candidate}; '
             'this commit changes no file, so the phase branch moves at once '
-            'and its own runs are recorded afterwards (E43 (b)).'
+            'and CI skips its own runs (E43 (b), E131).'
         )
     reviewer = one_line(
         args.reviewer
@@ -1137,33 +1100,13 @@ def land(
         f'the landing commit {sha[:12]} is made but was not pushed; before '
         f'running land.py again, undo it with `git reset --soft {candidate}`'
     )
-    if args.wait_for_landing_run:
-        push(tools, undo, args.remote, topic_ref)
-        out(f'ok   pushed {args.topic_branch}; waiting for the landing run')
-        runs = wait_for_runs(tools, sha, [args.topic_branch])
-        if args.topic_branch not in runs:
-            raise Refusal(
-                f'no landing run appeared on {sha[:12]}; {args.phase_branch} '
-                'was not moved'
-            )
-        final = watch(tools, runs[args.topic_branch]['databaseId'])
-        if final.get('conclusion') != 'success':
-            raise Refusal(
-                f'the landing run is not green ({describe(final)}); '
-                f'{args.phase_branch} was not moved'
-            )
-        tools.git('push', '--quiet', '--no-verify', args.remote, phase_ref)
-        out(
-            f'ok   {describe(final)}; {args.phase_branch} fast-forwarded to {sha}'
-        )
-    else:
-        # One atomic push: the remote refuses both if the phase branch has
-        # moved since the fetch above, since this is not a forced update.
-        push(tools, undo, '--atomic', args.remote, topic_ref, phase_ref)
-        out(
-            f'ok   pushed {args.topic_branch} and fast-forwarded '
-            f'{args.phase_branch} to {sha} (decision E43 (b))'
-        )
+    # One atomic push: the remote refuses both if the phase branch has
+    # moved since the fetch above, since this is not a forced update.
+    push(tools, undo, '--atomic', args.remote, topic_ref, phase_ref)
+    out(
+        f'ok   pushed {args.topic_branch} and fast-forwarded '
+        f'{args.phase_branch} to {sha} (decision E43 (b))'
+    )
     out(f'LANDED {sha}')
     status = 0
     if on_lane:
@@ -1179,13 +1122,17 @@ def land(
             status = 1
         else:
             out(f'ok   {args.topic_branch} equals {args.phase_branch} at {sha}')
-    runs = wait_for_runs(tools, sha, [args.topic_branch, args.phase_branch])
+    # One look, no wait: CI skips the landing commit's runs (E131), so they
+    # are listed for their links only.
+    listed: dict[str, dict[str, object]] = {}
+    for run in runs_on(tools, sha):
+        listed.setdefault(str(run.get('headBranch')), run)
     for branch in (args.topic_branch, args.phase_branch):
-        run = runs.get(branch)
+        run = listed.get(branch)
         out(
             f'run  {branch}: {run.get("databaseId")} {run.get("url")}'
             if run
-            else f'run  {branch}: not yet listed; `land.py verify {sha}` finds it'
+            else f'run  {branch}: not yet listed (CI skips it, E131)'
         )
     out(f'next: land.py verify {sha}')
     return status
@@ -1225,9 +1172,42 @@ def revert_instructions(
     return '\n'.join(lines)
 
 
+def evidence_problem(
+    tools: Tools, runs: list[dict[str, object]], sha: str, what: str
+) -> tuple[str | None, dict[str, object] | None]:
+    """Why ``sha``'s newest gating run is no evidence, or None and that run.
+
+    Only a push run on the phase branch or a topic branch under it counts
+    (:func:`gating`); a cancelled or unfinished one is reported as such, so
+    the caller can ask for a rerun rather than a revert."""
+    if not runs:
+        return (
+            f'no CI run on {what} {sha[:12]} itself that is a push to the '
+            "phase branch or a topic branch under it (a pull request's run "
+            'skips the gate and does not count)',
+            None,
+        )
+    newest = runs[0]
+    if (
+        newest.get('status') == 'completed'
+        and newest.get('conclusion') == 'success'
+    ):
+        return None, newest
+    return f'the newest CI run on {what} is {describe(newest)}', newest
+
+
 def verify(
     args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
 ) -> int:
+    """A landing commit verified on the run it landed on (decision E131).
+
+    CI skips an empty landing commit's own runs: its tree is the
+    candidate's, which ran on its exact SHA. So the evidence is the
+    candidate's newest gating run (the landing commit's parent), or, for a
+    moved landing (E130), the newest gating run on its ``Moved-from``
+    commit, whose tree must be the landing's. A run on the landing commit
+    itself is reported and need not exist; one that ran and failed still
+    fails, since CI should have skipped it."""
     if args.phase_branch != PHASE_BRANCH:
         raise Refusal(
             f'the phase branch is {args.phase_branch!r}, not {PHASE_BRANCH!r}'
@@ -1236,6 +1216,7 @@ def verify(
     trailers = trailers_of(tools, sha)
     base = trailers.get('Base-SHA')
     tree = tools.git('rev-parse', sha + '^{tree}').strip()
+    parent = tools.git('rev-parse', sha + '^').strip()
     parent_tree = tools.git('rev-parse', sha + '^^{tree}').strip()
     problems: list[str] = []
     if tree != parent_tree:
@@ -1245,88 +1226,85 @@ def verify(
     for key in ('Reviewed-by', 'Protected-paths', 'Base-SHA', 'Checkpoint-SHA'):
         if key not in trailers:
             problems.append(f'{sha[:12]} has no {key} trailer')
-    runs = wait_for_runs(
-        tools, sha, [args.phase_branch], timeout=args.appear_timeout
-    )
-    every = {str(r.get('headBranch')): r for r in reversed(runs_on(tools, sha))}
-    every.update(runs)
-    if args.phase_branch not in every:
-        problems.append(
-            f'no CI run on {sha[:12]} on {args.phase_branch}; is the phase '
-            'branch at the landing?'
+    # The evidence: the candidate's run, or the moved-from commit's.
+    evidenced, what = parent, 'the candidate'
+    if 'Moved-from' in trailers:
+        moved = resolve_quiet(tools, trailers['Moved-from'])
+        if moved is None:
+            problems.append(
+                f'its Moved-from commit {trailers["Moved-from"][:12]} is not '
+                'in this repository; fetch it'
+            )
+        elif tools.git('rev-parse', moved + '^{tree}').strip() != tree:
+            problems.append(
+                f"{sha[:12]}'s tree is not its Moved-from commit "
+                f"{moved[:12]}'s, so that commit's run is no evidence for it"
+            )
+        evidenced, what = moved or '', 'the moved-from commit'
+    unresolved: list[dict[str, object]] = []
+    green: dict[str, object] | None = None
+    if evidenced and not problems:
+        why, run = evidence_problem(
+            tools, runs_on(tools, evidenced), evidenced, what
         )
-    cancelled: list[dict[str, object]] = []
-    finals: list[dict[str, object]] = []
-    for _branch, run in sorted(every.items()):
+        if why is None and run is not None:
+            green = run
+            out(
+                f'ok   {describe(run)} {run.get("url")}, on {what} '
+                f'{evidenced[:12]}, whose tree the landing commit has (E131)'
+            )
+        elif run is not None and (
+            run.get('status') != 'completed'
+            or run.get('conclusion') == 'cancelled'
+        ):
+            out(f'CANC {why}')
+            unresolved.append(run)
+        else:
+            problems.append(why or f'no evidence on {what}')
+    # The landing commit's own runs, which CI skips: reported, never
+    # required; one that ran and failed is real, and fails.
+    for run in runs_on(tools, sha):
         final = run
         if run.get('status') != 'completed':
             out(f'wait {describe(run)} {run.get("url")}')
             final = watch(tools, run.get('databaseId'))
-        finals.append(final)
         conclusion = final.get('conclusion')
-        mark = {'success': 'ok  ', 'cancelled': 'CANC'}.get(
-            str(conclusion), 'FAIL'
-        )
-        out(f'{mark} {describe(final)} {final.get("url")}')
         if conclusion == 'cancelled':
-            cancelled.append(final)
-        elif conclusion != 'success':
-            problems.append(f'{describe(final)}')
-    unresolved: list[dict[str, object]] = []
-    if cancelled:
-        # A cancelled run says nothing about the tree. Another green run on
-        # the same SHA, or on the candidate, whose tree an empty landing
-        # commit shares, or, for a moved landing, on the moved-from commit
-        # when its tree is the same, is the evidence instead.
-        green = [f for f in finals if f.get('conclusion') == 'success']
-        if not green and tree == parent_tree:
-            parent = tools.git('rev-parse', sha + '^').strip()
-            green = [
-                r
-                for r in runs_on(tools, parent)
-                if r.get('status') == 'completed'
-                and r.get('conclusion') == 'success'
-            ][:1]
-        moved = (
-            resolve_quiet(tools, trailers['Moved-from'])
-            if not green and 'Moved-from' in trailers
-            else None
-        )
-        if moved and tools.git('rev-parse', moved + '^{tree}').strip() == tree:
-            # A moved landing (E130): its tree is the moved-from commit's,
-            # whose green run it landed on (Moved-from-run).
-            wanted = trailers.get('Moved-from-run')
-            runs = [
-                r
-                for r in runs_on(tools, moved)
-                if r.get('status') == 'completed'
-                and r.get('conclusion') == 'success'
-            ]
-            green = sorted(
-                runs, key=lambda r: str(r.get('databaseId')) != wanted
-            )[:1]
-        for run in cancelled:
-            if green:
-                out(
-                    f'note {describe(run)} was cancelled; the same tree is green '
-                    f'in run {green[0].get("databaseId")} at '
-                    f'{str(green[0].get("headSha"))[:12]}'
+            # Cancelled says nothing about the tree; the run it landed on
+            # does.
+            out(
+                f'CANC {describe(final)} {final.get("url")} (the landing '
+                'commit)'
+                + (
+                    f'; the same tree is green in run {green.get("databaseId")}'
+                    f' at {evidenced[:12]}'
+                    if green
+                    else ''
                 )
-            else:
-                unresolved.append(run)
+            )
+        elif conclusion in ('success', 'skipped', 'neutral'):
+            out(
+                f'ok   {describe(final)} {final.get("url")} (the landing commit)'
+            )
+        else:
+            out(f'FAIL {describe(final)} {final.get("url")}')
+            problems.append(f'{describe(final)}, on the landing commit itself')
     if problems:
         out('VERIFY FAILED:\n- ' + '\n- '.join(problems))
         out(revert_instructions(sha, base, args.phase_branch, args.remote))
         return 1
     if unresolved:
         out(
-            'VERIFY INCOMPLETE: cancelled, with no green run on the same tree; '
-            'nothing failed, so rerun rather than revert:'
+            f'VERIFY INCOMPLETE: the newest run on {what} was cancelled or '
+            'has not finished; nothing failed, so rerun or wait rather than '
+            'revert:'
         )
         for run in unresolved:
             out(f'  gh run rerun {run.get("databaseId")}   # then verify again')
         return 3
-    out(f'VERIFIED {sha}: every run on it is green or stands for a green tree')
+    out(
+        f'VERIFIED {sha}: the run it landed on is green, and it changes no file'
+    )
     return 0
 
 
@@ -1345,8 +1323,10 @@ def parser_for(command: str) -> argparse.ArgumentParser:
             description='Waits for the runs on a landing commit and reports them.',
         )
         parser.add_argument('landing', metavar='LANDING_SHA')
+        # Accepted for older command lines: verify no longer waits for the
+        # landing commit's runs to appear, since CI skips them (E131).
         parser.add_argument(
-            '--appear-timeout', type=float, default=APPEAR_TIMEOUT
+            '--appear-timeout', type=float, default=0, help=argparse.SUPPRESS
         )
     else:
         parser = argparse.ArgumentParser(
@@ -1366,7 +1346,13 @@ def parser_for(command: str) -> argparse.ArgumentParser:
         parser.add_argument('--reviewer')
         parser.add_argument('--summary')
         parser.add_argument('--dry-run', action='store_true')
-        parser.add_argument('--wait-for-landing-run', action='store_true')
+        # Refused as obsolete (E131), with the reason, rather than dropped,
+        # so an old command line learns why.
+        parser.add_argument(
+            '--wait-for-landing-run',
+            action='store_true',
+            help=argparse.SUPPRESS,
+        )
         parser.add_argument(
             '--moved-from',
             metavar='SHA',
