@@ -19,10 +19,11 @@ output, raw or as gate.sh prints it (``    | `` before each line, the
 step's block taken where gate.sh names the step), with exactly one verdict
 whose count is the ``DIFFERS`` lines read; and ``ratchet.log``, the ratchet
 step's. Every observation must be of the gate's run: its commit the gate
-JSON's ``sha``, its case file's SHA-256 the one in ``--cases`` (or
-``--heldout``). ``--gate-json`` is the run's ``evidence/gate/<sha>.json``,
-which stays outside the tree (design.md:432): the pack names it by its file
-name and SHA-256 and never copies it, and one inside ``--out`` is refused.
+JSON's ``sha`` from a clean checkout, its case file's SHA-256 the one in
+``--cases`` (or ``--heldout``); and a gating difference must name its case.
+``--gate-json`` is the run's ``evidence/gate/<sha>.json``, which stays
+outside the tree (design.md:432): the pack names it by its file name and
+SHA-256 and never copies it, and one inside ``--out`` is refused.
 ``--reference`` is the committed python-ref observations, ``--cases`` the
 case files, ``--inventory`` the Phase 1b inventory, ``--register`` the
 register, and ``--heldout`` the held-out cases, of which only digests and
@@ -61,7 +62,9 @@ The pack, in ``--out``, nothing written anywhere else:
   approver, the owner's first, and the comparator's and the ratchet's lines
   as they printed them. ``compare.py`` prints a field's expected and
   observed values, so these lines carry values; a line naming a held-out
-  case, by its ID or its file name, is counted and never shown. The cases
+  case, by its ID or its file name, is counted and never shown, and so is a
+  register entry naming one anywhere, its free text included (its ID still
+  stands where it excuses a listed case's difference). The cases
   for the owner's call, the type-set findings and the DT and ORD results
   are not here: they come with T1.33 part 2.
 - ``heldout.md``: the held-out bundle's digests (as-built's T1.20 recipes)
@@ -71,7 +74,8 @@ A regression is not a failure here: the pack is written and says so. This
 is reporting, not a gate. An input missing, unreadable or of another run
 fails the run by name (a case the inventory lists with no case file, or an
 observation of another commit or case file, by its ID), with nothing
-written; so does a link where the pack writes. Exit status 1 then.
+written; so does a link where the pack writes. Exit status 1 then. It writes
+no bytecode, so nothing lands outside ``--out`` either way.
 """
 
 from __future__ import annotations
@@ -88,6 +92,11 @@ from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+# Nothing outside --out, bytecode included: set before any harness module
+# loads (``_module``), so neither a run that writes the pack nor one that
+# fails leaves a ``__pycache__`` beside them.
+sys.dont_write_bytecode = True
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -119,7 +128,7 @@ NO_RULE = 'no rule'
 VERDICT = re.compile(r'compare: (?P<count>no|[0-9]+) differences')
 #: How gate.sh prints a step's output, and names the step.
 PREFIX = '    | '
-COMPARE_STEP = re.compile(r'compare +(?:ok|FAIL)')
+COMPARE_STEP = re.compile(r'compare +(?:ok|FAIL \(exit [0-9]+\))')
 
 
 class Refused(Exception):
@@ -223,7 +232,8 @@ def provenance(
     digests: dict[str, str],
 ) -> None:
     r"""Every observation is of the gate's run: its commit the gate JSON's
-    ``sha``, its case file the one given, by SHA-256."""
+    ``sha``, from a clean checkout, its case file the one given, by
+    SHA-256."""
     at = ratchet().at
     for runner, cell in columns(observed):
         label = _label(runner, cell)
@@ -232,6 +242,11 @@ def provenance(
                 raise Refused(
                     f'{case}: {label} observed another commit than the gate '
                     f"run's {commit}"
+                )
+            if at(line, 'identity.commit.clean') is not True:
+                raise Refused(
+                    f'{case}: {label} observed it from a checkout with '
+                    'uncommitted changes (identity.commit.clean)'
                 )
             if case not in digests:
                 raise Refused(
@@ -750,6 +765,13 @@ def differences(
     said = verdicts[0].group('count')
     count = 0 if said == 'no' else int(said)
     read = sum(kind == 'gating' for kind, *_ in found)
+    unplaced = sum(kind == 'gating' and not case for kind, _, case, _ in found)
+    if unplaced:
+        raise Refused(
+            f'--gate-out: compare.log: {unplaced} gating difference(s) name '
+            'no case (a runner failure): no case could be classed by them, '
+            'so the pack is not written'
+        )
     if count != read:
         raise Refused(
             f'--gate-out: compare.log: the verdict counts {count} '
@@ -770,9 +792,11 @@ def comparator_md(
     notes: str,
     register: list[dict[str, Any]],
     hidden: set[str],
+    withheld: int,
 ) -> str:
     r"""Item 4, in part. A line naming a held-out case is counted, never
-    shown."""
+    shown; ``register`` is the entries naming none, ``withheld`` the count
+    of the others."""
     counts: dict[str, Counter[str]] = {}
     for kind, rule, _, _ in found:
         counts.setdefault(rule, Counter())[kind] += 1
@@ -829,6 +853,9 @@ def comparator_md(
             + (', '.join(proposed) or 'none')
             + '.',
             '',
+            f'Register entries naming a held-out case, counted, not listed: '
+            f'{withheld}.',
+            '',
             "The comparator's lines as it printed them, values included, "
             'and its verdict:',
             '',
@@ -858,9 +885,10 @@ def _digest_line(name: str, data: bytes) -> bytes:
 
 def heldout(path: Path | None) -> tuple[str, set[str], dict[str, str]]:
     r"""``heldout.md``, digests and counts only; the held-out case IDs,
-    which only count elsewhere; and each case file's SHA-256 by ID. The digests are as-built.md's T1.20
-    recipes: BUNDLE over every file but the two digest files, INPUTS over
-    the ``h11.*.json`` files without their ``expect``, as canonical JSON."""
+    which only count elsewhere; and each case file's SHA-256 by ID. The
+    digests are as-built.md's T1.20 recipes: BUNDLE over every file but the
+    two digest files, INPUTS over the ``h11.*.json`` files without their
+    ``expect``, as canonical JSON."""
     if path is None:
         return '# Held-out bundle\n\nNo held-out bundle was given.\n', set(), {}
     files = sorted(
@@ -937,6 +965,13 @@ def pack(arguments: argparse.Namespace) -> dict[str, str]:
     idents = rows(arguments.inventory, loaded)
     register = entries(arguments.register)
     held, hidden, digests = heldout(arguments.heldout)
+    # An entry naming a held-out case anywhere, its free text included, is
+    # only counted: the pack lists the others.
+    listed = [
+        entry
+        for entry in register
+        if not _names(json.dumps(entry, sort_keys=True, default=str), hidden)
+    ]
     provenance(
         observed,
         commit,
@@ -951,10 +986,16 @@ def pack(arguments: argparse.Namespace) -> dict[str, str]:
     }
     cases = {ident: case for ident, (case, _) in loaded.items()}
     return {
-        'cases.md': cases_md(head, idents, found, register),
+        'cases.md': cases_md(head, idents, found, listed),
         'seams.md': seams_md(head, idents, cases, observed),
         'comparator.md': comparator_md(
-            head, differing, lines, notes, register, hidden
+            head,
+            differing,
+            lines,
+            notes,
+            listed,
+            hidden,
+            len(register) - len(listed),
         ),
         'heldout.md': held,
     }

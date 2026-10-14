@@ -1,13 +1,7 @@
 {
  "about": "T1.35 part 1's acceptance tests (the evidence-pack generator, scripts/rust_core/evidence.py) that failed when the independent test author wrote them, before the implementation, at 8af842b2 (tests/test_t135_evidence.py, its interface in that file's docstring). 'exits' holds the Python test ids, 'py:' and the test's name with its parameters. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The test author added the review's tests (orchestrator's decisions on the subagent review of 39cccb09: a core INTERNAL_ERROR a regression even as the reference, python-old's held only by old_client_crash; the compare output as gate.sh prints it, its one verdict adding up; a gating difference never a correct outcome; every observation of the gate's commit and the cases given; held-out file names caught, unruled lines counted; seams per core runner, a panic named; every per-cell run required) on 39cccb09, failing when written. The test author added the second review's tests (Codex's on 39cccb09, orchestrator's decisions: no held-out case reaches the pack through a register entry; no bytecode written outside --out, run with bytecode writing on) on 89d506d2, failing when written.",
  "pending": {
-  "exits": [
-   "py:test_a_register_entry_never_carries_a_held_out_case_into_the_pack[approved-tied-by-cases]",
-   "py:test_a_register_entry_never_carries_a_held_out_case_into_the_pack[named-in-free-text-only]",
-   "py:test_a_register_entry_never_carries_a_held_out_case_into_the_pack[proposed-tied-by-case-outcomes]",
-   "py:test_no_bytecode_or_anything_else_is_written_outside_the_evidence_dir[a-run-that-fails]",
-   "py:test_no_bytecode_or_anything_else_is_written_outside_the_evidence_dir[a-run-that-writes-the-pack]"
-  ]
+  "exits": []
  },
  "authored": {
   "exits": [
