@@ -30,9 +30,6 @@
    "text.time-of-day-seconds"
   ],
   "p2-exits": [
-   "py:test_a_contradicted_cell_claim_fails[refusal-claims-a-later-stage]",
-   "py:test_a_contradicted_cell_claim_fails[role]",
-   "py:test_a_contradicted_cell_claim_fails[time-of-day-as-time-column]",
    "py:test_a_contradicted_cell_claim_fails[type]",
    "py:test_each_case_is_admitted[feature.bool]",
    "py:test_each_case_is_admitted[time.date]",
