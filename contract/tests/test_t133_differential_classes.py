@@ -176,11 +176,16 @@ def test_a_text_time_refusal_fails_closed() -> None:
 
 def _empty_table() -> tuple[dict[str, Any], dict[str, Any]]:
     r"""An empty table: the reference fails unnamed, the core refuses it
-    by name (E66(b)'s class)."""
+    by name (E66(b)'s class), INVALID_REQUEST since the owner's switch of
+    P1B-11 (E97, T1.32g)."""
     old = {'id': 's00', 'from_source': ['RuntimeError', None, None]}
     core = {
         'id': 's00',
-        'from_source': [REFUSED, 'UNSUPPORTED_REQUEST', 'empty_table'],
+        'from_source': [
+            'StructuredDataError',
+            'INVALID_REQUEST',
+            'empty_table',
+        ],
     }
     return old, core
 

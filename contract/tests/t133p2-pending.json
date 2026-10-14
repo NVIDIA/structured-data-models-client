@@ -18,9 +18,7 @@
    "py:test_a_difference_from_the_reference_is_registered[varint.large]",
    "py:test_a_difference_from_the_reference_is_registered[varint.view]",
    "py:test_a_difference_from_the_reference_is_registered[varint]",
-   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]",
-   "py:test_p1b_1_is_replaced_case_by_case",
-   "py:test_the_owner_approved_it[P1B-6]"
+   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]"
   ],
   "rust-host-duckdb": []
  },
