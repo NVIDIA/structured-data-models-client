@@ -326,7 +326,7 @@ class RelationalMaterializer:
         )
         _refuse_more_entities_than_fit_in_memory(task, per_call)
         with (
-            self._engine_errors(model),
+            self._engine_errors(model, per_call),
             model.batch_mode(batch_size=per_call),
         ):
             parts = model.materialize_task(
@@ -547,7 +547,9 @@ class RelationalMaterializer:
 
     @contextmanager
     def _engine_errors(
-        self, model: KumoRelational | None = None
+        self,
+        model: KumoRelational | None = None,
+        per_call: int | None = None,
     ) -> Iterator[None]:
         r"""Re-raise engine failures through this client's error surface.
 
@@ -605,7 +607,7 @@ class RelationalMaterializer:
             refused = _what_the_engine_refused(str(error))
             said = str(error)
             if refused.get('batch_too_large_to_send'):
-                said = _said_in_this_client_s_terms(said)
+                said = _said_in_this_client_s_terms(said, per_call)
             raise StructuredDataError(
                 f'{said}{detail}',
                 code='INVALID_REQUEST',
@@ -889,10 +891,10 @@ _THE_ENGINE_S_REMEDY = 'Please reduce either'
 #: on the context alone, where only a narrower context helps.
 _ASK_IN_SMALLER_CALLS = (
     'Ask in smaller calls, with materialize(rows_per_call=N) below the '
-    '{per_call:,} one call holds by default: the same entities, in more and '
-    'smaller calls. Where the context is itself over the limit, no call is '
-    'small enough and it is num_context_samples, num_neighbors or the '
-    'columns the graph carries that have to come down.'
+    '{per_call} this question holds: the same entities, in more and smaller '
+    'calls. Where the context is itself over the limit, no call is small '
+    'enough and it is num_context_samples, num_neighbors or the columns the '
+    'graph carries that have to come down.'
 )
 
 
@@ -903,19 +905,22 @@ _A_WINDOW_THAT_OUTRAN_THE_DATA = (
 )
 
 
-def _said_in_this_client_s_terms(said: str) -> str:
-    r"""The engine's size complaint, keeping its figures and its own remedy.
+def _said_in_this_client_s_terms(said: str, per_call: int | None) -> str:
+    r"""The engine's size complaint, keeping its figures and not its remedy.
 
     What it measured is the useful half and is kept whole. What to do about it
     is written for a caller who can set a run mode and a batch size directly,
     and through this client one of those is derived and the other is named
     differently, so that half is replaced.
+
+    The size named is the one this question holds to, which is not always the
+    10,000 of an ordinary task: a temporal link prediction holds 200, and
+    advice to come down to 500 would be followed into the same failure.
     """
     at = said.find(_THE_ENGINE_S_REMEDY)
     measured = said if at < 0 else said[:at].rstrip()
-    return f'{measured} ' + _ASK_IN_SMALLER_CALLS.format(
-        per_call=RELATIONAL_LIMITS['predict_rows_max']
-    )
+    holds = f'{per_call:,}' if per_call else 'number'
+    return f'{measured} ' + _ASK_IN_SMALLER_CALLS.format(per_call=holds)
 
 
 def _what_the_engine_refused(said: str) -> dict[str, Any]:

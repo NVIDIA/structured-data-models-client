@@ -23,10 +23,9 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
 | rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
-| entities one `materialize()` gathers | relational | 100,000, in at most 100 calls | at `materialize()` |
+| entities one `materialize()` gathers | relational | 100,000, in at most 100 calls | at `materialize()`, and this client's own: the endpoint is never asked for more than one call's worth |
 | request body | relational | 30 MiB per call | at `materialize()` |
 | request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
-| calls one question is gathered as | relational | 10 | at `materialize()` |
 | an explanation | relational | exactly one entity | before sending |
 | an explanation | relational | only within the 1,000-row context budget | before sending |
 | hops | relational | 6 | at `materialize()` |
@@ -66,8 +65,10 @@ size tried, and the same graph at the default context was gathered as 15
 calls of 200. `num_context_samples`, `num_neighbors` and the columns the graph
 carries are what come down in the first case.
 
-Every batch is built before the first is sent, each with its own context, so
-the whole population is held in memory at once. More than 100,000 entities in
+**That 100,000 is this client's, not the endpoint's.** The endpoint is never
+asked for more than one call holds. Every batch is built before the first is
+sent, each with its own context, so the whole population is held in memory at
+once, and 100,000 entities is about a gigabyte of it. More than 100,000 entities in
 one `materialize()` is refused for that reason rather than by the endpoint,
 and so is more than 100 calls, which is the same ceiling reached from the
 other side when `rows_per_call` is set very low. Ask about fewer entities at a
@@ -78,9 +79,10 @@ A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as
 `details['rows_answered']`, so the rest can be asked for again without buying
 the whole population twice. A forecast keeps its answered steps the same way,
-numbered by step, under `details['parts_answered']`; a ranking keeps only the
-count, because an order over some of its candidates is a different answer
-rather than part of the one that was asked for.
+under `details['answered']`, numbered by step, with how many of them under
+`details['parts_answered']`; a ranking keeps only the count, because an order
+over some of its candidates is a different answer rather than part of the one
+that was asked for.
 
 **Batch size is chosen from the row count, not from the bytes.** The 30 MiB
 body is checked per batch at `materialize()`, before anything is sent.

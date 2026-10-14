@@ -166,8 +166,14 @@ def test_an_aggregation_wider_than_the_history_is_refused_locally(client):
 @requires_relational
 def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
     """The per-call cap is the endpoint's, and batching is sized from it, so a
-    drift sends batches it refuses. Asked at the boundary: the cap is answered
-    and one row past it is not, and the refusal names the cap it holds to."""
+    drift sends batches it refuses. Asked at the boundary: one row past the
+    cap is refused, and the refusal names the cap this client holds to.
+
+    One past, and not the cap itself, because the rows here are repeated to
+    reach that size and a payload of 10,000 repeated keys is refused for the
+    repetition instead. That the cap is answered was measured separately,
+    against a graph with that many distinct entities in it.
+    """
     import copy
 
     from sdm_client.models import RELATIONAL_LIMITS
@@ -175,6 +181,7 @@ def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
     cap = RELATIONAL_LIMITS['predict_rows_max']
     payload = copy.deepcopy(query.materialize(indices=[0, 1]).payloads[0])
     rows = payload['predict']['instance_table']['rows']
+
     payload['predict']['instance_table']['rows'] = [
         list(rows[i % len(rows)]) for i in range(cap + 1)
     ]

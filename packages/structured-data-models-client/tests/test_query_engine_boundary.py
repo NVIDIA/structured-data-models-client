@@ -299,21 +299,35 @@ def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
     assert '3 calls' in str(refused.value)
 
 
-def test_a_size_refusal_is_answered_in_options_this_client_takes():
+@pytest.mark.parametrize(
+    ('per_call', 'named'),
+    [(10_000, '10,000'), (200, '200')],
+    ids=['ordinary', 'temporal_link_prediction'],
+)
+def test_a_size_refusal_is_answered_in_options_this_client_takes(
+    per_call, named
+):
     """The engine offers the run mode, which this client derives rather than
-    takes, so a caller following its advice lands on another refusal."""
-    from sdm_client.materializers.relational import (
-        _said_in_this_client_s_terms,
-    )
+    takes, so a caller following its advice lands on another refusal. The size
+    it offers instead is the one this question holds to.
 
-    said = _said_in_this_client_s_terms(
-        'Context size exceeds the 30MB limit. 9 nodes.\nPlease reduce '
-        'either the number of entities predicted at once or the run mode.'
-    )
+    Raised through the guard the production path uses, because a helper that
+    rewrites a message proves nothing if nothing calls it.
+    """
+    built = RelationalMaterializer(schema())
+    with pytest.raises(StructuredDataError) as refused:
+        with built._engine_errors(None, per_call):
+            raise ValueError(
+                'Context size exceeds the 30MB limit. 9 nodes.\nPlease '
+                'reduce either the number of entities predicted at once or '
+                'the run mode.'
+            )
+    said = str(refused.value)
     assert '9 nodes' in said
     assert 'run mode' not in said
-    assert 'rows_per_call' in said
+    assert f'rows_per_call=N) below the {named}' in said
     assert 'num_context_samples' in said
+    assert refused.value.details['batch_too_large_to_send']
 
 
 def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
