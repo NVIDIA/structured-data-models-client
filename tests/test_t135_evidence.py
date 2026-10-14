@@ -42,9 +42,14 @@ The command::
   cases plus ``base.adventureworks``, no other case.
 - ``--register``: ``register.yaml``.
 - ``--heldout``: the held-out case files. Their contents never reach the
-  pack or the output: digests and counts only.
+  pack or the output: digests and counts only. No held-out case's ID
+  reaches them either, nor any register entry's free text that names one
+  or whose ``cases`` or ``case_outcomes`` do; such an entry is counted at
+  most.
 - ``--out``: ``docs/design/rust-core/phase-1/evidence``. Nothing is written
-  anywhere else, and nothing at all when an input is missing.
+  anywhere else, and nothing at all when an input is missing: no bytecode
+  either, run as Python runs by default (bytecode writing on), whether the
+  run writes the pack or fails.
 
 A missing input fails the run non-zero, naming it (its option or its file
 name; a case the inventory lists without a case file, by its ID). A
@@ -115,6 +120,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -1661,6 +1667,164 @@ def test_a_panic_before_any_stage_is_named_a_panic(
         found = _runner_columns(paths, 'time.only-refused')
         assert found == {'rust-host': 'panic', 'python-core': 'refusal'}
         assert class_of(paths, 'time.only-refused') == 'regression'
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+# --- T1.35 part 1's second review (Codex's, orchestrator's decisions) ------------
+
+
+def _heldout_world() -> dict[str, Any]:
+    state = world()
+    for name in ('h11.synth-a', 'h11.synth-b'):
+        state['heldout'][name] = _case(
+            'keys', 'materialize', SUCCESS_MATERIALIZE, 'payload'
+        )
+    return state
+
+
+def _tied_by_case_outcomes(state: dict[str, Any]) -> None:
+    entry = _entry(
+        'HO-1',
+        'proposed',
+        None,
+        [
+            _item(
+                'h11.synth-a',
+                'ref-pandas3',
+                'rust-host',
+                'success',
+                'refusal INVALID_REQUEST',
+            )
+        ],
+    )
+    state['register'].append(entry)
+
+
+def _tied_by_cases(state: dict[str, Any]) -> None:
+    entry = _entry('HO-1', 'approved', 'reviewer', [])
+    entry['cases'] = ['h11.synth-b']
+    entry.pop('refs')
+    state['register'].append(entry)
+
+
+def _named_in_free_text_only(state: dict[str, Any]) -> None:
+    state['register'].append(_entry('HO-1', 'approved', 'owner', []))
+
+
+@pytest.mark.parametrize(
+    'mutate',
+    [
+        pytest.param(
+            _tied_by_case_outcomes, id='proposed-tied-by-case-outcomes'
+        ),
+        pytest.param(_tied_by_cases, id='approved-tied-by-cases'),
+        pytest.param(_named_in_free_text_only, id='named-in-free-text-only'),
+    ],
+)
+def test_a_register_entry_never_carries_a_held_out_case_into_the_pack(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Any]], None],
+) -> None:
+    def check() -> None:
+        state = _heldout_world()
+        mutate(state)
+        for entry in state['register']:
+            if entry['id'] == 'HO-1':
+                # Every free-text field names a held-out case and carries
+                # its query's canary.
+                text = f'h11.synth-a and h11.synth-b.json: {HELDOUT_CANARY}'
+                for field in (
+                    'title',
+                    'old_behavior',
+                    'new_behavior',
+                    'affected_inputs',
+                    'notes',
+                ):
+                    entry[field] = text
+        paths, done = generate(tmp_path, state, heldout=True)
+        said = done.stdout + done.stderr
+        for leaked in (HELDOUT_CANARY, 'h11.synth-a', 'h11.synth-b'):
+            assert leaked not in said, leaked
+            for name, data in pack(paths).items():
+                assert leaked not in data.decode(), (name, leaked)
+        # The entries no held-out case touches keep their listing.
+        text = (paths['out'] / 'comparator.md').read_text()
+        assert 'Seeded entry ZZ-1' in text
+        assert text.index('ZZ-1') < text.index('AA-1')
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def _tree_copy(root: Path) -> Path:
+    r"""The generator and every file of the harness it reads, copied from
+    this checkout without any bytecode, so a ``.pyc`` the run writes is
+    new."""
+    copy = root / 'checkout'
+    ignore = shutil.ignore_patterns('__pycache__', '*.pyc')
+    for part in ('scripts', 'contract', 'docs/design/rust-core'):
+        shutil.copytree(ROOT / part, copy / part, ignore=ignore)
+    return copy
+
+
+def _missing_reference(paths: dict[str, Path]) -> None:
+    paths['reference'].unlink()
+
+
+@pytest.mark.parametrize(
+    'mutate',
+    [
+        pytest.param(None, id='a-run-that-writes-the-pack'),
+        pytest.param(_missing_reference, id='a-run-that-fails'),
+    ],
+)
+def test_no_bytecode_or_anything_else_is_written_outside_the_evidence_dir(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Path]], None] | None,
+) -> None:
+    def check() -> None:
+        assert EVIDENCE.is_file(), (
+            f'{EVIDENCE.relative_to(ROOT)}: not written yet'
+        )
+        checkout = _tree_copy(tmp_path)
+        paths = write(world(), tmp_path / 'inputs')
+        if mutate is not None:
+            mutate(paths)
+        before = tree(tmp_path)
+        # As someone runs it: Python's own default, bytecode writing on.
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ('PYTHONDONTWRITEBYTECODE', 'PYTHONPYCACHEPREFIX')
+        }
+        done = subprocess.run(
+            [
+                sys.executable,
+                str(checkout / 'scripts/rust_core/evidence.py'),
+                *arguments(paths, heldout=True),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=checkout,
+            env=env,
+            timeout=120,
+        )
+        assert (done.returncode == 0) == (mutate is None), (
+            done.stdout + done.stderr
+        )
+        after = tree(tmp_path)
+        out = str(paths['out'].relative_to(tmp_path))
+        changed = sorted(
+            name
+            for name in set(before) | set(after)
+            if before.get(name) != after.get(name)
+            and name != out
+            and not name.startswith(out + os.sep)
+            and not out.startswith(name + os.sep)
+        )
+        assert changed == []
 
     G.held('exits', f'py:{request.node.name}', check)
 
