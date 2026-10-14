@@ -1,0 +1,59 @@
+{
+ "about": "T1.33 part 3's acceptance tests that failed when the independent test author wrote them, before the implementation, on origin/rust-core-phase-1 at b2aead26, on the owner's answers of 2026-10-14 (items 24 and 26). 'rust-host': rows of contract/t133p3-vectors.json through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs): the lossless types read, not skipped (every lossless connection is refused PROVIDER_SCHEMA_MISMATCH at b2aead26; a VARINT with no setting is described float64; lossless.json needs the json extension in the test host's DuckDB), and rel-trial's time-named text refused text_time. 'exits': packages/structured-data-models-client/tests/test_the_schema_route.py's text_time cases flipped to text ('py:test_the_schema_route::<test id>'). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": {
+  "rust-host": [
+   "lossless.uuid",
+   "lossless.bit",
+   "lossless.timetz",
+   "lossless.hugeint",
+   "lossless.hugeint-wide",
+   "lossless.hugeint-past-38-digits",
+   "lossless.uhugeint",
+   "lossless.uhugeint-past-38-digits",
+   "varint",
+   "lossless.varint",
+   "varint-past-38-digits",
+   "lossless.json",
+   "text-time.time-frame",
+   "text-time.time-perspective"
+  ],
+  "exits": [
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+24:00-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+99:00-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+2360-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[-25:00-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+01:99-True-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+0160-True-False]",
+   "py:test_the_schema_route::test_text_the_list_does_not_read_is_text[year-0]",
+   "py:test_the_schema_route::test_text_the_list_does_not_read_is_text[past-9999]"
+  ]
+ },
+ "authored": {
+  "rust-host": [
+   "lossless.uuid",
+   "lossless.bit",
+   "lossless.timetz",
+   "lossless.hugeint",
+   "lossless.hugeint-wide",
+   "lossless.hugeint-past-38-digits",
+   "lossless.uhugeint",
+   "lossless.uhugeint-past-38-digits",
+   "varint",
+   "lossless.varint",
+   "varint-past-38-digits",
+   "lossless.json",
+   "text-time.time-frame",
+   "text-time.time-perspective"
+  ],
+  "exits": [
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+24:00-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+99:00-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+2360-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[-25:00-False-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+01:99-True-False]",
+   "py:test_the_schema_route::test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[+0160-True-False]",
+   "py:test_the_schema_route::test_text_the_list_does_not_read_is_text[year-0]",
+   "py:test_the_schema_route::test_text_the_list_does_not_read_is_text[past-9999]"
+  ]
+ }
+}

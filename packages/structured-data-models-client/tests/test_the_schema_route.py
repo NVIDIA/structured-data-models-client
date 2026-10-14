@@ -1362,6 +1362,30 @@ def test_a_system_view_named_as_a_table_is_pinned_on_both_routes(
     assert not isinstance(failed.value, StructuredDataError)
 
 
+def _assert_text(schema: Any, table: str, column: str) -> None:
+    r"""``column`` described as text: no refusal, not the time column, no
+    timestamp (T1.33 part 3, the owner's item 24)."""
+    assert schema[table].time_column != column
+    described = schema[table].columns[column]
+    assert str(described.dtype) == 'string'
+    assert str(described.stype) != 'timestamp'
+
+
+def _gate() -> Any:
+    path = ROOT / 'contract/tests/t133p3_gate.py'
+    spec = importlib.util.spec_from_file_location('t133p3_gate', path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: T1.33 part 3's pending list (``contract/tests/t133p3-pending.json``):
+#: a check named there must still fail; once it passes it fails, naming
+#: itself, until it is taken out.
+_T133P3 = _gate()
+
+
 def _offset_events(zone: str) -> Any:
     connection = duckdb.connect()
     connection.execute(
@@ -1420,9 +1444,18 @@ def test_text_with_an_offset_is_read_by_the_list_or_refused_by_name(
                 str(core['events'].columns['event_date'].stype) == 'timestamp'
             )
         else:
-            with pytest.raises(StructuredDataError) as refused:
-                Schema.from_source(DuckDBSource(_offset_events(zone)))
-            assert refused.value.details['rule'] == 'text_time'
+            # T1.33 part 3 (the owner's item 24): values the core does not
+            # read as times are text, under any name, not refused.
+            def check() -> None:
+                core = Schema.from_source(DuckDBSource(_offset_events(zone)))
+                _assert_text(core, 'events', 'event_date')
+
+            _T133P3.held(
+                'exits',
+                'py:test_the_schema_route::'
+                f'test_text_with_an_offset_is_read_by_the_list_or_refused_by_name[{zone}-{read}-{core_reads}]',
+                check,
+            )
 
 
 def _text_events(values: list[str]) -> Any:
@@ -1437,13 +1470,39 @@ def _text_events(values: list[str]) -> Any:
 
 
 @pytest.mark.parametrize(
-    ('values', 'rule'),
+    'values',
     [
         # A year the list does not hold, which an offset would carry into
-        # one it does (T1.25b fix 1): outside the list, refused by name
-        # (register DT-15), the year 0 and its mirror past 9999.
-        (['0000-12-31T23:00-02:00'] * 3, 'text_time'),
-        (['9999-12-31T23:00-02:00'] * 3, 'text_time'),
+        # one it does (T1.25b fix 1): outside the list, so no times, and
+        # from T1.33 part 3 (the owner's item 24) text under any name, not
+        # refused (DT-15's text_time reversed), the year 0 and its mirror
+        # past 9999.
+        ['0000-12-31T23:00-02:00'] * 3,
+        ['9999-12-31T23:00-02:00'] * 3,
+    ],
+    ids=['year-0', 'past-9999'],
+)
+def test_text_the_list_does_not_read_is_text(
+    monkeypatch: pytest.MonkeyPatch, values: list[str], request: Any
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+
+    def check() -> None:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            core = Schema.from_source(DuckDBSource(_text_events(values)))
+        _assert_text(core, 'events', 'event_time')
+
+    _T133P3.held(
+        'exits',
+        f'py:test_the_schema_route::{request.node.name}',
+        check,
+    )
+
+
+@pytest.mark.parametrize(
+    ('values', 'rule'),
+    [
         # Values in the list whose day and month the column leaves open
         # (register DT-16): refused under the order's own rule.
         (['03/15/99', '15/11/00'], 'text_time_order'),

@@ -1,0 +1,238 @@
+{
+ "format": "sdm-t133p3-vectors/1",
+ "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
+ "rows": [
+  {
+   "id": "text.control",
+   "column": "f",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "a control: text with no setting, each cell DuckDB's own text, as the UUID and BIT rows are held"
+  },
+  {
+   "id": "hugeint.control",
+   "column": "f",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000 AS f FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast"
+   },
+   "why": "a control: a HUGEINT with no setting (decimal128(38, 0)) read as a number today, each cell exact, as the lossless numbers are held"
+  },
+  {
+   "id": "lossless.uuid",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD38' || lpad(user_id::VARCHAR, 4, '0'))::UUID AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "P1B-43 (owner, item 26): a UUID is read as its canonical text, 8-4-4-4-12 in lower case"
+  },
+  {
+   "id": "lossless.bit",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, (CASE WHEN user_id % 2 = 0 THEN '0101' ELSE '110011' END)::BIT AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a BIT is read as its text of '0' and '1'"
+  },
+  {
+   "id": "time.control",
+   "column": "f",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ('12:0' || user_id::VARCHAR || ':00')::TIME AS f FROM users"
+   ],
+   "want": {
+    "dtype": "timestamp[us]",
+    "cells": "null"
+   },
+   "why": "the core's time of day today, with no setting: TIMETZ under the setting is held to the same"
+  },
+  {
+   "id": "lossless.timetz",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ('12:0' || user_id::VARCHAR || ':00+01')::TIMETZ AS f FROM users"
+   ],
+   "want": {
+    "dtype": "timestamp[us]",
+    "cells": "null"
+   },
+   "why": "P1B-43: a TIMETZ is read as a time of day, as a TIME is (time.control)"
+  },
+  {
+   "id": "lossless.hugeint",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000 AS f FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a HUGEINT is read as a number"
+  },
+  {
+   "id": "lossless.hugeint-wide",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000000000000000000000000000000 AS f FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a HUGEINT past int64 but within decimal128(38, 0) is still a number, each value exact"
+  },
+  {
+   "id": "lossless.hugeint-past-38-digits",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 170141183460469231731687303715884105727::HUGEINT ELSE user_id::HUGEINT END AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a HUGEINT column holding a value decimal128(38, 0) cannot hold falls back to text"
+  },
+  {
+   "id": "lossless.uhugeint",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT + 5 AS f FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a UHUGEINT is read as a number"
+  },
+  {
+   "id": "lossless.uhugeint-past-38-digits",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 340282366920938463463374607431768211455::UHUGEINT ELSE user_id::UHUGEINT END AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a UHUGEINT past decimal128(38, 0) falls back to text"
+  },
+  {
+   "id": "varint",
+   "column": "f",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT * 7 AS f FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a VARINT (BIGNUM, arrow.opaque with no setting) is read as a number"
+  },
+  {
+   "id": "lossless.varint",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT * 7 AS f FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a VARINT on a lossless connection is read as a number"
+  },
+  {
+   "id": "varint-past-38-digits",
+   "column": "f",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (CASE WHEN user_id = 3 THEN '1' || repeat('0', 40) ELSE user_id::VARCHAR END)::VARINT AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "P1B-43: a VARINT holding a value decimal128(38, 0) cannot hold falls back to text"
+  },
+  {
+   "id": "lossless.json",
+   "column": "f",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, to_json(user_id) AS f FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast"
+   },
+   "why": "P1B-43: lossless JSON stays text (needs the json extension in the host's DuckDB)"
+  },
+  {
+   "id": "text-time.time-frame",
+   "column": "time_frame",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (['up to 12 weeks', 'Baseline and 6 months', 'Day 1 through Day 28', '24 hours post-dose'])[user_id % 4 + 1] AS time_frame FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast",
+    "stype": "categorical",
+    "time_column": null
+   },
+   "why": "text_time (owner, item 24): rel-trial's outcomes.time_frame, a name that says time over values that are no times, is text; the reference describes it string, categorical, no time column"
+  },
+  {
+   "id": "text-time.time-perspective",
+   "column": "time_perspective",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (['Prospective', 'Retrospective'])[user_id % 2 + 1] AS time_perspective FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": "cast",
+    "stype": "categorical",
+    "time_column": null
+   },
+   "why": "text_time: rel-trial's designs.time_perspective is text; the reference describes it string, categorical"
+  },
+  {
+   "id": "text-time.time-frame-dates",
+   "column": "time_frame",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, strftime(DATE '2024-01-01' + user_id::INTEGER, '%Y-%m-%d') AS time_frame FROM users"
+   ],
+   "want": {
+    "dtype": "string",
+    "cells": null,
+    "stype": "timestamp",
+    "time_column": "time_frame"
+   },
+   "why": "kept: a time-named column whose values read as times is still a time column; the reference describes it string, timestamp, the time column"
+  }
+ ]
+}
