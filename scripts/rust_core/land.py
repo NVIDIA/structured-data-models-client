@@ -184,13 +184,21 @@ Run = Callable[[Sequence[str]], Completed]
 
 
 def run_command(argv: Sequence[str]) -> Completed:
-    proc = subprocess.run(list(argv), capture_output=True, text=True)
+    # surrogateescape: a byte that is not text (a patch's, for
+    # ``--moved-from``) is kept, not a crash, and goes back out unchanged.
+    proc = subprocess.run(
+        list(argv), capture_output=True, text=True, errors='surrogateescape'
+    )
     return Completed(proc.returncode, proc.stdout, proc.stderr)
 
 
 def run_command_input(argv: Sequence[str], text: str) -> Completed:
     proc = subprocess.run(
-        list(argv), input=text, capture_output=True, text=True
+        list(argv),
+        input=text,
+        capture_output=True,
+        text=True,
+        errors='surrogateescape',
     )
     return Completed(proc.returncode, proc.stdout, proc.stderr)
 
