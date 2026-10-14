@@ -828,36 +828,74 @@ def _seeded(
 def test_the_syntheses_leave_out_only_cases_held_elsewhere(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Seeded: an admitted case whose core reaches another call than the
-    # reference is left out under an approved entry listing it, and fails
-    # without one; one whose reference holds a value the canonical form
-    # does not is left out; a diagnostic one never is.
+    # Seeded on fixtures of its own, whatever the corpus admits: an
+    # admitted case whose core reaches another call than the reference is
+    # left out under an approved entry listing it, and fails without one;
+    # an admitted case whose reference holds a value the canonical form
+    # does not is left out; a diagnostic one never is, nor an admitted one
+    # that is neither.
     module = sys.modules[__name__]
+    short, unreadable, diagnostic, plain = (
+        'base.regression',
+        'base.binary',
+        'base.multiclass',
+        'base.adventureworks',
+    )
     cases = tmp_path / 'cases'
     cases.mkdir()
     for path in sorted(CASES.rglob('*.json')):
         case = json.loads(path.read_bytes())
-        if case['id'] in ('nested.fixed-array', 'nested.map'):
+        if case['id'] in (short, unreadable, plain):
             case['status'] = 'acceptance'
-            if case['id'] == 'nested.map':
-                # Stopping where the reference does: left out only for its
-                # values.
-                case['core'] = {
-                    'describe_source': case['core']['describe_source']
-                }
+        if case['id'] == diagnostic:
+            case['status'] = 'diagnostic'
+        if case['id'] == short:
+            # The core stopping at from_source, the reference at predict.
+            case['core'] = {'describe_source': case['core']['describe_source']}
         (cases / path.name).write_text(json.dumps(case), encoding='utf-8')
+    reference = tmp_path / _reference().name
+    lines = []
+    for line in _reference().read_text(encoding='utf-8').splitlines():
+        observed = json.loads(line)
+        assert observed['outcome']['stage'] == 'predict' or (
+            observed['case'] not in (short, unreadable, diagnostic, plain)
+        )
+        if observed['case'] in (unreadable, diagnostic):
+            statement = next(
+                each
+                for each in observed['driver']['capture']['statements']
+                if any('values' in r for r in each.get('results') or [])
+            )
+            result = next(r for r in statement['results'] if 'values' in r)
+            result['values']['unencodable'] = ['arrow:seeded']
+        lines.append(json.dumps(observed) + '\n')
+    reference.write_text(''.join(lines), encoding='utf-8')
     monkeypatch.setattr(module, 'CASES', cases)
-    left_out = _not_synthesizable()
-    assert left_out['nested.map'] == 'values the canonical form does not hold'
-    assert left_out['nested.fixed-array'] == (
-        'the core reaches predict, the reference from_source'
-    )
-    assert 'nested.struct' not in left_out
+    monkeypatch.setattr(module, '_reference', lambda: reference)
     register = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    register['entries'].append(
+        {
+            'id': 'SEEDED-1',
+            'status': 'approved',
+            'cases': [short],
+        }
+    )
+    approved = tmp_path / 'approved.yaml'
+    approved.write_text(yaml.safe_dump(register), encoding='utf-8')
+    monkeypatch.setattr(module, 'REGISTER', approved)
+    left_out = _not_synthesizable()
+    assert left_out[short] == (
+        'the core reaches from_source, the reference predict'
+    )
+    assert left_out[unreadable] == 'values the canonical form does not hold'
+    assert diagnostic not in left_out
+    assert plain not in left_out
+    # No approved entry lists it: the seeded one gone, and the case taken
+    # out of any other's list.
+    register['entries'].pop()
     for entry in register['entries']:
-        if entry['id'] == 'P1B-9':
-            entry['status'] = 'proposed'
-    unapproved = tmp_path / 'register.yaml'
+        entry['cases'] = [c for c in entry.get('cases') or [] if c != short]
+    unapproved = tmp_path / 'unapproved.yaml'
     unapproved.write_text(yaml.safe_dump(register), encoding='utf-8')
     monkeypatch.setattr(module, 'REGISTER', unapproved)
     with pytest.raises(AssertionError, match='no approved entry lists it'):

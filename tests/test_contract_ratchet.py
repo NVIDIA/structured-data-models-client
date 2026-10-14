@@ -182,7 +182,23 @@ def observe(
     change: Callable[[dict[str, dict[str, Any]]], None] | None = None,
 ) -> Path:
     r"""A runner's observations, made from the reference's: relabelled,
-    and for rust-host with what it cannot observe left null."""
+    and for rust-host with what it cannot observe left null; where the
+    checkpoint's tree holds a baseline of the case for the runner, its
+    projected fields are the baseline's (read from this checkout, whose
+    files the checkpoint holds), so the unseeded observation is
+    what that runner is held to wherever an admission has moved it from
+    the reference (an approved transition, or python-old's recorded crash),
+    whichever cases are admitted."""
+    # This checkout's, which the temporary repository's checkpoint copied:
+    # a seed that edits or breaks the candidate's baseline files changes
+    # nothing here.
+    held = {}
+    baselines = ROOT / f'contract/baselines/{CELL}/{runner}.jsonl'
+    if baselines.is_file():
+        held = {
+            line['case']: line['projection']
+            for line in map(json.loads, baselines.read_text().splitlines())
+        }
     cases = {
         json.loads(path.read_text())['id']: json.loads(path.read_text())
         for path in (repo / 'contract/cases').glob('*/*.json')
@@ -204,6 +220,12 @@ def observe(
                 'predict',
             }:
                 line.pop('driver', None)
+        for name, value in held.get(case, {}).items():
+            *parents, last = name.split('.')
+            target = line
+            for part in parents:
+                target = target[part]
+            target[last] = value
         lines[case] = line
     if change is not None:
         change(lines)
