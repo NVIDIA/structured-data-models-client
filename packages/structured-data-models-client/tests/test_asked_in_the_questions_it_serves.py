@@ -88,6 +88,29 @@ def test_a_ranking_is_one_question_per_candidate():
     )
 
 
+@pytest.mark.parametrize(
+    ('query', 'how'),
+    [
+        (RANK, {'candidates': [0, 1]}),
+        (FORECAST, {}),
+    ],
+    ids=['ranking', 'forecast'],
+)
+def test_a_part_is_one_call_and_more_entities_than_one_holds_is_refused(
+    monkeypatch, query, how
+):
+    """Batching a part would multiply the fan-out the guard counts, and would
+    report a candidate unscored for the whole ranking on one batch's context."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    with pytest.raises(StructuredDataError) as refused:
+        built(query, indices=[1, 2, 3, 4, 5], **how)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert 'fewer entities' in str(refused.value)
+
+
 @pytest.fixture(scope='module')
 def _forecast_template():
     pytest.importorskip('sdm_relational_engine')

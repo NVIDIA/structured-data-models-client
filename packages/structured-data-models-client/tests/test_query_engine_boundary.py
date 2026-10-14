@@ -237,6 +237,53 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
     assert list(frame['id']) == scored
 
 
+def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
+    monkeypatch,
+):
+    """Every batch is built, with its own context, before any is sent, so
+    nothing else bounds what one `materialize()` holds."""
+    from sdm_client.materializers import relational as materializer
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with pytest.raises(StructuredDataError) as refused:
+            query().materialize(indices=[5, 6, 7, 8, 9], num_context_samples=20)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['calls'] == 3
+
+
+def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
+    """Fifty calls failing on the thirty-seventh used to throw away
+    thirty-six answers the endpoint had already been paid for."""
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+
+    class FailsOnTheSecondCall(Echo):
+        def predict(self, payload: dict) -> dict:
+            if self.calls == 1:
+                raise StructuredDataError('the endpoint said no', code='X')
+            return super().predict(payload)
+
+    client = SDMClient(url='http://localhost:8000')
+    client._transport = FailsOnTheSecondCall()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = query('PREDICT users.age FOR EACH users.user_id').materialize(
+            indices=[5, 6, 7, 8, 9], num_context_samples=20
+        )
+        with pytest.raises(StructuredDataError) as failed:
+            client.predict(request, model=KumoRelational())
+    assert failed.value.code == 'X'
+    assert failed.value.details['calls_answered'] == 1
+    assert failed.value.details['rows_answered'] == 2
+    assert len(failed.value.details['answered'].items) == 2
+
+
 def test_a_dropped_row_is_explained_rather_than_only_counted():
     """The engine says how many rows went unresolved, never why. It knows."""
     frame = orders()
@@ -273,6 +320,14 @@ def test_the_two_ceilings_are_the_engine_s_own():
         RELATIONAL_LIMITS['predict_rows_max']
         == engine._MAX_PRED_SIZE[TaskType.BINARY_CLASSIFICATION]
     )
+    # The client reads the lower ceiling off the task kind's name, and only
+    # `temporal_link_prediction` carries it. Were the engine to hold a second
+    # task to a size of its own, the client would batch that task too large.
+    assert {
+        kind
+        for kind in TaskType
+        if engine._MAX_PRED_SIZE[kind] != RELATIONAL_LIMITS['predict_rows_max']
+    } == {TaskType.TEMPORAL_LINK_PREDICTION}
 
 
 def test_a_relationship_listed_twice_is_linked_once():

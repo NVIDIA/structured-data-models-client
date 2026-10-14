@@ -133,6 +133,38 @@ def _ended(message: Any) -> str:
     return text if not text or text[-1] in '.!?' else f'{text}.'
 
 
+def refuse_a_part_asked_in_several_calls(
+    part: Any, rewritten: Decomposition
+) -> None:
+    r"""Refuse a decomposed question whose parts would each take several calls.
+
+    A part is one call, and the fan-out guard above counts parts because of
+    it: were a part batched, a ranking over 200 candidates would make 200
+    times as many calls as the guard allows.
+
+    It would also change the answer. Each batch samples its own context, and a
+    batch whose context holds one class leaves the candidate out of every row
+    rather than out of its own, because a candidate is reported unscored for
+    the whole ranking. Refusing is what the client did before parts could be
+    batched at all.
+    """
+    calls = len(getattr(part, 'payloads', ()) or ())
+    if calls <= 1:
+        return
+    asked = len(getattr(part, 'indices', ()) or ())
+    each = 'candidate' if rewritten.kind == RANKING else 'step'
+    raise StructuredDataError(
+        f'{asked:,} entities are more than one call scores, and this question '
+        f'is asked as {len(rewritten.parts)} of them, one per {each}, each of '
+        f'which would take {calls} calls. A {each} is scored or not for the '
+        f'whole answer, so a batch whose context taught it nothing would drop '
+        f'it from every row rather than from its own. Ask about fewer '
+        f'entities at a time',
+        code='UNSUPPORTED_REQUEST',
+        details={'entities': asked, 'calls_per_part': calls},
+    )
+
+
 def about_the_part(
     error: StructuredDataError, rewritten: Decomposition, about: Any
 ) -> StructuredDataError:

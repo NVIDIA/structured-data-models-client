@@ -7,6 +7,7 @@ r"""Gather and encode relational requests with the relational engine."""
 from __future__ import annotations
 
 import copy
+import math
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -77,6 +78,16 @@ def _warn_of_a_context_the_default_mode_capped(
     )
 
 
+#: More calls than this and a request is gathered in pieces that no longer fit
+#: in memory together. Every batch is built before any is sent, each carrying
+#: its own context, and a batch may be as large as the endpoint's 30 MiB body.
+#: A caller with the memory for it can raise this. It is reached at ten times
+#: whatever one call scores: 100,000 entities, or 2,000 for a temporal link
+#: prediction, both well past what this client refused before it batched at
+#: all.
+MOST_CALLS = 10
+
+
 def _rows_per_call(
     kind: object, limits: Mapping[str, int] = RELATIONAL_LIMITS
 ) -> int:
@@ -84,6 +95,38 @@ def _rows_per_call(
     if str(kind) == 'temporal_link_prediction':
         return limits['predict_rows_temporal_link_prediction']
     return limits['predict_rows_max']
+
+
+def _refuse_more_calls_than_fit_in_memory(
+    task: TaskTable, per_call: int
+) -> None:
+    r"""Refuse a request that would be gathered as more batches than fit.
+
+    The engine builds every batch before the first is sent, so the cost of a
+    population is paid in memory up front. This is the ceiling that the old
+    per-call entity check used to supply as a side effect of refusing to batch
+    at all.
+    """
+    asked = getattr(task, 'num_prediction_examples', None)
+    if not isinstance(asked, Integral) or per_call <= 0:
+        return
+    calls = math.ceil(int(asked) / per_call)
+    if calls <= MOST_CALLS:
+        return
+    raise StructuredDataError(
+        f'{int(asked):,} entities are gathered as {calls:,} calls of '
+        f'{per_call:,}, and every one is built, with its own context, before '
+        f'any is sent. That is past the {MOST_CALLS} this will hold at once; '
+        f'ask about fewer entities at a time, or raise '
+        f'sdm_client.materializers.relational.MOST_CALLS if the memory is '
+        f'yours to spend',
+        code='UNSUPPORTED_REQUEST',
+        details={
+            'entities': int(asked),
+            'calls': calls,
+            'rows_per_call': per_call,
+        },
+    )
 
 
 class RelationalMaterializer:
@@ -228,9 +271,11 @@ class RelationalMaterializer:
         _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
         task = self._narrow_context(task, num_context_samples)
 
+        per_call = _rows_per_call(task.task_type)
+        _refuse_more_calls_than_fit_in_memory(task, per_call)
         with (
             self._engine_errors(model),
-            model.batch_mode(batch_size=_rows_per_call(task.task_type)),
+            model.batch_mode(batch_size=per_call),
         ):
             parts = model.materialize_task(
                 task,

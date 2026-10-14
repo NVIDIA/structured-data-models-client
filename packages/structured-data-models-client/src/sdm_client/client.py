@@ -519,11 +519,13 @@ class SDMClient:
         call sends none for those, names them all at once, and refuses a
         ranking with nothing left before it spends a call.
 
-        A candidate is scored or not for the whole ranking. A ranking over
-        more entities than one call scores asks each candidate in several
-        batches, and one batch whose context holds one class leaves the
-        candidate out of every row, because ``unscored_candidates`` names a
-        candidate for the whole result rather than per row.
+        A candidate is scored or not for the whole ranking, because each
+        candidate is one call: a part is never batched, and a ranking over
+        more entities than one call scores is refused when it is gathered.
+        Were a part ever split, the engine would sample a context per batch,
+        and one cold batch would drop the candidate from every row rather
+        than from its own, since ``unscored_candidates`` names a candidate
+        for the whole result rather than per row.
         """
         positions = []
         for position, (part, (_, about)) in enumerate(
@@ -783,21 +785,54 @@ def _numbered_across_calls(
     The endpoint numbers every call's rows from zero, so a request sent in
     several calls would otherwise give each ``row_index`` once per call, and
     ``to_pandas()``, which orders by it, would interleave the batches.
+
+    Every call is counted before the first is sent, because a call whose rows
+    cannot be counted leaves the ones after it unnumberable, and finding that
+    out between two sends spends calls on an answer that cannot be returned.
+
+    A call that fails ends the request, and the answers already paid for are
+    carried on the error as ``details['answered']``, with the rows they cover
+    as ``details['rows_answered']``: the caller can keep them and ask again
+    for the rest rather than resend the whole population.
     """
-    answers = []
-    start: int | None = 0
-    for payload in plan:
-        if start is None:
-            raise StructuredDataError(
-                'a request sent in several calls has a call whose rows could '
-                'not be counted, so the rows of the calls after it cannot be '
-                'numbered',
-                code='INTERNAL_ERROR',
-            )
-        answers.append(_numbered_from(answer(payload), start))
-        rows = _envelope_rows(payload, 'predict')
-        start = None if rows is None else start + rows
+    calls = list(plan)
+    counted = [_envelope_rows(payload, 'predict') for payload in calls]
+    if any(rows is None for rows in counted[:-1]):
+        raise StructuredDataError(
+            'a request sent in several calls has a call whose rows could not '
+            'be counted, so the rows of the calls after it cannot be numbered',
+            code='INTERNAL_ERROR',
+        )
+    answers: list[PredictionResult] = []
+    start = 0
+    for payload, rows in zip(calls, counted, strict=True):
+        try:
+            answers.append(_numbered_from(answer(payload), start))
+        except StructuredDataError as error:
+            _carry_the_answers_already_paid_for(error, answers, start)
+            raise
+        start += rows or 0
     return answers
+
+
+def _carry_the_answers_already_paid_for(
+    error: StructuredDataError, answers: list[PredictionResult], rows: int
+) -> None:
+    r"""Record on ``error`` the calls that were answered before it.
+
+    A request sent in fifty calls that fails on the thirty-seventh has
+    thirty-six answers the endpoint was already paid for. Dropping them makes
+    the caller buy them again; the error keeps its own type and code, so
+    nothing branching on either has to know they are there.
+    """
+    if not answers:
+        return
+    error.details = {
+        **error.details,
+        'answered': PredictionResult.merge(answers),
+        'calls_answered': len(answers),
+        'rows_answered': rows,
+    }
 
 
 def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:

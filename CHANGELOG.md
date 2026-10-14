@@ -9,13 +9,29 @@ these packages. All five distributions share one version and one entry.
 
 ### Changed
 
-- A relational `materialize()` takes any number of entities. More than the
-  endpoint scores in one call, 10,000 or 200 for a link prediction, are
-  gathered in batches of that size, and `predict()` sends one call per batch
-  and returns one result in the order the indices were given. It used to
-  refuse more than 1,000 and ask for the calls to be split by hand. A batch
-  whose request would exceed the endpoint's 30 MB body is still refused at
-  `materialize()`; ask for fewer entities at a time on a wide graph.
+- A relational `materialize()` takes more entities than one call scores. They
+  are gathered in batches of 10,000, or 200 for a temporal link prediction,
+  and `predict()` sends one call per batch and returns one result in the order
+  the indices were given. It used to refuse more than 1,000 and ask for the
+  calls to be split by hand. A batch whose request would exceed the endpoint's
+  30 MiB body is still refused at `materialize()`; ask for fewer entities at a
+  time on a wide graph.
+
+  Two things are still refused. Every batch is built before the first is sent,
+  so more than ten of them is refused rather than held in memory at once; and
+  a ranking or a forecast is still asked as one call per candidate or step,
+  because a candidate is reported unscored for the whole ranking rather than
+  per batch.
+
+- A call that fails part way through a batched `predict()` carries the answers
+  already paid for on the error, as `details['answered']` and
+  `details['rows_answered']`, rather than discarding them.
+
+- In the relational engine, `batch_mode(batch_size='max')` now means 10,000
+  entities a batch rather than 1,000, following the size the endpoint answers.
+  A graph wide enough that 10,000 entities exceed the 30 MiB body is refused
+  on the first batch where it used to be gathered as batches of 1,000; pass an
+  explicit `batch_size=` for the old behaviour.
 
 - The Databricks example notebook is now a get-started notebook,
   `examples/databricks/kumo_relational_quickstart.ipynb`, in place of

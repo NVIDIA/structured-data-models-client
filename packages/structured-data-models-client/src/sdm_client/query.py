@@ -36,6 +36,7 @@ from sdm_client.decompose import (
     Decomposition,
     about_the_part,
     parts_of,
+    refuse_a_part_asked_in_several_calls,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
@@ -111,6 +112,8 @@ class PredictiveQuery:
                 exclusive with ``predict``. On the relational route, more than
                 the endpoint scores in one call are gathered as several calls,
                 and :meth:`~sdm_client.SDMClient.predict` answers them as one.
+                A question asked in parts, such as a ranking or a forecast, is
+                already one call per part and is refused rather than batched.
             predict: Rows supplied directly for scoring. Supported for
                 single-table schemas and mutually exclusive with ``indices``.
             num_context_samples: For ``indices`` requests, the maximum number
@@ -402,6 +405,7 @@ class PredictiveQuery:
                 raise
             except StructuredDataError as error:
                 raise about_the_part(error, rewritten, step) from error
+            refuse_a_part_asked_in_several_calls(gathered[-1], rewritten)
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])
