@@ -32,6 +32,23 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
 5. the active slice gates: in Python, every S0 path has an acceptance case;
    S0 requires no cell, since every cell applies from S1, and Java is checked
    structurally only (design: Java runtime coverage starts with Java);
+6. a contradicted cell claim fails (T1.32g; design, "Coverage generator"):
+   each cell a case claims, acceptance or diagnostic alike, must be held by
+   a column of the case's source in the case's ``python-ref`` observation
+   (``contract/reference/*.jsonl``), at a stage the case reached. A claim
+   ``<type>/<role>`` holds when some column the reference read is admitted
+   as ``<type>`` (:func:`cell_type`: the Arrow type the driver returned, in
+   the reference's sample of the table at ``from_source``, through the
+   core's admission table, so ``timestamp[s]`` is ``timestamp-us``,
+   scope-format.md: "a cell names the type the core receives") and plays
+   ``<role>`` there (:func:`observed`): the key, time column, links and
+   other columns of the schema the reference described, with the case's
+   edits; the query's target from ``materialize`` on; and, in a refusal at
+   ``from_source`` before any schema, only what the case's options declare
+   and ``feature`` for a column of a table holding no declared constraint.
+   A claim with no observation of the case, or an observation that does
+   not show it (no capture, no sample, a shape it does not read), fails;
+   it is never taken on trust;
 8. against the manifests at ``--checkpoint``: no path or cell is removed, no
    path moves to a later slice and no cell's ``expect`` turns ``unknown``
    (each would take it out of rule 5), unless a row of the checkpoint's
@@ -40,7 +57,7 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
    a note, none withdrawing it (``ratchet.owner_approved``), names the ID in
    backticks; a row the candidate writes never authorizes its own change.
 
-Rules 6 and 7 are Phase 2's (``--gate S1``); ``--gate S0`` was cut by the
+Rule 7 is Phase 2's (``--gate S1``); ``--gate S0`` was cut by the
 owner (E66(f)), its rule 5 run by ``--check`` for the active slice. A file it
 cannot read (missing, not UTF-8, not YAML or JSON, nested past the parser,
 or not of its shape) is refused by name. Exit status 0 when every rule holds,
@@ -68,6 +85,8 @@ MANIFESTS = {
 }
 SCHEMA = f'{PHASE_0}/scope.schema.json'
 CASES = 'contract/cases'
+#: The reference observations rule 6 holds the cells' claims to (T1.13).
+REFERENCE = 'contract/reference'
 DECISIONS = 'docs/design/rust-core/phase-1/decisions.md'
 SLICES = ('S0', 'S1', 'S2', 'S3')
 #: The language and slice whose coverage gates (design, "Coverage
@@ -249,6 +268,41 @@ def read_cases(tree: Any, report: Report) -> dict[str, dict[str, Any]] | None:
     return None if unread else found
 
 
+def read_reference(tree: Any, report: Report) -> dict[str, Any] | None:
+    r"""The reference observations by case, or None, a file or line unread
+    reported (rule 6 would otherwise judge on less than is committed)."""
+    found: dict[str, Any] = {}
+    unread = False
+    try:
+        names = [n for n in tree.files(REFERENCE) if n.endswith('.jsonl')]
+    except _module('ratchet').Unreadable as error:
+        report.fail('read', str(error))
+        return None
+    for name in names:
+        try:
+            text = _text(tree, name)
+        except Unreadable as error:
+            report.fail('read', str(error))
+            unread = True
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            where = f'{name}:{number}'
+            try:
+                observation = _json(line, where)
+            except Unreadable as error:
+                report.fail('read', str(error))
+                unread = True
+                continue
+            if not isinstance(observation, dict) or not isinstance(
+                observation.get('case'), str
+            ):
+                report.fail('read', f'{where}: not an observation of a case')
+                unread = True
+                continue
+            found[observation['case']] = observation
+    return None if unread else found
+
+
 # --- the rules -----------------------------------------------------------------
 
 
@@ -398,6 +452,426 @@ def rule_5(
     return covered
 
 
+# --- rule 6: the cells' claims, held to the reference ---------------------------
+
+#: The Arrow types the reference's driver returns (pyarrow's text of each)
+#: that the core's admission table (``sdm-host``'s ``admission.rs``, decisions
+#: B-D6 and H16) admits unparameterized, by the cell type admitted.
+_PLAIN = {
+    **{
+        name: name
+        for name in (
+            'int8',
+            'int16',
+            'int32',
+            'int64',
+            'uint8',
+            'uint16',
+            'uint32',
+            'uint64',
+            'bool',
+            'null',
+        )
+    },
+    'halffloat': 'float32',
+    'float': 'float32',
+    'double': 'float64',
+    'string': 'utf8',
+    'large_string': 'utf8',
+    'string_view': 'utf8',
+    'binary': 'binary',
+    'large_binary': 'binary',
+    'binary_view': 'binary',
+    'date32[day]': 'date32',
+    'date64[ms]': 'timestamp-us',
+}
+#: A parameterized type's name, by the cell type admitted: the admission
+#: table widens decimal32 and decimal64 and takes every list form as a list.
+_HEADS = {
+    'decimal32': 'decimal128',
+    'decimal64': 'decimal128',
+    'decimal128': 'decimal128',
+    'decimal256': 'decimal256',
+    'fixed_size_binary': 'binary',
+    'list': 'list',
+    'large_list': 'list',
+    'fixed_size_list': 'list',
+    'list_view': 'list',
+    'large_list_view': 'list',
+    'struct': 'struct',
+    'map': 'map',
+}
+_HEAD = re.compile(r'([a-z_0-9]+)[<(\[]')
+_UNIT = re.compile(
+    r'(timestamp|duration|time32|time64)\[(s|ms|us|ns)(, tz=.+)?\]'
+)
+#: The reference's sample of a table at ``from_source``, and its read of the
+#: table's declared constraints (contract/reference's statements).
+_SAMPLE = re.compile(r'SELECT .+ FROM "((?:[^"]|"")+)" LIMIT [0-9]+', re.S)
+_CONSTRAINTS = re.compile(
+    r"FROM duckdb_constraints\(\)\s+WHERE table_name = '((?:[^']|'')+)'"
+)
+#: A PQL query's first column reference before ``FOR EACH``: its target.
+_TARGET = re.compile(r'\s*PREDICT\s+(.*?)\s+FOR\s+EACH\s', re.S | re.IGNORECASE)
+_COLUMN = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.(\*|[A-Za-z_][A-Za-z0-9_]*)')
+ROLES = ('primary-key', 'foreign-key', 'time-column', 'feature', 'target')
+
+
+class Unevidenced(Exception):
+    r"""What an observation does not show, named."""
+
+
+def _inner(text: str, start: int) -> str:
+    r"""``text`` from ``start`` to the first comma or unmatched closing
+    bracket outside nested brackets: one type within a parameter list."""
+    depth = 0
+    for at in range(start, len(text)):
+        char = text[at]
+        if char in '<([':
+            depth += 1
+        elif char in '>)]':
+            if depth == 0:
+                return text[start:at]
+            depth -= 1
+        elif char == ',' and depth == 0:
+            return text[start:at]
+    return text[start:]
+
+
+def cell_type(arrow: str) -> str | None:
+    r"""The cell type the core admits a column the driver returned as
+    ``arrow`` (pyarrow's text of the type) as, or None for a type outside
+    the set: the admission table, read at the cell's grain (a list is a
+    list whatever its items; L5 checks the host's conversions)."""
+    if arrow in _PLAIN:
+        return _PLAIN[arrow]
+    unit = _UNIT.fullmatch(arrow)
+    if unit is not None:
+        kind, scale, zone = unit.groups()
+        if kind in ('time32', 'time64'):
+            return None if zone else 'time64'
+        if kind == 'duration':
+            return (
+                None if zone else f'duration-{"ns" if scale == "ns" else "us"}'
+            )
+        return f'timestamp-{"ns" if scale == "ns" else "us"}' + (
+            '-tz' if zone else ''
+        )
+    head = _HEAD.match(arrow)
+    if head is None:
+        return None
+    if head.group(1) == 'dictionary' and arrow.startswith('dictionary<values='):
+        values = cell_type(_inner(arrow, len('dictionary<values=')))
+        return 'dictionary-utf8' if values == 'utf8' else values
+    if head.group(1) == 'run_end_encoded' and ', values: ' in arrow:
+        found = arrow.index(', values: ') + len(', values: ')
+        return cell_type(_inner(arrow, found))
+    return _HEADS.get(head.group(1))
+
+
+def _strs(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(x, str) for x in value)
+
+
+def _statements(line: dict[str, Any]) -> list[dict[str, Any]]:
+    r"""The statements the reference ran at ``from_source``, as captured."""
+    driver = line.get('driver')
+    capture = driver.get('capture') if isinstance(driver, dict) else None
+    statements = (
+        capture.get('statements') if isinstance(capture, dict) else None
+    )
+    if not isinstance(statements, list):
+        raise Unevidenced('no driver capture')
+    return [
+        each
+        for each in statements
+        if isinstance(each, dict)
+        and each.get('stage') == 'from_source'
+        and isinstance(each.get('sql'), str)
+        and isinstance(each.get('results'), list)
+    ]
+
+
+def received(line: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
+    r"""Each column the reference sampled at ``from_source``, by source
+    table and name, with the cell types the core admits it as: the Arrow
+    schema of the driver's answer to the reference's sample of the table."""
+    found: dict[tuple[str, str], set[str]] = {}
+    for statement in _statements(line):
+        sample = _SAMPLE.fullmatch(statement['sql'].strip())
+        if sample is None:
+            continue
+        table = sample.group(1).replace('""', '"')
+        for result in statement['results']:
+            schema = result.get('schema') if isinstance(result, dict) else None
+            if not isinstance(schema, list):
+                continue
+            for field in schema:
+                if not (
+                    isinstance(field, dict)
+                    and isinstance(field.get('name'), str)
+                    and isinstance(field.get('type'), str)
+                ):
+                    raise Unevidenced('a sample it does not read')
+                cell = cell_type(field['type'])
+                found.setdefault((table, field['name']), set()).update(
+                    [cell] if cell is not None else []
+                )
+    if not found:
+        raise Unevidenced('no sample of a table at from_source')
+    return found
+
+
+def _undeclared(line: dict[str, Any]) -> set[str]:
+    r"""The source tables the reference found no declared constraint on:
+    its read of their constraints answered no row."""
+    rows: dict[str, list[Any]] = {}
+    for statement in _statements(line):
+        read = _CONSTRAINTS.search(statement['sql'])
+        if read is None or 'FOREIGN KEY' in statement['sql']:
+            continue
+        rows.setdefault(read.group(1).replace("''", "'"), []).extend(
+            r.get('rows') if isinstance(r, dict) else None
+            for r in statement['results']
+        )
+    return {table for table, counts in rows.items() if counts == [0]}
+
+
+def _keys(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {value}
+    if _strs(value):
+        return set(value)
+    if value is None:
+        return set()
+    raise Unevidenced('a key it does not read')
+
+
+def _described(schema: Any) -> dict[str, Any]:
+    r"""The schema the reference described, as tables (each its columns,
+    key and time column) and links (source table and column first)."""
+    if not isinstance(schema, dict) or not isinstance(
+        schema.get('tables'), list
+    ):
+        raise Unevidenced('a schema it does not read')
+    tables: dict[str, dict[str, Any]] = {}
+    for table in schema['tables']:
+        columns = table.get('columns') if isinstance(table, dict) else None
+        if not (
+            isinstance(table, dict)
+            and isinstance(table.get('name'), str)
+            and isinstance(columns, list)
+            and all(
+                isinstance(c, dict) and isinstance(c.get('name'), str)
+                for c in columns
+            )
+            and isinstance(table.get('time_column'), (str, type(None)))
+        ):
+            raise Unevidenced('a schema it does not read')
+        tables[table['name']] = {
+            'columns': [c['name'] for c in columns],
+            'key': _keys(table.get('primary_key')),
+            'time': table['time_column'],
+        }
+    links = schema.get('links')
+    if not isinstance(links, list) or not all(
+        _strs(link) and len(link) == 4 for link in links
+    ):
+        raise Unevidenced('a schema it does not read')
+    return {'tables': tables, 'links': [tuple(link) for link in links]}
+
+
+def _edited(described: dict[str, Any], edits: Any) -> dict[str, Any]:
+    r"""The schema with the case's edits made, as ``run_python.py`` makes
+    them once ``from_source`` returns (an edit it does not know: refused)."""
+    tables, links = described['tables'], list(described['links'])
+    for edit in edits if isinstance(edits, list) else [None]:
+        op = edit.get('op') if isinstance(edit, dict) else None
+        name = edit.get('table') if isinstance(edit, dict) else None
+        table = tables.get(name) if isinstance(name, str) else None
+        if op == 'set_relationships' and isinstance(
+            edit.get('relationships'), list
+        ):
+            links = [
+                tuple(
+                    link.get(key)
+                    for key in (
+                        'source_table',
+                        'source_column',
+                        'target_table',
+                        'target_column',
+                    )
+                )
+                for link in edit['relationships']
+                if isinstance(link, dict)
+            ]
+        elif table is None:
+            raise Unevidenced('an edit it does not read')
+        elif op == 'clear_time_column':
+            table['time'] = None
+        elif op == 'delete_column':
+            table['columns'] = [
+                c for c in table['columns'] if c != edit.get('column')
+            ]
+        elif op == 'set_primary_key':
+            table['key'] = _keys(edit.get('column'))
+        elif op == 'set_time_column':
+            table['time'] = edit.get('column')
+        elif op != 'set_stype':
+            raise Unevidenced('an edit it does not read')
+    return {'tables': tables, 'links': links}
+
+
+def _target(case: dict[str, Any]) -> tuple[str, str] | None:
+    r"""The column the case's query predicts, or None (a count, ``*``)."""
+    given = case.get('input')
+    pql = given.get('pql') if isinstance(given, dict) else None
+    head = _TARGET.match(pql) if isinstance(pql, str) else None
+    column = _COLUMN.search(head.group(1)) if head is not None else None
+    if column is None or column.group(2) == '*':
+        return None
+    return column.group(1), column.group(2)
+
+
+def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
+    r"""The cells the case's reference observation shows: each column the
+    reference read, at the cell type the core admits it as, in each role
+    it played at a stage the case reached; :class:`Unevidenced` where the
+    observation does not show what that needs."""
+    outcome = line.get('outcome')
+    if not isinstance(outcome, dict) or outcome.get('result') not in (
+        'success',
+        'refusal',
+    ):
+        raise Unevidenced('no outcome it reads')
+    stage = outcome.get('stage')
+    if stage not in ('from_source', 'materialize', 'predict'):
+        raise Unevidenced('no stage it reads')
+    given = case['input'] if isinstance(case.get('input'), dict) else {}
+    options = given.get('from_source') or {}
+    named = options.get('tables') if isinstance(options, dict) else None
+    if named is not None and not isinstance(named, dict):
+        raise Unevidenced('table options it does not read')
+    types = received(line)
+    declared = _declared(options if isinstance(options, dict) else {})
+    to_name = {v: k for k, v in (named or {}).items()}
+    free = _undeclared(line)
+    public = line.get('public')
+    schema = public.get('schema') if isinstance(public, dict) else None
+    roles: dict[tuple[str, str], set[str]] = {}
+    held: set[tuple[str, str]] = set()
+    if schema is not None:
+        described = _described(schema)
+        held = {
+            (name, column)
+            for name, table in described['tables'].items()
+            for column in table['columns']
+        }
+        if not (outcome['result'] == 'refusal' and stage == 'from_source'):
+            # The edits were made: from_source returned with them.
+            described = _edited(described, given.get('edits', []))
+        linked = {(link[0], link[1]) for link in described['links']}
+        for name, table in described['tables'].items():
+            for column in table['columns']:
+                mine = set()
+                if column in table['key']:
+                    mine.add('primary-key')
+                if column == table['time']:
+                    mine.add('time-column')
+                if (name, column) in linked:
+                    mine.add('foreign-key')
+                roles[(name, column)] = mine or {'feature'}
+    elif not (outcome['result'] == 'refusal' and stage == 'from_source'):
+        raise Unevidenced('no schema past from_source')
+    # Each column read at from_source that no described schema holds: the
+    # stage refused or left it out in the role the input gave it, what the
+    # options declare, or a feature where no declared constraint of its
+    # table could make it anything else (a refusal covers its rejected
+    # input, and claims no later stage).
+    for source, column in types:
+        name = to_name.get(source, None if named else source)
+        if name is None or (name, column) in held:
+            continue
+        mine = declared.get((name, column), set())
+        if not mine and source in free:
+            mine = {'feature'}
+        if mine:
+            roles.setdefault((name, column), set()).update(mine)
+    target = _target(case)
+    if target is not None and stage in ('materialize', 'predict'):
+        roles.setdefault(target, set()).add('target')
+    cells = set()
+    for (name, column), played in roles.items():
+        source = (named or {}).get(name, None if named else name)
+        for cell in types.get((source, column), set()) if source else set():
+            cells.update(f'{cell}/{role}' for role in played)
+    return cells
+
+
+def _declared(options: dict[str, Any]) -> dict[tuple[str, str], set[str]]:
+    r"""The roles the case's ``from_source`` options declare."""
+    found: dict[tuple[str, str], set[str]] = {}
+    keys = options.get('primary_keys') or {}
+    times = options.get('time_columns') or {}
+    links = options.get('relationships') or []
+    if not (
+        isinstance(keys, dict)
+        and isinstance(times, dict)
+        and isinstance(links, list)
+    ):
+        raise Unevidenced('options it does not read')
+    for table, key in keys.items():
+        for column in _keys(key):
+            found.setdefault((table, column), set()).add('primary-key')
+    for table, column in times.items():
+        if isinstance(column, str):
+            found.setdefault((table, column), set()).add('time-column')
+    for link in links:
+        if isinstance(link, dict):
+            found.setdefault(
+                (link.get('source_table'), link.get('source_column')), set()
+            ).add('foreign-key')
+    return found
+
+
+def rule_6(
+    corpus: dict[str, dict[str, Any]],
+    reference: dict[str, Any],
+    report: Report,
+) -> None:
+    r"""Each case's cell claims, acceptance and diagnostic alike, held to
+    its reference observation; a claim with none to hold it to fails."""
+    for case_id, case in sorted(corpus.items()):
+        claims = case['cells']
+        if not claims:
+            continue
+        line = reference.get(case_id)
+        if line is None:
+            report.fail(
+                'rule 6',
+                f'case {case_id}: claims {", ".join(claims)} with no '
+                'reference observation of the case to hold them to',
+            )
+            continue
+        try:
+            shown = observed(case, line)
+        except Unevidenced as error:
+            report.fail(
+                'rule 6',
+                f'case {case_id}: claims {", ".join(claims)}, and its '
+                f'reference observation shows none of them: {error}',
+            )
+            continue
+        for claim in claims:
+            if claim not in shown:
+                report.fail(
+                    'rule 6',
+                    f'case {case_id}: claims {claim}, and no column of its '
+                    'source plays that role at that type at a stage its '
+                    'reference observation reached',
+                )
+
+
 def rule_8(
     language: str,
     old: dict[str, Any],
@@ -475,6 +949,9 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
             rule_1(language, manifest, report)
             rule_2_3(language, manifest, report)
     corpus = read_cases(candidate, report)
+    reference = read_reference(candidate, report)
+    if corpus is not None and reference is not None:
+        rule_6(corpus, reference, report)
     if corpus is not None and len(manifests) == len(MANIFESTS):
         rule_4(manifests, corpus, report)
         covered = rule_5(manifests, corpus, report)

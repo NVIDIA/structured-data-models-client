@@ -22,9 +22,6 @@
    "utf8-float-text.mixed.float-tiny-text"
   ],
   "exits": [
-   "py:test_a_contradicted_cell_claim_fails[role]",
-   "py:test_a_contradicted_cell_claim_fails[text-as-integer]",
-   "py:test_a_contradicted_cell_claim_fails[type]",
    "py:test_each_key_case_is_admitted[key.decimal-18-0]",
    "py:test_each_key_case_is_admitted[key.decimal-38-10]",
    "py:test_each_key_case_is_admitted[key.declared-int32]",

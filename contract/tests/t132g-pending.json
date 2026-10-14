@@ -3,11 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_claim_with_no_evidence_fails_closed",
-   "py:test_a_contradicted_claim_fails_whatever_the_case_s_status[acceptance]",
-   "py:test_a_contradicted_claim_fails_whatever_the_case_s_status[diagnostic]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
