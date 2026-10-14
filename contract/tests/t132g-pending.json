@@ -3,10 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_the_reference_s_sample_compares_equal_to_itself[nested.map]",
-   "py:test_the_reference_s_sample_compares_equal_to_itself[nested.union]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],

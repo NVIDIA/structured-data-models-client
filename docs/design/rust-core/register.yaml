@@ -3309,6 +3309,49 @@ entries:
   case_outcomes:
   - {case: time.feature-date-and-timestamp-with-null, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: the cells the reference observation shows, its outcome unchanged'}
 
+- id: P1B-54
+  title: nested.map's and nested.union's reference lines hold their map and union values in canonical form
+  kind: keep
+  old_behavior: >-
+    The observation's canonical form (decision H9) held no map or union:
+    run_python's arrow_values and sdm-testkit's values wrote each such
+    value read as Arrow as ["?", "arrow:<type>"] and listed it unencodable,
+    and compare.py's sql.result rule fails every result holding one, even
+    against itself. The committed python-ref lines of nested.map and
+    nested.union (python-ref at b413e9a) hold one in from_source statement
+    6, the reference's Arrow read of users, so neither case could compare
+    equal on any pairing of runners.
+  new_behavior: >-
+    A map is ["map", [[key, value], ...]] in Arrow's entry order, duplicate
+    keys kept, and a union ["union", type code, member name, cell], a null
+    member keeping its tag (contract/t132g-p2c-vectors.json, E111). The two
+    lines are recorded again under T1.13's rules with the new encoder. Only
+    the encoding of the map and union cells changes, not the reference's
+    behavior: each line's semantic projection (ratchet.semantic) differs
+    from the committed one only in statement 6's values.unencodable (now
+    empty) and values.unordered (the raw line also in values.ordered, and
+    identity.commit); the same eight rows, encoded by both encoders, differ
+    only in column f, every other column identical, and python-ref's
+    outcome is unchanged.
+  affected_inputs: >-
+    No input: the committed python-ref lines of nested.map and
+    nested.union, which the ratchet's reference rule passes changed only
+    under an approved entry naming each case on python-ref.
+  cases: [nested.map, nested.union]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E111}
+  notes: >-
+    T1.32g part 2c, an encoding-only re-record with no outcome of its own,
+    for the reviewers (H19), never self-approved; the orchestrator put the
+    re-record in scope. A control recorded at the tests' tree (6b247cd7,
+    the old encoder) equals the committed lines in semantic projection, so
+    the re-recorded lines differ by the encoder alone. The outcomes below
+    are python-ref's, unchanged.
+  case_outcomes:
+  - {case: nested.map, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the map cells in canonical form, its outcome unchanged'}
+  - {case: nested.union, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the union cells in canonical form, its outcome unchanged'}
+
 # --- The decimals family (T1.32b) --------------------------------------------
 
 - id: P1B-71
