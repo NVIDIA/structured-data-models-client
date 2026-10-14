@@ -62,7 +62,8 @@ The pack, in ``--out``, nothing written anywhere else:
   approver, the owner's first, and the comparator's and the ratchet's lines
   as they printed them. ``compare.py`` prints a field's expected and
   observed values, so these lines carry values; a line naming a held-out
-  case, by its ID or its file name, is counted and never shown, and so is a
+  case (its ID anywhere in it, a plain substring match, which may hide too
+  much and never too little) is counted and never shown, and so is a
   register entry naming one anywhere, its free text included (its ID still
   stands where it excuses a listed case's difference). The cases
   for the owner's call, the type-set findings and the DT and ORD results
@@ -937,10 +938,10 @@ def heldout(path: Path | None) -> tuple[str, set[str], dict[str, str]]:
 
 
 def _names(line: str, idents: set[str]) -> bool:
-    return any(
-        re.search(rf'(?<![\w.-]){re.escape(ident)}(?:\.json)?(?![\w.-])', line)
-        for ident in idents
-    )
+    r"""Whether ``line`` names a held-out case: any of ``idents`` as a plain
+    substring, so it may hide too much, never too little (the orchestrator's
+    fail-safe rule)."""
+    return any(ident in line for ident in idents)
 
 
 # --- the pack ----------------------------------------------------------------
