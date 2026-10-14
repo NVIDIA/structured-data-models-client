@@ -214,19 +214,19 @@ pub fn admit_with_capacity(data: &ArrowData, capacity: usize) -> Result<ArrowDat
     for batch in &data.batches {
         check_declared(&data.schema, batch)?;
     }
-    let fields: Vec<Field> = data
-        .schema
+    // After check (a), before the table: a column of one of DuckDB's
+    // extension types (a UUID, a BIT, a TIMETZ, a HUGEINT, a UHUGEINT or a
+    // BIGNUM) is read as what it means (crate::extensions, P1B-43).
+    let (read, read_batches) = crate::extensions::read(&data.schema, &data.batches)?;
+    let fields: Vec<Field> = read
         .fields()
         .iter()
         .map(|f| admitted_field(f.name(), f, admitted_type))
         .collect::<Result<_, CoreError>>()?;
-    let schema: SchemaRef = Arc::new(Schema::new_with_metadata(
-        fields,
-        data.schema.metadata().clone(),
-    ));
+    let schema: SchemaRef = Arc::new(Schema::new_with_metadata(fields, read.metadata().clone()));
     let admit = Admit { capacity };
     let mut batches = Vec::new();
-    for batch in &data.batches {
+    for batch in &read_batches {
         admit.batch(batch, &schema, &mut batches)?;
     }
     Ok(ArrowData {

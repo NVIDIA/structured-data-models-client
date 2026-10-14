@@ -688,11 +688,10 @@ pub struct TextShare {
 /// two orders of day and month, the text is refused `text_time_order`
 /// (register DT-16), or `text_time` where a value outside the list is
 /// among them, as a source's column is refused (`Reader::column`: a value
-/// outside the list before an open order); where the most, counting the
-/// values the list does not read but the client's shapes hold and, under
-/// a name that says time, every value it does not read, decides otherwise,
-/// `text_time` (DT-15).
-/// So text outside the shapes is no time under any other name (DT-17).
+/// outside the list before an open order). Otherwise the values the list
+/// reads decide it: a value it does not read is no time under any name,
+/// so such a column is text, never refused for its name (the owner's item
+/// 24 of 2026-10-14; register DT-15 and DT-17).
 /// Offsets mixed, which the reference refuses unnamed, are refused by name
 /// (`text_time_zones`, register DT-11).
 fn text_holds_dates(
@@ -717,7 +716,6 @@ fn text_holds_dates(
     *day_first = times.day_first_format(&first);
     let named = if names::says_time(name) { 0.3 } else { 0.0 };
     let score = |held: usize| named + held as f64 / first.len() as f64 >= 1.0;
-    let named_time = named > 0.0;
     match times.share(&first) {
         Ok(share) if score(share.fewest) != score(share.listed) => {
             let outside = share.most > share.listed || share.unshaped > 0;
@@ -727,13 +725,11 @@ fn text_holds_dates(
                 "text_time_order"
             }))
         }
-        Ok(share)
-            if score(share.fewest)
-                == score(share.most + if named_time { share.unshaped } else { 0 }) =>
-        {
-            Ok(score(share.fewest))
-        }
-        Ok(_) | Err(TextUnread::Undecided) => Err(not_yet("text_time")),
+        // The values the list reads decide it: one it does not read is no
+        // time, under any name (the owner's item 24 of 2026-10-14; DT-15,
+        // DT-17), so the column is text rather than refused.
+        Ok(share) => Ok(score(share.fewest)),
+        Err(TextUnread::Undecided) => Err(not_yet("text_time")),
         Err(TextUnread::Order) => Err(not_yet("text_time_order")),
         Err(TextUnread::MixedZones) => Err(not_yet("text_time_zones")),
     }

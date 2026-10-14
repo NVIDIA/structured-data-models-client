@@ -884,10 +884,15 @@ fn a_text_time_column_is_passed_over_for_its_text_and_chosen_by_its_instants() {
 }
 
 #[test]
-fn text_the_reading_does_not_decide_is_refused_by_name_where_it_could_change_the_score() {
-    // A value the reading does not decide, which could make the score.
+fn text_the_reading_does_not_decide_is_text_under_any_name() {
+    // A value the reading does not decide is no time, under a name that
+    // says time too (the owner's item 24 of 2026-10-14; DT-15): text, not
+    // refused.
     let undecided = texts(&[Some("2024-02-02"), Some("2024-01-03")]);
-    assert_eq!(of(vec![("happened", undecided)]).unwrap_err(), "text_time");
+    assert_ne!(
+        stype(&of(vec![("happened", undecided)]).unwrap(), "happened"),
+        Stype::Timestamp
+    );
     // Offsets mixed, which the reference refuses.
     let mixed = texts(&[Some("2024-01-02+01"), Some("2024-01-03+02")]);
     assert_eq!(
@@ -909,10 +914,13 @@ fn text_the_reading_does_not_decide_is_refused_by_name_where_it_could_change_the
         stype(&of(vec![("ts", bounded)]).unwrap(), "ts"),
         Stype::Timestamp
     );
-    // But one in ten reading as no time can: still refused.
+    // Nor one in ten, the values the list reads deciding it: text.
     let mut close: Vec<Option<&str>> = vec![Some("2024-02-02"); 9];
     close.push(Some("no date"));
-    assert_eq!(of(vec![("ts", texts(&close))]).unwrap_err(), "text_time");
+    assert_ne!(
+        stype(&of(vec![("ts", texts(&close))]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
     // A text time column whose first 100 values read, and whose later
     // ones the reading does not decide: refused only when the choice asks
     // where it starts, among several.
@@ -932,7 +940,7 @@ fn text_the_reading_does_not_decide_is_refused_by_name_where_it_could_change_the
 }
 
 #[test]
-fn text_outside_the_shapes_is_no_time_unless_the_name_says_time() {
+fn text_outside_the_shapes_is_no_time_under_any_name() {
     // Codes under a name that says nothing of time: no timestamp, decided,
     // whatever another reader would make of them.
     let codes = texts(&[Some("code"), Some("code"), Some("2024-01-02")]);
@@ -943,9 +951,13 @@ fn text_outside_the_shapes_is_no_time_unless_the_name_says_time() {
         ),
         Stype::Timestamp
     );
-    // Under a name that says time they could make the score: refused.
-    assert_eq!(of(vec![("ts", codes)]).unwrap_err(), "text_time");
-    // Unless the values the list reads decide it either way.
+    // Nor under a name that says time (the owner's item 24 of
+    // 2026-10-14; DT-17): text, not refused.
+    assert_ne!(
+        stype(&of(vec![("ts", codes)]).unwrap(), "ts"),
+        Stype::Timestamp
+    );
+    // The values the list reads decide it either way.
     let mut most: Vec<Option<&str>> = vec![Some("2024-01-02"); 9];
     most.push(Some("code"));
     assert_eq!(

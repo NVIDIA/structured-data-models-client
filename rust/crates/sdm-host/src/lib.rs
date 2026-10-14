@@ -12,6 +12,7 @@
 
 pub mod admission;
 pub mod codec;
+mod extensions;
 pub mod runs;
 pub mod zones;
 

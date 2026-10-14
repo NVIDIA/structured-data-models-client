@@ -8,41 +8,10 @@
    "py:test_a_difference_from_the_reference_is_registered[decimal64.18-0]",
    "py:test_a_difference_from_the_reference_is_registered[decimal64.18-2]",
    "py:test_a_difference_from_the_reference_is_registered[large-list-view.int32]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.bit]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.hugeint]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.json]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.uhugeint]",
    "py:test_a_difference_from_the_reference_is_registered[utf8-view]",
-   "py:test_a_difference_from_the_reference_is_registered[varint.large]",
-   "py:test_a_difference_from_the_reference_is_registered[varint.view]",
-   "py:test_a_difference_from_the_reference_is_registered[varint]",
-   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.uuid]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.hugeint-wide]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.hugeint-past-38-digits]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.uhugeint-wide]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.uhugeint-past-38-digits]",
-   "py:test_a_difference_from_the_reference_is_registered[varint-wide]",
-   "py:test_a_difference_from_the_reference_is_registered[varint-past-38-digits]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.varint]"
+   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]"
   ],
-  "rust-host-duckdb": [
-   "lossless.hugeint",
-   "lossless.uhugeint",
-   "lossless.bit",
-   "lossless.timetz",
-   "varint",
-   "varint.large",
-   "varint.view",
-   "lossless.uuid",
-   "lossless.hugeint-wide",
-   "lossless.hugeint-past-38-digits",
-   "lossless.uhugeint-wide",
-   "lossless.uhugeint-past-38-digits",
-   "varint-wide",
-   "varint-past-38-digits",
-   "lossless.varint"
-  ]
+  "rust-host-duckdb": []
  },
  "authored": {
   "rust-host": [],
