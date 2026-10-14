@@ -1,9 +1,16 @@
 {
- "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it; tests/test_t132g_python_old_as_run.py, at f504a9e9, for part 2a's fix after its review: python-old's lines as run (tests/golden/t132g-python-old-*.jsonl), host warnings and origins left out of exactly, the checkpoint's reference line, an entry's case of another type). Part 2c (T1.32g part 2c, at f504a9e9): contract/tests/test_t132g_map_union_values.py ('exits') and rust/crates/sdm-testkit/tests/t132g_map_union_values.rs ('rust-host', vector names of contract/t132g-p2c-vectors.json): a map's and a union's canonical cells. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it; tests/test_t132g_python_old_as_run.py, at f504a9e9, for part 2a's fix after its review: python-old's lines as run (tests/golden/t132g-python-old-*.jsonl), host warnings and origins left out of exactly, the checkpoint's reference line, an entry's case of another type). Part 2c (T1.32g part 2c, at f504a9e9): contract/tests/test_t132g_map_union_values.py ('exits') and rust/crates/sdm-testkit/tests/t132g_map_union_values.rs ('rust-host', vector names of contract/t132g-p2c-vectors.json): a map's and a union's canonical cells. Part 2d (T1.32g part 2d, at bc4b2d0c): tests/test_t132g_later_stage.py, on the real lines of tests/golden/t132g-later-stage: an approved entry moving a runner past the reference's stop compares only the evidence the reference produced, and large Arrow buffers predicted from the case's setup. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": []
+  "exits": [
+   "py:test_an_approved_move_past_the_reference_s_stop_compares_what_it_reached[t132g.later-key-hugeint]",
+   "py:test_an_approved_move_past_the_reference_s_stop_compares_what_it_reached[t132g.later-nested-fixed-array]",
+   "py:test_the_large_buffer_case_passes_under_an_approved_move",
+   "py:test_evidence_the_reference_produced_still_fails_when_it_differs[a materialize statement the reference ran]",
+   "py:test_large_buffer_rows_and_arrow_agree",
+   "py:test_small_strings_under_the_setting_fail"
+  ]
  },
  "authored": {
   "python-core": [],
@@ -76,7 +83,13 @@
    "py:test_the_comparator_takes_a_different_map_or_union_as_different[another union member]",
    "py:test_the_comparator_takes_a_different_map_or_union_as_different[another union value]",
    "py:test_the_reference_s_sample_compares_equal_to_itself[nested.map]",
-   "py:test_the_reference_s_sample_compares_equal_to_itself[nested.union]"
+   "py:test_the_reference_s_sample_compares_equal_to_itself[nested.union]",
+   "py:test_an_approved_move_past_the_reference_s_stop_compares_what_it_reached[t132g.later-key-hugeint]",
+   "py:test_an_approved_move_past_the_reference_s_stop_compares_what_it_reached[t132g.later-nested-fixed-array]",
+   "py:test_the_large_buffer_case_passes_under_an_approved_move",
+   "py:test_evidence_the_reference_produced_still_fails_when_it_differs[a materialize statement the reference ran]",
+   "py:test_large_buffer_rows_and_arrow_agree",
+   "py:test_small_strings_under_the_setting_fail"
   ]
  }
 }
