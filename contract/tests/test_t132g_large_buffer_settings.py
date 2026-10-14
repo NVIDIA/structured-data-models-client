@@ -17,9 +17,11 @@ is now strict (the orchestrator's decision):
   ``arrow_large_buffer_size`` anywhere (comments, strings and dollar
   quotes included) must be, after trimming whitespace and one optional
   trailing ``;``, exactly one canonical statement, matched in any case:
-  ``SET [SESSION|GLOBAL] arrow_large_buffer_size (=|TO)? <bool>``, the
-  bool ``true`` or ``false`` unquoted or single-quoted, or ``RESET
-  [SESSION|GLOBAL] arrow_large_buffer_size``;
+  ``SET arrow_large_buffer_size (=|TO)? <bool>``, the bool ``true`` or
+  ``false`` unquoted or single-quoted, or ``RESET
+  arrow_large_buffer_size``, unscoped: a ``SESSION`` or ``GLOBAL`` scope
+  is refused (an unscoped SET is DuckDB's global value, which a ``RESET
+  SESSION`` leaves standing, so scopes cannot be read as one last word);
 - any other such element fails the comparison by name ("unsupported
   setting statement"); an element without the name is ignored; the last
   canonical statement, the base's and then the setup's, wins. No
@@ -84,9 +86,7 @@ run_python = _module('run_python', ROOT / 'contract/runners/run_python.py')
 compare = _module('compare', ROOT / 'scripts/rust_core/compare.py')
 
 #: Each a run of canonical elements (or ones not naming the setting);
-#: each ends in a mode DuckDB itself decides (:func:`duckdb_says`). Scopes
-#: are not mixed: an unscoped SET is DuckDB's global value, which a
-#: ``RESET SESSION`` leaves standing (see the package's report).
+#: each ends in a mode DuckDB itself decides (:func:`duckdb_says`).
 SPELLINGS: dict[str, list[str]] = {
     'unquoted true': [ON],
     'nothing': [],
@@ -102,18 +102,11 @@ SPELLINGS: dict[str, list[str]] = {
     'surrounding whitespace and a semicolon': [
         '   SET   arrow_large_buffer_size   =   true   ;  '
     ],
-    'session': ["SET SESSION arrow_large_buffer_size = 'true'"],
-    'global false after true': [
-        ON,
-        'SET GLOBAL arrow_large_buffer_size = false',
-    ],
-    'global to a quoted TRUE': ["SET GLOBAL arrow_large_buffer_size TO 'TRUE'"],
     'reset': [ON, 'RESET arrow_large_buffer_size'],
     'reset in any case with a semicolon': [
         ON,
         'reset ARROW_LARGE_BUFFER_SIZE;',
     ],
-    'reset global': [ON, 'RESET GLOBAL arrow_large_buffer_size'],
     'false then true over two elements': [
         'SET arrow_large_buffer_size = false',
         'SET arrow_large_buffer_size = TRUE',
@@ -254,8 +247,8 @@ def test_a_quoted_false_after_true_holds_the_large_reads_to_small_types(
 
 
 #: Elements naming the setting that are not one canonical statement; each
-#: fails the comparison by name. Fix 2 read the first seven; the rule now
-#: refuses them.
+#: fails the comparison by name. Fix 2 read the first seven, and fix 4 the
+#: scoped ones; the rule now refuses them.
 FORMS = {
     'a trailing line comment': (
         'SET arrow_large_buffer_size = false -- small again'
@@ -289,6 +282,13 @@ FORMS = {
     'a number': 'SET arrow_large_buffer_size = 1',
     'another word': "SET arrow_large_buffer_size = 'yes'",
     'a read of it': "SELECT current_setting('arrow_large_buffer_size')",
+    'a session scope': "SET SESSION arrow_large_buffer_size = 'true'",
+    'a global scope': 'SET GLOBAL arrow_large_buffer_size = false',
+    'a global scope to a quoted TRUE': (
+        "SET GLOBAL arrow_large_buffer_size TO 'TRUE'"
+    ),
+    'a session reset': 'RESET SESSION arrow_large_buffer_size',
+    'a global reset': 'RESET GLOBAL arrow_large_buffer_size',
 }
 
 

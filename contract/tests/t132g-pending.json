@@ -1,5 +1,5 @@
 {
- "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it; tests/test_t132g_python_old_as_run.py, at f504a9e9, for part 2a's fix after its review: python-old's lines as run (tests/golden/t132g-python-old-*.jsonl), host warnings and origins left out of exactly, the checkpoint's reference line, an entry's case of another type). Part 2c (T1.32g part 2c, at f504a9e9): contract/tests/test_t132g_map_union_values.py ('exits') and rust/crates/sdm-testkit/tests/t132g_map_union_values.rs ('rust-host', vector names of contract/t132g-p2c-vectors.json): a map's and a union's canonical cells. Part 2d (T1.32g part 2d, at bc4b2d0c): tests/test_t132g_later_stage.py, on the real lines of tests/golden/t132g-later-stage: an approved entry moving a runner past the reference's stop compares only the evidence the reference produced, and large Arrow buffers predicted from the case's setup; tests/test_t132g_later_stage_moves.py, at d03f0f65, for part 2d's fix after its review: which approved entries are a move past the checkpoint reference's stop, the move held since in a baseline, and the large buffers' setting as DuckDB applies it (a later RESET or false, a base's setting); contract/tests/test_t132g_large_buffer_settings.py, at 1723e8e9, for part 2d's fix 2 after Codex's round 2: the setting's ordinary spellings held to what real DuckDB does, and an unsupported one failing by name; the same file, at c1e9b099, for part 2d's fix 4 after Codex's round 3: the strict rule, an element naming the setting exactly one canonical statement or refused by name. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it; tests/test_t132g_python_old_as_run.py, at f504a9e9, for part 2a's fix after its review: python-old's lines as run (tests/golden/t132g-python-old-*.jsonl), host warnings and origins left out of exactly, the checkpoint's reference line, an entry's case of another type). Part 2c (T1.32g part 2c, at f504a9e9): contract/tests/test_t132g_map_union_values.py ('exits') and rust/crates/sdm-testkit/tests/t132g_map_union_values.rs ('rust-host', vector names of contract/t132g-p2c-vectors.json): a map's and a union's canonical cells. Part 2d (T1.32g part 2d, at bc4b2d0c): tests/test_t132g_later_stage.py, on the real lines of tests/golden/t132g-later-stage: an approved entry moving a runner past the reference's stop compares only the evidence the reference produced, and large Arrow buffers predicted from the case's setup; tests/test_t132g_later_stage_moves.py, at d03f0f65, for part 2d's fix after its review: which approved entries are a move past the checkpoint reference's stop, the move held since in a baseline, and the large buffers' setting as DuckDB applies it (a later RESET or false, a base's setting); contract/tests/test_t132g_large_buffer_settings.py, at 1723e8e9, for part 2d's fix 2 after Codex's round 2: the setting's ordinary spellings held to what real DuckDB does, and an unsupported one failing by name; the same file, at c1e9b099, for part 2d's fix 4 after Codex's round 3: the strict rule, an element naming the setting exactly one canonical statement or refused by name, a SESSION or GLOBAL scope refused too. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
   "rust-host": [],
@@ -19,7 +19,17 @@
    "py:test_an_unsupported_setting_statement_fails_by_name[the name in a comment alone-base]",
    "py:test_an_unsupported_setting_statement_fails_by_name[the name in a comment alone-setup]",
    "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-setup]"
+   "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global reset-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global reset-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope to a quoted TRUE-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope to a quoted TRUE-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session reset-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session reset-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session scope-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session scope-setup]"
   ]
  },
  "authored": {
@@ -113,24 +123,10 @@
    "py:test_an_unsupported_setting_statement_fails_by_name[a read of it-setup]",
    "py:test_an_unsupported_setting_statement_fails_by_name[another word-base]",
    "py:test_an_unsupported_setting_statement_fails_by_name[another word-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a quoted semicolon, then a set, in one element-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a quoted semicolon, then a set, in one element-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset and a select in one element-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset and a select in one element-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset in any case with a comment-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a reset in any case with a comment-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing block comment-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing block comment-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing line comment-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[a trailing line comment-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[false then true in one element-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[false then true in one element-setup]",
    "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted false after true-base]",
    "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted false after true-setup]",
    "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted true-base]",
    "py:test_the_inferred_mode_is_the_one_duckdb_uses[quoted true-setup]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[session-base]",
-   "py:test_the_inferred_mode_is_the_one_duckdb_uses[session-setup]",
    "py:test_an_unsupported_setting_statement_fails_by_name[a quoted semicolon, then a set, in one element-base]",
    "py:test_an_unsupported_setting_statement_fails_by_name[a quoted semicolon, then a set, in one element-setup]",
    "py:test_an_unsupported_setting_statement_fails_by_name[a reset and a select in one element-base]",
@@ -146,7 +142,17 @@
    "py:test_an_unsupported_setting_statement_fails_by_name[the name in a comment alone-base]",
    "py:test_an_unsupported_setting_statement_fails_by_name[the name in a comment alone-setup]",
    "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-setup]"
+   "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global reset-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global reset-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope to a quoted TRUE-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope to a quoted TRUE-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session reset-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session reset-setup]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session scope-base]",
+   "py:test_an_unsupported_setting_statement_fails_by_name[a session scope-setup]"
   ]
  }
 }
