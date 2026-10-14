@@ -170,8 +170,12 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         for case, _ in run_python.load_cases([CASES / 's1'])
         if not case['id'].startswith('edit.')
     }
+    # T1.33 (T1.32f's real-data part) adds the notebook's churn and Color
+    # questions over the AdventureWorks base, no inventory case either.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
-        'base.adventureworks'
+        'base.adventureworks',
+        'base.adventureworks.churn',
+        'base.adventureworks.color',
     }
     # From T1.29 the inventory's three baseline cases are acceptance cases
     # with their routes and paths, keeping its input and expectation; from
