@@ -7,7 +7,7 @@
   "routes": [],
   "seam": "time",
   "cells": [
-    "date32/feature",
+    "date32/time-column",
     "timestamp-us/feature"
   ],
   "input": {

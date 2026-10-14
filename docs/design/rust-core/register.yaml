@@ -3270,6 +3270,40 @@ entries:
   - {case: base.regression, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
   - {case: base.regression, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
 
+- id: P1B-52
+  title: time.feature-date-and-timestamp-with-null claims its date column as the users time column, as the reference reads it
+  kind: keep
+  old_behavior: >-
+    The case claimed the cells date32/feature and timestamp-us/feature. Its
+    reference observation (python-ref at b413e9a) makes users.f_date, a
+    date32 the driver returns, the users time column (the inventory's
+    today: "users.f_date becomes the users time column"), and f_ts, a
+    timestamp[us], a feature; no column of the case is a date32 feature.
+  new_behavior: >-
+    The case claims date32/time-column and timestamp-us/feature, the cells
+    its reference observation shows, so coverage rule 6 (T1.32g) holds
+    every claim of the corpus. Only the claim changes: the input, the
+    expectation and every runner's outcome are unchanged, and the case's
+    python-ref line is re-recorded, identity only. No case claims
+    date32/feature now; no gate rests on a cell yet (rule 5 gates S0's
+    paths, and every cell applies from S1).
+  affected_inputs: >-
+    The case file of time.feature-date-and-timestamp-with-null and its
+    Phase 1b inventory entry, which the ratchet's cases rule passes only
+    under an approved entry naming the case.
+  cases: [T1.32g, time.feature-date-and-timestamp-with-null]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E96}
+  notes: >-
+    T1.32g part 1, a claim-only correction of a diagnostic case with no
+    outcome of its own, for the reviewers (H19), never self-approved. The
+    alternative, holding a column the reference made the time column as a
+    feature too, would let any time column satisfy a feature claim, which
+    weakens rule 6. The outcome below is python-ref's, unchanged.
+  case_outcomes:
+  - {case: time.feature-date-and-timestamp-with-null, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: the cells the reference observation shows, its outcome unchanged'}
+
 # --- The decimals family (T1.32b) --------------------------------------------
 
 - id: P1B-71

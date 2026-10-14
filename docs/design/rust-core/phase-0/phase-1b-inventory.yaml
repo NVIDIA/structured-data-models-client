@@ -614,7 +614,7 @@ cases:
 
 - id: time.feature-date-and-timestamp-with-null
   seam: time
-  cells: [date32/feature, timestamp-us/feature]
+  cells: [date32/time-column, timestamp-us/feature]
   base: shop
   setup:
   - CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN NULL ELSE DATE '2020-01-01' + user_id::INTEGER END AS f_date, CASE WHEN user_id = 5 THEN NULL ELSE TIMESTAMP '2020-01-01' + to_days(user_id::INTEGER) END AS f_ts FROM users
