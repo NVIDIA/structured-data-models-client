@@ -1,7 +1,17 @@
 {
- "about": "T1.35 part 1's acceptance tests (the evidence-pack generator, scripts/rust_core/evidence.py) that failed when the independent test author wrote them, before the implementation, at 8af842b2 (tests/test_t135_evidence.py, its interface in that file's docstring). 'exits' holds the Python test ids, 'py:' and the test's name with its parameters. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The test author added the review's tests (orchestrator's decisions on the subagent review of 39cccb09: a core INTERNAL_ERROR a regression even as the reference, python-old's held only by old_client_crash; the compare output as gate.sh prints it, its one verdict adding up; a gating difference never a correct outcome; every observation of the gate's commit and the cases given; held-out file names caught, unruled lines counted; seams per core runner, a panic named; every per-cell run required) on 39cccb09, failing when written. The test author added the second review's tests (Codex's on 39cccb09, orchestrator's decisions: no held-out case reaches the pack through a register entry; no bytecode written outside --out, run with bytecode writing on) on 89d506d2, failing when written.",
+ "about": "T1.35 part 1's acceptance tests (the evidence-pack generator, scripts/rust_core/evidence.py) that failed when the independent test author wrote them, before the implementation, at 8af842b2 (tests/test_t135_evidence.py, its interface in that file's docstring). 'exits' holds the Python test ids, 'py:' and the test's name with its parameters. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The test author added the review's tests (orchestrator's decisions on the subagent review of 39cccb09: a core INTERNAL_ERROR a regression even as the reference, python-old's held only by old_client_crash; the compare output as gate.sh prints it, its one verdict adding up; a gating difference never a correct outcome; every observation of the gate's commit and the cases given; held-out file names caught, unruled lines counted; seams per core runner, a panic named; every per-cell run required) on 39cccb09, failing when written. The test author added the second review's tests (Codex's on 39cccb09, orchestrator's decisions: no held-out case reaches the pack through a register entry; no bytecode written outside --out, run with bytecode writing on) on 89d506d2, failing when written. The test author added the third review's tests (orchestrator's rule: a held-out ID matched as a plain substring, so a sentence-final one, one before any punctuation and one inside a longer token are withheld and counted, in a register entry, a compare.log line and a ratchet.log line) on f6fd89ef, failing when written.",
  "pending": {
-  "exits": []
+  "exits": [
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-path-compare]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-path-ratchet]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-path-register]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-token-compare]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-token-ratchet]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-token-register]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[sentence-final-compare]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[sentence-final-ratchet]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[sentence-final-register]"
+  ]
  },
  "authored": {
   "exits": [
@@ -16,6 +26,15 @@
    "py:test_a_core_panic_is_a_regression_even_as_the_reference[python-core-panics-as-the-reference]",
    "py:test_a_core_panic_is_a_regression_even_as_the_reference[rust-host-panics-as-the-reference]",
    "py:test_a_gate_json_inside_the_pack_is_refused",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-path-compare]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-path-ratchet]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-path-register]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-token-compare]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-token-ratchet]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[inside-a-token-register]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[sentence-final-compare]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[sentence-final-ratchet]",
+   "py:test_a_held_out_id_is_withheld_wherever_it_sits[sentence-final-register]",
    "py:test_a_link_in_the_evidence_dir_is_not_written_through",
    "py:test_a_missing_input_fails_by_name[an-inventory-case-file]",
    "py:test_a_missing_input_fails_by_name[cases]",

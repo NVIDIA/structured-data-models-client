@@ -45,7 +45,11 @@ The command::
   pack or the output: digests and counts only. No held-out case's ID
   reaches them either, nor any register entry's free text that names one
   or whose ``cases`` or ``case_outcomes`` do; such an entry is counted at
-  most.
+  most. A held-out ID is matched as a plain substring, anywhere: followed
+  by a full stop or any punctuation, or inside a longer token, it is still
+  withheld (the filter may hide too much, never too little). The pack
+  counts what it withholds: ``not listed: N`` register entries, ``not
+  shown: N`` lines of ``compare.log`` and ``ratchet.log``.
 - ``--out``: ``docs/design/rust-core/phase-1/evidence``. Nothing is written
   anywhere else, and nothing at all when an input is missing: no bytecode
   either, run as Python runs by default (bytecode writing on), whether the
@@ -1825,6 +1829,63 @@ def test_no_bytecode_or_anything_else_is_written_outside_the_evidence_dir(
             and not out.startswith(name + os.sep)
         )
         assert changed == []
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+# --- T1.35 part 1's third review (orchestrator's rule: a plain substring) --------
+
+#: Where a held-out ID sits in text: each must be withheld.
+HELD_OUT_FORMS = {
+    'sentence-final': '{}.',
+    'comma': '{}, then more',
+    'semicolon': '{}; then more',
+    'parenthesis': '(see {})',
+    'colon': '{}: then more',
+    'inside-a-token': 'x{}y',
+    'inside-a-path': 'contract/cases/{}.json.orig',
+}
+
+
+@pytest.mark.parametrize('place', ['register', 'compare', 'ratchet'])
+@pytest.mark.parametrize('form', sorted(HELD_OUT_FORMS))
+def test_a_held_out_id_is_withheld_wherever_it_sits(
+    request: pytest.FixtureRequest, tmp_path: Path, form: str, place: str
+) -> None:
+    def check() -> None:
+        state = _heldout_world()
+        named = HELD_OUT_FORMS[form].format('h11.synth-a')
+        if place == 'register':
+            state['register'].append(
+                _entry('HO-1', 'approved', 'owner', [])
+                | {'title': f'Differs on {named}'}
+            )
+        if place == 'compare':
+            body = _body(state)
+            state['compare'] = _with_verdict(
+                [
+                    *body,
+                    'diagnostic rule sql.text: key.payload: python-core: '
+                    f'differs on {named}',
+                ],
+                3,
+            )
+        paths = write(state, tmp_path)
+        if place == 'ratchet':
+            with (paths['gate-out'] / 'ratchet.log').open('a') as handle:
+                handle.write(f'ratchet: register: AA-1 differs on {named}\n')
+        done = run(arguments(paths, heldout=True))
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert 'h11.synth-a' not in done.stdout + done.stderr
+        for name, data in pack(paths).items():
+            assert 'h11.synth-a' not in data.decode(), name
+        text = (paths['out'] / 'comparator.md').read_text()
+        listed = re.search(r'not listed\D{0,5}(\d+)\b', text)
+        shown = re.search(r'not shown\D{0,5}(\d+)\b', text)
+        assert listed is not None and shown is not None, text
+        assert (int(listed.group(1)), int(shown.group(1))) == (
+            (1, 0) if place == 'register' else (0, 1)
+        )
 
     G.held('exits', f'py:{request.node.name}', check)
 
