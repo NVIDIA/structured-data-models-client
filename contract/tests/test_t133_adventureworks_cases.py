@@ -16,10 +16,11 @@ notebook, before the implementation. The cases are
 
 - The questions are the notebook's (``examples/databricks/
   adventureworks_relational.ipynb``, ``QUESTIONS['inactivity_90d']`` and
-  ``QUESTIONS['product_color']``): the query text unchanged, no option the
-  notebook does not pass (``inference_config`` among them), and the
-  entities its ``frequent_customers`` and ``top_product`` queries answer
-  over the fixture. Each has ``base.adventureworks``'s base, schema, edits
+  ``QUESTIONS['product_color']``): the query text as the client prints
+  it once parsed (``to_string()``), no option the notebook does not pass
+  (``inference_config`` among them), and the entities its
+  ``frequent_customers`` and ``top_product`` queries answer over the
+  fixture. Each has ``base.adventureworks``'s base, schema, edits
   and ``describe_source``, and the core operations its call starts.
 - The cases' expectations: each case's ``expect`` is what ``python-ref``
   observed (``contract/reference/<commit>.jsonl``; the identity rules are
@@ -203,6 +204,14 @@ def notebook_questions() -> dict[str, tuple[str | None, set[str]]]:
     raise AssertionError('the notebook has no QUESTIONS')
 
 
+def printed(pql: str) -> str:
+    r"""``pql`` parsed and printed as the client prints a query."""
+    from predictive_query.parser.parser import PQLParser
+
+    text: str = PQLParser().to_parsed_predictive_query(pql).to_string()
+    return text
+
+
 def fixture() -> Any:
     import duckdb
 
@@ -223,9 +232,15 @@ def test_each_case_asks_the_notebook_s_question(case: str) -> None:
     loaded = case_file(case)
     assert loaded['id'] == case
     pql, options = notebook_questions()[QUESTION[case]]
-    # The query text unchanged (the notebook's adjacent literals joined),
-    # and only the options the notebook passes: no inference_config.
-    assert loaded['input']['pql'] == pql
+    # The notebook's query (its adjacent literals joined) in the form the
+    # client prints it, query.to_string(), which python-core hands the core
+    # and every acceptance case stores (churn's '=0' becomes ' = 0'): the
+    # same question, parsed. The reference's request names the same text.
+    assert pql is not None
+    assert loaded['input']['pql'] == printed(pql)
+    [payload] = reference()[case]['public']['payloads']
+    assert payload['parsed']['metadata']['source_query'] == printed(pql)
+    # Only the options the notebook passes: no inference_config.
     assert set(loaded['input']['materialize']) == options == {'indices'}
     # The entities the notebook's query answers over the fixture.
     wanted = [row[0] for row in fixture().execute(ENTITIES[case]).fetchall()]
