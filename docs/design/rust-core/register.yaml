@@ -3940,16 +3940,21 @@ entries:
     which the ratchet's reference rule passes changed only under an
     approved entry naming the case on python-ref.
   cases: [time.feature-interval]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E113}
   notes: >-
     T1.32g part 2e, an encoding-only re-record with no outcome of its own,
     as part 2c's P1B-54, for the reviewers (H19), never self-approved; the
-    orchestrator put the re-record in scope. A control recorded at the
-    tests' tree (bb281abe, the old encoder) equals the committed line in
-    semantic projection, so the re-recorded line differs by the encoder
-    alone. The outcome below is python-ref's, unchanged.
+    orchestrator put the re-record in scope. Approved by both reviewers of
+    part 2e's review round 1 of e792e420 (Codex and the independent
+    subagent: APPROVE-P1B-56, each having replayed statement 6 through the
+    old and the new encoder and reproduced the committed and the
+    re-recorded values), relayed by the orchestrator (H19); never the
+    implementer's approval. A control recorded at the tests' tree
+    (bb281abe, the old encoder) equals the committed line in semantic
+    projection, so the re-recorded line differs by the encoder alone. The
+    outcome below is python-ref's, unchanged.
   case_outcomes:
   - {case: time.feature-interval, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the interval cells in canonical form, its outcome unchanged'}
 
