@@ -18,14 +18,14 @@
       "holds": "ErrorCode::UnsupportedType,",
       "why": "The named refusal the plan asks for in place of the reference's unnamed RuntimeError, which names the wrong type: register P1B-7, proposed, which T1.32c resolves when it admits nested.union. The probe without the column reaches predict's result on both runners",
       "observed": {
-        "python-core": {
-          "stage": "from_source",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "UNSUPPORTED_TYPE",
           "operation": null,
           "rule": null
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "from_source",
+          "error": "StructuredDataError",
           "code": "UNSUPPORTED_TYPE",
           "operation": null,
           "rule": null
@@ -43,14 +43,14 @@
       "holds": "raise self._refusal(",
       "why": "The reference's own refusal: python-core validates the query in the host as the reference does, and rust-host's materialize refuses it in the core (rust/crates/sdm-core/src/materialize.rs:603-607); T1.32d admits the case with it",
       "observed": {
-        "python-core": {
-          "stage": "materialize",
-          "error": "StructuredDataError",
+        "rust-host": {
           "code": "INVALID_REQUEST",
           "operation": null,
           "rule": null
         },
-        "rust-host": {
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
           "code": "INVALID_REQUEST",
           "operation": null,
           "rule": null
@@ -121,35 +121,9 @@
               "time_columns": {}
             },
             "check_keys": true
-          },
-          "materialize": {
-            "provider": {
-              "provider": "sql",
-              "dialect": "duckdb"
-            },
-            "indices": [
-              {
-                "t": "i64",
-                "v": "0"
-              },
-              {
-                "t": "i64",
-                "v": "1"
-              }
-            ],
-            "anchor_time": {
-              "t": "ts",
-              "v": "1709251200000000000",
-              "unit": "ns",
-              "zone": null
-            },
-            "seed": null
-          },
-          "predict": {
-            "model": "kumo-relational"
           }
         },
-        "until": "predict",
+        "until": "from_source",
         "expect": "admission/union"
       }
     },
@@ -316,34 +290,81 @@
             },
             "check_keys": true
           },
-          "materialize": {
-            "provider": {
-              "provider": "sql",
-              "dialect": "duckdb"
+          "validate_query": {
+            "profile": {
+              "model": null,
+              "name": "RELATIONAL"
             },
-            "indices": [
-              {
-                "t": "i64",
-                "v": "0"
-              },
-              {
-                "t": "i64",
-                "v": "1"
-              }
-            ],
-            "anchor_time": {
-              "t": "ts",
-              "v": "1709251200000000000",
-              "unit": "ns",
-              "zone": null
-            },
-            "seed": null
-          },
-          "predict": {
-            "model": "kumo-relational"
+            "schema": {
+              "links": [
+                [
+                  {
+                    "column": "user_id",
+                    "table": "orders"
+                  },
+                  {
+                    "column": "user_id",
+                    "table": "users"
+                  }
+                ]
+              ],
+              "tables": [
+                {
+                  "columns": [
+                    {
+                      "dtype": "int",
+                      "name": "order_id",
+                      "stype": "ID"
+                    },
+                    {
+                      "dtype": "int",
+                      "name": "user_id",
+                      "stype": "ID"
+                    },
+                    {
+                      "dtype": "float",
+                      "name": "price",
+                      "stype": "numerical"
+                    },
+                    {
+                      "dtype": "time",
+                      "name": "ts",
+                      "stype": "timestamp"
+                    }
+                  ],
+                  "end_time_column": null,
+                  "name": "orders",
+                  "primary_key": "order_id",
+                  "time_column": "ts"
+                },
+                {
+                  "columns": [
+                    {
+                      "dtype": "int",
+                      "name": "user_id",
+                      "stype": "ID"
+                    },
+                    {
+                      "dtype": "int",
+                      "name": "age",
+                      "stype": "numerical"
+                    },
+                    {
+                      "dtype": "string",
+                      "name": "country",
+                      "stype": "categorical"
+                    }
+                  ],
+                  "end_time_column": null,
+                  "name": "users",
+                  "primary_key": "user_id",
+                  "time_column": null
+                }
+              ]
+            }
           }
         },
-        "until": "predict",
+        "until": "materialize",
         "expect": "materialize/unknown_column"
       }
     }

@@ -517,12 +517,9 @@
               "zone": null
             },
             "seed": null
-          },
-          "predict": {
-            "model": "kumo-relational"
           }
         },
-        "until": "predict",
+        "until": "materialize",
         "expect": "materialize/int64_range"
       }
     },

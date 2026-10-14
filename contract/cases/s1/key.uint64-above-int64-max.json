@@ -1,10 +1,22 @@
 {
   "format": "sdm-case/1",
   "id": "key.uint64-above-int64-max",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
-  "routes": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
   "seam": "keys",
   "cells": [
     "uint64/primary-key",
@@ -61,9 +73,6 @@
         "zone": null
       },
       "seed": null
-    },
-    "predict": {
-      "model": "kumo-relational"
     }
   },
   "expect": {

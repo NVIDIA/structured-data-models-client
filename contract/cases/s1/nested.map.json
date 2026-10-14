@@ -1,10 +1,15 @@
 {
   "format": "sdm-case/1",
   "id": "nested.map",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
-  "routes": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
   "seam": "nested",
   "cells": [
     "map/feature"
@@ -36,32 +41,6 @@
         "time_columns": {}
       },
       "check_keys": true
-    },
-    "materialize": {
-      "provider": {
-        "provider": "sql",
-        "dialect": "duckdb"
-      },
-      "indices": [
-        {
-          "t": "i64",
-          "v": "0"
-        },
-        {
-          "t": "i64",
-          "v": "1"
-        }
-      ],
-      "anchor_time": {
-        "t": "ts",
-        "v": "1709251200000000000",
-        "unit": "ns",
-        "zone": null
-      },
-      "seed": null
-    },
-    "predict": {
-      "model": "kumo-relational"
     }
   },
   "expect": {

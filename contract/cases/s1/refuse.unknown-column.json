@@ -1,10 +1,24 @@
 {
   "format": "sdm-case/1",
   "id": "refuse.unknown-column",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
-  "routes": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.validate/accept/any",
+    "query.validate/refuse/any",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
   "seam": "refusal",
   "cells": [],
   "input": {
@@ -32,31 +46,78 @@
       },
       "check_keys": true
     },
-    "materialize": {
-      "provider": {
-        "provider": "sql",
-        "dialect": "duckdb"
+    "validate_query": {
+      "profile": {
+        "model": null,
+        "name": "RELATIONAL"
       },
-      "indices": [
-        {
-          "t": "i64",
-          "v": "0"
-        },
-        {
-          "t": "i64",
-          "v": "1"
-        }
-      ],
-      "anchor_time": {
-        "t": "ts",
-        "v": "1709251200000000000",
-        "unit": "ns",
-        "zone": null
-      },
-      "seed": null
-    },
-    "predict": {
-      "model": "kumo-relational"
+      "schema": {
+        "links": [
+          [
+            {
+              "column": "user_id",
+              "table": "orders"
+            },
+            {
+              "column": "user_id",
+              "table": "users"
+            }
+          ]
+        ],
+        "tables": [
+          {
+            "columns": [
+              {
+                "dtype": "int",
+                "name": "order_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "int",
+                "name": "user_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "float",
+                "name": "price",
+                "stype": "numerical"
+              },
+              {
+                "dtype": "time",
+                "name": "ts",
+                "stype": "timestamp"
+              }
+            ],
+            "end_time_column": null,
+            "name": "orders",
+            "primary_key": "order_id",
+            "time_column": "ts"
+          },
+          {
+            "columns": [
+              {
+                "dtype": "int",
+                "name": "user_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "int",
+                "name": "age",
+                "stype": "numerical"
+              },
+              {
+                "dtype": "string",
+                "name": "country",
+                "stype": "categorical"
+              }
+            ],
+            "end_time_column": null,
+            "name": "users",
+            "primary_key": "user_id",
+            "time_column": null
+          }
+        ]
+      }
     }
   },
   "expect": {

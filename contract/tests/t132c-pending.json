@@ -3,13 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_each_nested_case_is_admitted[nested.fixed-array]",
-   "py:test_each_nested_case_is_admitted[nested.list-int]",
-   "py:test_each_nested_case_is_admitted[nested.map]",
-   "py:test_each_nested_case_is_admitted[nested.struct]",
-   "py:test_each_nested_case_is_admitted[nested.union]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [

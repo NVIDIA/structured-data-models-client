@@ -1963,6 +1963,9 @@ entries:
     contract/refusal-maps/refusal.json, on python-core and rust-host. Both
     refuse; the class and code change. T1.32c resolves it when it admits
     the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+  case_outcomes:
+  - {case: nested.union, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: nested.union, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-8
   title: time.feature-interval is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -2048,6 +2051,9 @@ entries:
     and sdm-testkit's tests/t132c_nested_types.rs; the old-against-core
     probe of T1.32c (as-built.md, T1.32c) met it in 18 of 60 generated
     sources, each a fixed-size list the reference fails unnamed. Approved by the owner on 2026-10-13, relayed by the orchestrator (E93): fixed-size lists left out with a warning.
+  case_outcomes:
+  - {case: nested.fixed-array, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: nested.fixed-array, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-10
   title: nested.map and nested.struct are refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -2093,6 +2099,11 @@ entries:
     which first reaches it through the public call with tables named) is
     pinned, both routes' outcomes, by the client's
     tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+  case_outcomes:
+  - {case: nested.map, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: nested.map, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: nested.struct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: nested.struct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-11
   title: empty.fact-table is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -2142,6 +2153,9 @@ entries:
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
     T1.32d. The two-fault outcome is pinned, both routes', by the client's
     tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32d its refs name the family's vectors whose source holds an empty table (the fact table, the entity table, both, a third table named or not, the fact table named, emptied by a filter, and with no entities asked for), each the same transition, the reference's unnamed RuntimeError to this entry's UNSUPPORTED_REQUEST: for a reviewer to hold to the approved meaning. The code is kept: the recommendation above, INVALID_REQUEST, would change this approved entry, so T1.32d leaves it to the owner (E91). The owner chose INVALID_REQUEST on 2026-10-13, the rule kept (relayed by the orchestrator; recorded at T1.32g, E97, never the implementer's approval): the refs above declare the reference's unnamed RuntimeError to INVALID_REQUEST, and sdm-schema's infer.rs refuses an empty table so.
+  case_outcomes:
+  - {case: empty.fact-table, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: empty.fact-table, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-12
   title: Schema.from_source's keys and time columns of the wrong type are refused by the core, by name, where the reference refuses them or fails unnamed
@@ -4443,6 +4457,99 @@ entries:
   case_outcomes:
   - {case: nested.map, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the map cells in canonical form, its outcome unchanged'}
   - {case: nested.union, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the union cells in canonical form, its outcome unchanged'}
+
+- id: P1B-53
+  title: The key, nested, empty, null and refuse cases admitted to acceptance, each runner held to its observed outcome
+  kind: keep
+  old_behavior: >-
+    The 18 cases named were diagnostic: run and reported, gating nothing;
+    the families' code and register entries landed with T1.32a, T1.32c and
+    T1.32d's first parts.
+  new_behavior: >-
+    Acceptance cases (T1.32g, E95): each names the DuckDB routes of the
+    three public calls and the paths it reaches, and every runner is held
+    to the outcome observed, its baseline: python-ref's own where the core
+    agrees, and where it differs the approved entry that states it
+    (P1B-9 nested.fixed-array, P1B-10 nested.map and nested.struct, P1B-7
+    nested.union, P1B-11 empty.fact-table; python-old keeps the
+    reference's unnamed refusals). No outcome changes by this entry.
+  affected_inputs: >-
+    The case files of the 18 cases named, which the ratchet's cases rule
+    passes only under an approved entry naming each, and their baselines.
+  cases: [T1.32g, empty.entity-without-facts, empty.fact-table, empty.indices, key.declared-int32, key.uint64-above-int64-max, key.uint64-small, key.uint8, key.varchar, nested.fixed-array, nested.list-int, nested.map, nested.struct, nested.union, null.feature-all-null, null.some-foreign-keys, null.some-times, null.target-all-null, refuse.unknown-column]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E95}
+  notes: >-
+    The admission record H19 asks for, with no deviation of its own, for
+    both reviewers to approve (as P1B-26), never the implementer. Where the
+    core's outcome is not the reference's, the entry stating it carries the
+    first admission's case_outcomes too (P1B-7, P1B-9, P1B-10, P1B-11, each
+    owner-approved, the rows added at T1.32g for the reviewers to check).
+    refuse.unknown-column carries validate_query to the core, as python-core
+    validates the query before the core's materialize, so both hosts run
+    the same operations. Four key
+    cases whose python-ref answer is INTERNAL_ERROR (key.hugeint,
+    key.decimal-18-0, key.decimal-38-10, key.varchar-large-buffers) are
+    admitted apart, after the ratchet's part for python-old's
+    INTERNAL_ERROR. The outcomes below are each runner's baseline at the
+    checkpoint (none where the case had none) and the projection the
+    package's observations give.
+  case_outcomes:
+  - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.entity-without-facts, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.fact-table, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.fact-table, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.fact-table, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.indices, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.indices, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: empty.indices, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.declared-int32, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.declared-int32, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.declared-int32, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-above-int64-max, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-small, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-small, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint64-small, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint8, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint8, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.uint8, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.varchar, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.varchar, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.varchar, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.fixed-array, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.fixed-array, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.fixed-array, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.list-int, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.list-int, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.list-int, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.map, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.map, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.map, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.struct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.struct, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.struct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.union, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.union, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: nested.union, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.feature-all-null, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.feature-all-null, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.feature-all-null, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-foreign-keys, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-foreign-keys, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-foreign-keys, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-times, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-times, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.some-times, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.target-all-null, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.target-all-null, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: null.target-all-null, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: refuse.unknown-column, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: refuse.unknown-column, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: refuse.unknown-column, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
 
 - id: P1B-56
   title: time.feature-interval's reference line holds its interval values in canonical form

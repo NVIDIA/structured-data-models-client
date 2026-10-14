@@ -3,17 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_each_case_is_admitted[empty.entity-without-facts]",
-   "py:test_each_case_is_admitted[empty.fact-table]",
-   "py:test_each_case_is_admitted[empty.indices]",
-   "py:test_each_case_is_admitted[null.feature-all-null]",
-   "py:test_each_case_is_admitted[null.some-foreign-keys]",
-   "py:test_each_case_is_admitted[null.some-times]",
-   "py:test_each_case_is_admitted[null.target-all-null]",
-   "py:test_each_case_is_admitted[refuse.unknown-column]",
-   "rust:rust_host_answers_each_case_as_python_ref"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [

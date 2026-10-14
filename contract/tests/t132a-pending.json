@@ -6,13 +6,8 @@
   "exits": [
    "py:test_each_key_case_is_admitted[key.decimal-18-0]",
    "py:test_each_key_case_is_admitted[key.decimal-38-10]",
-   "py:test_each_key_case_is_admitted[key.declared-int32]",
    "py:test_each_key_case_is_admitted[key.hugeint]",
-   "py:test_each_key_case_is_admitted[key.uint64-above-int64-max]",
-   "py:test_each_key_case_is_admitted[key.uint64-small]",
-   "py:test_each_key_case_is_admitted[key.uint8]",
-   "py:test_each_key_case_is_admitted[key.varchar-large-buffers]",
-   "py:test_each_key_case_is_admitted[key.varchar]"
+   "py:test_each_key_case_is_admitted[key.varchar-large-buffers]"
   ]
  },
  "authored": {
