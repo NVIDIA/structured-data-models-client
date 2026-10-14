@@ -352,7 +352,7 @@ def test_a_size_refusal_is_answered_in_options_this_client_takes(
     from sdm_relational_engine.rfm.rfm import _SIZE_LIMIT_MSG
 
     def too_large(*args, **kwargs):
-        raise ValueError(_SIZE_LIMIT_MSG.format(stats='9 nodes.'))
+        raise ValueError(_SIZE_LIMIT_MSG.format(stats='9 nodes.', entities=''))
 
     built = query()
     monkeypatch.setattr(
@@ -379,12 +379,22 @@ def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
     monkeypatch,
 ):
     """Every batch is built, with its own context, before any is sent, so
-    nothing else bounds what one `materialize()` holds."""
+    nothing else bounds what one `materialize()` holds.
+
+    The gathering is made to fail if it is reached, because a guard that runs
+    after it would refuse the same request with the same message, having
+    already built everything it was there to prevent being built.
+    """
     from sdm_client.materializers import relational as materializer
     from sdm_client.models import RELATIONAL_LIMITS
 
     monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
     monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
+    monkeypatch.setattr(
+        type(query()._relational_materializer._get_model()),
+        'materialize_task',
+        lambda *args, **how: pytest.fail('the batches were built'),
+    )
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with pytest.raises(StructuredDataError) as refused:
