@@ -663,9 +663,7 @@ jobs:
       # with its stack, and a worker that dies ends the run rather than
       # leaving xdist waiting on it.
       - name: The runner's controls and the route tests
-        run: |
-          python -m pytest contract/tests -q -n auto --dist loadfile \
-            --timeout=600 --max-worker-restart=0
+        run: python -m pytest contract/tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
       # Every cell gates, the floor's too (T1.18's own run alone reported

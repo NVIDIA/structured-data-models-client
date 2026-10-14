@@ -23,7 +23,8 @@
 #   prune_caches.py.
 #
 # The cheap tier skips those four self-tests only when no file under
-# scripts/rust_core/ differs between the merge base with the phase branch
+# scripts/rust_core/, nor .github/workflows/ci.yml, which they read, differs
+# between the merge base with the phase branch
 # (origin/rust-core-phase-1, else rust-core-phase-1) and the worktree,
 # committed, uncommitted or untracked, nor, under the hook, between each ref
 # pushed and its own merge base; any change there runs all four, since the
@@ -182,10 +183,11 @@ if [ -n "$base" ] && [ "$pushed_refs" = 1 ]; then
   done <"$logdir/pushed-refs"
 fi
 # The tooling self-tests run unless there is a merge base, the tier is
-# cheap and nothing under scripts/rust_core/ changed.
+# cheap and nothing under scripts/rust_core/ changed, nor CI's workflow,
+# which the self-tests read.
 run_selftests=1
 if [ "$full" = 0 ] && [ -n "$base" ] &&
-  ! grep -q '^scripts/rust_core/' <<<"$changed"; then
+  ! grep -qE '^(scripts/rust_core/|\.github/workflows/ci\.yml$)' <<<"$changed"; then
   run_selftests=0
 fi
 skipped=()
@@ -225,7 +227,7 @@ selftest 'replay_jobs.py self-tests' \
 selftest 'prune_caches.py self-tests' \
   "${py[@]}" scripts/rust_core/prune_caches.py --selftest
 if [ "${#skipped[@]}" -gt 0 ]; then
-  echo "skipped, nothing under scripts/rust_core/ changed since the merge base ${base:0:10} with $phase_ref:" \
+  echo "skipped, nothing under scripts/rust_core/ nor ci.yml changed since the merge base ${base:0:10} with $phase_ref:" \
     "$(IFS=,; echo "${skipped[*]}" | sed 's/,/, /g')"
 fi
 
