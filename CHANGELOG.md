@@ -5,22 +5,7 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
-## Unreleased
-
-### Changed
-
-- The Databricks example notebook is now a get-started notebook,
-  `examples/databricks/kumo_relational_quickstart.ipynb`, in place of
-  `adventureworks_relational.ipynb`. It deploys the model to a serving
-  endpoint, loads the AdventureWorks sample tables into your schema, and
-  checks each prediction against what actually happened.
-
-### Fixed
-
-- A Databricks metric view name may hold a part SQL reads only quoted, such as
-  the catalog in `my-catalog.sales.metrics`, without backticks.
-
-## 1.0.0 - 2026-10-08
+## 1.0.0 - 2026-10-13
 
 First public release. The five distributions are versioned and published
 together, and a given version of one is tested only against the same version
@@ -40,12 +25,18 @@ of the others.
   expressions a view's author wrote.
 - `SDMClient.for_databricks_serving(endpoint)` for a model served on Databricks,
   with `warehouse()` and `lakebase()` for the SQL warehouse and Lakebase.
+- A Databricks get-started notebook,
+  `examples/databricks/kumo_relational_quickstart.ipynb`, which deploys the
+  model to a serving endpoint, loads the AdventureWorks sample tables into
+  your schema, and checks each prediction against what actually happened.
+- A Databricks metric view name may hold a part SQL reads only quoted, such as
+  the catalog in `my-catalog.sales.metrics`, without backticks.
 - Wheels for the relational engine on CPython 3.10 to 3.13, manylinux_2_28,
   x86-64 and aarch64.
 - A stated compatibility and deprecation contract, in
   [`docs/reference/stability.md`](docs/reference/stability.md).
-- Publishing through PyPI Trusted Publishing with PEP 740 attestations, and a
-  CycloneDX SBOM attached to each GitHub Release.
+- Publishing to PyPI through NVIDIA's Kitmaker service, which owns the PyPI
+  project, and a CycloneDX SBOM attached to each GitHub Release.
 
 ### Distributions
 

@@ -29,30 +29,37 @@ disclosure policy. See the
 
 ## Verifying a release
 
-Every file this project publishes to PyPI carries a
-[PEP 740](https://peps.python.org/pep-0740/) attestation. There is no NVIDIA
-signing key to fetch: the signature is issued to the short-lived identity of
-this repository's release workflow and recorded in Sigstore's transparency
-log.
+These distributions are published to PyPI by **Kitmaker**, the team that owns
+NVIDIA's PyPI organization, from artifacts attached to the corresponding
+GitHub release in this repository. Kitmaker publishes to
+[pypi.org](https://pypi.org/) and `pypi.nvidia.com` together.
+
+What that gives you is NVIDIA's ownership of the project on PyPI: the
+distribution lives under the NVIDIA organization, which is the same assurance
+that covers NVIDIA's other published packages. What it does not give you is a
+per-file signature traceable to this repository. The uploader is Kitmaker, so no PEP 740
+attestation names this repository's release workflow. Whether PyPI holds a
+Kitmaker attestation instead is Kitmaker's to say; what this repository can
+tell you is that it does not sign these files itself.
+
+You can compare a downloaded file against the asset of the same name on the
+corresponding GitHub release. The release workflow checks this itself: it will
+not finish unless PyPI holds the same bytes it built and attached, and it never
+replaces an asset it has already uploaded. So the two should agree. It is still
+not proof of how either was built, and a release asset can be replaced by hand
+afterwards, so a mismatch is not by itself evidence of tampering on PyPI and a
+match is not evidence that this repository produced them.
 
 ```bash
-pip install pypi-attestations
 pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify
-python -m pypi_attestations verify pypi \
-  --repository https://github.com/NVIDIA/structured-data-models-client \
-  /tmp/verify/*.whl
+# then compare that file's digest against the asset of the same name at
+# https://github.com/NVIDIA/structured-data-models-client/releases/tag/v1.0.0
 ```
 
-`--repository` is not optional: without it the command refuses to verify a
-file published from a repository at all, and with the wrong one it fails. The
-same command verifies any of the five packages; name the file you want to
-check.
-
-A passing check tells you these exact bytes were published to PyPI by an
-authorized Trusted Publisher of this repository, and have not been altered
-since. That is integrity and origin. It is not build provenance: it does not
-establish how the bytes were produced, and it does not tell you the release is
-free of defects or vulnerabilities.
+None of this tells you the release is free of defects or vulnerabilities, and
+it does not establish origin: as above, a match shows two places hold the same
+bytes, not who built them. What stands behind these files is NVIDIA's ownership
+of the projects on PyPI.
 
 ## Supported versions
 
