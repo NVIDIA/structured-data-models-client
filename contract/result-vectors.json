@@ -987,17 +987,26 @@
         "types": [
           "MAP(VARCHAR, INTEGER)"
         ],
-        "ordered": "842e1be7719598137c0ceb4eeb5aadbef472f93ae7ae304b1a0c219b2f85ee8a",
-        "unordered": "842e1be7719598137c0ceb4eeb5aadbef472f93ae7ae304b1a0c219b2f85ee8a",
-        "unencodable": [
-          "arrow:map<string, int32>"
-        ]
+        "ordered": "d279b6f7deae37f49f16932a41de093cfc359ec4788b3a8e282c218911ab5707",
+        "unordered": "d279b6f7deae37f49f16932a41de093cfc359ec4788b3a8e282c218911ab5707",
+        "unencodable": []
       },
       "rows": [
         [
           [
-            "?",
-            "arrow:map<string, int32>"
+            "map",
+            [
+              [
+                [
+                  "s",
+                  "k"
+                ],
+                [
+                  "i",
+                  "1"
+                ]
+              ]
+            ]
           ]
         ]
       ]
@@ -1025,21 +1034,29 @@
           "UNION(i INTEGER, j INTEGER)",
           "UNION(i INTEGER, j INTEGER)"
         ],
-        "ordered": "3d39fac6a4e684f07cacd9355fc5cbc949054a228da10702083596d3c76028b4",
-        "unordered": "3d39fac6a4e684f07cacd9355fc5cbc949054a228da10702083596d3c76028b4",
-        "unencodable": [
-          "arrow:sparse_union<i: int32=0, j: int32=1>"
-        ]
+        "ordered": "54170436603fdcacf82aa51cea689118d4b5878c5af27770970a29799b478a55",
+        "unordered": "54170436603fdcacf82aa51cea689118d4b5878c5af27770970a29799b478a55",
+        "unencodable": []
       },
       "rows": [
         [
           [
-            "?",
-            "arrow:sparse_union<i: int32=0, j: int32=1>"
+            "union",
+            0,
+            "i",
+            [
+              "i",
+              "1"
+            ]
           ],
           [
-            "?",
-            "arrow:sparse_union<i: int32=0, j: int32=1>"
+            "union",
+            1,
+            "j",
+            [
+              "i",
+              "1"
+            ]
           ]
         ]
       ]

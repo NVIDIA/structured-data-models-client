@@ -18,11 +18,14 @@
 //! (a timestamp without a zone), `["tstz", nanoseconds since the UTC
 //! epoch]`, `["time", nanoseconds since midnight]`, `["dur",
 //! nanoseconds]`, each temporal count read from the array's integer storage
-//! at its unit, `["list", cells]` and `["struct", [[name, cell], ...]]`;
-//! a dictionary is read as its values. A value of any other type (an
-//! interval, a map, a union among them) is `["?",
-//! its type's name]` and is listed as unencodable, which the comparator
-//! never takes as equal. A row is the compact JSON of its cells, ASCII only
+//! at its unit, `["list", cells]`, `["struct", [[name, cell], ...]]`,
+//! `["map", [[key, value], ...]]` (Arrow's entry order, duplicate keys
+//! kept) and `["union", type code, member name, cell]` (never null itself:
+//! a null member, or a union DuckDB writes as null, keeps its tag); a
+//! dictionary is read as its values. A value of any other type (an
+//! interval) is `["?", its type's name]` and is listed as unencodable,
+//! inside a map or a chosen union member too, which the comparator never
+//! takes as equal; a member no row chooses names nothing. A row is the compact JSON of its cells, ASCII only
 //! (Python's `json.dumps` with `ensure_ascii`), so its order as text is its
 //! order as bytes; `ordered` is the SHA-256 of the rows in the order read,
 //! `unordered` of the same rows sorted by their text.
@@ -33,8 +36,8 @@ use std::fmt::Write as _;
 use duckdb::arrow::array::{
     Array, ArrayRef, AsArray, BinaryArray, BinaryViewArray, BooleanArray, Date32Array,
     Decimal128Array, Decimal256Array, FixedSizeBinaryArray, FixedSizeListArray, Float16Array,
-    Float32Array, Float64Array, GenericListArray, LargeBinaryArray, LargeStringArray, StringArray,
-    StringViewArray, StructArray,
+    Float32Array, Float64Array, GenericListArray, LargeBinaryArray, LargeStringArray, MapArray,
+    StringArray, StringViewArray, StructArray, UnionArray,
 };
 use duckdb::arrow::compute::cast;
 use duckdb::arrow::datatypes::{
@@ -120,10 +123,29 @@ fn float(value: f64) -> Value {
 
 /// One value, `row` of `array`, in canonical form.
 fn cell(array: &ArrayRef, row: usize, odd: &mut BTreeSet<String>) -> Value {
+    let any = array.as_any();
+    // An Arrow union has no validity of its own: each row is its member's
+    // tag, the member's cell null where the member is.
+    if let DataType::Union(fields, _) = array.data_type() {
+        return match any.downcast_ref::<UnionArray>() {
+            Some(a) => {
+                let code = a.type_id(row);
+                match fields.iter().find(|(id, _)| *id == code) {
+                    Some((_, field)) => json!([
+                        "union",
+                        code,
+                        field.name(),
+                        cell(a.child(code), a.value_offset(row), odd)
+                    ]),
+                    None => unencodable(array.data_type(), odd),
+                }
+            }
+            None => unencodable(array.data_type(), odd),
+        };
+    }
     if array.is_null(row) {
         return Value::Null;
     }
-    let any = array.as_any();
     match array.data_type() {
         DataType::Null => Value::Null,
         // Fails closed: a Boolean array that does not read as one is
@@ -282,6 +304,17 @@ fn cell(array: &ArrayRef, row: usize, odd: &mut BTreeSet<String>) -> Value {
                     .map(|(field, column)| json!([field.name(), cell(column, row, odd)]))
                     .collect();
                 json!(["struct", members])
+            }
+            None => unencodable(array.data_type(), odd),
+        },
+        DataType::Map(_, _) => match any.downcast_ref::<MapArray>() {
+            Some(a) => {
+                let entries = a.value(row);
+                let (keys, items) = (entries.column(0), entries.column(1));
+                let pairs: Vec<Value> = (0..entries.len())
+                    .map(|i| json!([cell(keys, i, odd), cell(items, i, odd)]))
+                    .collect();
+                json!(["map", pairs])
             }
             None => unencodable(array.data_type(), odd),
         },

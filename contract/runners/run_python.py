@@ -992,8 +992,11 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     1970-01-01 on the wall clock]``, ``["tstz", nanoseconds since the UTC
     epoch]``, ``["time", nanoseconds since midnight]``, ``["dur",
     nanoseconds]``, ``["list", cells]`` and ``["struct", [[name, cell],
-    ...]]``. A value of any other kind is ``["?", its type's name]`` and is
-    listed as unencodable, which the comparator never takes as equal. This
+    ...]]``; read from Arrow (:func:`_arrow_cells`), a map is ``["map",
+    [[key, value], ...]]`` in Arrow's entry order and a union ``["union",
+    type code, member name, cell]``. A value of any other kind is ``["?",
+    its type's name]`` and is listed as unencodable, which the comparator
+    never takes as equal. This
     reads Python values, which hold a time only to the microsecond: an
     Arrow result is read from Arrow instead (:func:`arrow_values`), and a
     row read of a column a driver reads with less than its precision is
@@ -1073,8 +1076,8 @@ def _canonical_text(value: Any) -> str:
 #: their precision: ``TIME_NS`` and ``TIMESTAMP_NS`` to microseconds, an
 #: ``INTERVAL`` to a ``timedelta`` that folds its months into days, a
 #: ``UNION`` to its member's value without its tag, and a ``MAP`` to a
-#: dictionary the canonical form would take for a struct (an Arrow map is
-#: unencodable, so the two reads could never agree). A value of a column of
+#: dictionary the canonical form would take for a struct (Arrow's reading
+#: of either keeps what these lose). A value of a column of
 #: such a type, or of one holding such a type at any depth, read as rows
 #: (``fetchall``) is unencodable, never compared as if exact.
 _LOSSY_AS_ROWS = frozenset(
@@ -1266,8 +1269,10 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     r"""The canonical cells of one Arrow array, read from Arrow itself, as
     ``sdm-testkit``'s ``values`` reads them: temporal values from their
     integer storage at their unit (so a ``time64[ns]`` keeps its
-    nanoseconds), lists and structs element by element, a dictionary as its
-    values; a type outside that set (an interval, a map, a union) is
+    nanoseconds), lists, structs and maps element by element (a map's
+    entries in Arrow's order, duplicate keys kept), a union as its chosen
+    member's cell under its type code and name (:func:`_union_cells`), a
+    dictionary as its values; a type outside that set (an interval) is
     unencodable, its non-null values ``["?", "arrow:<type>"]``."""
     import pyarrow as pa
     import pyarrow.types as is_
@@ -1314,6 +1319,21 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
             else None
             for i, ok in enumerate(valid)
         ]
+    if is_.is_map(kind):
+        cells: list[Any] = []
+        for i, ok in enumerate(valid):
+            if not ok:
+                cells.append(None)
+                continue
+            entries = array[i].values
+            keys = _arrow_cells(entries.field(0), odd)
+            items = _arrow_cells(entries.field(1), odd)
+            cells.append(
+                ['map', [[k, v] for k, v in zip(keys, items, strict=True)]]
+            )
+        return cells
+    if is_.is_union(kind):
+        return _union_cells(array, odd)
     if is_.is_float16(kind):
         array = array.cast(pa.float32())
         kind = array.type
@@ -1336,6 +1356,68 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
         return [canonical_cell(value, odd) for value in array.to_pylist()]
     name = f'arrow:{kind}'
     return [_unencodable(name, odd) if ok else None for ok in valid]
+
+
+def _union_cells(array: Any, odd: list[str]) -> list[Any]:
+    r"""A union array's cells, ``["union", type code, member name, the
+    member's cell]``, never null themselves: an Arrow union has no validity
+    of its own, so a null member, or a union DuckDB writes as null (a null
+    under its first member), is its tag with a null cell. The type codes
+    (and a dense union's offsets) are read from the array's buffers at its
+    offset, as pyarrow's ``type_codes`` and scalars do not follow a slice
+    (a union inside a list is one). Only a chosen member's values count as
+    unencodable: an interval member no row chooses names nothing."""
+    import pyarrow as pa
+
+    kind = array.type
+    length, offset = len(array), array.offset
+    buffers = array.buffers()
+    codes = pa.Array.from_buffers(
+        pa.int8(), length + offset, [None, buffers[1]]
+    ).to_pylist()[offset:]
+    at = (
+        pa.Array.from_buffers(
+            pa.int32(), length + offset, [None, buffers[2]]
+        ).to_pylist()[offset:]
+        if kind.mode == 'dense'
+        else list(range(length))
+    )
+    position = {code: j for j, code in enumerate(kind.type_codes)}
+    # Each member read whole, its names set aside, since a sparse member
+    # holds a slot for every row, chosen or not; pyarrow's ``field`` gives
+    # a sparse member at the array's offset and a dense one whole.
+    scratch: list[str] = []
+    members = [
+        _arrow_cells(array.field(j), scratch) for j in range(kind.num_fields)
+    ]
+    cells: list[Any] = []
+    for code, index in zip(codes, at, strict=True):
+        j = position[code]
+        member = members[j][index]
+        _chosen_odd(member, odd)
+        cells.append(['union', code, kind.field(j).name, member])
+    return cells
+
+
+def _chosen_odd(cell: Any, odd: list[str]) -> None:
+    r"""The unencodable names a cell holds at any depth, added to ``odd``."""
+    if not isinstance(cell, list):
+        return
+    tag = cell[0]
+    if tag == '?':
+        odd.append(cell[1])
+    elif tag == 'list':
+        for item in cell[1]:
+            _chosen_odd(item, odd)
+    elif tag == 'struct':
+        for _, item in cell[1]:
+            _chosen_odd(item, odd)
+    elif tag == 'map':
+        for key, item in cell[1]:
+            _chosen_odd(key, odd)
+            _chosen_odd(item, odd)
+    elif tag == 'union':
+        _chosen_odd(cell[3], odd)
 
 
 def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
