@@ -2362,11 +2362,12 @@ entries:
     the class the owner approved on 2026-10-11 (E66(b): where the
     reference crashes or gives an unnamed or internal error, a named
     refusal or a clearer code is approved): the reference's answer is an
-    internal error and the core's a named refusal. Proposed, for the
-    reviewer or the owner to approve under the class; never
-    self-approved. Whether a decimal class target should be taken (its
-    classes the decimals' text, or the values read at float64) is
-    T1.32b's question.
+    internal error and the core's a named refusal. It was proposed at
+    T1.27 for the reviewer or the owner to approve under the class, never
+    self-approved, and the reviewers approved it at T1.32b (above). Whether
+    a decimal class target should be taken (its classes the decimals'
+    text, or the values read at float64) was T1.32b's question; T1.32b
+    keeps the refusal (above).
 
 - id: P1B-19
   title: A decimal feature past float64's precision is refused UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST

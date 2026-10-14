@@ -679,8 +679,10 @@ def _approved_as_the_schema_allows(
     ``register.schema.json`` allows: one waiting for the owner or the
     owner's (:func:`_awaits_or_the_owner_s`), or a reviewer's where the
     reference refuses too ("an entry that refuses an input the reference
-    accepts needs owner"): some python-core probe hits the map's entry, and
-    the reference refused every case whose probe does (T1.32b, P1B-18)."""
+    accepts needs owner"): some probe hits the map's entry, on any runner
+    (python-core, rust-host or any other the probe names), and the
+    reference refused every case whose probe does on any of them (T1.32b,
+    P1B-18; a hit on one runner alone is not excused by another case's)."""
     if _awaits_or_the_owner_s(registered):
         return True
     if registered['status'] != 'approved' or registered['approved_by'] != (
@@ -690,7 +692,10 @@ def _approved_as_the_schema_allows(
     hitting = [
         probe['case']
         for probe in document['probes']
-        if probe.get('python-core', {}).get('expect') == entry['id']
+        if any(
+            isinstance(runner, dict) and runner.get('expect') == entry['id']
+            for runner in probe.values()
+        )
     ]
     return bool(hitting) and all(
         (reference.get(case_id) or {}).get('result') == 'refusal'
@@ -728,6 +733,25 @@ def test_a_reviewer_s_approval_holds_a_map_entry_only_where_the_reference_refuse
             {'status': 'approved', 'approved_by': who},
             reference,
         )
+    # Codex's round 2 repro: rust-host alone made to hit the entry on a
+    # case the reference answers with success (decimal.feature-38-0-wide)
+    # fails, whatever the other cases the entry is hit on.
+    assert reference['decimal.feature-38-0-wide']['result'] == 'success'
+    rust_only = copy.deepcopy(document)
+    for probe in rust_only['probes']:
+        if probe['id'] == 'decimal.feature-38-0-wide':
+            assert probe['python-core']['expect'] != entry['id']
+            probe['rust-host']['expect'] = entry['id']
+    assert not _approved_as_the_schema_allows(
+        rust_only, entry, approved, reference
+    )
+    # And a hit on rust-host alone counts as a hit: with no other, the
+    # entry is held to its case's reference outcome.
+    rust_hit = copy.deepcopy(document)
+    for probe in rust_hit['probes']:
+        if probe.get('python-core', {}).get('expect') == entry['id']:
+            probe['python-core']['expect'] = 'success'
+    assert _approved_as_the_schema_allows(rust_hit, entry, approved, reference)
 
 
 def _not_the_reference_s(

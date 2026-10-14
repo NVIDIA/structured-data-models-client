@@ -125,7 +125,7 @@ A fix round is one batch of fixes after a review verdict requiring changes; a re
 | T1.32a part 1 review, two reviewers (fixes after c12a5dc: float32 double rounding, the decimal reader's scale overflow, decimal evidence through a decimal context, P1B-32's refs too broad, integers rounded into float keys, the host's boolean text and NaN; after 66eeeb6: two success-making entries claimed for reviewers; after 457ca9e: P1B-31's cases not read by the ratchet's authorization) | T1.32a | 3 | 0 | Reported, not waited on (E29) |
 | CI1 review, two reviewers (fixes after 33a1b67, rebased onto 8900bcb: land.py's destinations, review SHAs resolved by git, the evidence in the landing message, replay from a clean HEAD, verify on cancelled runs, the docs' landing path and lanes) | CI1 | 1 | 0 | Reported, not waited on (E29) |
 | T1.32c part 1 review, two reviewers (fixes after 5104791c: owner-only approval wording on the new successes, lane 1b's IDs, the E49 probe committed) | T1.32c | 1 | 0 | Reported, not waited on (E29) |
-| T1.32b part 1 review, two reviewers (fixes after 318e5ee: P1B-18's refs approved and the key refs moved onto P1B-33, the float constant's exact scale raised to Arrow's 22, the probe's P1B-71 predicate narrowed, P1B-33's stale note) | T1.32b | 1 | 0 | Reported, not waited on (E29) |
+| T1.32b part 1 review, two reviewers (fixes after 318e5ee: P1B-18's refs approved and the key refs moved onto P1B-33, the float constant's exact scale raised to Arrow's 22, the probe's P1B-71 predicate narrowed, P1B-33's stale note; after 28a4c6c: the map check's reviewer approval held to every runner's hits, Codex's round 2 P2) | T1.32b | 2 | 0 | Reported, not waited on (E29) |
 
 ## Owner check-ins
 
