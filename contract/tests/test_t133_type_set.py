@@ -1,0 +1,306 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""T1.33's type set: ``contract/type-set-vectors.json`` held to its own
+shape and to the register.
+
+Written by the package's independent test author, before the change.
+
+    python -m pytest contract/tests/test_t133_type_set.py -q
+
+``rust/crates/sdm-host/tests/t133_type_set.rs`` holds the core to each
+vector (admission's class, the admitted type, the received-type inference
+vector). This file holds what the core cannot show:
+
+- exit "each arrow-rs ``DataType`` classified as accepted, admitted or
+  refused by name, with its received-type inference vector": every vector
+  has one class, its inference (or none for a type no array can be built
+  of), its answer's class (``core``) and the reference's (``reference``);
+  the arrow-schema version is the one ``rust/Cargo.lock`` pins; each of
+  the 41 variants has a vector and no type has two;
+- "any change to the set proposed to the owner", "every changed case's
+  entry complete": where the reference's answer (through DuckDB 1.5.6) and
+  the core's differ, an approved register entry names the vector with
+  exactly that transition in its ``refs`` (T1.32a's binding-transition
+  form, ``<file>#<id or glob> <from> -> <to>``): the vector's
+  ``covered_by`` vector where it names one, an earlier package's vector of
+  the same DuckDB type, else this file's. A proposed entry excuses nothing;
+  a type DuckDB hands no such column of (``not reachable``) needs none;
+- "the owner's list of new refusals": a refusal of a type the reference
+  reads is an entry the owner approved;
+- exit "each type in HOST-2 marked reference-accepted or not": each type
+  family HOST-2 names (in backticks) is followed in its entry by
+  ``reference-accepted`` or ``not reference-accepted``.
+
+Gating (``contract/tests/t133p2_gate.py``): a test named in
+``t133p2-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``)
+failed when written. It still runs and must still fail; once it passes it
+fails, naming itself, until it is taken out of the list.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import importlib.util
+import json
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+VECTORS = ROOT / 'contract/type-set-vectors.json'
+REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
+LOCK = ROOT / 'rust/Cargo.lock'
+REF = 'contract/type-set-vectors.json#'
+CLASSES = ('accepted', 'admitted', 'refused')
+OUTCOME = re.compile(r'success|refusal [A-Z][A-Z_]*')
+
+
+def _module(name: str, path: Path) -> ModuleType:
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+G = _module('t133p2_gate', ROOT / 'contract/tests/t133p2_gate.py')
+FILE: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
+ALL: list[dict[str, Any]] = FILE['vectors']
+
+
+def _register() -> dict[str, Any]:
+    loaded: dict[str, Any] = yaml.safe_load(
+        REGISTER.read_text(encoding='utf-8')
+    )
+    return loaded
+
+
+def _entry(entry_id: str) -> dict[str, Any]:
+    for entry in _register()['entries']:
+        if entry['id'] == entry_id:
+            return dict(entry)
+    raise AssertionError(f'register: no entry {entry_id}')
+
+
+def _held(name: str, check: Any) -> None:
+    G.held('exits', f'py:{name}', check)
+
+
+# --- the file's shape --------------------------------------------------------
+
+
+def test_the_pending_list_only_shrinks() -> None:
+    assert G.only_shrinks() == []
+    ids = {vector['id'] for vector in ALL}
+    loaded = G.gating()
+    assert set(loaded['pending']['rust-host']) <= ids
+
+
+def test_the_vectors_are_of_the_arrow_schema_cargo_lock_pins() -> None:
+    lock = LOCK.read_text(encoding='utf-8')
+    found = re.search(r'name = "arrow-schema"\nversion = "([^"]+)"', lock)
+    assert found is not None
+    assert FILE['format'] == 'sdm-type-set-vectors/1'
+    assert FILE['arrow_schema'] == found[1]
+
+
+def test_each_variant_has_a_vector_and_no_type_has_two() -> None:
+    variants = FILE['variants']
+    assert len(variants) == len(set(variants)) == 41
+    assert {vector['variant'] for vector in ALL} == set(variants)
+    for key in ('id', 'arrow'):
+        repeated = [k for k, n in Counter(v[key] for v in ALL).items() if n > 1]
+        assert repeated == [], f'{key} repeated: {repeated}'
+
+
+@pytest.mark.parametrize('vector', ALL, ids=[v['id'] for v in ALL])
+def test_each_vector_has_one_class_and_its_inference(
+    vector: dict[str, Any],
+) -> None:
+    assert vector['class'] in CLASSES
+    assert (vector['admitted_as'] is not None) == (
+        vector['class'] == 'admitted'
+    )
+    inference = vector['inference']
+    if inference is None:
+        # No array of the type can be built: held at admission alone.
+        assert vector['buildable'] is False
+        assert vector['class'] != 'refused'
+        assert vector['core'] is None
+        return
+    assert len(inference) == 1 and next(iter(inference)) in (
+        'dtype',
+        'left_out',
+        'refusal',
+    )
+    refusal = inference.get('refusal')
+    if vector['class'] == 'refused':
+        # Refused by name, the column and the Arrow type received there.
+        assert refusal is not None
+        assert refusal['code'] == 'UNSUPPORTED_TYPE'
+        assert refusal['column'].startswith('f')
+        assert refusal['arrow_type']
+    elif refusal is not None:
+        assert refusal == {
+            'code': 'UNSUPPORTED_REQUEST',
+            'rule': refusal['rule'],
+        }
+        assert refusal['rule']
+    want = 'success' if refusal is None else f'refusal {refusal["code"]}'
+    assert vector['core'] == want
+    assert vector['reference'] == 'not reachable' or OUTCOME.fullmatch(
+        vector['reference']
+    ), vector['reference']
+    assert vector['evidence'] or vector['reference'] == 'not reachable'
+
+
+# --- the register --------------------------------------------------------------
+
+#: A vector ref and the transition it declares, in any vectors file.
+TRANSITION = re.compile(
+    r'(?P<file>contract/[a-z0-9-]+\.json)#(?P<glob>\S+) '
+    r'(?P<old>success|refusal [A-Z][A-Z_]*) -> '
+    r'(?P<new>success|refusal [A-Z][A-Z_]*)'
+)
+
+
+def _approved_transitions() -> list[tuple[str, str, str, str, str]]:
+    r"""Each vector ref of an approved entry: (entry, file, glob, from, to)."""
+    found = []
+    for entry in _register()['entries']:
+        if entry.get('status') != 'approved':
+            continue
+        for ref in entry.get('refs') or []:
+            matched = TRANSITION.fullmatch(str(ref))
+            if matched is not None:
+                found.append(
+                    (
+                        str(entry['id']),
+                        matched['file'],
+                        matched['glob'],
+                        matched['old'],
+                        matched['new'],
+                    )
+                )
+    return found
+
+
+def _covering(vector: dict[str, Any]) -> list[str]:
+    r"""The approved entries naming the vector's difference exactly."""
+    target = vector.get('covered_by') or REF + vector['id']
+    file, vector_id = target.split('#', 1)
+    old, new = vector['reference'], vector['core']
+    return [
+        entry
+        for entry, f, glob, frm, to in _approved_transitions()
+        if f == file
+        and (frm, to) == (old, new)
+        and fnmatch.fnmatchcase(vector_id, glob)
+    ]
+
+
+DIFFERING = [
+    v
+    for v in ALL
+    if v['core'] is not None
+    and v['reference'] != 'not reachable'
+    and v['reference'] != v['core']
+]
+
+
+@pytest.mark.parametrize('vector', DIFFERING, ids=[v['id'] for v in DIFFERING])
+def test_a_difference_from_the_reference_is_registered(
+    vector: dict[str, Any],
+) -> None:
+    def check() -> None:
+        assert _covering(vector), (
+            f'{vector["id"]}: the reference {vector["reference"]}, the core '
+            f'{vector["core"]}: no approved entry names '
+            f'{vector.get("covered_by") or REF + vector["id"]} with that '
+            'transition'
+        )
+
+    _held(
+        f'test_a_difference_from_the_reference_is_registered[{vector["id"]}]',
+        check,
+    )
+
+
+def test_a_refusal_of_a_type_the_reference_reads_is_the_owner_s() -> None:
+    new_refusals = [
+        v
+        for v in ALL
+        if v['reference'] == 'success'
+        and (v['core'] or '').startswith('refusal')
+    ]
+    for vector in new_refusals:
+        owners = [
+            e for e in _covering(vector) if _entry(e)['approved_by'] == 'owner'
+        ]
+        assert owners, f"{vector['id']}: a new refusal, not the owner's"
+
+
+def test_every_vector_ref_names_a_vector_and_a_transition() -> None:
+    ids = {v['id'] for v in ALL}
+    for entry in _register()['entries']:
+        for ref in entry.get('refs') or []:
+            if not str(ref).startswith(REF):
+                continue
+            matched = TRANSITION.fullmatch(str(ref))
+            assert matched is not None, f'{entry["id"]}: {ref}'
+            assert any(fnmatch.fnmatchcase(i, matched['glob']) for i in ids), (
+                f'{entry["id"]}: {ref} names no vector'
+            )
+
+
+# --- HOST-2 ----------------------------------------------------------------------
+
+
+def _host_2_text() -> str:
+    entry = _entry('HOST-2')
+    return ' '.join(
+        str(entry.get(k) or '')
+        for k in ('title', 'old_behavior', 'new_behavior', 'notes')
+    )
+
+
+def test_host_2_marks_each_type_reference_accepted_or_not() -> None:
+    def check() -> None:
+        text = ' '.join(_host_2_text().split())
+        families = sorted(set(re.findall(r'`([a-z_]+)`', text)))
+        assert families, 'HOST-2 names no type family'
+        for family in families:
+            mark = re.search(
+                rf'`{family}`[^`]*?\b(not reference-accepted|reference-accepted)\b',
+                text,
+            )
+            assert mark is not None, f'HOST-2: `{family}` is not marked'
+
+    _held('test_host_2_marks_each_type_reference_accepted_or_not', check)
+
+
+def test_each_family_host_2_names_has_its_reference_answer() -> None:
+    text = ' '.join(_host_2_text().split())
+    families = set(re.findall(r'`([a-z_]+)`', text))
+    variants = {
+        'interval': 'Interval',
+        'union': 'Union',
+    }
+    for family in families & set(variants):
+        answered = [
+            v
+            for v in ALL
+            if v['variant'] == variants[family]
+            and v['reference'] != 'not reachable'
+        ]
+        assert answered, f'{family}: no vector records the reference'

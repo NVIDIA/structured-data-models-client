@@ -1,0 +1,2553 @@
+{
+ "format": "sdm-type-set-vectors/1",
+ "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json.",
+ "arrow_schema": "58.4.0",
+ "derived_from": [
+  "rust/crates/sdm-host/src/admission.rs:9-22 (the admission table) and :101-149 (convert_type)",
+  "rust/crates/sdm-contract/src/types.rs:291-379 (ColumnType::from_arrow_unchecked, the closed set) and :250-256 (a decimal's precision and scale)",
+  "rust/crates/sdm-schema/src/infer.rs:574-602 (dtype_of) and :387-470 (preview: a list, binary or duration left out)",
+  "rust/crates/sdm-schema/src/lib.rs:59-67 (not_yet: UNSUPPORTED_REQUEST naming the rule)",
+  "contract/nested-type-vectors.json (the reference's answers for the DuckDB types it records)",
+  "the reference's DuckDB _to_dtype (rfm/backend/duckdb/table.py:235-278), and a probe of the reference environment (DuckDB 1.5.6, pandas 3.0.6) at b413e9ad through contract/tools/nested_type_record.py's run and project, 2026-10-14, for the DuckDB types no committed vector records"
+ ],
+ "register_ref": "contract/type-set-vectors.json#",
+ "variants": [
+  "Null",
+  "Boolean",
+  "Int8",
+  "Int16",
+  "Int32",
+  "Int64",
+  "UInt8",
+  "UInt16",
+  "UInt32",
+  "UInt64",
+  "Float16",
+  "Float32",
+  "Float64",
+  "Timestamp",
+  "Date32",
+  "Date64",
+  "Time32",
+  "Time64",
+  "Duration",
+  "Interval",
+  "Binary",
+  "FixedSizeBinary",
+  "LargeBinary",
+  "BinaryView",
+  "Utf8",
+  "LargeUtf8",
+  "Utf8View",
+  "List",
+  "ListView",
+  "FixedSizeList",
+  "LargeList",
+  "LargeListView",
+  "Struct",
+  "Union",
+  "Dictionary",
+  "Decimal32",
+  "Decimal64",
+  "Decimal128",
+  "Decimal256",
+  "Map",
+  "RunEndEncoded"
+ ],
+ "vectors": [
+  {
+   "id": "null",
+   "variant": "Null",
+   "type": "Null",
+   "arrow": "Null",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "the Python host's all-missing entity column (pa.nulls); DuckDB hands an untyped NULL over as int32",
+   "reference": "not reachable",
+   "evidence": "probe: a view of `NULL AS f` arrives as int32"
+  },
+  {
+   "id": "boolean",
+   "variant": "Boolean",
+   "type": "Boolean",
+   "arrow": "Boolean",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "bool"
+   },
+   "core": "success",
+   "reach": "BOOLEAN",
+   "reference": "success",
+   "evidence": "inventory feature.bool"
+  },
+  {
+   "id": "int8",
+   "variant": "Int8",
+   "type": "Int8",
+   "arrow": "Int8",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "TINYINT",
+   "reference": "success",
+   "evidence": "probe: TINYINT described int64"
+  },
+  {
+   "id": "int16",
+   "variant": "Int16",
+   "type": "Int16",
+   "arrow": "Int16",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "SMALLINT",
+   "reference": "success",
+   "evidence": "probe: SMALLINT described int64"
+  },
+  {
+   "id": "int32",
+   "variant": "Int32",
+   "type": "Int32",
+   "arrow": "Int32",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "INTEGER",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+  },
+  {
+   "id": "int64",
+   "variant": "Int64",
+   "type": "Int64",
+   "arrow": "Int64",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "BIGINT",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+  },
+  {
+   "id": "uint8",
+   "variant": "UInt8",
+   "type": "UInt8",
+   "arrow": "UInt8",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "UTINYINT",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+  },
+  {
+   "id": "uint16",
+   "variant": "UInt16",
+   "type": "UInt16",
+   "arrow": "UInt16",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "USMALLINT",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+  },
+  {
+   "id": "uint32",
+   "variant": "UInt32",
+   "type": "UInt32",
+   "arrow": "UInt32",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "UINTEGER",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+  },
+  {
+   "id": "uint64",
+   "variant": "UInt64",
+   "type": "UInt64",
+   "arrow": "UInt64",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "UBIGINT",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json; inventory INTEGER and BIGINT features"
+  },
+  {
+   "id": "float16",
+   "variant": "Float16",
+   "type": "Float16",
+   "arrow": "Float16",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Float32",
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "float32",
+   "variant": "Float32",
+   "type": "Float32",
+   "arrow": "Float32",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "FLOAT",
+   "reference": "success",
+   "evidence": "contract/key-cast-vectors.json"
+  },
+  {
+   "id": "float64",
+   "variant": "Float64",
+   "type": "Float64",
+   "arrow": "Float64",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "DOUBLE",
+   "reference": "success",
+   "evidence": "inventory DOUBLE features"
+  },
+  {
+   "id": "timestamp.s.naive",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "s",
+     null
+    ]
+   },
+   "arrow": "Timestamp(s)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Timestamp": [
+     "us",
+     null
+    ]
+   },
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "TIMESTAMP_S",
+   "reference": "success",
+   "evidence": "inventory time.timestamp-s; probe"
+  },
+  {
+   "id": "timestamp.s.utc",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "s",
+     "UTC"
+    ]
+   },
+   "arrow": "Timestamp(s, \"UTC\")",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Timestamp": [
+     "us",
+     "UTC"
+    ]
+   },
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "timestamp.ms.naive",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "ms",
+     null
+    ]
+   },
+   "arrow": "Timestamp(ms)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Timestamp": [
+     "us",
+     null
+    ]
+   },
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "TIMESTAMP_MS",
+   "reference": "success",
+   "evidence": "probe: TIMESTAMP_MS described timestamp"
+  },
+  {
+   "id": "timestamp.ms.utc",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "ms",
+     "UTC"
+    ]
+   },
+   "arrow": "Timestamp(ms, \"UTC\")",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Timestamp": [
+     "us",
+     "UTC"
+    ]
+   },
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "timestamp.us.naive",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "us",
+     null
+    ]
+   },
+   "arrow": "Timestamp(\u00b5s)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "TIMESTAMP",
+   "reference": "success",
+   "evidence": "inventory time.* cases"
+  },
+  {
+   "id": "timestamp.us.utc",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "us",
+     "UTC"
+    ]
+   },
+   "arrow": "Timestamp(\u00b5s, \"UTC\")",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "timestamp.ns.naive",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "ns",
+     null
+    ]
+   },
+   "arrow": "Timestamp(ns)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "TIMESTAMP_NS",
+   "reference": "success",
+   "evidence": "inventory time.timestamp-ns"
+  },
+  {
+   "id": "timestamp.ns.utc",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "ns",
+     "UTC"
+    ]
+   },
+   "arrow": "Timestamp(ns, \"UTC\")",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "timestamp.us.named-zone",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "us",
+     "America/Los_Angeles"
+    ]
+   },
+   "arrow": "Timestamp(\u00b5s, \"America/Los_Angeles\")",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "TIMESTAMPTZ (session zone)",
+   "reference": "success",
+   "evidence": "inventory time.timestamptz; probe"
+  },
+  {
+   "id": "timestamp.us.offset-zone",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "us",
+     "+05:30"
+    ]
+   },
+   "arrow": "Timestamp(\u00b5s, \"+05:30\")",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "timestamp.us.empty-zone",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "us",
+     ""
+    ]
+   },
+   "arrow": "Timestamp(\u00b5s, \"\")",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "timestamp.ms.named-zone",
+   "variant": "Timestamp",
+   "type": {
+    "Timestamp": [
+     "ms",
+     "America/Los_Angeles"
+    ]
+   },
+   "arrow": "Timestamp(ms, \"America/Los_Angeles\")",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Timestamp": [
+     "us",
+     "America/Los_Angeles"
+    ]
+   },
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "date32",
+   "variant": "Date32",
+   "type": "Date32",
+   "arrow": "Date32",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "DATE",
+   "reference": "success",
+   "evidence": "inventory time.date; probe"
+  },
+  {
+   "id": "date64",
+   "variant": "Date64",
+   "type": "Date64",
+   "arrow": "Date64",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Timestamp": [
+     "us",
+     null
+    ]
+   },
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "time32.s",
+   "variant": "Time32",
+   "type": {
+    "Time32": "s"
+   },
+   "arrow": "Time32(s)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Time64": "us"
+   },
+   "inference": {
+    "dtype": "time"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "time32.ms",
+   "variant": "Time32",
+   "type": {
+    "Time32": "ms"
+   },
+   "arrow": "Time32(ms)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Time64": "us"
+   },
+   "inference": {
+    "dtype": "time"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "time32.us",
+   "variant": "Time32",
+   "type": {
+    "Time32": "us"
+   },
+   "arrow": "Time32(\u00b5s)",
+   "buildable": false,
+   "class": "admitted",
+   "admitted_as": {
+    "Time64": "us"
+   },
+   "inference": null,
+   "core": null,
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid Arrow array type"
+  },
+  {
+   "id": "time32.ns",
+   "variant": "Time32",
+   "type": {
+    "Time32": "ns"
+   },
+   "arrow": "Time32(ns)",
+   "buildable": false,
+   "class": "admitted",
+   "admitted_as": {
+    "Time64": "us"
+   },
+   "inference": null,
+   "core": null,
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid Arrow array type"
+  },
+  {
+   "id": "time64.s",
+   "variant": "Time64",
+   "type": {
+    "Time64": "s"
+   },
+   "arrow": "Time64(s)",
+   "buildable": false,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Time64": "s"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid Arrow array type"
+  },
+  {
+   "id": "time64.ms",
+   "variant": "Time64",
+   "type": {
+    "Time64": "ms"
+   },
+   "arrow": "Time64(ms)",
+   "buildable": false,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Time64": "ms"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid Arrow array type"
+  },
+  {
+   "id": "time64.us",
+   "variant": "Time64",
+   "type": {
+    "Time64": "us"
+   },
+   "arrow": "Time64(\u00b5s)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "time"
+   },
+   "core": "success",
+   "reach": "TIME",
+   "reference": "success",
+   "evidence": "inventory time.feature-time-of-day"
+  },
+  {
+   "id": "time64.ns",
+   "variant": "Time64",
+   "type": {
+    "Time64": "ns"
+   },
+   "arrow": "Time64(ns)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "time"
+   },
+   "core": "success",
+   "reach": "TIME_NS",
+   "reference": "success",
+   "evidence": "probe: TIME_NS described timestamp"
+  },
+  {
+   "id": "duration.s",
+   "variant": "Duration",
+   "type": {
+    "Duration": "s"
+   },
+   "arrow": "Duration(s)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Duration": "us"
+   },
+   "inference": {
+    "left_out": "timedelta"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over (INTERVAL is month_day_nano)"
+  },
+  {
+   "id": "duration.ms",
+   "variant": "Duration",
+   "type": {
+    "Duration": "ms"
+   },
+   "arrow": "Duration(ms)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Duration": "us"
+   },
+   "inference": {
+    "left_out": "timedelta"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over (INTERVAL is month_day_nano)"
+  },
+  {
+   "id": "duration.us",
+   "variant": "Duration",
+   "type": {
+    "Duration": "us"
+   },
+   "arrow": "Duration(\u00b5s)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "timedelta"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over (INTERVAL is month_day_nano)"
+  },
+  {
+   "id": "duration.ns",
+   "variant": "Duration",
+   "type": {
+    "Duration": "ns"
+   },
+   "arrow": "Duration(ns)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "timedelta"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over (INTERVAL is month_day_nano)"
+  },
+  {
+   "id": "interval.year-month",
+   "variant": "Interval",
+   "type": {
+    "Interval": "YearMonth"
+   },
+   "arrow": "Interval(YearMonth)",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Interval": "YearMonth"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "interval.day-time",
+   "variant": "Interval",
+   "type": {
+    "Interval": "DayTime"
+   },
+   "arrow": "Interval(DayTime)",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Interval": "DayTime"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "interval.month-day-nano",
+   "variant": "Interval",
+   "type": {
+    "Interval": "MonthDayNano"
+   },
+   "arrow": "Interval(MonthDayNano)",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Interval": "MonthDayNano"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "INTERVAL",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested scalar.interval: RuntimeError at from_source",
+   "covered_by": "contract/nested-type-vectors.json#scalar.interval"
+  },
+  {
+   "id": "binary",
+   "variant": "Binary",
+   "type": "Binary",
+   "arrow": "Binary",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "BLOB; BIT; BIGNUM (VARINT) as binary with the extension arrow.opaque",
+   "reference": "success",
+   "evidence": "nested scalar.blob: left out; probe: BIT left out. BIGNUM, the same Arrow type under extension metadata, the reference refuses unnamed at from_source (probe), where the core leaves it out: a difference of field metadata, not of type",
+   "covered_by": "contract/nested-type-vectors.json#scalar.blob"
+  },
+  {
+   "id": "fixed-size-binary.16",
+   "variant": "FixedSizeBinary",
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "arrow": "FixedSizeBinary(16)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Binary",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "UUID with arrow_lossless_conversion (extension arrow.uuid)",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: lossless UUID, RuntimeError at from_source"
+  },
+  {
+   "id": "large-binary",
+   "variant": "LargeBinary",
+   "type": "LargeBinary",
+   "arrow": "LargeBinary",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Binary",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "BLOB with arrow_large_buffer_size",
+   "reference": "success",
+   "evidence": "probe: large BLOB left out"
+  },
+  {
+   "id": "binary-view",
+   "variant": "BinaryView",
+   "type": "BinaryView",
+   "arrow": "BinaryView",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Binary",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "BLOB with arrow_output_version '1.4' and produce_arrow_string_view",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "utf8",
+   "variant": "Utf8",
+   "type": "Utf8",
+   "arrow": "Utf8",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "VARCHAR",
+   "reference": "success",
+   "evidence": "inventory text features"
+  },
+  {
+   "id": "large-utf8",
+   "variant": "LargeUtf8",
+   "type": "LargeUtf8",
+   "arrow": "LargeUtf8",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Utf8",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "VARCHAR with arrow_large_buffer_size",
+   "reference": "success",
+   "evidence": "probe: described string; a large_string key is key.varchar-large-buffers, P1B-6"
+  },
+  {
+   "id": "utf8-view",
+   "variant": "Utf8View",
+   "type": "Utf8View",
+   "arrow": "Utf8View",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Utf8",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "VARCHAR with arrow_output_version '1.4' and produce_arrow_string_view",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "list.int32",
+   "variant": "List",
+   "type": {
+    "List": "Int32"
+   },
+   "arrow": "List(Int32)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "intlist"
+   },
+   "core": "success",
+   "reach": "INTEGER[]",
+   "reference": "success",
+   "evidence": "nested list.integer: left out",
+   "covered_by": "contract/nested-type-vectors.json#list.integer"
+  },
+  {
+   "id": "list.float64",
+   "variant": "List",
+   "type": {
+    "List": "Float64"
+   },
+   "arrow": "List(Float64)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "floatlist"
+   },
+   "core": "success",
+   "reach": "DOUBLE[]",
+   "reference": "success",
+   "evidence": "nested list.double: left out",
+   "covered_by": "contract/nested-type-vectors.json#list.double"
+  },
+  {
+   "id": "list.utf8",
+   "variant": "List",
+   "type": {
+    "List": "Utf8"
+   },
+   "arrow": "List(Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "stringlist"
+   },
+   "core": "success",
+   "reach": "VARCHAR[]",
+   "reference": "success",
+   "evidence": "nested list.varchar: left out",
+   "covered_by": "contract/nested-type-vectors.json#list.varchar"
+  },
+  {
+   "id": "list.binary",
+   "variant": "List",
+   "type": {
+    "List": "Binary"
+   },
+   "arrow": "List(Binary)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "stringlist"
+   },
+   "core": "success",
+   "reach": "BLOB[]",
+   "reference": "success",
+   "evidence": "nested list.blob: left out",
+   "covered_by": "contract/nested-type-vectors.json#list.blob"
+  },
+  {
+   "id": "list.decimal128-38-0",
+   "variant": "List",
+   "type": {
+    "List": {
+     "Decimal128": [
+      38,
+      0
+     ]
+    }
+   },
+   "arrow": "List(Decimal128(38, 0))",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "left_out": "intlist"
+   },
+   "core": "success",
+   "reach": "HUGEINT[]",
+   "reference": "success",
+   "evidence": "nested list.hugeint: left out",
+   "covered_by": "contract/nested-type-vectors.json#list.hugeint"
+  },
+  {
+   "id": "list.boolean",
+   "variant": "List",
+   "type": {
+    "List": "Boolean"
+   },
+   "arrow": "List(Boolean)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "BOOLEAN[]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested list.boolean: ValueError at from_source",
+   "covered_by": "contract/nested-type-vectors.json#list.boolean"
+  },
+  {
+   "id": "list.date32",
+   "variant": "List",
+   "type": {
+    "List": "Date32"
+   },
+   "arrow": "List(Date32)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "DATE[]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested list.date: ValueError at from_source",
+   "covered_by": "contract/nested-type-vectors.json#list.date"
+  },
+  {
+   "id": "list.list-int32",
+   "variant": "List",
+   "type": {
+    "List": {
+     "List": "Int32"
+    }
+   },
+   "arrow": "List(List(Int32))",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "INTEGER[][]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested list.list-integer",
+   "covered_by": "contract/nested-type-vectors.json#list.list-integer"
+  },
+  {
+   "id": "list.struct",
+   "variant": "List",
+   "type": {
+    "List": {
+     "Struct": [
+      [
+       "a",
+       "Int32"
+      ]
+     ]
+    }
+   },
+   "arrow": "List(Struct(\"a\": Int32))",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "STRUCT(a INTEGER)[]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested list.struct",
+   "covered_by": "contract/nested-type-vectors.json#list.struct"
+  },
+  {
+   "id": "list.interval",
+   "variant": "List",
+   "type": {
+    "List": {
+     "Interval": "MonthDayNano"
+    }
+   },
+   "arrow": "List(Interval(MonthDayNano))",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f.item",
+     "arrow_type": {
+      "Interval": "MonthDayNano"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "INTERVAL[]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested list.interval",
+   "covered_by": "contract/nested-type-vectors.json#list.interval"
+  },
+  {
+   "id": "list.large-utf8",
+   "variant": "List",
+   "type": {
+    "List": "LargeUtf8"
+   },
+   "arrow": "List(LargeUtf8)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Utf8"
+   },
+   "inference": {
+    "left_out": "stringlist"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "large-list.int32",
+   "variant": "LargeList",
+   "type": {
+    "LargeList": "Int32"
+   },
+   "arrow": "LargeList(Int32)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Int32"
+   },
+   "inference": {
+    "left_out": "intlist"
+   },
+   "core": "success",
+   "reach": "INTEGER[] with arrow_large_buffer_size",
+   "reference": "success",
+   "evidence": "nested list.integer-large",
+   "covered_by": "contract/nested-type-vectors.json#list.integer-large"
+  },
+  {
+   "id": "large-list.large-utf8",
+   "variant": "LargeList",
+   "type": {
+    "LargeList": "LargeUtf8"
+   },
+   "arrow": "LargeList(LargeUtf8)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Utf8"
+   },
+   "inference": {
+    "left_out": "stringlist"
+   },
+   "core": "success",
+   "reach": "VARCHAR[] with arrow_large_buffer_size",
+   "reference": "success",
+   "evidence": "nested list.varchar-large",
+   "covered_by": "contract/nested-type-vectors.json#list.varchar-large"
+  },
+  {
+   "id": "list-view.int32",
+   "variant": "ListView",
+   "type": {
+    "ListView": "Int32"
+   },
+   "arrow": "ListView(Int32)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Int32"
+   },
+   "inference": {
+    "left_out": "intlist"
+   },
+   "core": "success",
+   "reach": "INTEGER[] with arrow_output_list_view, version '1.4'",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested list.integer-view",
+   "covered_by": "contract/nested-type-vectors.json#list.integer-view"
+  },
+  {
+   "id": "large-list-view.int32",
+   "variant": "LargeListView",
+   "type": {
+    "LargeListView": "Int32"
+   },
+   "arrow": "LargeListView(Int32)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Int32"
+   },
+   "inference": {
+    "left_out": "intlist"
+   },
+   "core": "success",
+   "reach": "INTEGER[] with arrow_output_list_view, version '1.4' and arrow_large_buffer_size",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "fixed-size-list.int32-3",
+   "variant": "FixedSizeList",
+   "type": {
+    "FixedSizeList": [
+     "Int32",
+     3
+    ]
+   },
+   "arrow": "FixedSizeList(3 x Int32)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Int32"
+   },
+   "inference": {
+    "left_out": "intlist"
+   },
+   "core": "success",
+   "reach": "INTEGER[3]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested array.integer-3",
+   "covered_by": "contract/nested-type-vectors.json#array.integer-3"
+  },
+  {
+   "id": "fixed-size-list.boolean-2",
+   "variant": "FixedSizeList",
+   "type": {
+    "FixedSizeList": [
+     "Boolean",
+     2
+    ]
+   },
+   "arrow": "FixedSizeList(2 x Boolean)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "List": "Boolean"
+   },
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "BOOLEAN[2]",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested array.boolean-2",
+   "covered_by": "contract/nested-type-vectors.json#array.boolean-2"
+  },
+  {
+   "id": "struct.int32",
+   "variant": "Struct",
+   "type": {
+    "Struct": [
+     [
+      "a",
+      "Int32"
+     ]
+    ]
+   },
+   "arrow": "Struct(\"a\": Int32)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "STRUCT(a INTEGER)",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested struct.integer",
+   "covered_by": "contract/nested-type-vectors.json#struct.integer"
+  },
+  {
+   "id": "struct.int32-utf8",
+   "variant": "Struct",
+   "type": {
+    "Struct": [
+     [
+      "a",
+      "Int32"
+     ],
+     [
+      "b",
+      "Utf8"
+     ]
+    ]
+   },
+   "arrow": "Struct(\"a\": Int32, \"b\": Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "STRUCT(a INTEGER, b VARCHAR)",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested struct.integer-varchar",
+   "covered_by": "contract/nested-type-vectors.json#struct.integer-varchar"
+  },
+  {
+   "id": "struct.large-utf8",
+   "variant": "Struct",
+   "type": {
+    "Struct": [
+     [
+      "a",
+      "LargeUtf8"
+     ]
+    ]
+   },
+   "arrow": "Struct(\"a\": LargeUtf8)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Struct": [
+     [
+      "a",
+      "Utf8"
+     ]
+    ]
+   },
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "struct.interval",
+   "variant": "Struct",
+   "type": {
+    "Struct": [
+     [
+      "a",
+      {
+       "Interval": "MonthDayNano"
+      }
+     ]
+    ]
+   },
+   "arrow": "Struct(\"a\": Interval(MonthDayNano))",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f.a",
+     "arrow_type": {
+      "Interval": "MonthDayNano"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "STRUCT(a INTERVAL)",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "struct.empty",
+   "variant": "Struct",
+   "type": {
+    "Struct": []
+   },
+   "arrow": "Struct()",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "map.utf8-int32",
+   "variant": "Map",
+   "type": {
+    "Map": [
+     "Utf8",
+     "Int32"
+    ]
+   },
+   "arrow": "Map(\"entries\": non-null Struct(\"key\": non-null Utf8, \"value\": Int32), unsorted)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "MAP(VARCHAR, INTEGER)",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested map.varchar-integer",
+   "covered_by": "contract/nested-type-vectors.json#map.varchar-integer"
+  },
+  {
+   "id": "map.int32-utf8",
+   "variant": "Map",
+   "type": {
+    "Map": [
+     "Int32",
+     "Utf8"
+    ]
+   },
+   "arrow": "Map(\"entries\": non-null Struct(\"key\": non-null Int32, \"value\": Utf8), unsorted)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "MAP(INTEGER, VARCHAR)",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested map.integer-varchar",
+   "covered_by": "contract/nested-type-vectors.json#map.integer-varchar"
+  },
+  {
+   "id": "map.large-utf8-int64",
+   "variant": "Map",
+   "type": {
+    "Map": [
+     "LargeUtf8",
+     "Int64"
+    ]
+   },
+   "arrow": "Map(\"entries\": non-null Struct(\"key\": non-null LargeUtf8, \"value\": Int64), unsorted)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Map": [
+     "Utf8",
+     "Int64"
+    ]
+   },
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "union.sparse",
+   "variant": "Union",
+   "type": {
+    "Union": [
+     "Sparse",
+     [
+      [
+       0,
+       "n",
+       "Int32"
+      ],
+      [
+       1,
+       "s",
+       "Utf8"
+      ]
+     ]
+    ]
+   },
+   "arrow": "Union(Sparse, 0: (\"n\": Int32), 1: (\"s\": Utf8))",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Union": [
+       "Sparse",
+       [
+        [
+         0,
+         "n",
+         "Int32"
+        ],
+        [
+         1,
+         "s",
+         "Utf8"
+        ]
+       ]
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "UNION(n INTEGER, s VARCHAR)",
+   "reference": "refusal UNNAMED",
+   "evidence": "nested union.integer-varchar",
+   "covered_by": "contract/nested-type-vectors.json#union.integer-varchar"
+  },
+  {
+   "id": "union.dense",
+   "variant": "Union",
+   "type": {
+    "Union": [
+     "Dense",
+     [
+      [
+       0,
+       "n",
+       "Int32"
+      ],
+      [
+       1,
+       "s",
+       "Utf8"
+      ]
+     ]
+    ]
+   },
+   "arrow": "Union(Dense, 0: (\"n\": Int32), 1: (\"s\": Utf8))",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Union": [
+       "Dense",
+       [
+        [
+         0,
+         "n",
+         "Int32"
+        ],
+        [
+         1,
+         "s",
+         "Utf8"
+        ]
+       ]
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int8-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int8",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(Int8, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int16-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int16",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(Int16, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int32-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int32",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(Int32, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int64-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int64",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(Int64, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.uint8-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "UInt8",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(UInt8, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "ENUM('a', 'b', 'c')",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: ENUM, RuntimeError at from_source"
+  },
+  {
+   "id": "dictionary.uint16-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "UInt16",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(UInt16, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.uint32-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "UInt32",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(UInt32, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.uint64-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "UInt64",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(UInt64, Utf8)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int32-large-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int32",
+     "LargeUtf8"
+    ]
+   },
+   "arrow": "Dictionary(Int32, LargeUtf8)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Dictionary": [
+     "Int32",
+     "Utf8"
+    ]
+   },
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int32-utf8-view",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int32",
+     "Utf8View"
+    ]
+   },
+   "arrow": "Dictionary(Int32, Utf8View)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Dictionary": [
+     "Int32",
+     "Utf8"
+    ]
+   },
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int32-int64",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int32",
+     "Int64"
+    ]
+   },
+   "arrow": "Dictionary(Int32, Int64)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Int64",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int8-float16",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int8",
+     "Float16"
+    ]
+   },
+   "arrow": "Dictionary(Int8, Float16)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Float32",
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int32-binary",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int32",
+     "Binary"
+    ]
+   },
+   "arrow": "Dictionary(Int32, Binary)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Binary",
+   "inference": {
+    "left_out": "binary"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int16-date32",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int16",
+     "Date32"
+    ]
+   },
+   "arrow": "Dictionary(Int16, Date32)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Date32",
+   "inference": {
+    "dtype": "date"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.int32-interval",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Int32",
+     {
+      "Interval": "MonthDayNano"
+     }
+    ]
+   },
+   "arrow": "Dictionary(Int32, Interval(MonthDayNano))",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Interval": "MonthDayNano"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "dictionary.float32-utf8",
+   "variant": "Dictionary",
+   "type": {
+    "Dictionary": [
+     "Float32",
+     "Utf8"
+    ]
+   },
+   "arrow": "Dictionary(Float32, Utf8)",
+   "buildable": false,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Dictionary": [
+       "Float32",
+       "Utf8"
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid Arrow array type (a non-integer index)"
+  },
+  {
+   "id": "decimal32.9-2",
+   "variant": "Decimal32",
+   "type": {
+    "Decimal32": [
+     9,
+     2
+    ]
+   },
+   "arrow": "Decimal32(9, 2)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Decimal128": [
+     9,
+     2
+    ]
+   },
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "DECIMAL(9,2) with arrow_output_version '1.5'",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "decimal64.18-2",
+   "variant": "Decimal64",
+   "type": {
+    "Decimal64": [
+     18,
+     2
+    ]
+   },
+   "arrow": "Decimal64(18, 2)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Decimal128": [
+     18,
+     2
+    ]
+   },
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "DECIMAL(18,2) with arrow_output_version '1.5'",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "decimal64.18-0",
+   "variant": "Decimal64",
+   "type": {
+    "Decimal64": [
+     18,
+     0
+    ]
+   },
+   "arrow": "Decimal64(18, 0)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Decimal128": [
+     18,
+     0
+    ]
+   },
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "DECIMAL(18,0) with arrow_output_version '1.5'",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe: RuntimeError at from_source"
+  },
+  {
+   "id": "decimal128.38-10",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     38,
+     10
+    ]
+   },
+   "arrow": "Decimal128(38, 10)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "DECIMAL(38,10)",
+   "reference": "success",
+   "evidence": "inventory decimal.* features"
+  },
+  {
+   "id": "decimal128.38-0",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     38,
+     0
+    ]
+   },
+   "arrow": "Decimal128(38, 0)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "HUGEINT, UHUGEINT, DECIMAL(38,0)",
+   "reference": "success",
+   "evidence": "inventory decimal.feature-38-0-wide; probe: UHUGEINT described int64"
+  },
+  {
+   "id": "decimal128.18-2",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     18,
+     2
+    ]
+   },
+   "arrow": "Decimal128(18, 2)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "DECIMAL(18,2)",
+   "reference": "success",
+   "evidence": "probe: described float64"
+  },
+  {
+   "id": "decimal128.18-0",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     18,
+     0
+    ]
+   },
+   "arrow": "Decimal128(18, 0)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "DECIMAL(18,0)",
+   "reference": "success",
+   "evidence": "probe: described int64 (a feature; the key is key.decimal-18-0)"
+  },
+  {
+   "id": "decimal128.38-negative-scale",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     38,
+     -2
+    ]
+   },
+   "arrow": "Decimal128(38, -2)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "decimal128.39-0",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     39,
+     0
+    ]
+   },
+   "arrow": "Decimal128(39, 0)",
+   "buildable": false,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Decimal128": [
+       39,
+       0
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid decimal128"
+  },
+  {
+   "id": "decimal128.0-0",
+   "variant": "Decimal128",
+   "type": {
+    "Decimal128": [
+     0,
+     0
+    ]
+   },
+   "arrow": "Decimal128(0, 0)",
+   "buildable": false,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Decimal128": [
+       0,
+       0
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid decimal128"
+  },
+  {
+   "id": "decimal256.76-0",
+   "variant": "Decimal256",
+   "type": {
+    "Decimal256": [
+     76,
+     0
+    ]
+   },
+   "arrow": "Decimal256(76, 0)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over (DuckDB decimals stop at 38)"
+  },
+  {
+   "id": "decimal256.76-10",
+   "variant": "Decimal256",
+   "type": {
+    "Decimal256": [
+     76,
+     10
+    ]
+   },
+   "arrow": "Decimal256(76, 10)",
+   "buildable": true,
+   "class": "accepted",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "decimal256.77-0",
+   "variant": "Decimal256",
+   "type": {
+    "Decimal256": [
+     77,
+     0
+    ]
+   },
+   "arrow": "Decimal256(77, 0)",
+   "buildable": false,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Decimal256": [
+       77,
+       0
+      ]
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "not a valid decimal256"
+  },
+  {
+   "id": "run-end.int16-int32",
+   "variant": "RunEndEncoded",
+   "type": {
+    "RunEndEncoded": [
+     "Int16",
+     "Int32"
+    ]
+   },
+   "arrow": "RunEndEncoded(\"run_ends\": non-null Int16, \"values\": Int32)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Int32",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "run-end.int32-utf8",
+   "variant": "RunEndEncoded",
+   "type": {
+    "RunEndEncoded": [
+     "Int32",
+     "Utf8"
+    ]
+   },
+   "arrow": "RunEndEncoded(\"run_ends\": non-null Int32, \"values\": Utf8)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Utf8",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "run-end.int64-float64",
+   "variant": "RunEndEncoded",
+   "type": {
+    "RunEndEncoded": [
+     "Int64",
+     "Float64"
+    ]
+   },
+   "arrow": "RunEndEncoded(\"run_ends\": non-null Int64, \"values\": Float64)",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": "Float64",
+   "inference": {
+    "dtype": "float"
+   },
+   "core": "success",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "run-end.int32-dictionary-utf8",
+   "variant": "RunEndEncoded",
+   "type": {
+    "RunEndEncoded": [
+     "Int32",
+     {
+      "Dictionary": [
+       "Int8",
+       "Utf8"
+      ]
+     }
+    ]
+   },
+   "arrow": "RunEndEncoded(\"run_ends\": non-null Int32, \"values\": Dictionary(Int8, Utf8))",
+   "buildable": true,
+   "class": "admitted",
+   "admitted_as": {
+    "Dictionary": [
+     "Int8",
+     "Utf8"
+    ]
+   },
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  },
+  {
+   "id": "run-end.int32-interval",
+   "variant": "RunEndEncoded",
+   "type": {
+    "RunEndEncoded": [
+     "Int32",
+     {
+      "Interval": "MonthDayNano"
+     }
+    ]
+   },
+   "arrow": "RunEndEncoded(\"run_ends\": non-null Int32, \"values\": Interval(MonthDayNano))",
+   "buildable": true,
+   "class": "refused",
+   "admitted_as": null,
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_TYPE",
+     "column": "f",
+     "arrow_type": {
+      "Interval": "MonthDayNano"
+     }
+    }
+   },
+   "core": "refusal UNSUPPORTED_TYPE",
+   "reach": "none",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no such type over"
+  }
+ ]
+}

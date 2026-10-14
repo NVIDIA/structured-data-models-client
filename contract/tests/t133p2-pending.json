@@ -1,0 +1,61 @@
+{
+ "about": "T1.33 part 2's acceptance tests that failed when the independent test author wrote them, before the implementation, on origin/rust-core-phase-1 at f5826d81: contract/tests/test_t133_type_set.py and rust/crates/sdm-host/tests/t133_type_set.rs over contract/type-set-vectors.json (every arrow-rs DataType classified, with its received-type inference vector; a difference from the reference registered; HOST-2's types marked), and contract/tests/test_t133_register.py (no proposed entry without its approver; every changed case named; P1B-1 replaced case by case; the owner's answers of 2026-10-13 night recorded: P1B-36, P1B-5, P1B-6, DT-14 and ORD-1 approved, P1B-1 to P1B-4 closed as superseded, C9 and H11 confirmed, DT-7 the reviewer's). 'rust-host' holds type-set vector ids (none failed: the core admits and infers every type as its vector says, by name), 'exits' the Python test ids, 'py:<test id>'. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": {
+  "rust-host": [],
+  "exits": [
+   "py:test_a_difference_from_the_reference_is_registered[fixed-size-binary.16]",
+   "py:test_a_difference_from_the_reference_is_registered[binary-view]",
+   "py:test_a_difference_from_the_reference_is_registered[utf8-view]",
+   "py:test_a_difference_from_the_reference_is_registered[large-list-view.int32]",
+   "py:test_a_difference_from_the_reference_is_registered[struct.interval]",
+   "py:test_a_difference_from_the_reference_is_registered[dictionary.uint8-utf8]",
+   "py:test_a_difference_from_the_reference_is_registered[decimal32.9-2]",
+   "py:test_a_difference_from_the_reference_is_registered[decimal64.18-2]",
+   "py:test_a_difference_from_the_reference_is_registered[decimal64.18-0]",
+   "py:test_host_2_marks_each_type_reference_accepted_or_not",
+   "py:test_no_entry_is_proposed_without_its_approver",
+   "py:test_p1b_1_is_replaced_case_by_case",
+   "py:test_the_owner_approved_it[P1B-36]",
+   "py:test_the_owner_approved_it[P1B-5]",
+   "py:test_the_owner_approved_it[P1B-6]",
+   "py:test_the_owner_approved_it[DT-14]",
+   "py:test_the_owner_approved_it[ORD-1]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-1]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-2]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-3]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-4]",
+   "py:test_dt_7_is_the_reviewer_s",
+   "py:test_the_owner_confirmed_the_row_as_written[C9]",
+   "py:test_the_owner_confirmed_the_row_as_written[H11]"
+  ]
+ },
+ "authored": {
+  "rust-host": [],
+  "exits": [
+   "py:test_a_difference_from_the_reference_is_registered[fixed-size-binary.16]",
+   "py:test_a_difference_from_the_reference_is_registered[binary-view]",
+   "py:test_a_difference_from_the_reference_is_registered[utf8-view]",
+   "py:test_a_difference_from_the_reference_is_registered[large-list-view.int32]",
+   "py:test_a_difference_from_the_reference_is_registered[struct.interval]",
+   "py:test_a_difference_from_the_reference_is_registered[dictionary.uint8-utf8]",
+   "py:test_a_difference_from_the_reference_is_registered[decimal32.9-2]",
+   "py:test_a_difference_from_the_reference_is_registered[decimal64.18-2]",
+   "py:test_a_difference_from_the_reference_is_registered[decimal64.18-0]",
+   "py:test_host_2_marks_each_type_reference_accepted_or_not",
+   "py:test_no_entry_is_proposed_without_its_approver",
+   "py:test_p1b_1_is_replaced_case_by_case",
+   "py:test_the_owner_approved_it[P1B-36]",
+   "py:test_the_owner_approved_it[P1B-5]",
+   "py:test_the_owner_approved_it[P1B-6]",
+   "py:test_the_owner_approved_it[DT-14]",
+   "py:test_the_owner_approved_it[ORD-1]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-1]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-2]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-3]",
+   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-4]",
+   "py:test_dt_7_is_the_reviewer_s",
+   "py:test_the_owner_confirmed_the_row_as_written[C9]",
+   "py:test_the_owner_confirmed_the_row_as_written[H11]"
+  ]
+ }
+}
