@@ -1921,9 +1921,9 @@ entries:
     A DuckDB source whose text keys reach the host as large_string (DuckDB's
     arrow_large_buffer_size setting), under a forced core route.
   cases: [key.varchar-large-buffers, T1.21e, T1.32a]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E99}
   notes: >-
     Measured at T1.21e: the reference observation of the diagnostic case
     contract/cases/s1/key.varchar-large-buffers.json, and its probe in
@@ -1933,6 +1933,10 @@ entries:
     Approver: owner (T1.33: a new success, kept by E66(b) for individual
     decision; the owner approved it on 2026-10-13, night, item 10, recorded at
     the T1.32g bundle, E99(d), not here).
+    Approved by the owner on 2026-10-13 (evening; the orchestrator's record of the
+    owner's decisions, item 10, E99(d)), relayed by the orchestrator, recorded at
+    T1.32g; never the implementer's approval. The case is admitted under
+    P1B-33's first-admission rows, which state the same success.
 
 - id: P1B-7
   title: nested.union is refused by name on the core route where the reference raises an unnamed RuntimeError
