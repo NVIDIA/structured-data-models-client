@@ -174,15 +174,28 @@ def _executable(path: Path, text: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+#: What ``ratchet.py where`` prints on a lane of the phase branch.
+LANE = '--base origin/rust-core-phase-1'
+
+
 def _run(
-    tmp_path: Path, files: dict[str, str | None], where: str | None = ''
+    tmp_path: Path,
+    files: dict[str, str | None],
+    where: str | None = '',
+    lane: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     r"""The step's text in a scratch directory holding the repository's
     contract and scripts, with ``files`` as the downloaded artifacts (None:
     not downloaded). ``ratchet.py where`` and ``effective`` are stubbed:
     ``where`` prints ``where`` (None: it fails), empty as off the phase
     branch, and ``effective`` records its call and fails, so a run with a
-    base shows the step asks it and stops when it fails."""
+    base shows the step asks it and stops when it fails. With ``lane``, the
+    step runs as on a lane: ``where`` prints :data:`LANE` and the real
+    ``effective`` writes the gate's effective expectations from the phase
+    branch's checkpoint (CI checks out every branch), so an admitted case's
+    approved outcome is held as the gate holds it."""
+    if lane:
+        where = LANE
     work = tmp_path / 'work'
     work.mkdir(parents=True)
     for name in ('contract', 'scripts', 'docs', 'rust'):
@@ -196,12 +209,21 @@ def _run(
     answer = 'exit 1' if where is None else f'printf "%s\\n" {where!r}; exit 0'
     ratchet = '[ "$1" = scripts/rust_core/ratchet.py ]'
     called = tmp_path / 'effective-called'
+    # On a lane, the real effective, on this checkout's history (the step
+    # runs at the checkout's root in CI; the scratch directory is no
+    # repository).
+    effective = (
+        f'if {ratchet} && [ "$2" = effective ]; then '
+        f'exec {sys.executable} "$@" --repo {str(ROOT)!r}; fi\n'
+        if lane
+        else f'if {ratchet} && [ "$2" = effective ]; then '
+        f'echo "$@" > {str(called)!r}; exit 1; fi\n'
+    )
     _executable(
         bin_dir / 'python',
         '#!/usr/bin/env bash\n'
         f'if {ratchet} && [ "$2" = where ]; then {answer}; fi\n'
-        f'if {ratchet} && [ "$2" = effective ]; then '
-        f'echo "$@" > {str(called)!r}; exit 1; fi\n'
+        f'{effective}'
         f'exec {sys.executable} "$@"\n',
     )
     env = {
@@ -234,7 +256,7 @@ def _files(observed: dict[str, list[Any]]) -> dict[str, str | None]:
 def test_both_hosts_agreeing_pass(
     tmp_path: Path, observed: dict[str, list[Any]]
 ) -> None:
-    done = _run(tmp_path, _files(observed))
+    done = _run(tmp_path, _files(observed), lane=True)
     assert done.returncode == 0, done.stdout + done.stderr
     assert 'cross-host: python-core and rust-host observed' in done.stdout
     assert 'compare: no differences' in done.stdout
@@ -352,7 +374,7 @@ def test_the_request_id_s_value_alone_passes(
         if each['case'] == 'base.regression'
     ]
     _predicted(line)['body']['metadata']['request_id'] = 'another-id'
-    done = _run(tmp_path, _files(changed))
+    done = _run(tmp_path, _files(changed), lane=True)
     assert done.returncode == 0, done.stdout + done.stderr
 
 
@@ -383,7 +405,9 @@ def test_a_diagnostic_case_s_difference_is_reported_not_gated(
         if statuses[each['case']] == 'diagnostic'
         and (each['core'] or {}).get('fetches')
     ]
-    done = _run(tmp_path, _seeded(observed, 'rust-host', case, 'fetches'))
+    done = _run(
+        tmp_path, _seeded(observed, 'rust-host', case, 'fetches'), lane=True
+    )
     assert done.returncode == 0, done.stdout + done.stderr
     assert f'diagnostic: core: {case}: python-core against rust-host' in (
         done.stdout
