@@ -156,19 +156,29 @@
           }
         ],
         "primary_keys": {
-          "customers": [
-            "CustomerID"
-          ],
-          "products": [
-            "ProductID"
-          ],
-          "sales_order_details": [
-            "SalesOrderDetailID"
-          ]
+          "customers": {
+            "value": [
+              "CustomerID"
+            ]
+          },
+          "products": {
+            "value": [
+              "ProductID"
+            ]
+          },
+          "sales_order_details": {
+            "value": [
+              "SalesOrderDetailID"
+            ]
+          }
         },
         "time_columns": {
-          "sales_order_headers": "OrderDate",
-          "sales_order_details": "OrderDate"
+          "sales_order_headers": {
+            "value": "OrderDate"
+          },
+          "sales_order_details": {
+            "value": "OrderDate"
+          }
         },
         "relationships": [
           [
