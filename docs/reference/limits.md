@@ -38,7 +38,9 @@ the first, and `predict()` sends one call per batch and returns one result.
 Its `row_index` counts across the whole request rather than from zero per
 call, so `to_pandas()`, which orders by it, gives the indices back in the
 order they were asked for. A session scores those batches against the context
-it pinned, so the context is uploaded once rather than once per call.
+it pinned, so the context is uploaded once rather than once per call. `fit()`
+itself takes a request of one call, since a session pins one context: fit a
+small request and score the batched one against the handle.
 
 **The 10,000 is the deployment's, not this client's.** It is the serving
 layer's `TFM_MAX_TEST_ROWS`, whose default it is, so a deployment may hold to

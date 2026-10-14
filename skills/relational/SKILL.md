@@ -193,8 +193,7 @@ its own, and they are in
 `fit()` uploads a context once and pins it in the endpoint's memory; every
 later call on the handle sends only the rows to score. Gathering still happens
 here, in `materialize()`, so what a session saves is sending the context again,
-which is worth doing when one question is asked of more rows than a single call
-scores:
+which is worth doing when the same context answers question after question.
 
 ```python
 with SDMClient(url='http://localhost:8000', timeout=600) as client:
@@ -214,6 +213,11 @@ with SDMClient(url='http://localhost:8000', timeout=600) as client:
 
 The same answers the one-shot call gave: a session changes what it costs to
 ask again, not what comes back.
+
+**`fit()` takes a request of one call.** A session pins one context, and a
+request gathered in several batches carries one per batch, so fitting one is
+refused. To score more rows than a call holds against a pinned context, fit a
+request of one call and pass the batched request to the handle's `predict()`.
 
 One context is one question. A later call on the handle has to ask the pinned
 query, task, target and entity table; anything else is refused and the refusal

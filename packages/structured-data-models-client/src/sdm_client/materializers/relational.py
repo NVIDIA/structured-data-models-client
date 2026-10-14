@@ -142,6 +142,19 @@ def rows_per_call_asked_for(options: Mapping[str, Any]) -> int | None:
     return int(given)
 
 
+def _the_largest_batch(task: TaskTable, per_call: int) -> int:
+    r"""How many rows the largest batch of this request actually carries.
+
+    Not the size asked for: a request for one entity is one call of one row
+    whatever the batch size allows, and telling its caller to ask for smaller
+    calls names a remedy that has nothing left to divide.
+    """
+    asked = getattr(task, 'num_prediction_examples', None)
+    if not isinstance(asked, Integral) or int(asked) < 1:
+        return per_call
+    return min(per_call, int(asked))
+
+
 def _refuse_more_entities_than_fit_in_memory(
     task: TaskTable, per_call: int
 ) -> None:
@@ -330,8 +343,9 @@ class RelationalMaterializer:
             rows_per_call_asked_for(options), task.task_type
         )
         _refuse_more_entities_than_fit_in_memory(task, per_call)
+        largest = _the_largest_batch(task, per_call)
         with (
-            self._engine_errors(model, per_call),
+            self._engine_errors(model, largest),
             model.batch_mode(batch_size=per_call),
         ):
             parts = model.materialize_task(
