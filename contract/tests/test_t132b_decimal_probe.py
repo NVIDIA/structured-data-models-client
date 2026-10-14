@@ -2,46 +2,52 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The decimal probe's P1B-71 explanation, held to its consequence only.
+"""The decimal probe's P1B-71 note: never an explanation of a difference.
 
     python -m pytest contract/tests/test_t132b_decimal_probe.py -q
 
-Written by the bundle's independent test author after Codex's review of
-T1.32g part 2b (P2: contract/tools/decimal_probe.py's EXPLAINED
-took every difference of a static float condition at a scale of 28 or more
-as P1B-71's, an emptied schema among them). P1B-71, as the owner decided
-on 2026-10-13, is narrow: a float constant compared with a static
-DECIMAL(p, s) column is read from the float's exact binary value, rounded
-half to even, where the reference's pyarrow approximates from scale 28; so
-the core and the reference may label differently only the rows whose value
-lies within that approximation of the exact constant. Nothing else may
-differ under it.
+Written by the bundle's independent test author after Codex's reviews of
+T1.32g part 2b. Round 1 (P2): ``contract/tools/decimal_probe.py``'s
+``EXPLAINED`` took every difference of a static float condition at a scale
+of 28 or more as P1B-71's, an emptied schema among them. Round 2 (P2): its
+proximity allowance still explained a label histogram swapped where no
+value's label differs under either conversion. The orchestrator's decision
+(conservative): the probe never explains a label or request difference; it
+reports it unexplained, with a hint naming P1B-71 as a possible, unverified
+cause. P1B-71 (the owner's decision of 2026-10-13: a float constant
+compared with a static DECIMAL(p, s) column read from its exact binary
+value, rounded half to even, where the reference's pyarrow approximates
+from scale 28) stays the core's behavior; the probe only does not take it
+as proof.
 
-- Negative controls, each reported unexplained (compare exits 1, the
-  vector counted unexplained, no under P1B-71): the schema emptied
-  (Codex's repro); a payload table's rows or the result changed; a warning
-  added; a label flipped where no value of the column lies near the
-  constant; and a request that differs with its labels unchanged.
-- Positive control: a column holding the constant's exact value, one label
-  flipped between the reference and the core, the request's digest with it,
-  and nothing else: explained under P1B-71.
-- Controls of the controls: the recorded answer agrees with itself, and an
-  outcome change is never explained.
+- Negative controls, each reported unexplained (``compare`` exits 1, the
+  vector counted unexplained, no ``under P1B-71``): the schema emptied
+  (round 1's repro); a payload table's rows, the feature column's
+  description or the result changed; a warning added; a label flipped
+  where no value of the column lies near the constant; the request changed
+  with its labels unchanged; two labels flipped where one value lies at
+  the constant; a histogram swapped where every value's label is the same
+  under both conversions (round 2's repro).
+- The former positive control, the exact conversion's own one-label
+  consequence, is unexplained too, its line naming P1B-71 as a hint.
+- Controls of the controls: the recorded answer agrees with itself and is
+  the probe's own vector; an outcome change is never explained.
 
-The reference's answer is static.gt-float-scale-30.d38-30's, recorded
-by decimal_probe.py observe python-ref in the reference environment of
-contract/reference-env.txt (b413e9ad) on 2026-10-14, as REFERENCE
-below. The constant's exact value at scale 30,
-699999999999999955591079014994, was computed apart, in Python:
-int((Decimal(0.7) * 10**30).quantize(1, ROUND_HALF_EVEN)).
+The reference's answer is ``static.gt-float-scale-30.d38-30``'s, recorded
+by ``decimal_probe.py observe python-ref`` in the reference environment of
+``contract/reference-env.txt`` (b413e9ad) on 2026-10-14, as ``REFERENCE``
+below; recorded again with the column holding round 2's values
+``[0.7, -1, 0, 0.25, 1, 2, 3.75, null]``, it is the same answer. The
+constant's exact value at scale 30, 699999999999999955591079014994, was
+computed apart, in Python:
+``int((Decimal(0.7) * 10**30).quantize(1, ROUND_HALF_EVEN))``.
 
-A vector names its column's values as values (decimal text, or None)
-and its condition in its pql; the probe's static vectors carry
-values (test_each_static_vector_names_its_values), so the
-explanation can compute which rows lie near the constant.
+A vector names its column's values as ``values`` (decimal text, or None)
+and its condition in its ``pql``
+(``test_each_static_vector_names_its_values``).
 
-Gating (contract/tests/t132b_gate.py): a test whose id is in
-t132b-pending.json's pending["exits"] (as py:<test id>) failed
+Gating (``contract/tests/t132b_gate.py``): a test whose id is in
+``t132b-pending.json``'s ``pending["exits"]`` (as ``py:<test id>``) failed
 when written. It still runs and must still fail; once it passes it fails,
 naming itself, until it is taken out of the list.
 """
@@ -344,20 +350,58 @@ def test_more_labels_flipped_than_values_near_the_constant_is_unexplained(
     gated(request, check)
 
 
-# --- the positive control -----------------------------------------------------
+# --- a label difference, never explained ------------------------------------
 
 
-def test_the_exact_conversion_s_own_consequence_is_explained(
-    capsys: pytest.CaptureFixture[str],
+def assert_hinted(out: str) -> None:
+    r"""The vector's line names P1B-71 as a possible cause, not as an
+    explanation."""
+    [line] = [each for each in out.splitlines() if each.startswith(VECTOR_ID)]
+    assert 'P1B-71' in line, out
+    assert 'under P1B-71' not in line, out
+
+
+def test_the_exact_conversion_s_own_consequence_is_unexplained_with_a_hint(
+    capsys: pytest.CaptureFixture[str], request: pytest.FixtureRequest
 ) -> None:
     # The column holds the constant's exact value: compared by >=, the core
     # labels that row true from the exact reading, where an approximation
-    # past it labels it false. One label, the request's digest with it, and
-    # nothing else differ.
+    # past it labels it false. One label and the request's digest differ,
+    # nothing else: still unexplained, P1B-71 named as a possible cause.
     near = [str(EXACT_0_7_AT_30), '-1', '0', '0.25', '1', '2', '3.75', None]
-    status, out = judged(capsys, changed(flipped), vector(near, op='>='))
-    assert status == 0, out
-    assert '1 explained' in out and 'under P1B-71' in out, out
+
+    def check() -> None:
+        status, out = judged(capsys, changed(flipped), vector(near, op='>='))
+        assert_unexplained(status, out)
+        assert_hinted(out)
+
+    gated(request, check)
+
+
+def test_a_swapped_histogram_no_conversion_explains_is_unexplained(
+    capsys: pytest.CaptureFixture[str], request: pytest.FixtureRequest
+) -> None:
+    # Round 2's repro: users.f > 0.7 at DECIMAL(38, 30) over 0.7, -1, 0,
+    # 0.25, 1, 2, 3.75 and a null. The column's 0.7 is above the exact
+    # constant and the reference's alike, so no value's label differs under
+    # either conversion; the context histogram swapped from false 2, true 3
+    # to false 3, true 2, and the request's digest with it, is unexplained.
+    values = ['0.7', '-1', '0', '0.25', '1', '2', '3.75', None]
+    assert Decimal('0.7') > EXACT_0_7_AT_30
+
+    def swapped(answer: dict[str, Any]) -> None:
+        cells = answer['columns']['instance_table.TARGET']['request'][0]
+        cells = cells['context']['cells']
+        assert cells == {'false': 2, 'true': 3}
+        cells.update(false=3, true=2)
+        answer['payload'][0]['digest'] = 'c' * 64
+
+    def check() -> None:
+        status, out = judged(capsys, changed(swapped), vector(values))
+        assert_unexplained(status, out)
+        assert_hinted(out)
+
+    gated(request, check)
 
 
 def test_each_static_vector_names_its_values(
