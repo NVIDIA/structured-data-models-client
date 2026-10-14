@@ -4800,8 +4800,8 @@ entries:
     ratchet's reference rule passes changed only under an approved entry
     naming the case on python-ref.
   cases: [time.timestamptz]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     T1.32g, a recording-environment correction with no outcome of its own,
@@ -4812,6 +4812,9 @@ entries:
     author's commits change the case and record the line; this entry is
     the ratchet's authorization of the line. The outcome below is
     python-ref's, unchanged.
+    Approved by both reviewers of the bundle's review round 4 of 8a639756
+    (Codex and the independent subagent: APPROVE-P1B-57), relayed by the
+    orchestrator (H19); never the implementer's approval.
   case_outcomes:
   - {case: time.timestamptz, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'recording-environment correction: the zone set for every cursor, the outcome unchanged'}
 
