@@ -1477,12 +1477,16 @@ def _cell_pair(
     case: dict[str, Any],
     core: dict[str, Any] | None,
     old: dict[str, Any] | None,
+    stop: str | None = None,
 ) -> None:
     r"""H1's comparison in a cell other than the reference's: ``python-core``
     and ``python-old`` observed in the same cell, and their host fields
     equal (the ``schema``, ``warnings``, ``result`` and ``payload`` rules),
     in place of the reference's, which are reported. Either runner alone
-    there is a failure: the cell's comparison needs both."""
+    there is a failure: the cell's comparison needs both. ``stop``, where
+    python-old stopped as the reference did and an approved move took
+    python-core past it (E114): held only that far, as :func:`_host_fields`
+    holds a runner past the reference's stop."""
     cells = {
         each['identity'].get('cell') for each in (core, old) if each is not None
     }
@@ -1499,7 +1503,9 @@ def _cell_pair(
     if len(cells) != 1:
         report.fail(f'{where}: python-core and python-old in different cells')
         return
-    _host_fields(report, case, 'python-core', core, old, 'python-old')
+    _host_fields(
+        report, case, 'python-core', core, old, 'python-old', stop=stop
+    )
 
 
 def compare(
@@ -1586,6 +1592,7 @@ def compare(
         ordered = policy['ordered'].get(case['id'], {})
         before = len(report.failures)
         ref = reference.get(case['id'])
+        stops: dict[str, str | None] = {}
         if reference_file is not None and ref is None:
             report.fail(f'{case["id"]}: no reference observation')
         if ref is not None:
@@ -1616,6 +1623,7 @@ def compare(
                 who in effective.get(MOVED, {}).get(case['id'], []),
                 ref,
             )
+            stops[who] = stop
             if wanted is not None:
                 _effective(
                     report, case, who, observation['outcome'], wanted, ref
@@ -1661,7 +1669,16 @@ def compare(
                     )
         python = observed.get('python-core', {}).get(case['id'])
         old = observed.get('python-old', {}).get(case['id'])
-        _cell_pair(report, case, python, old)
+        # Past the reference's stop (E114): python-old held python-core
+        # only as far as it went, where it stopped as the reference did.
+        pair_stop = (
+            stops.get('python-core')
+            if old is not None
+            and ref is not None
+            and all(old['outcome'][f] == ref['outcome'][f] for f in OUTCOME)
+            else None
+        )
+        _cell_pair(report, case, python, old, pair_stop)
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(report, case, python, rust)

@@ -3,10 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_the_cell_s_pair_compares_only_what_python_old_reached[t132g.later-key-hugeint]",
-   "py:test_the_cell_s_pair_compares_only_what_python_old_reached[t132g.later-nested-fixed-array]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
