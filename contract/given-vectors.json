@@ -1,0 +1,1873 @@
+{
+ "format": "sdm-given-vectors/1",
+ "recorded_by": "contract/tools/given_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "base": "shop",
+ "provider": {
+  "provider": "sql",
+  "dialect": "duckdb"
+ },
+ "question": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+ "register_ref": "contract/given-vectors.json#",
+ "vectors": [
+  {
+   "id": "key.name",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": "order_id"
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "order_id"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.list",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "order_id"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.null",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": null
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": null
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.int",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": 3
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.float",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": 1.5
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.bool",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": true
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.nested",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      [
+       "order_id"
+      ]
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.mapping",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": {
+      "order_id": 1
+     }
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.empty",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": []
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": []
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.member-int",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      3
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.member-null",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      null
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.twice",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "order_id"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "order_id",
+       "order_id"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "UNSUPPORTED_REQUEST",
+    "fields": {
+     "operation": "describe_source",
+     "rule": "composite_key"
+    }
+   },
+   "register": {
+    "phase2": "composite_key"
+   },
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id",
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.composite",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "user_id"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "order_id",
+       "user_id"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "UNSUPPORTED_REQUEST",
+    "fields": {
+     "operation": "describe_source",
+     "rule": "composite_key"
+    }
+   },
+   "register": {
+    "phase2": "composite_key"
+   },
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id",
+       "user_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.missing-column",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": "nope"
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "nope"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "column": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.name",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": "ts"
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "value": "ts"
+     }
+    }
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.null",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": null
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "value": null
+     }
+    }
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": null
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": null
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.int",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": 3
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "orders",
+     "rule": "time_column_not_a_name"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.float",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": 1.5
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "orders",
+     "rule": "time_column_not_a_name"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.bool",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": true
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "orders",
+     "rule": "time_column_not_a_name"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.list",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": [
+      "ts"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "orders",
+     "rule": "time_column_not_a_name"
+    }
+   },
+   "register": {
+    "entry": "P1B-12",
+    "transition": "refusal UNNAMED -> refusal INVALID_REQUEST"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "TypeError",
+    "code": null,
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.mapping",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": {
+      "ts": 1
+     }
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "orders",
+     "rule": "time_column_not_a_name"
+    }
+   },
+   "register": {
+    "entry": "P1B-12",
+    "transition": "refusal UNNAMED -> refusal INVALID_REQUEST"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "TypeError",
+    "code": null,
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "time.missing-column",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "orders": "nope"
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "value": "nope"
+     }
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "orders",
+     "column": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "order.key-table-first",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "nope": 3
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "nope": "unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "order.time-table-first",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "time_columns": {
+     "nope": 3
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "nope": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_columns",
+     "table": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "order.keys-before-times",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": 3
+    },
+    "time_columns": {
+     "orders": 3
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "unreadable"
+    },
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "order.key-null-before-time",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": null
+    },
+    "time_columns": {
+     "orders": 3
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": null
+     }
+    },
+    "time_columns": {
+     "orders": "unreadable"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "order.tables-by-name",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "users": 3,
+     "orders": "nope"
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "users": "unreadable",
+     "orders": {
+      "value": [
+       "nope"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "column": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "order.missing-column-before-composite",
+   "kind": "case",
+   "owner": null,
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "nope"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "order_id",
+       "nope"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "column": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
+   },
+   "reference_why": null
+  },
+  {
+   "id": "wire.key-bare-list",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": [
+      "order_id"
+     ]
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-bare-string",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "order_id"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-bare-null",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": null
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-value-number",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": 3
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-value-string",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": "order_id"
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-value-nested",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       [
+        "a"
+       ]
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-value-member-number",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "a",
+       3
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-value-member-null",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "a",
+       null
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-unreadable-object",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "unreadable": true
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-extra-field",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "a"
+      ],
+      "x": 1
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-unknown-tag",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "names": [
+       "a"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.key-tag-cased",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": "Unreadable"
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.time-bare-string",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": "ts"
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.time-bare-null",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": null
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.time-value-number",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "value": 3
+     }
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.time-value-list",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "value": [
+       "ts"
+      ]
+     }
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.time-unreadable-object",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "unreadable": true
+     }
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "wire.time-extra-field",
+   "kind": "wire",
+   "owner": null,
+   "spec": {
+    "tables": [],
+    "primary_keys": {},
+    "time_columns": {
+     "orders": {
+      "value": "ts",
+      "x": 1
+     }
+    }
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "start",
+    "code": "INVALID_MESSAGE",
+    "fields": {
+     "attachment": 1,
+     "category": "*",
+     "line": "*",
+     "column": "*"
+    }
+   },
+   "register": null,
+   "reference_why": "a malformed SourceSpec, what no host may write: no caller value is written this way",
+   "reference": null
+  },
+  {
+   "id": "edit.key-not-names",
+   "kind": "edit",
+   "owner": null,
+   "set": {
+    "table": "orders",
+    "attribute": "primary_key",
+    "value": 3
+   },
+   "edit": {
+    "edit": "primary_key",
+    "table": "orders",
+    "key": "unreadable"
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_key",
+     "table": "orders",
+     "rule": "key_not_names"
+    }
+   },
+   "pair": "key.int",
+   "register": null,
+   "reference_why": "the setter on the core route: tests/test_the_schema_edits.py holds it to the reference",
+   "reference": null
+  },
+  {
+   "id": "edit.time-not-a-name",
+   "kind": "edit",
+   "owner": null,
+   "set": {
+    "table": "orders",
+    "attribute": "time_column",
+    "value": 3
+   },
+   "edit": {
+    "edit": "time_column",
+    "table": "orders",
+    "column": "unreadable"
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "time_column",
+     "table": "orders",
+     "rule": "time_column_not_a_name"
+    }
+   },
+   "pair": "time.int",
+   "register": null,
+   "reference_why": "the setter on the core route: tests/test_the_schema_edits.py holds it to the reference",
+   "reference": null
+  },
+  {
+   "id": "edit.key-null",
+   "kind": "edit",
+   "owner": null,
+   "set": {
+    "table": "orders",
+    "attribute": "primary_key",
+    "value": null
+   },
+   "edit": {
+    "edit": "primary_key",
+    "table": "orders",
+    "key": {
+     "value": null
+    }
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": null,
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "pair": "key.null",
+   "register": null,
+   "reference_why": "the setter clears the key, as the reference does (E67); describe_source refuses the same null as an empty key",
+   "reference": null
+  },
+  {
+   "id": "edit.time-null",
+   "kind": "edit",
+   "owner": null,
+   "set": {
+    "table": "orders",
+    "attribute": "time_column",
+    "value": null
+   },
+   "edit": {
+    "edit": "time_column",
+    "table": "orders",
+    "column": {
+     "value": null
+    }
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id"
+      ],
+      "time_column": null
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "pair": "time.null",
+   "register": null,
+   "reference_why": "the setter clears the time column, as describe_source does",
+   "reference": null
+  }
+ ]
+}
