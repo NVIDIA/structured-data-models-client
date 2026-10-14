@@ -45,8 +45,7 @@
    "py:test_each_case_is_admitted[time.text-us-date]",
    "py:test_each_case_is_admitted[time.timestamp-ns]",
    "py:test_each_case_is_admitted[time.timestamp-s]",
-   "py:test_each_case_is_admitted[time.timestamptz]",
-   "rust:every_statement_the_family_runs_is_pinned_in_sdm_data_s_tests"
+   "py:test_each_case_is_admitted[time.timestamptz]"
   ]
  },
  "authored": {
