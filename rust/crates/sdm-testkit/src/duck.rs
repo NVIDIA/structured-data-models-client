@@ -18,7 +18,8 @@
 //! the extension directory), its bytes checked against the digest recorded
 //! for the platform before it is loaded; autoloading and autoinstalling
 //! stay off, so nothing else loads, and the loaded ICU's version is
-//! checked.
+//! checked. JSON, which the Python wheel also links, is loaded the same way
+//! (T1.33), so a JSON column can be set up here.
 
 use std::collections::BTreeMap;
 
@@ -59,8 +60,32 @@ const ICU_SHA256: [(&str, &str); 4] = [
     ),
 ];
 
-/// A fresh in-memory database, with ICU loaded and extension autoloading
-/// off.
+/// The SHA-256 of DuckDB's signed JSON extension for v1.5.6, by platform,
+/// recorded as [`ICU_SHA256`] is (T1.33). The Python wheel the reference
+/// runs links JSON; this host loads it the way it loads ICU, rather than
+/// building it into the bundled DuckDB, which would rebuild DuckDB and leave
+/// CI's cached build beside a second one.
+const JSON_SHA256: [(&str, &str); 4] = [
+    (
+        "linux_amd64",
+        "3d511cc45086176ff5f39bc7e9e7d5f223ae7df2f020933d8c189ba72cdfefb5",
+    ),
+    (
+        "linux_arm64",
+        "f1f1e30d351706b90de79aa386d6f8d4f7166fa8010666b9029f5cf22edeb630",
+    ),
+    (
+        "osx_amd64",
+        "67c65794da71ba75210bb3ffd0555210275d8e76dc32cb9d8bbdc24aefb62c40",
+    ),
+    (
+        "osx_arm64",
+        "7e35cd56f0ec59c2bd3aae8793ce68b87ae0a7fa873e1bdc50f531bc859fc591",
+    ),
+];
+
+/// A fresh in-memory database, with ICU and JSON loaded and extension
+/// autoloading off.
 pub fn open() -> Result<Connection> {
     let config = Config::default()
         .enable_autoload_extension(false)
@@ -71,48 +96,61 @@ pub fn open() -> Result<Connection> {
     if version != DUCKDB_VERSION {
         bail!("DuckDB {version} is linked, and the reference runs {DUCKDB_VERSION}");
     }
-    // Installed once per machine from DuckDB's repository, signature
-    // checked by DuckDB; its bytes are checked here against the digest
-    // recorded for the platform before it is loaded (decision E37).
+    load(&connection, "icu", &ICU_SHA256)?;
+    load(&connection, "json", &JSON_SHA256)?;
+    Ok(connection)
+}
+
+/// Loads DuckDB's signed extension `name`: installed once per machine from
+/// DuckDB's repository, signature checked by DuckDB; its bytes are checked
+/// here against the digest recorded for the platform before it is loaded
+/// (decision E37), and the loaded version must be the linked DuckDB's.
+fn load(connection: &Connection, name: &str, digests: &[(&str, &str)]) -> Result<()> {
     let installed = |connection: &Connection| -> Result<Option<String>> {
-        Ok(connection.query_row(
-            "SELECT install_path FROM duckdb_extensions() WHERE extension_name = 'icu' AND installed",
-            [],
-            |row| row.get(0),
-        ).ok())
+        Ok(connection
+            .query_row(
+                "SELECT install_path FROM duckdb_extensions() \
+                 WHERE extension_name = ? AND installed",
+                [name],
+                |row| row.get(0),
+            )
+            .ok())
     };
-    let path = match installed(&connection)? {
+    let path = match installed(connection)? {
         Some(path) => path,
         None => {
             // Tests in parallel may install it at once; whichever install
             // lands, the file must then be there.
-            let _ = connection.execute_batch("INSTALL icu");
-            installed(&connection)?.context("installing DuckDB's ICU extension")?
+            let _ = connection.execute_batch(&format!("INSTALL {name}"));
+            installed(connection)?
+                .with_context(|| format!("installing DuckDB's {name} extension"))?
         }
     };
     let platform: String =
         connection.query_row("SELECT platform FROM pragma_platform()", [], |row| {
             row.get(0)
         })?;
-    let Some((_, digest)) = ICU_SHA256.iter().find(|(name, _)| *name == platform) else {
-        bail!("no recorded ICU digest for the platform {platform}");
+    let Some((_, digest)) = digests.iter().find(|(p, _)| *p == platform) else {
+        bail!("no recorded {name} digest for the platform {platform}");
     };
     let bytes = std::fs::read(&path).with_context(|| format!("reading {path}"))?;
     if crate::case::sha256(&bytes) != *digest {
-        bail!("the ICU extension at {path} is not the one recorded for {platform}");
+        bail!("the {name} extension at {path} is not the one recorded for {platform}");
     }
     connection
-        .execute_batch("LOAD icu")
-        .context("loading DuckDB's ICU extension")?;
-    let (loaded, icu): (bool, String) = connection.query_row(
-        "SELECT loaded, extension_version FROM duckdb_extensions() WHERE extension_name = 'icu'",
-        [],
+        .execute_batch(&format!("LOAD {name}"))
+        .with_context(|| format!("loading DuckDB's {name} extension"))?;
+    let (loaded, extension): (bool, String) = connection.query_row(
+        "SELECT loaded, extension_version FROM duckdb_extensions() WHERE extension_name = ?",
+        [name],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    if !loaded || icu != DUCKDB_VERSION {
-        bail!("ICU {icu} is not the reference DuckDB's ({DUCKDB_VERSION}), or is not loaded");
+    if !loaded || extension != DUCKDB_VERSION {
+        bail!(
+            "{name} {extension} is not the reference DuckDB's ({DUCKDB_VERSION}), or is not loaded"
+        );
     }
-    Ok(connection)
+    Ok(())
 }
 
 /// A query's result: its schema and every batch the driver handed over.

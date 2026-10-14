@@ -14,7 +14,7 @@
       "rule": "UNSUPPORTED_TYPE: a union, outside the type set",
       "owner": "T1.32c",
       "register": "P1B-7",
-      "where": "rust/crates/sdm-host/src/admission.rs:74",
+      "where": "rust/crates/sdm-host/src/admission.rs:80",
       "holds": "ErrorCode::UnsupportedType,",
       "why": "The named refusal the plan asks for in place of the reference's unnamed RuntimeError, which names the wrong type: register P1B-7, proposed, which T1.32c resolves when it admits nested.union. The probe without the column reaches predict's result on both runners",
       "observed": {

@@ -185,15 +185,17 @@ jobs:
         with:
           workspaces: rust
           save-if: ${{ env.SAVE_CACHES == 'true' }}
-      # The test host's ICU, DuckDB's signed extension for v1.5.6, which it
-      # installs the first time and checks against its recorded digest before
-      # every load (decision E37): cached, so a run downloads it once.
+      # The test host's ICU and JSON, DuckDB's signed extensions for v1.5.6,
+      # which it installs the first time and checks against their recorded
+      # digests before every load (decision E37; JSON from T1.33): cached, so
+      # a run downloads them once. The key names both, so the cache saved
+      # before JSON, which lacks it, is not restored as a hit.
       # Saved, like every cache here, only where SAVE_CACHES says.
       - id: duckdb-extensions
         uses: actions/cache/restore@v6
         with:
           path: ~/.duckdb/extensions/v1.5.6
-          key: duckdb-extensions-v1.5.6-${{ runner.os }}-${{ runner.arch }}
+          key: duckdb-extensions-v1.5.6-icu-json-${{ runner.os }}-${{ runner.arch }}
       # The test kit's clippy, here on the DuckDB build this job makes (H3).
       - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
