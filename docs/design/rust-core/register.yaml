@@ -4169,11 +4169,17 @@ entries:
     (dtype timestamp[us], every payload cell null), its offset dropped, so
     it is described as the reference describes it; the JSON as text. A
     HUGEINT, UHUGEINT or VARINT, under any setting and storage, follows the
-    big-integer rule over the column handed over: received as int64 where
-    every value fits it, else as decimal128(38, 0) where every value fits 38
+    big-integer rule over the whole column: received as int64 where every
+    value fits it, else as decimal128(38, 0) where every value fits 38
     digits, else as text (utf8); dtype int for the first two, string for
     the third; every payload cell is DuckDB's own CAST(x AS VARCHAR), so
-    exact. A HUGEINT with no setting (decimal128(38, 0)) is read as before.
+    exact. The tier is the whole column's, never a fetch's (the
+    orchestrator's decision of 2026-10-14): where the preview may have left
+    rows unread, describe_source asks the column's smallest and largest
+    values over the whole table (column_ranges) and takes the widest tier;
+    every later fetch is widened to the tier described, and one holding a
+    value past it (a source that does not answer column_ranges) is refused
+    VALUE_OUT_OF_RANGE naming the column, never sent in another tier. A HUGEINT with no setting (decimal128(38, 0)) is read as before.
     A lossless connection is described as any other (T1.33's fix of the
     catalog read: arrow.bool8 admitted as boolean). A value whose bytes the
     type's layout does not read is refused UNSUPPORTED_TYPE naming the
@@ -4182,9 +4188,7 @@ entries:
     Schema.from_source and materialize over a DuckDB connection with
     arrow_lossless_conversion set, holding a UUID, HUGEINT, UHUGEINT, BIT or
     JSON column, or over any DuckDB connection holding a VARINT column,
-    under a forced core route. The tier is read per fetch, so a table whose
-    preview fits int64 but whose later rows do not is described int while a
-    later fetch receives a wider type (not measured).
+    under a forced core route.
   cases: [T1.33]
   refs:
   - 'contract/type-set-vectors.json#lossless.uuid refusal UNNAMED -> success'
@@ -4202,6 +4206,8 @@ entries:
   - 'contract/type-set-vectors.json#varint-past-38-digits refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#varint.large refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#varint.view refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#lossless.hugeint-wide-after-preview refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#varint-wide-after-preview refusal UNNAMED -> success'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E120}

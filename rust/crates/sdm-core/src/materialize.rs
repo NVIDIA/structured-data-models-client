@@ -607,10 +607,10 @@ impl Times {
         table: &Table,
         batch: RecordBatch,
     ) -> Result<RecordBatch, CoreError> {
-        let schema = batch.schema();
-        let mut fields = Vec::with_capacity(schema.fields().len());
+        // Its big integers in their columns' tiers first (big_integers).
+        let (batch, mut read_any) = big_integers(table, batch)?;
+        let (schema, mut fields) = (batch.schema(), Vec::new());
         let mut columns = Vec::with_capacity(schema.fields().len());
-        let mut read_any = false;
         for (field, array) in schema.fields().iter().zip(batch.columns()) {
             let timestamp = table
                 .column(field.name())
@@ -2269,4 +2269,40 @@ fn text_unread(unread: Unread) -> CoreError {
         Unread::Order => not_yet("text_time_order"),
         Unread::MixedZones => not_yet("text_time_zones"),
     }
+}
+
+/// `batch`, fetched from `table`, with each big-integer column in the tier
+/// its column was described in, or refused by name (register P1B-43,
+/// [`crate::big_integer::conform`]); and whether any column changed.
+fn big_integers(table: &Table, batch: RecordBatch) -> Result<(RecordBatch, bool), CoreError> {
+    let schema = batch.schema();
+    let mut fields = Vec::with_capacity(schema.fields().len());
+    let mut columns = Vec::with_capacity(schema.fields().len());
+    let mut changed = false;
+    for (field, array) in schema.fields().iter().zip(batch.columns()) {
+        let conformed = match table.column(field.name()) {
+            Some(described) => {
+                crate::big_integer::conform(field, array, &described.received.to_arrow())?
+            }
+            None => None,
+        };
+        match conformed {
+            Some((field, array)) => {
+                changed = true;
+                fields.push(field);
+                columns.push(array);
+            }
+            None => {
+                fields.push(field.as_ref().clone());
+                columns.push(Arc::clone(array));
+            }
+        }
+    }
+    if !changed {
+        return Ok((batch, false));
+    }
+    let schema = arrow_schema::Schema::new_with_metadata(fields, schema.metadata().clone());
+    RecordBatch::try_new(Arc::new(schema), columns)
+        .map(|batch| (batch, true))
+        .map_err(|_| internal("a fetch's big integers do not read back into its rows"))
 }

@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod attached;
+pub mod big_integer;
 pub mod compose;
 mod describe;
 pub mod dispatch;

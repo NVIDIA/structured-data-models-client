@@ -14,7 +14,9 @@
 //! | `arrow.opaque` `hugeint`, `uhugeint` (`fixed_size_binary(16)`), `bignum` (any binary storage) | by the big-integer rule |
 //!
 //! The big-integer rule (the orchestrator's, 2026-10-14) reads the whole
-//! column of the data handed over: `int64` where every value fits it, else
+//! column of the data handed over, the field marked
+//! `sdm_core::big_integer::MARKER` so the core holds the column to one tier
+//! across fetches: `int64` where every value fits it, else
 //! `decimal128(38, 0)` where every value fits 38 digits, else `utf8`, each
 //! value's exact decimal text (DuckDB's own `CAST(x AS VARCHAR)`). The
 //! column read keeps its name, nullability and metadata but the extension's
@@ -410,7 +412,21 @@ pub(crate) fn read(
                 (read_as, read)
             }
         };
-        fields[index] = read_field(field, read_as);
+        let mut read_field = read_field(field, read_as);
+        if matches!(
+            meaning,
+            Meaning::HugeInt | Meaning::UHugeInt | Meaning::BigNum
+        ) {
+            // Its tier is the fetch's; the core holds the column to one
+            // (sdm_core::big_integer).
+            let mut metadata = read_field.metadata().clone();
+            metadata.insert(
+                sdm_core::big_integer::MARKER.to_owned(),
+                sdm_core::big_integer::MARKED.to_owned(),
+            );
+            read_field = read_field.with_metadata(metadata);
+        }
+        fields[index] = read_field;
         for (batch, array) in columns.iter_mut().zip(read) {
             batch[index] = array;
         }

@@ -100,8 +100,11 @@ class; a proposed one, a proposed entry the review sees. The umbrellas
 P1B-1 to P1B-4, closed as superseded (T1.33), are approved by the owner for
 E92's Phase 2 class alone (``PHASE_2_CLASS``): any other rule under one is
 ``proposed:<entry>``, as before the closing, and a rule the owner has still
-to answer (``PENDING_OWNER``: ``text_time``) ``pending-owner:<entry>``. The
-tool approves nothing.
+to answer (``PENDING_OWNER``, none since T1.33 part 3)
+``pending-owner:<entry>``. ``text_time`` is no longer the owner's open
+question (item 24 of 2026-10-14: text that is no time is text under any
+name): what refusals of it remain, a time column's values at the time
+column's choice or at materialize, are DT-15's. The tool approves nothing.
 """
 
 from __future__ import annotations
@@ -151,6 +154,9 @@ RULES = {
     # A key of a type the bridge's cast takes no Arrow type for (an edit
     # keying a decimal column): T1.32a's.
     'key_type': 'P1B-3',
+    # From T1.33 part 3: a chosen time column's text outside the core's
+    # list of formats, DT-15's (approved), never an umbrella's.
+    'text_time': 'DT-15',
 }
 #: From T1.28a: the core's refusals at predict, of a request both routes
 #: materialize alike, by the entry naming each (predict's not-yet rules,
@@ -166,7 +172,10 @@ FROM_SOURCE_RULES = {'empty_table': ('P1B-11', 'INVALID_REQUEST')}
 #: does not read). ``multicategorical`` and ``time_whole_table`` were here
 #: until T1.32e ported the one and fixed the other (E92: neither is a
 #: Phase 2 refusal), so a core refusing either again is UNCLASSIFIED.
-DESCRIBED_RULES = {'text_time': 'P1B-2'}
+#: ``text_time`` is DT-15's from T1.33 part 3 (P1B-2's before): inference no
+#: longer refuses it for a name, and what remains is the time column's
+#: choice reading text outside the list.
+DESCRIBED_RULES = {'text_time': 'DT-15'}
 #: The umbrella entries the owner closed as superseded (T1.33, E88(e)):
 #: each is approved by the owner for E92's Phase 2 class alone, so it
 #: classifies as approved only a rule of that class.
@@ -217,12 +226,9 @@ PHASE_2_CLASS = frozenset(
     }
 )
 #: An umbrella's rule the owner has still to answer for (T1.33's owner
-#: list): its class names the question, never `approved`.
-PENDING_OWNER = {
-    # Free text under a time-like name: a Phase 2 refusal (P1B-2) or DT-17's
-    # permanent reading? (as-built, T1.33, the owner's list.)
-    ('P1B-2', 'text_time'): 'pending-owner',
-}
+#: list): its class names the question, never `approved`. None open:
+#: ``text_time``, the last, the owner answered on 2026-10-14 (item 24).
+PENDING_OWNER: dict[tuple[str, str], str] = {}
 #: The entry a static target's refusal by a rule is under, where it is not
 #: the rule's own.
 STATIC_RULES = {'target_type': 'P1B-18'}

@@ -9,9 +9,7 @@
    "py:test_a_difference_from_the_reference_is_registered[decimal64.18-2]",
    "py:test_a_difference_from_the_reference_is_registered[large-list-view.int32]",
    "py:test_a_difference_from_the_reference_is_registered[utf8-view]",
-   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.hugeint-wide-after-preview]",
-   "py:test_a_difference_from_the_reference_is_registered[varint-wide-after-preview]"
+   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]"
   ],
   "rust-host-duckdb": []
  },

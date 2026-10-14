@@ -42,6 +42,7 @@ use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
 use sdm_schema::keys;
 
+use crate::big_integer;
 use crate::run::{
     ArrowData, Ask, Asker, Attachment, FetchResult, Reply, internal, schema_mismatch,
 };
@@ -173,6 +174,8 @@ pub(crate) async fn run(
                 "a preview's columns are not the ones it asked for",
             ));
         }
+        // A big integer's tier, the whole column's (P1B-43).
+        let preview = whole_column_tiers(&asker, &table.source, preview).await?;
         let previewed = infer::preview(
             &table.name,
             &table.source,
@@ -315,6 +318,76 @@ fn falls_back(failed: &CoreError) -> bool {
         }
         _ => false,
     }
+}
+
+/// `preview` with each big-integer column the host layer read
+/// ([`crate::big_integer`]) in the tier of its values over the whole
+/// table, so the column is described in one tier every fetch is held to:
+/// where the preview may have left rows unread, the column's smallest and
+/// largest values are asked of the source (`column_ranges`, one request for
+/// every such column), and the column takes the widest tier of the preview
+/// and those two. Where the source fails that request or does not take it,
+/// as [`falls_back`] reads it, the preview's tier stands, and a later fetch
+/// past it is refused by name.
+async fn whole_column_tiers(
+    asker: &Asker,
+    source: &str,
+    preview: ArrowData,
+) -> Result<ArrowData, CoreError> {
+    let big: Vec<(String, arrow_schema::DataType)> = preview
+        .schema
+        .fields()
+        .iter()
+        .filter_map(|f| big_integer::tier(f).map(|t| (f.name().clone(), t)))
+        .collect();
+    let rows: usize = preview.batches.iter().map(|b| b.num_rows()).sum();
+    if big.is_empty() || (rows as u64) < PREVIEW_ROWS {
+        return Ok(preview);
+    }
+    let asked: Vec<String> = big.iter().map(|(name, _)| name.clone()).collect();
+    let read = match ask(
+        asker,
+        DataRequest::ColumnRanges {
+            table: source.to_owned(),
+            columns: asked.clone(),
+        },
+    )
+    .await
+    {
+        Ok(read) => read,
+        Err(failed) if falls_back(&failed) => return Ok(preview),
+        Err(failed) => return Err(failed),
+    };
+    let fields = read.schema.fields();
+    if fields.len() != 1 + 3 * asked.len() {
+        return Err(schema_mismatch(
+            "expected",
+            None,
+            "the column ranges hold another number of columns than asked",
+        ));
+    }
+    let mut tiers = Vec::new();
+    for (at, (name, previewed)) in big.iter().enumerate() {
+        let mut tier = previewed.clone();
+        for index in [1 + 3 * at, 2 + 3 * at] {
+            tier = big_integer::tier(&fields[index])
+                .and_then(|range| big_integer::wider(&tier, &range))
+                .ok_or_else(|| {
+                    schema_mismatch(
+                        "expected",
+                        Some(name),
+                        "a big integer's range is not of a big integer's type",
+                    )
+                })?;
+        }
+        if &tier != previewed {
+            tiers.push((name.clone(), tier));
+        }
+    }
+    if tiers.is_empty() {
+        return Ok(preview);
+    }
+    big_integer::widen_data(&preview, &tiers)
 }
 
 /// Holds the answer to a `column_ranges` request over `asked` to its
