@@ -22,12 +22,7 @@ name, ``target_type``, register P1B-18), ``decimal.feature-38-0-wide`` and
   routes, carrying to the core every operation up to the stage the
   reference answers at (``describe_source`` for ``from_source``, then
   ``materialize``, then ``predict``), the entities the public call is
-  handed. All but ``decimal.class-target-38-18``, which stays diagnostic
-  by the owner's decision of 2026-10-13 (``NOT_ADMITTED``): the reference's
-  answer there is INTERNAL_ERROR, which is no baseline, and the core's
-  refusal (``target_type``, P1B-18) is held by ``sdm-engine``'s
-  ``labels.rs`` unit test
-  ``a_static_decimal_is_compared_exactly_and_refused_as_a_target``.
+  handed.
 - "Each with its reference observation" and the cases' expectations: each
   case's ``expect`` is what ``python-ref`` observed
   (``contract/reference/<commit>.jsonl``); and ``python-core``'s public
@@ -82,15 +77,6 @@ PLACEHOLDER = 'P1B-1'
 #: Phase 2 class, they excuse no case, even one they list (T1.33).
 UMBRELLAS = ('P1B-1', 'P1B-2', 'P1B-3', 'P1B-4')
 #: The core operations that answer up to each stage of a public call.
-#: The family's cases the owner decided on 2026-10-13 are not admitted,
-#: with no judging-path change: each stays diagnostic, and the test that
-#: holds the core's answer instead.
-NOT_ADMITTED = {
-    'decimal.class-target-38-18': (
-        'rust/crates/sdm-engine/src/labels.rs: '
-        'a_static_decimal_is_compared_exactly_and_refused_as_a_target'
-    ),
-}
 OPERATIONS = {
     'from_source': ('describe_source',),
     'materialize': ('describe_source', 'materialize'),
@@ -249,13 +235,7 @@ def test_the_family_is_the_three_cases() -> None:
     }
 
 
-def admitted_cases() -> list[Any]:
-    return [
-        pytest.param(case, id=case) for case in IDS if case not in NOT_ADMITTED
-    ]
-
-
-@pytest.mark.parametrize('case', admitted_cases())
+@pytest.mark.parametrize('case', per_case())
 def test_each_case_is_admitted(
     case: str, request: pytest.FixtureRequest
 ) -> None:
@@ -276,21 +256,6 @@ def test_each_case_is_admitted(
         )
 
     gated(request, check)
-
-
-@pytest.mark.parametrize('case', sorted(NOT_ADMITTED))
-def test_a_case_not_admitted_stays_diagnostic_by_the_owner_s_decision(
-    case: str,
-) -> None:
-    # Diagnostic by decision, not skipped: the case is still one of the
-    # family's, still run and reported, never gating, with no routes; and
-    # the core's answer is held where NOT_ADMITTED says.
-    assert case in IDS
-    loaded = case_file(case)
-    assert loaded['status'] == 'diagnostic', loaded['status']
-    assert loaded['routes'] == []
-    path, test = NOT_ADMITTED[case].split(': ')
-    assert f'fn {test}()' in (ROOT / path).read_text(encoding='utf-8')
 
 
 @pytest.mark.parametrize('case', per_case())
