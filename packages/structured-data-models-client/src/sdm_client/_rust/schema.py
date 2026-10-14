@@ -88,11 +88,11 @@ def from_source(
 
     # A table is named by a str (P1B-74, the owner's): JSON would write
     # another key as its text, so the host refuses it before the run.
-    for field, given in (
+    for field, by_table in (
         ('primary_keys', primary_keys),
         ('time_columns', time_columns),
     ):
-        if any(not isinstance(table, str) for table in given or {}):
+        if any(not isinstance(table, str) for table in by_table or {}):
             raise StructuredDataError(
                 'a table is named by a string',
                 code='INVALID_REQUEST',
