@@ -140,10 +140,34 @@ def test_every_changed_case_is_named_by_an_entry_of_its_own() -> None:
     assert unnamed == [], unnamed
 
 
+#: P1B-1's 13 inventory cases, as the placeholder named them before T1.33:
+#: its ``cases`` until the umbrellas came to excuse no case (the
+#: orchestrator's decision), its ``refs`` since.
+P1B_1_CASES = (
+    'key.hugeint',
+    'key.varchar-large-buffers',
+    'key.decimal-18-0',
+    'key.decimal-38-10',
+    'decimal.class-target-38-18',
+    'nested.fixed-array',
+    'nested.struct',
+    'nested.map',
+    'nested.union',
+    'empty.fact-table',
+    'time.text-us-date',
+    'time.text-one-bad-value',
+    'time.feature-interval',
+)
+
+
 def test_p1b_1_is_replaced_case_by_case() -> None:
     def check() -> None:
-        cases = _entry('P1B-1')['cases']
-        assert cases
+        cases = list(P1B_1_CASES)
+        entry = _entry('P1B-1')
+        named = {str(c) for c in (entry.get('cases') or [])}
+        named |= {str(r) for r in (entry.get('refs') or [])}
+        missing = [c for c in cases if c not in named]
+        assert missing == [], f'P1B-1 no longer names {missing}'
         approved = [
             e
             for e in _entries()
