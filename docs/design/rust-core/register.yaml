@@ -3339,6 +3339,7 @@ entries:
   - 'contract/key-cast-vectors.json#*.mixed.float-text refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#*.mixed.int-text refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#*.numpy.int64 refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#utf8-float-text.mixed.float-*-text refusal INVALID_REQUEST -> success'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3347,6 +3348,10 @@ entries:
     approval under E66(b) and E73(b); never self-approved. The core sees only the column the host
     hands over, so it cannot tell a mixed list from the same values given
     as text. Approved by the owner on 2026-10-13, relayed by the orchestrator.
+    T1.32g adds one ref, for the reviewers to hold to this approved meaning:
+    the three utf8-float-text.mixed.float-*-text vectors (1e16, 1.5e-07 and
+    a tie mixed with text), the same transition as *.mixed.float-text, the
+    host writing each float as the core writes a float entity.
 
 - id: P1B-36
   title: A decimal entity of a float key is rounded once, at the key's width, where the reference rounds it twice

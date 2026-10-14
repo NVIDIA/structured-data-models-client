@@ -200,12 +200,45 @@ def _indices(indices: Sequence[Any]) -> Any:
 
 
 def _text(value: Any) -> str:
-    r"""A value as its text, a boolean as Arrow writes one."""
+    r"""A value as its text, a boolean as Arrow writes one and a float as
+    the core writes a float entity (``sdm_engine::keys``'s ``Entity::Float``,
+    Rust's ``{}`` of an ``f64``), so the core reads the same number back:
+    the shortest digits that read back as it, a tie between two such digit
+    strings going away from zero (Rust's choice, where ``repr`` takes the
+    even one), with no exponent and a whole one with no point (``1e16`` is
+    ``10000000000000000``, ``1.0`` is ``1``, ``1.5e-07`` is
+    ``0.00000015``). Exact arithmetic, never a decimal context."""
     import numpy as np
 
     if isinstance(value, (bool, np.bool_)):
         return 'true' if value else 'false'
-    return str(value)
+    if not isinstance(value, float) or not math.isfinite(value):
+        return str(value)  # an infinity is 'inf' or '-inf', as Rust's
+    from decimal import Decimal
+    from fractions import Fraction
+
+    sign, digits, exponent = Decimal(repr(float(value))).as_tuple()
+    assert isinstance(exponent, int)
+    whole = int(''.join(map(str, digits)))
+    unit = Fraction(10) ** exponent
+    if 2 * (abs(Fraction(value)) - whole * unit) == unit and float(
+        (whole + 1) * unit
+    ) == abs(value):
+        whole += 1  # a tie: Rust's shortest digits go away from zero
+    text = str(whole)
+    if whole == 0:
+        exponent = 0
+    else:
+        stripped = text.rstrip('0')
+        exponent += len(text) - len(stripped)
+        text = stripped
+    if exponent >= 0:
+        written = text + '0' * exponent
+    elif -exponent < len(text):
+        written = f'{text[:exponent]}.{text[exponent:]}'
+    else:
+        written = '0.' + '0' * (-exponent - len(text)) + text
+    return ('-' if sign else '') + written
 
 
 def _missing(value: Any) -> bool:

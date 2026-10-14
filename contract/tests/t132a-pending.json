@@ -1,26 +1,8 @@
 {
  "about": "T1.32a's acceptance tests that failed when the independent test author wrote them, before the implementation (contract/tests/test_t132a_key_cast.py, test_t132a_keys_family.py, tests/test_t132a_cell_claims.py, tests_test_ops/test_t132a_canary.py, sdm-testkit's tests/t132a_key_cast.rs and t132a_keys_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. T1.32g's test author (at 43f6bfa3) changed the recorder's text of a float in a mix to the core's (contract/tools/key_cast_record.py's host_text), re-recorded the vectors and added the utf8-float-text key: the vectors pending since fail on the host's str() text, and on rust-host the three new ones wait for a register ref of their transition.",
  "pending": {
-  "python-core": [
-   "int16.mixed.float-text",
-   "int32.mixed.float-text",
-   "int64.mixed.float-text",
-   "int8.mixed.float-text",
-   "large-utf8.mixed.float-text",
-   "uint16.mixed.float-text",
-   "uint32.mixed.float-text",
-   "uint64.mixed.float-text",
-   "uint8.mixed.float-text",
-   "utf8-float-text.mixed.float-1e16-text",
-   "utf8-float-text.mixed.float-tie-text",
-   "utf8-float-text.mixed.float-tiny-text",
-   "utf8.mixed.float-text"
-  ],
-  "rust-host": [
-   "utf8-float-text.mixed.float-1e16-text",
-   "utf8-float-text.mixed.float-tie-text",
-   "utf8-float-text.mixed.float-tiny-text"
-  ],
+  "python-core": [],
+  "rust-host": [],
   "exits": [
    "py:test_each_key_case_is_admitted[key.decimal-18-0]",
    "py:test_each_key_case_is_admitted[key.decimal-38-10]",
