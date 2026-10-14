@@ -68,9 +68,10 @@ checkpoint's files, read from git at ``--checkpoint``:
   checkpoint's), or an approved entry states that case, cell, runner and
   exact old and new outcome, an owner-approved one for a new refusal;
   ``INTERNAL_ERROR`` never passes, held or proposed, but python-old's equal
-  to the committed reference line (:func:`old_client_crash`), which is noted
-  as the old client's crash; the candidate's proposed baselines equal
-  the observations and hold every acceptance case; and ``availability``: each
+  to the checkpoint's reference line less host warnings and their origins
+  (:func:`old_client_crash`), which is noted as the old client's crash; the
+  candidate's proposed baselines equal the observations and hold every
+  acceptance case; and ``availability``: each
   observation has every field its runner has available and none it has not.
 
 A baseline is the checkpoint's, so a branch-side edit of one changes
@@ -560,16 +561,27 @@ def old_client_crash(
     ordered: dict[str, Any] | None,
 ) -> bool:
     r"""Whether ``observation`` is the old client's own crash: python-old's
-    ``INTERNAL_ERROR`` equal to the case's committed reference line in its
-    semantic projection, the reference's own ``StructuredDataError``, held
-    with the reference result as its baseline (E110, the owner's). Every other
-    ``INTERNAL_ERROR`` is a panic, which no baseline holds."""
+    ``INTERNAL_ERROR`` equal to the case's reference line at the checkpoint
+    in its semantic projection, less the host's warnings and their origins
+    (runtime noise: python-old records origins and python-ref none, and
+    each cell's libraries warn their own way), the reference's own
+    ``StructuredDataError``, held with the reference result as its baseline
+    (E110, the owner's). Every other ``INTERNAL_ERROR`` is a panic, which no
+    baseline holds."""
+
+    def exact(line: dict[str, Any]) -> dict[str, Any]:
+        found = semantic(line, ordered)
+        if isinstance(found.get('host'), dict):
+            found['host'].pop('warnings', None)
+            found['host'].pop('origins', None)
+        return found
+
     return (
         runner == 'python-old'
         and observation is not None
         and reference is not None
         and at(observation, 'outcome.code') == PANIC
-        and semantic(observation, ordered) == semantic(reference, ordered)
+        and exact(observation) == exact(reference)
     )
 
 
@@ -746,6 +758,11 @@ def effective(
             if not isinstance(item, dict) or item.get('old') != 'none':
                 continue
             case, runner = item.get('case'), item.get('runner')
+            if not isinstance(case, str) or not isinstance(runner, str):
+                raise Unreadable(
+                    f'{REGISTER}: {entry.get("id")}: a case outcome whose '
+                    'case or runner is not a name'
+                )
             ref = reference.get(case)
             if (
                 ref is None
@@ -1447,7 +1464,7 @@ def check(
                 corpus,
                 entries,
                 gone,
-                reference,
+                reference_lines(checkpoint),
                 (new_policy or {}).get('ordered')
                 if isinstance(new_policy, dict)
                 else None,
@@ -1483,6 +1500,9 @@ def accept(
     refuses, is left out."""
     tree = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
     reference = reference_lines(tree)
+    recorded = (
+        reference_lines(Tree(repo, checkpoint)) if checkpoint else reference
+    )
     expected = (
         effective(
             baselines(Tree(repo, checkpoint)),
@@ -1504,20 +1524,22 @@ def accept(
             if observation is None:
                 continue
             want = expected.get(case, {}).get(runner)
-            meets = (
-                projection(observation, list(want)) == want
-                if want is not None
-                else ref is not None
-                and all(
-                    at(observation, name) == at(ref, name)
-                    for name in fields
-                    if (marks.get(runner) or {}).get(name) != 'unavailable'
-                )
+            if want is None and ref is not None:
+                want = projection(ref, fields)
+            # What the runner cannot observe is left out (availability.yaml),
+            # so one entry text serves every runner.
+            meets = want is not None and all(
+                at(observation, name) == want.get(name)
+                for name in fields
+                if (marks.get(runner) or {}).get(name) != 'unavailable'
             )
             if not meets or (
                 at(observation, 'outcome.code') == PANIC
                 and not old_client_crash(
-                    runner, observation, ref, policy.get('ordered')
+                    runner,
+                    observation,
+                    recorded.get(case),
+                    policy.get('ordered'),
                 )
             ):
                 continue

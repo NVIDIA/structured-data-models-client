@@ -3,18 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_python_old_as_run_holds_the_seven[floor-pandas2.2]",
-   "py:test_python_old_as_run_holds_the_seven[ref-pandas3]",
-   "py:test_accept_proposes_python_old_as_run_and_the_admission_passes[floor-pandas2.2]",
-   "py:test_accept_proposes_python_old_as_run_and_the_admission_passes[ref-pandas3]",
-   "py:test_host_warnings_and_their_origins_are_runtime_noise[no warnings]",
-   "py:test_host_warnings_and_their_origins_are_runtime_noise[other warnings]",
-   "py:test_a_candidate_s_reference_line_cannot_make_a_held_crash_match",
-   "py:test_a_candidate_s_reference_line_cannot_make_accept_propose_a_crash",
-   "py:test_accept_refuses_an_entry_s_case_of_another_type_by_name[a list]",
-   "py:test_accept_refuses_an_entry_s_case_of_another_type_by_name[a mapping]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
