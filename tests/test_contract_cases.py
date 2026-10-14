@@ -127,9 +127,11 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     if source != {
         'tables': list(named.get('tables', [])),
         'primary_keys': {
-            t: [k] for t, k in named.get('primary_keys', {}).items()
+            t: {'value': [k]} for t, k in named.get('primary_keys', {}).items()
         },
-        'time_columns': named.get('time_columns', {}),
+        'time_columns': {
+            t: {'value': c} for t, c in named.get('time_columns', {}).items()
+        },
     }:
         problems.append('describe_source is not of its source')
     materialize = core.get('materialize')

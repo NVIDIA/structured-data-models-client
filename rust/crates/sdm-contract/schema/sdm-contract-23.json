@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/22",
+  "$id": "sdm-contract/23",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -473,23 +473,17 @@
           }
         },
         "primary_keys": {
-          "description": "Declared primary keys, by the schema's name of the table.",
+          "description": "Declared primary keys, by the schema's name of the table: each its\ncolumns in order, `null` naming none (refused as an empty key), or\n`unreadable` for a value the host could not write as an ordered\nsequence of names (the conformance rule on [`Given`]), which the\ncore refuses (decision E101).",
           "type": "object",
           "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "$ref": "#/$defs/Given"
           }
         },
         "time_columns": {
-          "description": "Declared time columns, by the schema's name of the table; `null`\nsays the table has none, as the caller's `None` does (decision E61).",
+          "description": "Declared time columns, by the schema's name of the table: a name,\n`null` saying the table has none, as the caller's `None` does\n(decision E61), or `unreadable` for a value that is not a name.",
           "type": "object",
           "additionalProperties": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "$ref": "#/$defs/Given2"
           }
         },
         "relationships": {
@@ -528,6 +522,61 @@
       "required": [
         "name",
         "source"
+      ]
+    },
+    "Given": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Given2": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
       ]
     },
     "SourceDescription": {
@@ -1718,63 +1767,8 @@
         }
       ]
     },
-    "Given": {
-      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "unreadable"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "value": {
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": [
-            "value"
-          ],
-          "additionalProperties": false
-        }
-      ]
-    },
-    "Given2": {
-      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "unreadable"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "value": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "value"
-          ],
-          "additionalProperties": false
-        }
-      ]
-    },
     "Given3": {
-      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
       "oneOf": [
         {
           "type": "string",
@@ -1797,7 +1791,7 @@
       ]
     },
     "Given4": {
-      "description": "A value a caller gave an edit: the value, as the contract writes it, or\na value of the host's own no contract type holds (a key named by a\nnumber, a set of names, a relationship that is not one), which the\ncore refuses as the reference refuses it.",
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
       "oneOf": [
         {
           "type": "string",

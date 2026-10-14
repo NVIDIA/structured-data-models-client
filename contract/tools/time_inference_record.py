@@ -484,7 +484,10 @@ def case_for(
                         for name, source in (vector.get('tables') or {}).items()
                     ],
                     'primary_keys': {},
-                    'time_columns': dict(named or {}),
+                    'time_columns': {
+                        table: {'value': column}
+                        for table, column in (named or {}).items()
+                    },
                 },
                 'check_keys': True,
             }

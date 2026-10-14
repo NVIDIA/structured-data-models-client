@@ -2040,47 +2040,88 @@ entries:
     tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32d its refs name the family's vectors whose source holds an empty table (the fact table, the entity table, both, a third table named or not, the fact table named, emptied by a filter, and with no entities asked for), each the same transition, the reference's unnamed RuntimeError to this entry's UNSUPPORTED_REQUEST: for a reviewer to hold to the approved meaning. The code is kept: the recommendation above, INVALID_REQUEST, would change this approved entry, so T1.32d leaves it to the owner (E91).
 
 - id: P1B-12
-  title: Schema.from_source's keys and time columns of the wrong type are read otherwise on the core route than by the reference
+  title: Schema.from_source's keys and time columns of the wrong type are refused by the core, by name, where the reference refuses them or fails unnamed
   kind: change
   old_behavior: >-
-    The reference reads each key it is given with _as_key_tuple: None names
-    no column, refused as an empty key; a name, one column; an ordered
-    iterable of names, its columns; anything else (a number, a set, a
-    mapping, a nested list) is refused, all StructuredDataError
-    INVALID_REQUEST. A time column that is not a name is refused as a
-    column the table lacks (a number, INVALID_REQUEST), or fails unnamed (a
-    list, TypeError).
+    The reference reads each key it is given with _as_key_tuple, after the
+    source is read and the key's table is found: None names no column,
+    refused as an empty key; a name, one column; an ordered iterable of
+    names, read once with list(), its columns; anything else (a number, a
+    set, a mapping, bytes, a nested list, a member that is not a name) is
+    refused, all StructuredDataError INVALID_REQUEST, and an exception
+    raised while reading the iterable propagates. A time column that is
+    not a name is refused as a column the table lacks where it is hashable
+    (a number, a tuple, INVALID_REQUEST), and fails unnamed where it is
+    not (a list, a set, a mapping, a pd.Index or an ndarray: TypeError
+    unhashable type). A table named by a non-str is refused
+    INVALID_REQUEST as a table the schema lacks; text JSON cannot hold (a
+    lone surrogate) is refused INVALID_REQUEST.
   new_behavior: >-
-    On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    schema bridge writes each key as a list of its names before the core
-    reads it (since T1.23, on the route for tables named from T1.24): a key
-    of None or a number fails with a raw TypeError; a set or a mapping is
-    read as its members or keys and taken; a nested list, and any time
-    column that is not a name (a number or a list), reach the contract's
-    decoder, which refuses them INVALID_MESSAGE. Measured at T1.24's fix
-    round 1, pinned both routes' by the client's
-    tests/test_the_schema_route.py. A value the contract's JSON cannot
-    encode fails on the core route with a raw TypeError or ValueError where
-    the reference gives INVALID_REQUEST: a time column given as a date, a
-    NaN or a NumPy bool, and a key member that is a NaN or another object
-    (found at T1.24's review, recorded at T1.25). The default route is
-    unchanged.
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the Python bridge writes each key and time column as contract 23's
+    Given (T1.32h, decision E101): a value the contract's type holds as
+    {"value": ...}, any other "unreadable", by the codec's one classifier
+    the edit setters use too. The core refuses each after the source is
+    read, as the reference does: an unreadable key INVALID_REQUEST
+    {field: primary_keys, table, rule: key_not_names}; a None key as an
+    empty key {field, table}; an unreadable time column INVALID_REQUEST
+    {field: time_columns, table, rule: time_column_not_a_name}; a column
+    the table lacks {field, table, column}, as before. Every input the
+    reference refuses INVALID_REQUEST is refused INVALID_REQUEST. What
+    differs from the reference: (1) a time column the reference fails
+    unnamed (a list, a set, a mapping, a pd.Index, an ndarray) is the
+    core's named refusal (decision E66(b)'s class); (2) the host's own
+    steps, reading an iterable key (an iterable whose reading raises lets
+    its exception out unchanged, KeyboardInterrupt included) and encoding
+    (a lone surrogate, the codec's INVALID_REQUEST with no fields), run
+    before the source is read, where the reference reads the key after
+    it, so with a source that also fails the host's step is seen first;
+    (3) a table named by a non-str is written by JSON's coercion of an
+    object key (3 is the table "3", None "null"), refused as a table the
+    schema lacks with that name, or taken if the source holds such a
+    table; a tuple is the codec's refusal (P1B-74 proposes the host's
+    refusal instead); (4) in several tables, the core takes the tables in
+    the order of their names, the reference in the caller's mapping order
+    (the multi-fault class, E41(k)). The default route is unchanged.
   affected_inputs: >-
-    Schema.from_source over a DuckDB source under a forced core route, with
-    primary_keys or time_columns holding a value of another type than a
-    name or a sequence of names.
-  cases: [T1.23, T1.24, T1.24b]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+    Schema.from_source over a DuckDB source under a forced core route,
+    with primary_keys or time_columns holding a value of another type than
+    a name or a sequence of names, an iterable key, or a table named by
+    anything but a str.
+  cases: [T1.23, T1.24, T1.24b, T1.32h, base.adventureworks, time.text-declared]
+  refs:
+  - 'contract/given-vectors.json#time.list refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/given-vectors.json#time.mapping refusal UNNAMED -> refusal INVALID_REQUEST'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E101}
   notes: >-
     Found by T1.24's round-1 review (subagent P3-3), pre-existing from
-    T1.23. The fix is the reference's own reading in the bridge, a host's
-    reading of its own argument (stays host): reading each key as
-    _as_key_tuple does and a time column's type before the core runs. It
-    grows frozen bridge code (E50(c)), so it waits for an owner-approved
-    allowance, which T1.24b's row asks for its setters' routing too.
-    Never self-approved.
+    T1.23. The owner said on 2026-10-13 that P1B-12 must be fixed, asked
+    for a design of where the rule lives and of the interface, and
+    allowed the bridge to grow for it (owner decisions of 2026-10-13,
+    item 18, relayed by the orchestrator; never the implementer's
+    approval). The design of 2026-10-13, revised after Codex's review,
+    puts every refusal of a value in the core (sdm-schema's
+    apply_keys_and_times, sharing edit_schema's refusals, E101) and
+    leaves the host only the reading of its own argument's type, the
+    stays-host class: the frozen _rust/schema.py::from_source is declared
+    moved, naming T1.32h. Held by contract/given-vectors.json on
+    python-core and rust-host (contract/tests/test_t132h_given_vectors.py,
+    sdm-testkit's tests/t132h_given.rs) and the client's
+    tests/test_t132h_keys_and_times.py, every Python type. Before T1.32h
+    a key of None or a number failed with a raw TypeError, a set or a
+    mapping was read as its members or keys and taken, and a nested list
+    or a time column that is not a name reached the decoder,
+    INVALID_MESSAGE. A key naming one column twice is the reference's
+    success and the core's composite_key (E92) unless P1B-73 is approved.
+    Contract 23 changes the shape of two cases' core inputs, their
+    describe_source spec's keys and time columns now written as Given;
+    their outcomes are unchanged on every runner, and their reference
+    lines are recorded again for the new case files (identity only).
+  case_outcomes:
+  - {case: base.adventureworks, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'case file only: the core spec written as contract 23 Given; the outcome unchanged'}
+  - {case: time.text-declared, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'case file only: the core spec written as contract 23 Given; the outcome unchanged'}
 
 - id: P1B-13
   title: A null where the sampler's walk tells rows apart is no link on the core route

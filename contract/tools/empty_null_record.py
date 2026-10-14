@@ -578,7 +578,7 @@ def core_indices(indices: list[int]) -> list[dict[str, str]]:
 def core_source(from_source: dict[str, Any] | None) -> dict[str, Any]:
     r"""``Schema.from_source``'s keywords as the core's source spec (the
     case's ``core.describe_source.source``), as the client's bridge builds
-    it."""
+    it: each key and time column as the contract's ``Given`` (T1.32h)."""
     given = from_source or {}
     return {
         'tables': [
@@ -586,10 +586,13 @@ def core_source(from_source: dict[str, Any] | None) -> dict[str, Any]:
             for name, source in (given.get('tables') or {}).items()
         ],
         'primary_keys': {
-            table: [key] if isinstance(key, str) else list(key)
+            table: {'value': [key] if isinstance(key, str) else list(key)}
             for table, key in (given.get('primary_keys') or {}).items()
         },
-        'time_columns': dict(given.get('time_columns') or {}),
+        'time_columns': {
+            table: {'value': column}
+            for table, column in (given.get('time_columns') or {}).items()
+        },
     }
 
 

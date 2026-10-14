@@ -355,7 +355,7 @@ def case_for(
                 'source': {
                     'tables': [],
                     'primary_keys': {
-                        table: [column]
+                        table: {'value': [column]}
                         for table, column in (named or {}).items()
                     },
                     'time_columns': {},

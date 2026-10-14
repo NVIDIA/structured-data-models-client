@@ -352,11 +352,16 @@ pub struct SourceSpec {
     /// it and the name the source holds it under; empty, every table the
     /// source lists, each under its own name (decision E59).
     pub tables: Vec<NamedTable>,
-    /// Declared primary keys, by the schema's name of the table.
-    pub primary_keys: BTreeMap<String, Vec<String>>,
-    /// Declared time columns, by the schema's name of the table; `null`
-    /// says the table has none, as the caller's `None` does (decision E61).
-    pub time_columns: BTreeMap<String, Option<String>>,
+    /// Declared primary keys, by the schema's name of the table: each its
+    /// columns in order, `null` naming none (refused as an empty key), or
+    /// `unreadable` for a value the host could not write as an ordered
+    /// sequence of names (the conformance rule on [`Given`]), which the
+    /// core refuses (decision E101).
+    pub primary_keys: BTreeMap<String, Given<Option<Vec<String>>>>,
+    /// Declared time columns, by the schema's name of the table: a name,
+    /// `null` saying the table has none, as the caller's `None` does
+    /// (decision E61), or `unreadable` for a value that is not a name.
+    pub time_columns: BTreeMap<String, Given<Option<String>>>,
     /// The relationships given, each `[foreign key, referenced key]` by the
     /// schema's names, in place of the declared and inferred ones; an empty
     /// list says there are none. Left out, they are the source's declared
@@ -565,10 +570,21 @@ pub enum SchemaEdit {
     Relationships { links: Vec<Given<Vec<ColumnRef>>> },
 }
 
-/// A value a caller gave an edit: the value, as the contract writes it, or
-/// a value of the host's own no contract type holds (a key named by a
-/// number, a set of names, a relationship that is not one), which the
-/// core refuses as the reference refuses it.
+/// A value a caller gave an edit or `describe_source`: the value, as the
+/// contract writes it, or a value of the host's own no contract type holds
+/// (a key named by a number, a set of names, a relationship that is not
+/// one), which the core refuses as the reference refuses it.
+///
+/// The conformance rule every host holds to (decision E101): the host's
+/// null or none is `{"value": null}`; text is the value; a finite, ordered
+/// collection read once without error, every member non-null text, is a
+/// list of those texts; a collection with a null, non-text or nested
+/// member, a collection with no order, a mapping, binary data, a number, a
+/// boolean, a temporal value or anything else is `unreadable`. Text the
+/// host cannot encode as UTF-8 is the host's encoding refusal, and an
+/// error raised while reading a collection is the caller's, never
+/// `unreadable`. Whether a value is valid (an empty key, a column the
+/// table lacks) is the core's call, never the host's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Given<T> {

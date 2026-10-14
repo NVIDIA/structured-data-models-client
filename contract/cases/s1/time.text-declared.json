@@ -40,7 +40,9 @@
         "tables": [],
         "primary_keys": {},
         "time_columns": {
-          "orders": "happened"
+          "orders": {
+            "value": "happened"
+          }
         }
       },
       "check_keys": true

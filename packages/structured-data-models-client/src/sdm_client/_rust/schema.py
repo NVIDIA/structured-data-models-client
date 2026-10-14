@@ -72,6 +72,11 @@ def from_source(
     r"""The schema of the tables named, or of every table, of the DuckDB
     ``source``, described on the core.
 
+    Each key and time column is written as the contract's ``Given``: a
+    value the contract's type cannot hold (a number, a set, a mapping) as
+    ``unreadable``, which the core refuses (decision E101); an iterable key
+    is read once, here, before the run starts.
+
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for an input it does not
@@ -86,10 +91,13 @@ def from_source(
             for name, named in (tables or {}).items()
         ],
         'primary_keys': {
-            table: [key] if isinstance(key, str) else list(key)
+            table: codec.given_key(key)[0]
             for table, key in (primary_keys or {}).items()
         },
-        'time_columns': dict(time_columns or {}),
+        'time_columns': {
+            table: codec.given_name_or_none(named)
+            for table, named in (time_columns or {}).items()
+        },
     }
     if relationships is not None:
         links = list(relationships)

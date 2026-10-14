@@ -263,13 +263,15 @@ fn core_source(from_source: &Value) -> Value {
                 Value::String(_) => json!([key]),
                 other => other.clone(),
             };
-            (table.clone(), key)
+            (table.clone(), json!({"value": key}))
         })
         .collect();
-    let times = from_source["time_columns"]
+    let times: Map<String, Value> = from_source["time_columns"]
         .as_object()
-        .cloned()
-        .unwrap_or_default();
+        .into_iter()
+        .flatten()
+        .map(|(table, column)| (table.clone(), json!({"value": column})))
+        .collect();
     json!({"tables": tables, "primary_keys": keys, "time_columns": times})
 }
 

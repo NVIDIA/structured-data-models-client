@@ -21,7 +21,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedTable, Dtype, SourceDescription, Stype,
+    self, ColumnRef, DescribedColumn, DescribedTable, Dtype, SourceDescription, Stype,
 };
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -200,14 +200,13 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
 /// over, and the relationships, in place of the declared and inferred ones.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Given<'a> {
-    pub time_columns: Option<&'a BTreeMap<String, Option<String>>>,
+    pub time_columns: Option<&'a BTreeSet<String>>,
     pub relationships: Option<&'a [Link]>,
 }
 
 impl Given<'_> {
     fn names_time_of(&self, table: &str) -> bool {
-        self.time_columns
-            .is_some_and(|given| given.contains_key(table))
+        self.time_columns.is_some_and(|given| given.contains(table))
     }
 }
 
@@ -357,12 +356,16 @@ fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
 /// meant kept, and gives the table's other columns back what they meant;
 /// naming a time column makes it a timestamp; a time column cleared
 /// (`None`) leaves the table none, its columns meaning what they meant, as
-/// the reference's setter takes `None` (decision E61). Refusals are
+/// the reference's setter takes `None` (decision E61). A key or time
+/// column the host could not write as names (`unreadable`) is refused by
+/// name, after its table is found, as `edit_schema` refuses it; a key of
+/// `null` names no column and is refused as an empty key, as the
+/// reference's `_as_key_tuple` reads `None` (decision E101). Refusals are
 /// `INVALID_REQUEST`, naming the field.
 pub fn apply_keys_and_times(
     tables: &mut [InferredTable],
-    primary_keys: &BTreeMap<String, Vec<String>>,
-    time_columns: &BTreeMap<String, Option<String>>,
+    primary_keys: &BTreeMap<String, ops::Given<Option<Vec<String>>>>,
+    time_columns: &BTreeMap<String, ops::Given<Option<String>>>,
 ) -> Result<(), CoreError> {
     let find =
         |tables: &mut [InferredTable], name: &str, field: &str| -> Result<usize, CoreError> {
@@ -373,6 +376,11 @@ pub fn apply_keys_and_times(
         };
     for (name, key) in primary_keys {
         let at = find(tables, name, "primary_keys")?;
+        let key = match key {
+            ops::Given::Unreadable => return Err(key_not_names(name, "primary_keys")),
+            ops::Given::Value(None) => return Err(empty_key(name, "primary_keys")),
+            ops::Given::Value(Some(key)) => key,
+        };
         let table = &mut tables[at];
         for column in key {
             if table.column(column).is_none() {
@@ -381,10 +389,7 @@ pub fn apply_keys_and_times(
         }
         let [column] = key.as_slice() else {
             if key.is_empty() {
-                return Err(
-                    invalid("a table was given an empty primary key", "primary_keys")
-                        .with_field("table", Detail::text(name)),
-                );
+                return Err(empty_key(name, "primary_keys"));
             }
             return Err(crate::not_yet("composite_key"));
         };
@@ -434,9 +439,15 @@ pub fn apply_keys_and_times(
     for (name, column) in time_columns {
         let at = find(tables, name, "time_columns")?;
         let table = &mut tables[at];
-        let Some(column) = column else {
-            table.time_column = None;
-            continue;
+        let column = match column {
+            ops::Given::Unreadable => {
+                return Err(time_column_not_a_name(name, "time_columns"));
+            }
+            ops::Given::Value(None) => {
+                table.time_column = None;
+                continue;
+            }
+            ops::Given::Value(Some(column)) => column,
         };
         if table.column(column).is_none() {
             return Err(no_column(name, column, "time_columns"));
@@ -466,6 +477,30 @@ pub fn apply_keys_and_times(
         table.time_column = Some(column.clone());
     }
     Ok(())
+}
+
+/// A key the host could not write as a column or a sequence of them
+/// (`unreadable`), refused alike by `describe_source` and `edit_schema`,
+/// `field` each operation's own (decision E101).
+pub(crate) fn key_not_names(table: &str, field: &str) -> CoreError {
+    invalid("a primary key names a column or a sequence of them", field)
+        .with_field("table", Detail::text(table))
+        .with_field("rule", Detail::text("key_not_names"))
+}
+
+/// A time column the host could not write as a name (`unreadable`),
+/// refused alike by `describe_source` and `edit_schema` (decision E101).
+pub(crate) fn time_column_not_a_name(table: &str, field: &str) -> CoreError {
+    invalid("a column named is not its table's", field)
+        .with_field("table", Detail::text(table))
+        .with_field("rule", Detail::text("time_column_not_a_name"))
+}
+
+/// A key naming no column, refused alike by `describe_source` (an empty
+/// list, or `null`) and `edit_schema` (an empty list; its `null` clears).
+pub(crate) fn empty_key(table: &str, field: &str) -> CoreError {
+    invalid("a table was given an empty primary key", field)
+        .with_field("table", Detail::text(table))
 }
 
 pub(crate) fn no_column(table: &str, column: &str, field: &str) -> CoreError {

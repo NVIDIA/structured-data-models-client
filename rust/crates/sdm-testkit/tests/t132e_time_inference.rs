@@ -251,6 +251,13 @@ fn the_case(vector: &Value) -> Case {
         Value::Null => json!({}),
         other => other.clone(),
     };
+    // The core's spec writes each time column as the contract's `Given`.
+    let written: serde_json::Map<String, Value> = named
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(table, column)| (table.clone(), json!({"value": column})))
+        .collect();
     let mut input = json!({
         "base": "shop",
         "setup": vector["setup"].clone(),
@@ -288,7 +295,7 @@ fn the_case(vector: &Value) -> Case {
         "core": {
             "describe_source": {
                 "provider": {"provider": "sql", "dialect": "duckdb"},
-                "source": {"tables": named_tables, "primary_keys": {}, "time_columns": named},
+                "source": {"tables": named_tables, "primary_keys": {}, "time_columns": written},
                 "check_keys": true,
             }
         },

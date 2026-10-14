@@ -256,7 +256,7 @@ fn the_case(all: &Value, vector: &Value) -> Case {
     let mut keys = serde_json::Map::new();
     if let Some(named) = named.as_object() {
         for (table, column) in named {
-            keys.insert(table.clone(), json!([column]));
+            keys.insert(table.clone(), json!({"value": [column]}));
         }
     }
     let text = vector["account_kind"] == "text";

@@ -13,7 +13,7 @@
 use std::collections::BTreeSet;
 
 use sdm_contract::ops::{
-    ColumnRef, DescribedColumn, DescribedTable, Dtype, SourceDescription, Stype,
+    ColumnRef, DescribedColumn, DescribedTable, Dtype, Given as Written, SourceDescription, Stype,
 };
 use sdm_contract::{ColumnType, CoreWarning, Detail, ErrorCode, Scalar};
 use sdm_schema::assemble::{self, Given, Link};
@@ -573,11 +573,14 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
         tables[0].time_column = Some("ts".into());
         let keys = keys
             .iter()
-            .map(|(t, k)| ((*t).to_owned(), k.iter().map(|c| (*c).to_owned()).collect()))
+            .map(|(t, k)| {
+                let names = k.iter().map(|c| (*c).to_owned()).collect();
+                ((*t).to_owned(), Written::Value(Some(names)))
+            })
             .collect();
         let times = times
             .iter()
-            .map(|(t, c)| ((*t).to_owned(), c.map(str::to_owned)))
+            .map(|(t, c)| ((*t).to_owned(), Written::Value(c.map(str::to_owned))))
             .collect();
         assemble::apply_keys_and_times(&mut tables, &keys, &times).map(|()| tables)
     };
@@ -661,18 +664,17 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
 /// warned of.
 #[test]
 fn relationships_given_are_the_schema_s_and_checked() {
-    let given =
-        |links: &[Link], times: Option<&std::collections::BTreeMap<String, Option<String>>>| {
-            assemble::assemble(
-                vec![orders(Dtype::Int), users()],
-                vec![],
-                Given {
-                    time_columns: times,
-                    relationships: Some(links),
-                },
-                None,
-            )
-        };
+    let given = |links: &[Link], times: Option<&BTreeSet<String>>| {
+        assemble::assemble(
+            vec![orders(Dtype::Int), users()],
+            vec![],
+            Given {
+                time_columns: times,
+                relationships: Some(links),
+            },
+            None,
+        )
+    };
     let none = given(&[], None).unwrap();
     assert!(none.description.links.is_empty());
     assert_eq!(
@@ -715,8 +717,7 @@ fn relationships_given_are_the_schema_s_and_checked() {
         Some("sub_id"),
     );
     subscriptions.time_column = None;
-    let timed =
-        std::collections::BTreeMap::from([("plans".to_owned(), Some("modified_at".to_owned()))]);
+    let timed = BTreeSet::from(["plans".to_owned()]);
     let made = assemble::assemble(
         vec![plans(), subscriptions],
         vec![],
@@ -737,7 +738,7 @@ fn relationships_given_are_the_schema_s_and_checked() {
     // settled or warned of, though no link refers to the table.
     let mut cleared_plans = plans();
     cleared_plans.time_column = None;
-    let cleared = std::collections::BTreeMap::from([("plans".to_owned(), None)]);
+    let cleared = BTreeSet::from(["plans".to_owned()]);
     let made = assemble::assemble(
         vec![cleared_plans, users()],
         vec![],

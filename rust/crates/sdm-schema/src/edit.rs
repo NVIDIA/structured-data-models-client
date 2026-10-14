@@ -35,7 +35,8 @@ use sdm_contract::ops::{
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 
 use crate::assemble::{
-    can_identify, checked, invalid, mark_keys, name_each_other, no_column, once, two_ways,
+    can_identify, checked, empty_key, invalid, key_not_names, mark_keys, name_each_other,
+    no_column, once, time_column_not_a_name, two_ways,
 };
 
 /// The meanings a caller may assign a column, by the text it gives
@@ -225,13 +226,7 @@ fn primary_key(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "primary_key")?;
     let names = match key {
-        Given::Unreadable => {
-            return Err(invalid(
-                "a primary key names a column or a sequence of them",
-                "primary_key",
-            )
-            .with_field("table", Detail::text(table)));
-        }
+        Given::Unreadable => return Err(key_not_names(table, "primary_key")),
         Given::Value(None) => {
             let shape = &mut description.tables[at];
             shape.duplicate_keys = Some(Scalar::UInt64(0));
@@ -243,10 +238,7 @@ fn primary_key(
     };
     let shape = &description.tables[at];
     if names.is_empty() {
-        return Err(
-            invalid("a table was given an empty primary key", "primary_key")
-                .with_field("table", Detail::text(table)),
-        );
+        return Err(empty_key(table, "primary_key"));
     }
     for name in names {
         let column = &shape.columns[column_at(shape, name, "primary_key")?];
@@ -293,10 +285,7 @@ fn time_column(
 ) -> Result<Option<ColumnRef>, CoreError> {
     let at = table_at(description, table, "time_column")?;
     let name = match column {
-        Given::Unreadable => {
-            return Err(invalid("a column named is not its table's", "time_column")
-                .with_field("table", Detail::text(table)));
-        }
+        Given::Unreadable => return Err(time_column_not_a_name(table, "time_column")),
         Given::Value(None) => {
             description.tables[at].time_column = None;
             return Ok(None);

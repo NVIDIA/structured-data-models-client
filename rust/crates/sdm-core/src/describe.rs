@@ -267,6 +267,7 @@ pub(crate) async fn run(
         None
     };
     let duplicates = counted.as_ref().map(|_| Scalar::UInt64(0));
+    let timed = spec.time_columns.keys().cloned().collect();
 
     // The schema as the reference's client assembles it: the links, the
     // edit stamps they settle, the columns joined on marked, and the
@@ -278,7 +279,7 @@ pub(crate) async fn run(
         tables,
         declared,
         Given {
-            time_columns: Some(&spec.time_columns),
+            time_columns: Some(&timed),
             relationships: given,
         },
         duplicates,
