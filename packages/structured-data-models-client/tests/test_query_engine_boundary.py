@@ -315,33 +315,48 @@ def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
 
 
 @pytest.mark.parametrize(
-    ('per_call', 'named'),
-    [(10_000, '10,000'), (200, '200')],
-    ids=['ordinary', 'temporal_link_prediction'],
+    ('rows_per_call', 'says'),
+    [
+        (2, 'rows_per_call=N) below the 2'),
+        (1, 'no smaller one to ask for'),
+    ],
+    ids=['a_smaller_call', 'no_smaller_call'],
 )
 def test_a_size_refusal_is_answered_in_options_this_client_takes(
-    per_call, named
+    monkeypatch, rows_per_call, says
 ):
     """The engine offers the run mode, which this client derives rather than
     takes, so a caller following its advice lands on another refusal. The size
-    it offers instead is the one this question holds to.
+    it offers instead is the one the question in hand holds to, and where a
+    call already scores one row it offers none.
 
-    Raised through the guard the production path uses, because a helper that
-    rewrites a message proves nothing if nothing calls it.
+    Raised from where the engine raises it, through the gathering the caller
+    asked for, because the rewriting is only reached if the guard around that
+    gathering is told what a call holds.
     """
-    built = RelationalMaterializer(schema())
-    with pytest.raises(StructuredDataError) as refused:
-        with built._engine_errors(None, per_call):
-            raise ValueError(
-                'Context size exceeds the 30MB limit. 9 nodes.\nPlease '
-                'reduce either the number of entities predicted at once or '
-                'the run mode.'
+    from sdm_relational_engine.rfm.rfm import _SIZE_LIMIT_MSG
+
+    def too_large(*args, **kwargs):
+        raise ValueError(_SIZE_LIMIT_MSG.format(stats='9 nodes.'))
+
+    built = query()
+    monkeypatch.setattr(
+        type(built._relational_materializer._get_model()),
+        'materialize_task',
+        too_large,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with pytest.raises(StructuredDataError) as refused:
+            built.materialize(
+                indices=[5, 6, 7, 8, 9],
+                num_context_samples=20,
+                rows_per_call=rows_per_call,
             )
     said = str(refused.value)
     assert '9 nodes' in said
     assert 'run mode' not in said
-    assert f'rows_per_call=N) below the {named}' in said
-    assert 'num_context_samples' in said
+    assert says in said
     assert refused.value.details['batch_too_large_to_send']
 
 

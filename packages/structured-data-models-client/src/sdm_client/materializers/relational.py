@@ -907,6 +907,16 @@ _ASK_IN_SMALLER_CALLS = (
 )
 
 
+#: What to say when a call already scores one row. There is no smaller call
+#: to ask for, so offering one would be asking for a number that does not
+#: exist.
+_NO_CALL_IS_SMALLER = (
+    'A call already scores one row, so there is no smaller one to ask for: '
+    'what comes down is num_context_samples, num_neighbors or the columns '
+    'the graph carries.'
+)
+
+
 _A_WINDOW_THAT_OUTRAN_THE_DATA = (
     'aggregation time range',
     'we would need data back to',
@@ -928,6 +938,8 @@ def _said_in_this_client_s_terms(said: str, per_call: int | None) -> str:
     """
     at = said.find(_THE_ENGINE_S_REMEDY)
     measured = said if at < 0 else said[:at].rstrip()
+    if per_call is not None and per_call <= 1:
+        return f'{measured} {_NO_CALL_IS_SMALLER}'
     holds = f'{per_call:,}' if per_call else 'number'
     return f'{measured} ' + _ASK_IN_SMALLER_CALLS.format(per_call=holds)
 

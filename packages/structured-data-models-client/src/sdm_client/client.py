@@ -814,7 +814,7 @@ def _numbered_across_calls(
     for payload, rows in zip(calls, counted, strict=True):
         try:
             answers.append(_numbered_from(answer(payload), start))
-        except StructuredDataError as error:
+        except Exception as error:
             _carry_the_answers_already_paid_for(error, answers, start)
             raise
         start += rows or 0
@@ -860,7 +860,7 @@ def _carry_the_steps_already_paid_for(
 
 
 def _carry_the_answers_already_paid_for(
-    error: StructuredDataError, answers: list[PredictionResult], rows: int
+    error: BaseException, answers: list[PredictionResult], rows: int
 ) -> None:
     r"""Record on ``error`` the calls that were answered before it.
 
@@ -876,8 +876,11 @@ def _carry_the_answers_already_paid_for(
     """
     if not answers:
         return
-    error.details = {
-        **error.details,
+    # Not every failure is this client's own: the Databricks transport lets
+    # its OAuth refresh raise, and those calls were paid for too.
+    held = getattr(error, 'details', None)
+    error.details = {  # type: ignore[attr-defined]
+        **(held if isinstance(held, dict) else {}),
         'answered': PredictionResult.merge(answers),
         'calls_answered': len(answers),
         'rows_answered': rows,
