@@ -1,9 +1,19 @@
 {
- "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": []
+  "exits": [
+   "py:test_python_old_holds_the_reference_s_own_internal_error[decimal.class-target-38-18]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.decimal-18-0]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.decimal-38-10]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.hugeint]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.varchar-large-buffers]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-one-bad-value]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-us-date]",
+   "py:test_the_gate_output_records_it_as_the_old_client_s_crash",
+   "py:test_an_admission_proposing_it_lands_and_the_next_change_passes"
+  ]
  },
  "authored": {
   "python-core": [],
@@ -13,7 +23,16 @@
    "py:test_a_contradicted_claim_fails_whatever_the_case_s_status[acceptance]",
    "py:test_a_contradicted_claim_fails_whatever_the_case_s_status[diagnostic]",
    "py:test_a_type_nested_past_the_bound_is_refused_by_name[dictionary]",
-   "py:test_a_type_nested_past_the_bound_is_refused_by_name[run_end_encoded]"
+   "py:test_a_type_nested_past_the_bound_is_refused_by_name[run_end_encoded]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[decimal.class-target-38-18]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.decimal-18-0]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.decimal-38-10]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.hugeint]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[key.varchar-large-buffers]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-one-bad-value]",
+   "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-us-date]",
+   "py:test_the_gate_output_records_it_as_the_old_client_s_crash",
+   "py:test_an_admission_proposing_it_lands_and_the_next_change_passes"
   ]
  }
 }
