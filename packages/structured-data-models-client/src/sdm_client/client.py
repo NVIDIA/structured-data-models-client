@@ -490,6 +490,12 @@ class SDMClient:
             try:
                 answers.append(self.predict(part, model=model, outputs=wanted))
             except StructuredDataError as error:
+                # The parts already answered were paid for as surely as the
+                # batches of one were, and the question is asked in parts for
+                # reasons of the endpoint's rather than the caller's.
+                _carry_the_answers_already_paid_for(
+                    error, answers, sum(len(one.items) for one in answers)
+                )
                 raise about_the_part(error, rewritten, about) from error
         if ranking:
             parts = rewritten.parts
@@ -824,6 +830,11 @@ def _carry_the_answers_already_paid_for(
     thirty-six answers the endpoint was already paid for. Dropping them makes
     the caller buy them again; the error keeps its own type and code, so
     nothing branching on either has to know they are there.
+
+    The same holds of a question asked in parts, where what was answered is
+    whole parts rather than batches of one. ``about_the_part`` copies the
+    error's ``__dict__``, so what is recorded here survives being said of the
+    part it happened in.
     """
     if not answers:
         return

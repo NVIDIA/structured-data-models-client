@@ -112,8 +112,10 @@ class PredictiveQuery:
                 exclusive with ``predict``. On the relational route, more than
                 the endpoint scores in one call are gathered as several calls,
                 and :meth:`~sdm_client.SDMClient.predict` answers them as one.
-                A question asked in parts, such as a ranking or a forecast, is
-                already one call per part and is refused rather than batched.
+                A ranking is refused rather than batched, because a
+                candidate is scored or not for the whole ranking. A forecast's
+                steps are batched, and what is counted against the fan-out
+                budget is the calls they come to.
             predict: Rows supplied directly for scoring. Supported for
                 single-table schemas and mutually exclusive with ``indices``.
             num_context_samples: For ``indices`` requests, the maximum number

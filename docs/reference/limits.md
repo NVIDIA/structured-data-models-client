@@ -43,9 +43,10 @@ Every batch is built before the first is sent, each with its own context, so
 the whole population is held in memory at once. More than ten batches of one
 question is refused at `materialize()` for that reason rather than by the
 endpoint; ask about fewer entities at a time, or raise
-`sdm_client.materializers.relational.MOST_CALLS`. A question asked in parts is
-held to `sdm_client.decompose.MOST_PARTS` instead, counting the calls its
-parts come to rather than the parts.
+`sdm_client.materializers.relational.MOST_CALLS`. Each part of a question
+asked in parts is gathered on its own and held to that same ten; the whole is
+held to `sdm_client.decompose.MOST_PARTS`, counting the calls its parts come
+to rather than the parts.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as

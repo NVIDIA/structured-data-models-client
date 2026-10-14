@@ -103,6 +103,43 @@ def test_a_ranking_over_more_entities_than_one_call_scores_is_refused(
     assert 'fewer entities' in str(refused.value)
 
 
+def test_a_step_that_fails_keeps_the_steps_already_paid_for():
+    """A question asked in parts pays per part, and the parts answered before
+    a failure are as bought as the batches of one are."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client import KumoRelational, SDMClient
+    from sdm_client.errors import StructuredDataError as Refused
+
+    class FailsOnTheThirdCall:
+        calls = 0
+
+        def predict(self, payload: dict) -> dict:
+            type(self).calls += 1
+            if self.calls == 3:
+                raise Refused('the endpoint said no', code='X')
+            table = payload['predict']['instance_table']
+            at = table['columns'].index('instance_id')
+            return {
+                'id': 'echo',
+                'model': 'kumo-relational',
+                'metadata': {},
+                'predictions': [
+                    {'row_index': i, 'id': str(row[at]), 'prediction': 1.0}
+                    for i, row in enumerate(table['rows'])
+                ],
+            }
+
+    request = built(FORECAST, indices=[1, 2])
+    client = SDMClient(url='http://localhost:8000')
+    client._transport = FailsOnTheThirdCall()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with pytest.raises(StructuredDataError) as failed:
+            client.predict(request, model=KumoRelational())
+    assert failed.value.details['calls_answered'] == 2
+    assert failed.value.details['rows_answered'] == 4
+
+
 def test_a_batched_forecast_is_held_to_the_calls_it_comes_to(monkeypatch):
     """Steps are merged per step, so batching one is only a question of how
     many calls it makes: counted, not refused on sight."""
