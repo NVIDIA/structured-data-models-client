@@ -37,6 +37,9 @@ runs the real
   python-core's or rust-host's, even equal to the reference's; an
   acceptance case python-old observes with no proposed baseline, whatever
   the reference answered;
+- still failing, at once: a proposed (not yet held) baseline at
+  ``INTERNAL_ERROR`` on python-core or rust-host, or on python-old unequal
+  to the reference line, fails the change that proposes it;
 - ``accept`` writes python-old's baseline at the reference's
   ``INTERNAL_ERROR``;
 - ``register.py`` still refuses an entry whose new outcome is
@@ -456,6 +459,113 @@ def test_an_acceptance_case_python_old_observes_with_no_baseline_fails(
         f'baselines: {case}: python-old: an acceptance case with no proposed '
         'baseline' in found
     ), found
+
+
+# --- still failing, at once: a proposed baseline --------------------------------
+#
+# A proposed baseline at INTERNAL_ERROR that no landing may hold fails the
+# change that proposes it, not only the next landing's. Each candidate
+# admits a case nothing holds yet and proposes one runner's baseline of it,
+# equal to that runner's observation, so the proposal rule as it stands
+# passes it.
+
+#: A diagnostic case the reference answers with success, held by no runner.
+UNHELD_SUCCESS = 's0.boundary.date-long-field'
+
+
+def admission(
+    case: str, runner: str, observed: Path, core_new: str
+) -> Callable[[Path], None]:
+    r"""``case`` admitted, an approved entry naming it (on python-core,
+    whose new outcome is ``core_new``), and ``runner``'s baseline of it
+    proposed from ``observed``."""
+
+    def edit(r: Path) -> None:
+        admit(r, case)
+        append_entry(
+            r,
+            {
+                'id': 'SEED-2',
+                'kind': 'keep',
+                'cases': [case],
+                'case_outcomes': [
+                    outcome(case, 'python-core', 'none', core_new)
+                ],
+            },
+        )
+        hold(r, runner, case, observed)
+
+    return edit
+
+
+def refused_at_once(problems: list[str], case: str, runner: str) -> bool:
+    return any(
+        p.startswith(f'baselines: {case}: {runner}: ') and 'INTERNAL_ERROR' in p
+        for p in problems
+    )
+
+
+@pytest.mark.parametrize('runner', ['python-core', 'rust-host'])
+def test_a_proposed_internal_error_of_another_runner_fails_at_once(
+    repo: Path, tmp_path: Path, runner: str, request: pytest.FixtureRequest
+) -> None:
+    before = helpers.checkpoint_of(repo)
+    observed = observe(repo, tmp_path, runner)
+    commit(
+        repo,
+        'T1.32g: the admission',
+        admission(
+            CASE,
+            runner,
+            observed,
+            'refusal INVALID_REQUEST at materialize (ValueError)',
+        ),
+    )
+    proposed = lines_of(baseline_file(repo, runner))[CASE]['projection']
+    assert proposed['outcome.code'] == 'INTERNAL_ERROR'
+
+    def refused() -> None:
+        found = check(repo, before, (observed,))
+        assert refused_at_once(found, CASE, runner), found
+
+    G.held('exits', f'py:{request.node.name}', refused)
+
+
+PROPOSED_UNEQUAL: dict[str, tuple[str, Callable[[dict[str, Any]], None]]] = {
+    'another stage': (CASE, outcome_of(stage='predict')),
+    'another error': (CASE, outcome_of(error='ValueError')),
+    'outside the baseline fields': (CASE, _differs_outside_the_baseline),
+    'the reference succeeded': (UNHELD_SUCCESS, panic_outcome),
+}
+
+
+@pytest.mark.parametrize('seed', sorted(PROPOSED_UNEQUAL))
+def test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once(
+    repo: Path, tmp_path: Path, seed: str, request: pytest.FixtureRequest
+) -> None:
+    case, edit = PROPOSED_UNEQUAL[seed]
+    before = helpers.checkpoint_of(repo)
+    reference = helpers.reference(repo)[case]
+    observed = observe(repo, tmp_path, 'python-old', changed(case, edit))
+    ours = lines_of(observed)[case]
+    assert ours['outcome']['code'] == 'INTERNAL_ERROR'
+    assert ratchet.semantic(ours) != ratchet.semantic(reference)
+    core_new = (
+        'success at materialize'
+        if reference['outcome']['result'] == 'success'
+        else 'refusal INVALID_REQUEST at materialize (ValueError)'
+    )
+    commit(
+        repo,
+        'T1.32g: the admission',
+        admission(case, 'python-old', observed, core_new),
+    )
+
+    def refused() -> None:
+        found = check(repo, before, (observed,))
+        assert refused_at_once(found, case, 'python-old'), found
+
+    G.held('exits', f'py:{request.node.name}', refused)
 
 
 # --- accept --------------------------------------------------------------------

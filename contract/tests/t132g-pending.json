@@ -12,7 +12,13 @@
    "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-one-bad-value]",
    "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-us-date]",
    "py:test_the_gate_output_records_it_as_the_old_client_s_crash",
-   "py:test_an_admission_proposing_it_lands_and_the_next_change_passes"
+   "py:test_an_admission_proposing_it_lands_and_the_next_change_passes",
+   "py:test_a_proposed_internal_error_of_another_runner_fails_at_once[python-core]",
+   "py:test_a_proposed_internal_error_of_another_runner_fails_at_once[rust-host]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another error]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another stage]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[outside the baseline fields]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[the reference succeeded]"
   ]
  },
  "authored": {
@@ -32,7 +38,13 @@
    "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-one-bad-value]",
    "py:test_python_old_holds_the_reference_s_own_internal_error[time.text-us-date]",
    "py:test_the_gate_output_records_it_as_the_old_client_s_crash",
-   "py:test_an_admission_proposing_it_lands_and_the_next_change_passes"
+   "py:test_an_admission_proposing_it_lands_and_the_next_change_passes",
+   "py:test_a_proposed_internal_error_of_another_runner_fails_at_once[python-core]",
+   "py:test_a_proposed_internal_error_of_another_runner_fails_at_once[rust-host]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another error]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another stage]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[outside the baseline fields]",
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[the reference succeeded]"
   ]
  }
 }
