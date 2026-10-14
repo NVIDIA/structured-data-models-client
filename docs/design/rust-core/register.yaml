@@ -2579,6 +2579,9 @@ entries:
     a decimal class target should be taken (its classes the decimals'
     text, or the values read at float64) was T1.32b's question; T1.32b
     keeps the refusal (above).
+  case_outcomes:
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-19
   title: A decimal feature past float64's precision is refused UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST
@@ -3253,7 +3256,7 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route whose entity key is a decimal of no negative scale,
     or text DuckDB hands over as large_string (arrow_large_buffer_size).
-  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint]
+  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, key.varchar-large-buffers]
   refs:
   - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-0-wide.* refusal INTERNAL_ERROR -> success'
@@ -3284,6 +3287,15 @@ entries:
     of T1.32b part 1's round 1 checked (the refs first proposed as P1B-70,
     moved here and that entry removed in its fix round 1). A decimal key with a scale, written as text,
     is read back by predict's result as text (key.decimal-38-10). Approved by the owner on 2026-10-13, relayed by the orchestrator.
+  case_outcomes:
+  - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.decimal-38-10, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.decimal-38-10, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.hugeint, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.hugeint, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-34
   title: An entity pandas coerces to the key's type is refused, where the reference accepts it changed
@@ -4459,10 +4471,10 @@ entries:
   - {case: nested.union, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the union cells in canonical form, its outcome unchanged'}
 
 - id: P1B-53
-  title: The key, nested, empty, null and refuse cases admitted to acceptance, each runner held to its observed outcome
+  title: The key, nested, empty, null and refuse cases and decimal.class-target-38-18 admitted to acceptance, each runner held to its observed outcome
   kind: keep
   old_behavior: >-
-    The 18 cases named were diagnostic: run and reported, gating nothing;
+    The 23 cases named were diagnostic: run and reported, gating nothing;
     the families' code and register entries landed with T1.32a, T1.32c and
     T1.32d's first parts.
   new_behavior: >-
@@ -4474,9 +4486,9 @@ entries:
     nested.union, P1B-11 empty.fact-table; python-old keeps the
     reference's unnamed refusals). No outcome changes by this entry.
   affected_inputs: >-
-    The case files of the 18 cases named, which the ratchet's cases rule
+    The case files of the 23 cases named, which the ratchet's cases rule
     passes only under an approved entry naming each, and their baselines.
-  cases: [T1.32g, empty.entity-without-facts, empty.fact-table, empty.indices, key.declared-int32, key.uint64-above-int64-max, key.uint64-small, key.uint8, key.varchar, nested.fixed-array, nested.list-int, nested.map, nested.struct, nested.union, null.feature-all-null, null.some-foreign-keys, null.some-times, null.target-all-null, refuse.unknown-column]
+  cases: [T1.32g, empty.entity-without-facts, empty.fact-table, empty.indices, key.declared-int32, key.uint64-above-int64-max, key.uint64-small, key.uint8, key.varchar, nested.fixed-array, nested.list-int, nested.map, nested.struct, nested.union, null.feature-all-null, null.some-foreign-keys, null.some-times, null.target-all-null, refuse.unknown-column, key.decimal-18-0, key.decimal-38-10, key.hugeint, key.varchar-large-buffers, decimal.class-target-38-18]
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E95}
@@ -4488,11 +4500,13 @@ entries:
     owner-approved, the rows added at T1.32g for the reviewers to check).
     refuse.unknown-column carries validate_query to the core, as python-core
     validates the query before the core's materialize, so both hosts run
-    the same operations. Four key
-    cases whose python-ref answer is INTERNAL_ERROR (key.hugeint,
-    key.decimal-18-0, key.decimal-38-10, key.varchar-large-buffers) are
-    admitted apart, after the ratchet's part for python-old's
-    INTERNAL_ERROR. The outcomes below are each runner's baseline at the
+    the same operations. Five cases python-ref answers INTERNAL_ERROR
+    (key.hugeint, key.decimal-18-0, key.decimal-38-10,
+    key.varchar-large-buffers, decimal.class-target-38-18) are admitted on
+    the ratchet's rule for the old client's crash (T1.32g part 2a, E110):
+    python-old's INTERNAL_ERROR is no entry's, held with the reference's
+    result as its baseline; P1B-33 and P1B-18 carry the core's first
+    admission. The outcomes below are each runner's baseline at the
     checkpoint (none where the case had none) and the projection the
     package's observations give.
   case_outcomes:
@@ -4550,6 +4564,16 @@ entries:
   - {case: refuse.unknown-column, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: refuse.unknown-column, cell: ref-pandas3, runner: python-old, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: refuse.unknown-column, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.decimal-38-10, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.decimal-38-10, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.hugeint, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.hugeint, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
 
 - id: P1B-56
   title: time.feature-interval's reference line holds its interval values in canonical form

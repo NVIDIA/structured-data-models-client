@@ -3,12 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_each_key_case_is_admitted[key.decimal-18-0]",
-   "py:test_each_key_case_is_admitted[key.decimal-38-10]",
-   "py:test_each_key_case_is_admitted[key.hugeint]",
-   "py:test_each_key_case_is_admitted[key.varchar-large-buffers]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [

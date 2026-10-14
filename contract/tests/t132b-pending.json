@@ -3,9 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_each_case_is_admitted[decimal.class-target-38-18]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [
