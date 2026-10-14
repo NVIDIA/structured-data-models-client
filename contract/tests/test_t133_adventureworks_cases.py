@@ -497,10 +497,15 @@ def test_the_answer_comparison_fails_closed() -> None:
 
 def test_the_pending_list_only_shrinks() -> None:
     assert G.only_shrinks() == []
-    # Every authored id is a test of this package's two files.
-    here = Path(__file__).read_text(encoding='utf-8') + (
-        ROOT / 'contract/tests/test_t133_relbench_recipe.py'
-    ).read_text(encoding='utf-8')
+    # Every authored id is a test of this package's gated files.
+    here = ''.join(
+        (ROOT / 'contract/tests' / name).read_text(encoding='utf-8')
+        for name in (
+            'test_t133_adventureworks_cases.py',
+            'test_t133_relbench_recipe.py',
+            'test_t133_corrected_controls.py',
+        )
+    )
     for name in G.gating()['authored']['exits']:
         assert name.startswith('py:'), name
         assert f'def {name[3:].split("[")[0]}(' in here, name

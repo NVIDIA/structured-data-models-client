@@ -33,6 +33,17 @@ reference and candidate environments in ``run``: it records its call and
 fails, so ``run`` never reaches the differential. ``fetch`` runs with an
 unreachable proxy, so nothing is downloaded whatever the tool does.
 
+The roots alone are not the check: a directory or file below a root
+outside the copy that is a symbolic link into it (the samples, the
+download directory, the spec or a probe's output) is refused the same way
+(T1.33 part 1's review, P2). So is a path spelled with ``~``, which the
+tool must expand once and use as checked; a path in another letter case on
+a disk that folds case; and a path in any git work tree, this
+repository's other worktrees included, compared by file identity (the
+orchestrator's rule). Sampling from inside the worktree spills nothing
+there either: DuckDB's temporary files go elsewhere (the subagent's
+review, P2-1, P2-2 and P3-2).
+
 Statically: the tree tracks no data file (parquet, Arrow, Feather, DuckDB)
 and no RelBench spec.
 
@@ -470,5 +481,352 @@ def test_a_sample_outside_the_worktree_writes_nothing_inside_it(
         assert len(written) > len(before)
         assert all(repo not in p.parents for p in written)
         assert str(repo) not in out.read_text(encoding='utf-8')
+
+    gated(request, check)
+
+
+# --- descendants linked into the worktree (T1.33 part 1's review, P2) -----------
+#
+# The roots outside the copy, a directory or file below them a symbolic
+# link into it: what the tool writes there lands in the worktree. Each is
+# refused before anything is written or any environment called.
+
+
+def _link(path: Path, target: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.symlink_to(target, target_is_directory=target.is_dir())
+
+
+@pytest.mark.parametrize('linked', ['samples', f'samples/{DATASET}'])
+def test_sample_refuses_samples_linked_into_the_worktree(
+    linked: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        cache = tmp_path / 'cache'
+        synthetic_cache(repo, cache)
+        _link(cache / linked, repo / 'contract')
+        out = tmp_path / 'out' / 'spec.json'
+        out.parent.mkdir()
+        done = tool(
+            repo,
+            'sample',
+            '--cache',
+            str(cache),
+            '--out',
+            str(out),
+            DATASET,
+            cwd=tmp_path,
+        )
+        assert done.returncode != 0, 'samples linked into the worktree'
+        assert untouched(repo) == []
+        assert not out.exists(), 'refused before the spec is written'
+
+    gated(request, check)
+
+
+def test_fetch_refuses_downloads_linked_into_the_worktree(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    # The download directory's first part (the repository's owner) a link
+    # into the copy: fetch would make the rest there and download into it.
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        relbench = _load(repo / TOOL)
+        cache = tmp_path / 'cache'
+        where = relbench.directory(cache, DATASET).relative_to(cache)
+        _link(cache / where.parts[0], repo / 'contract')
+        done = tool(
+            repo,
+            'fetch',
+            '--cache',
+            str(cache),
+            DATASET,
+            cwd=tmp_path,
+            env=OFFLINE,
+        )
+        assert done.returncode != 0, 'downloads linked into the worktree'
+        assert untouched(repo) == []
+
+    gated(request, check)
+
+
+@pytest.mark.parametrize(
+    'linked',
+    ['spec.json', 'old.json', 'core.json', 'corrected.json', 'samples'],
+)
+def test_run_refuses_outputs_linked_into_the_worktree(
+    linked: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    # A probe's output (or the spec) under --out a link to a file in the
+    # copy that does not exist yet; or the cache's samples a link into it.
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        cache = tmp_path / 'cache'
+        synthetic_cache(repo, cache)
+        out = tmp_path / 'out'
+        out.mkdir()
+        if linked == 'samples':
+            _link(cache / 'samples', repo / 'contract')
+        else:
+            _link(out / linked, repo / 'contract' / linked)
+        python, log = stand_in(tmp_path)
+        done = tool(
+            repo,
+            'run',
+            '--cache',
+            str(cache),
+            '--reference-python',
+            str(python),
+            '--candidate-python',
+            str(python),
+            '--out',
+            str(out),
+            DATASET,
+            cwd=tmp_path,
+        )
+        assert done.returncode != 0, f'{linked} linked into the worktree'
+        assert untouched(repo) == []
+        assert not log.exists(), 'refused before any environment is called'
+
+    gated(request, check)
+
+
+# --- other spellings and other work trees (T1.33 part 1's subagent review) ------
+
+
+def _home(tmp: Path) -> dict[str, str]:
+    r"""A home directory outside the copy, so ``~`` expanded is harmless."""
+    home = tmp / 'home'
+    home.mkdir(exist_ok=True)
+    return {'HOME': str(home)}
+
+
+@pytest.mark.parametrize('command', ['sample', 'run'])
+def test_an_out_spelled_with_a_tilde_writes_nothing_in_the_worktree(
+    command: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    # ``--out=~/…`` reaches the tool unexpanded (one argument, no shell):
+    # the path checked and the path written are one, so nothing lands in
+    # ``<cwd>/~/`` with the copy as the working directory.
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        cache = tmp_path / 'cache'
+        synthetic_cache(repo, cache)
+        env = _home(tmp_path)
+        (Path(env['HOME']) / 't133-tilde').mkdir()
+        python, _log = stand_in(tmp_path)
+        out = '--out=~/t133-tilde/spec.json'
+        extra: list[str] = []
+        if command == 'run':
+            out = '--out=~/t133-tilde-run'
+            extra = [
+                '--reference-python',
+                str(python),
+                '--candidate-python',
+                str(python),
+            ]
+        done = tool(
+            repo,
+            command,
+            '--cache',
+            str(cache),
+            *extra,
+            out,
+            DATASET,
+            cwd=repo,
+            env=env,
+        )
+        assert untouched(repo) == [], done.stdout + done.stderr
+        if command == 'sample':
+            assert done.returncode == 0, done.stdout + done.stderr
+            assert (Path(env['HOME']) / 't133-tilde/spec.json').is_file()
+
+    gated(request, check)
+
+
+@pytest.mark.parametrize('command', ['fetch', 'sample'])
+def test_a_cache_spelled_with_a_tilde_writes_nothing_in_the_worktree(
+    command: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        env = _home(tmp_path)
+        synthetic_cache(repo, Path(env['HOME']) / 'cache')
+        extra = (
+            ['--out', str(tmp_path / 'spec.json')]
+            if command == 'sample'
+            else []
+        )
+        done = tool(
+            repo,
+            command,
+            '--cache=~/cache',
+            *extra,
+            DATASET,
+            cwd=repo,
+            env={**env, **OFFLINE},
+        )
+        assert untouched(repo) == [], done.stdout + done.stderr
+        if command == 'sample':
+            assert done.returncode == 0, done.stdout + done.stderr
+            assert (Path(env['HOME']) / 'cache/samples').is_dir()
+
+    gated(request, check)
+
+
+def _folds_case(tmp: Path) -> bool:
+    probe = tmp / 'case-probe'
+    probe.mkdir(exist_ok=True)
+    return (tmp / 'CASE-PROBE').exists()
+
+
+def _case_kind() -> str:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as where:
+        folds = _folds_case(Path(where))
+    return 'case-insensitive' if folds else 'case-sensitive'
+
+
+@pytest.mark.parametrize('disk', [_case_kind()])
+def test_an_out_spelled_in_another_case_is_refused(
+    disk: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    # The worktree spelled in other letter case: on a disk that folds case
+    # (macOS's default) the same directory, compared by identity; on one
+    # that does not, another path, which must stay outside the copy.
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        cache = tmp_path / 'cache'
+        synthetic_cache(repo, cache)
+        variant = repo.parent / repo.name.upper() / 'spec.json'
+        done = tool(
+            repo,
+            'sample',
+            '--cache',
+            str(cache),
+            '--out',
+            str(variant),
+            DATASET,
+            cwd=tmp_path,
+        )
+        assert untouched(repo) == [], done.stdout + done.stderr
+        if disk == 'case-insensitive':
+            assert done.returncode != 0, 'the worktree in another case'
+
+    gated(request, check)
+
+
+@pytest.mark.parametrize('other', ['sibling worktree', 'another repository'])
+@pytest.mark.parametrize('option', ['out', 'cache'])
+def test_a_path_in_any_other_git_work_tree_is_refused(
+    option: str, other: str, tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    # The orchestrator's rule: no path inside any git work tree, this
+    # repository's other worktrees included.
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        tree = tmp_path / 'other'
+        if other == 'sibling worktree':
+            _git(repo, 'worktree', 'add', '-q', '--detach', str(tree))
+        else:
+            tree.mkdir()
+            _git(tree, 'init', '-q')
+            (tree / 'README').write_text('another repository\n')
+            _git(tree, 'add', '-A')
+            _git(tree, 'commit', '-q', '-m', 'another')
+        tree = tree.resolve()
+        cache = tmp_path / 'cache'
+        synthetic_cache(repo, cache)
+        out = tmp_path / 'spec.json'
+        if option == 'out':
+            out = tree / 'spec.json'
+        else:
+            target = tree / 'relbench-cache'
+            synthetic_cache(repo, target)
+            _git(tree, 'add', '-A')
+            _git(tree, 'commit', '-q', '-m', 'a cache, for the check')
+            cache = target
+        done = tool(
+            repo,
+            'sample',
+            '--cache',
+            str(cache),
+            '--out',
+            str(out),
+            DATASET,
+            cwd=tmp_path,
+        )
+        assert done.returncode != 0, f'--{option} inside {other}'
+        assert untouched(tree) == []
+        assert untouched(repo) == []
+
+    gated(request, check)
+
+
+def test_sampling_spills_nothing_into_the_worktree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    # Run from inside the copy, the sampler's DuckDB spills to its
+    # temp_directory (by default '.tmp' under the working directory). A
+    # spill is forced on the tool's own connection just before it writes
+    # the samples, and the copy read while that connection is open
+    # (DuckDB removes its temporary files when it closes).
+    import duckdb
+
+    def check() -> None:
+        repo = copy_of_the_tree(tmp_path)
+        cache = tmp_path / 'cache'
+        synthetic_cache(repo, cache)
+        relbench = _load(repo / TOOL)
+        seen: list[list[str]] = []
+        connect = duckdb.connect
+
+        class Spilling:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                self._con = connect(*args, **kwargs)
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._con, name)
+
+            def execute(self, sql: str, *args: Any) -> Any:
+                if sql.lstrip().upper().startswith('COPY') and not seen:
+                    limit = self._con.execute(
+                        "SELECT current_setting('memory_limit')"
+                    ).fetchone()[0]
+                    self._con.execute("SET memory_limit = '20MB'")
+                    self._con.execute(
+                        'CREATE TEMP TABLE t133_spill AS SELECT i, '
+                        "repeat('x', 50) || i AS s FROM range(2000000) r(i)"
+                    )
+                    seen.append(untouched(repo))
+                    self._con.execute('DROP TABLE t133_spill')
+                    self._con.execute(f"SET memory_limit = '{limit}'")
+                return self._con.execute(sql, *args)
+
+        monkeypatch.chdir(repo)
+        monkeypatch.setattr(duckdb, 'connect', Spilling)
+        writes, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+        try:
+            code = relbench.main(
+                [
+                    'sample',
+                    '--cache',
+                    str(cache),
+                    '--out',
+                    str(tmp_path / 'spec.json'),
+                    DATASET,
+                ]
+            )
+        finally:
+            sys.dont_write_bytecode = writes
+            monkeypatch.undo()
+        assert code == 0
+        assert seen, 'the sampler wrote no samples'
+        assert seen[0] == [], f'spilled into the worktree: {seen[0]}'
+        assert untouched(repo) == []
 
     gated(request, check)
