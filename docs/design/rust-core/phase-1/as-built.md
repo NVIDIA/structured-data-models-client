@@ -637,11 +637,31 @@ The decimal family (design, the T1.32b row, as T1.32a; E100), part 1: the core a
 
 ## T1.32f
 
-Filled when the package lands.
+Folded into T1.33 part 1 by the owner; recorded under [T1.33](#t133).
 
 ## T1.33
 
-Filled when the package lands.
+Part 1, T1.32f's real-data work (design, the T1.32f row; E78(k)). Each claim with its mechanism:
+
+- **The recipe.** `contract/tools/relbench.py` (`fetch`, `sample`, `run`) and the differential's changes are the prep branch's (abaeaee3, 395eeee4, f23551fe), applied unchanged to the head but for what follows. `fetch` downloads only the tables the recipes read, at the commit and SHA-256 `rfm/assets/relbench_registry.json` pins, a file of another digest deleted unread; `sample` keeps a hash-chosen seed of entities with facts in a window, each capped child table's rows of them, then every row a kept row refers to until no foreign key dangles, and writes `differential.py`'s spec, one source per question; `run` samples, probes the old route, the core and the P1B-13-corrected reference, and exits with `compare --corrected`'s status.
+- **No data in the tree (exit (d)).** `relbench.py` refuses `--cache` and `--out` that resolve to the worktree it is in or below it (`inside_worktree`: read from the working directory, `..` and links resolved), with exit status 2, before it reads, writes, fetches or starts an environment. Held by the test author's `contract/tests/test_t133_relbench_recipe.py` (15 tests: each command, each option, absolute, relative and `..` spellings, a control outside, and the tree tracking no parquet, Arrow, DuckDB file or spec).
+- **The classifier.** `DESCRIBED_RULES` keeps `text_time` alone, under P1B-2: `multicategorical` and `time_whole_table` were ported and fixed by T1.32e (E92 leaves both out of the Phase 2 class), so a core refusing either again is UNCLASSIFIED. A rejected register entry classifies nothing, in `classify`'s `under` and for P1B-13 (P1B-19 is rejected and `CODE_CHANGES` still names it). Seeded by hand, not committed: each of the three rules, P1B-11 approved and then rejected, P1B-13 rejected.
+- **The RelBench differential** (exits (a) and (e)): rel-hm, rel-stack, rel-avito and rel-trial, sampled from the pinned tables (the samples as in the prep run: rel-hm 120 customers, 762 articles, 900 transactions; rel-avito's VisitStream and SearchStream 3,000 rows each, past the 1,000-row preview), 22 sources, the old route against a test-ops build of this tree, the scripted endpoint, `--cache` and `--out` outside the worktree. `compare --corrected` exits 0:
+
+  | Class | Sources |
+  |---|---|
+  | Agree through predict (rel-hm's sales, churn and club status, each as-is and narrowed; rel-avito's visits; rel-trial's three narrowed) | 10 |
+  | Agree, both refusing `INVALID_REQUEST` at materialize with nothing given (no link inferred: rel-hm and rel-stack's inferred questions, each twice) | 4 |
+  | approved P1B-13: rel-stack's `posts.ParentId`, the corrected reference's request the core's, then the same result | 2 |
+  | proposed P1B-3 (`parent_table`, E92's Phase 2 class): rel-stack's votes per post (twice), rel-avito's clicks per ad | 3 |
+  | proposed P1B-2 (`text_time`): rel-trial as-is, free text under time-like names (`outcomes.time_frame`, `designs.time_perspective`) | 3 |
+  | UNCLASSIFIED; panics or `INTERNAL_ERROR` on either route | 0 |
+
+  Against the prep run (22 sources at T1.20's candidate): T1.32e's key rules took rel-hm's six `keyless_neighbors` sources through predict, its whole-table inference and multi-category port took the two `time_whole_table` and three `multicategorical` refusals away, and the self-reference the prep left UNCLASSIFIED is P1B-13's. T1.32e's live benchmark (`scripts/live/real_data_benchmark.py`) is the model-quality check on full AdventureWorks and H&M; this run adds the field-level classes and the structural shapes.
+- **The other corpora** (E49, the classifier changed): `differential.py run --corrected`, seed 27, 50 sources: 44 agree, 6 under approved P1B-11 (the prep: 36, 6 and 8 under P1B-4); `--corpus selfref --corrected`, 9 sources: 3 agree, 4 approved P1B-13, 2 proposed P1B-3 (`parent_table`).
+- **The AdventureWorks cases (exit (b)).** `base.adventureworks.churn` (binary) and `base.adventureworks.color` (multiclass, eight colours, each in its context) are acceptance cases on `base.adventureworks`'s routes with no seam, so `python-core` runs describe_source, materialize and predict on the core and `rust-host` the whole journey (the test author's `test_each_case_is_admitted`, and its runs on both Python runners). Their `python-ref` lines are re-recorded at the admission commit under T1.13's rules, identity only (`ratchet.py`'s semantic projection equal to the test author's lines); their baselines are `ratchet.py accept`'s against da4ab7f0. No register entry: each runner gives the reference's outcome.
+- **Exit (c)**, the AdventureWorks map's `inference_config` gap and the case format carrying option values to rust-host: closed by T1.29 (7a68ab77). Neither new case passes `inference_config`, as the notebook does not.
+- **Not done.** `text_time` on real data is classed under P1B-2 (proposed), as the prep classed it; DT-17 (approved, E68) describes the same reading, so whether it stays a Phase 2 refusal or is DT-17's permanent design is the owner's. The rest of T1.33 (the register reconciliation, the arrow-rs `DataType` pass) is later parts.
 
 ## T1.35
 

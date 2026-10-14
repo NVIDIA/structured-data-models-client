@@ -285,7 +285,7 @@ None yet.
 
 ### T1.33
 
-None yet.
+**Part 1, measured before its push** (T1.32f's real-data work; E87). The test author's tests (`T1.33 tests:` commits 3ece296f to c8059496), unchanged but for the pending ids taken out as they pass (all 15; `t133-pending.json`'s pending empty). The RelBench differential on this tree (`relbench.py run`, rel-hm, rel-stack, rel-avito, rel-trial, 22 sources, a test-ops build, cache and output outside the worktree): exit 0; 14 agree (10 through predict), 2 approved P1B-13, 3 proposed P1B-3 (`parent_table`), 3 proposed P1B-2 (`text_time`); no UNCLASSIFIED, no panic, no `INTERNAL_ERROR` ([as-built](as-built.md#t133)). E49: no route changes; the classifier changed, so `differential.py run --corrected` seed 27 (50 sources: 44 agree, 6 approved P1B-11) and `--corpus selfref` (9: 3 agree, 4 approved P1B-13, 2 proposed P1B-3); the new rules' seeded faults (the three described rules, an entry rejected) fail closed; no new reader of outside JSON. The AdventureWorks cases' `python-ref` lines re-recorded at a05668e8, identity only; their baselines from `ratchet.py accept` against da4ab7f0, their two lines only. No judging-path file changes. For the owner: `text_time` on real data (free text under time-like names) is P1B-2's or DT-17's.
 
 ### T1.35
 
