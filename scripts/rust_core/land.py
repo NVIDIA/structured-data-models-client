@@ -97,22 +97,31 @@ still applies to C (the branches, the lane and its commits' ownership,
 the worktree and HEAD, the descent from the phase head H, the checkpoint,
 and, at landing, the protected paths, the atomic push and the read-back),
 but the review and CI checks are made for X in C's place: two reviews
-naming X and the newest gating run on X's exact SHA green. It further
-refuses, naming the condition, unless:
+naming X and the newest gating run on X's exact SHA green, checked
+first. Then, with B the merge base of X and H, it refuses, naming the
+condition, unless:
 
 - same code: C's tree is X's;
-- same patches: the commits in ``H..C`` have, in order, the same ``git
-  patch-id --stable`` values as those in ``H..X``: the same count, the same
-  order, and no commit without a patch of its own (an empty commit or a
-  merge) on either side;
-- only landing commits between: ``X..H`` is not empty, and each commit in
-  it has one parent and its parent's tree and a subject starting
-  ``Land ``.
+- same patches: the commits of ``B..X`` (L_X), oldest first, pair one to
+  one, in order, with the commits of ``B..H`` that are not landing commits
+  (L_H) followed by those of ``H..C`` (L_C), each pair with the same tree;
+  as every side starts from B's tree and a landing commit keeps its
+  parent's, each of C's commits then makes exactly the change its partner
+  in X makes, byte for byte. No commit of L_X or L_C is empty;
+- only landing commits added: B is not H (C was moved over something),
+  and each commit of ``B..H`` is a landing commit (one parent, its
+  parent's tree, a subject starting ``Land ``) or, in order, one of X's own
+  commits landed before it as a moved copy (L_H: for a single move it is
+  empty; for a stack of packages, the earlier packages' moved commits);
+- no merge in ``B..X``, ``B..H`` or ``H..C``.
 
 X that is C itself, or is already in the phase branch, is refused, and so
 is ``--moved-from`` with ``--wait-for-landing-run``, which lands without a
 green run. The landing commit names X, X's green run by id and SHA, and
-that C was moved over landing commits only; its trailers are unchanged.
+that C was moved over landing commits only, and adds the trailers
+``Moved-from`` (X) and ``Moved-from-run`` (the run's id); ``verify``
+passes a cancelled run of such a landing on a green run of X when X's
+tree is the landing's.
 
 ``--dry-run`` makes every check, prints the landing commit it would make,
 and commits and pushes nothing.
@@ -184,22 +193,7 @@ Run = Callable[[Sequence[str]], Completed]
 
 
 def run_command(argv: Sequence[str]) -> Completed:
-    # surrogateescape: a byte that is not text (a patch's, for
-    # ``--moved-from``) is kept, not a crash, and goes back out unchanged.
-    proc = subprocess.run(
-        list(argv), capture_output=True, text=True, errors='surrogateescape'
-    )
-    return Completed(proc.returncode, proc.stdout, proc.stderr)
-
-
-def run_command_input(argv: Sequence[str], text: str) -> Completed:
-    proc = subprocess.run(
-        list(argv),
-        input=text,
-        capture_output=True,
-        text=True,
-        errors='surrogateescape',
-    )
+    proc = subprocess.run(list(argv), capture_output=True, text=True)
     return Completed(proc.returncode, proc.stdout, proc.stderr)
 
 
@@ -208,8 +202,6 @@ class Tools:
     """git and gh, through one function, so the tests can replace both."""
 
     run: Run = run_command
-    #: A command reading its input, ``git patch-id`` (``--moved-from``).
-    run_input: Callable[[Sequence[str], str], Completed] = run_command_input
     repo: str | None = None
     sleep: Callable[[float], None] = time.sleep
     calls: list[tuple[str, ...]] = field(default_factory=list)
@@ -226,18 +218,6 @@ class Tools:
 
     def git(self, *args: str, check: bool = True) -> str:
         return self._call(('git', *args), check)
-
-    def git_input(self, text: str, *args: str) -> str:
-        """Runs git with ``text`` as its input; a failure is refused."""
-        argv = ('git', *args)
-        self.calls.append(argv)
-        done = self.run_input(argv, text)
-        if done.returncode != 0:
-            raise Refusal(
-                f'`{" ".join(argv)}` failed ({done.returncode}): '
-                f'{(done.stderr or done.stdout).strip()}'
-            )
-        return done.stdout
 
     def attempt(self, *argv: str) -> Completed:
         """Runs a command whose failure is an answer, not an error."""
@@ -698,39 +678,44 @@ def check_candidate_ci(
 # --- a candidate moved over landing commits (--moved-from) ------------------
 
 
-def range_commits(tools: Tools, rng: str) -> list[tuple[str, str]]:
-    """The commits in ``rng``, oldest first, each as (SHA, subject)."""
-    out = tools.git('log', '--topo-order', '--format=%H%x00%s%x1e', rng)
-    found: list[tuple[str, str]] = []
+@dataclass
+class Commit:
+    sha: str
+    parents: int
+    subject: str
+
+
+def range_commits(tools: Tools, rng: str) -> list[Commit]:
+    """The commits in ``rng``, oldest first."""
+    out = tools.git('log', '--topo-order', '--format=%H%x00%P%x00%s%x1e', rng)
+    found: list[Commit] = []
     for entry in out.split('\x1e'):
-        sha, sep, text = entry.strip('\n').partition('\x00')
-        if sep:
-            found.append((sha, text.split('\n', 1)[0]))
+        fields = entry.strip('\n').split('\x00')
+        if len(fields) == 3:
+            sha, parents, subject = fields
+            found.append(Commit(sha, len(parents.split()), subject))
     return found[::-1]
 
 
-def patch_id(tools: Tools, sha: str) -> str | None:
-    """``git patch-id --stable`` of the commit's own patch; None for a
-    commit with no patch of its own (an empty commit, or a merge, which
-    ``diff-tree`` shows no patch for)."""
-    diff = tools.git('diff-tree', '--patch', '--binary', '--root', sha)
-    out = tools.git_input(diff, 'patch-id', '--stable').split()
-    return out[0] if out else None
+def tree_of(tools: Tools, sha: str) -> str:
+    return tools.git('rev-parse', f'{sha}^{{tree}}').strip()
 
 
-def between_problem(tools: Tools, sha: str, subject: str) -> str | None:
-    """None when ``sha`` is a landing commit: one parent, its parent's
-    tree, and a subject starting with ``Land ``; else why not."""
-    if not subject.startswith('Land '):
-        return "the subject does not start with 'Land '"
-    second = tools.attempt(
-        'git', 'rev-parse', '--verify', '--quiet', f'{sha}^2'
+def empty_commit(tools: Tools, commit: Commit) -> bool:
+    """One parent and its parent's tree: the commit changes no file."""
+    return commit.parents == 1 and tree_of(tools, commit.sha) == tree_of(
+        tools, f'{commit.sha}^'
     )
-    if second.returncode == 0:
+
+
+def landing_why_not(tools: Tools, commit: Commit) -> str | None:
+    """None when the commit is a landing commit: one parent, its parent's
+    tree, and a subject starting ``Land ``; else why not."""
+    if not commit.subject.startswith('Land '):
+        return "the subject does not start with 'Land '"
+    if commit.parents != 1:
         return 'it has more than one parent'
-    tree = tools.git('rev-parse', f'{sha}^{{tree}}').strip()
-    parent = tools.git('rev-parse', f'{sha}^^{{tree}}').strip()
-    if tree != parent:
+    if not empty_commit(tools, commit):
         return "its tree is not its parent's: it changes files"
     return None
 
@@ -752,95 +737,133 @@ def check_moved_from(
         )
 
 
+@dataclass
+class Move:
+    """What ``check_moved`` found: the landing commits moved over, X's
+    commits already in the phase branch as moved copies, and the
+    candidate's own commits."""
+
+    landings: int
+    landed: int
+    commits: int
+
+
 def check_moved(
     tools: Tools, moved: str, candidate: str, base: str, phase: str
-) -> tuple[int, int]:
+) -> Move:
     """Refuses unless the candidate is ``moved`` (X) moved over landing
-    commits only (decision E130), in the decision's order: the same tree,
-    the same patches in the same order since the phase head, and only
-    landing commits between X and the phase head. Returns the number of
-    patches and of landing commits between. X's reviews and CI are checked
-    by the caller, first."""
+    commits only (decision E130). With B the merge base of X and the phase
+    head H, the commits of ``B..X`` (L_X), oldest first, pair one to one,
+    in order, with those of ``B..H`` that are not landing commits (L_H)
+    followed by those of ``H..C`` (L_C), and each pair has the same tree.
+    Since a landing commit keeps its parent's tree and every side starts
+    from B's, each commit of L_H and L_C then makes exactly the change its
+    partner in X makes, byte for byte. L_H is empty for a single move, and
+    holds X's own earlier commits, landed as moved copies, for a stack.
+    No merge on any side, and no empty commit in L_X or L_C. The same tree
+    for C and X is checked first. X's reviews and CI are checked by the
+    caller, before this."""
     label = f'--moved-from {moved[:12]}'
     # 2. Same code.
-    tree_x = tools.git('rev-parse', f'{moved}^{{tree}}').strip()
-    tree_c = tools.git('rev-parse', f'{candidate}^{{tree}}').strip()
+    tree_x, tree_c = tree_of(tools, moved), tree_of(tools, candidate)
     if tree_x != tree_c:
         raise Refusal(
             f"{label}: not the same code: the candidate's tree "
             f"{tree_c[:12]} is not the moved-from commit's {tree_x[:12]}; "
             'a candidate whose code differs needs its own reviews and CI'
         )
-    # 3. Same patches, in order, with no extra or empty commit.
-    sides = {
-        'candidate': range_commits(tools, f'{base}..{candidate}'),
-        'moved-from commit': range_commits(tools, f'{base}..{moved}'),
-    }
-    ids: dict[str, list[str | None]] = {}
-    empty: list[str] = []
-    for side, commits in sides.items():
-        ids[side] = [patch_id(tools, sha) for sha, _ in commits]
-        empty += [
-            f"{sha[:12]} {subject} (the {side}'s)"
-            for (sha, subject), pid in zip(commits, ids[side], strict=True)
-            if pid is None
-        ]
-    if empty:
+    done = tools.attempt('git', 'merge-base', moved, base)
+    common = done.stdout.strip()
+    if done.returncode != 0 or not re.fullmatch(r'[0-9a-f]{40}', common):
         raise Refusal(
-            f'{label}: not the same patches: a commit with no patch of its own '
-            '(an empty commit or a merge) since the phase head:\n- '
-            + '\n- '.join(empty)
+            f'{label} shares no history with the head of {phase} '
+            f'{base[:12]}; it was not moved from there'
         )
-    ours, theirs = sides['candidate'], sides['moved-from commit']
-    if len(ours) != len(theirs):
-        raise Refusal(
-            f'{label}: not the same patches: the candidate adds {len(ours)} '
-            f'commit(s) to the head of {phase}, the moved-from commit '
-            f'{len(theirs)}'
-        )
-    differ = [
-        f'commit {n}: {c[0][:12]} {c[1]} against {x[0][:12]} {x[1]}'
-        for n, (c, x, pc, px) in enumerate(
-            zip(
-                ours,
-                theirs,
-                ids['candidate'],
-                ids['moved-from commit'],
-                strict=True,
-            ),
-            start=1,
-        )
-        if pc != px
-    ]
-    if differ:
-        raise Refusal(
-            f"{label}: not the same patches: in order, these commits' "
-            '`git patch-id --stable` differ:\n- ' + '\n- '.join(differ)
-        )
-    # 4. Only landing commits between X and the phase head.
-    between = range_commits(tools, f'{moved}..{base}')
-    if not between:
+    if common == base:
         raise Refusal(
             f'{label}: not moved over landing commits: the head of {phase} '
             f"{base[:12]} is already in the moved-from commit's history, so "
             'the candidate was moved over nothing; land the moved-from '
             'commit itself'
         )
-    stray = [
-        (sha, subject, why)
-        for sha, subject in between
-        if (why := between_problem(tools, sha, subject))
+    l_x = range_commits(tools, f'{common}..{moved}')
+    b_h = range_commits(tools, f'{common}..{base}')
+    l_c = range_commits(tools, f'{base}..{candidate}')
+    # No merge anywhere: it has no change of its own to pair, and is no
+    # landing commit.
+    merges = [
+        f'{c.sha[:12]} {c.subject} (in {where})'
+        for where, commits in (
+            (f"{common[:12]}..X, the moved-from commit's", l_x),
+            (f'{common[:12]}..{base[:12]}, the phase branch', b_h),
+            ('the candidate, since the phase head', l_c),
+        )
+        for c in commits
+        if c.parents > 1
     ]
+    if merges:
+        raise Refusal(
+            f'{label}: a merge commit, which has no patch of its own to '
+            'compare and is not a landing commit (a landing commit has one '
+            'parent):\n- ' + '\n- '.join(merges)
+        )
+    # 3. No empty commit in X's commits or the candidate's.
+    empty = [
+        f"{c.sha[:12]} {c.subject} (the {side}'s)"
+        for side, commits in (('moved-from commit', l_x), ('candidate', l_c))
+        for c in commits
+        if empty_commit(tools, c)
+    ]
+    if empty:
+        raise Refusal(
+            f'{label}: not the same patches: an empty commit, with no patch '
+            'of its own:\n- ' + '\n- '.join(empty)
+        )
+    # 4. Between B and H, landing commits, and otherwise X's own commits
+    # in order (a stack's earlier packages, landed as moved copies).
+    l_h = [c for c in b_h if landing_why_not(tools, c) is not None]
+    stray: list[str] = []
+    for n, c in enumerate(l_h):
+        why = landing_why_not(tools, c)
+        if n >= len(l_x):
+            stray.append(
+                f'{c.sha[:12]} {c.subject} ({why}; and X has no commit '
+                'left to be its moved copy)'
+            )
+        elif tree_of(tools, c.sha) != tree_of(tools, l_x[n].sha):
+            stray.append(
+                f'{c.sha[:12]} {c.subject} ({why}; and its tree is not that '
+                f"of X's commit {n + 1}, {l_x[n].sha[:12]} "
+                f'{l_x[n].subject}, so it is not that commit moved)'
+            )
     if stray:
         raise Refusal(
-            f'{label}: not only landing commits between the moved-from commit '
-            f'and the head of {phase} (a landing commit has one parent, its '
-            "parent's tree, and a subject starting 'Land '):\n- "
-            + '\n- '.join(
-                f'{sha[:12]} {subject} ({why})' for sha, subject, why in stray
-            )
+            f'{label}: not only landing commits between the merge base '
+            f'{common[:12]} of the moved-from commit and the head of {phase}: '
+            'each commit there is a landing commit (one parent, its '
+            "parent's tree, a subject starting 'Land ') or, in order, one "
+            "of X's own commits moved (the same tree):\n- " + '\n- '.join(stray)
         )
-    return len(ours), len(between)
+    # 3. The candidate's commits are the rest of X's, one to one.
+    rest = l_x[len(l_h) :]
+    if len(rest) != len(l_c):
+        raise Refusal(
+            f'{label}: not the same patches: the candidate adds {len(l_c)} '
+            f'commit(s) to the head of {phase}, and the moved-from commit '
+            f'has {len(rest)} not yet in it'
+        )
+    differ = [
+        f'commit {n}: {c.sha[:12]} {c.subject} against {x.sha[:12]} {x.subject}'
+        for n, (c, x) in enumerate(zip(l_c, rest, strict=True), start=1)
+        if tree_of(tools, c.sha) != tree_of(tools, x.sha)
+    ]
+    if differ:
+        raise Refusal(
+            f"{label}: not the same patches: in order, each of the candidate's "
+            "commits has its partner's tree in X, and these do not:\n- "
+            + '\n- '.join(differ)
+        )
+    return Move(len(b_h) - len(l_h), len(l_h), len(l_c))
 
 
 # --- the landing commit -------------------------------------------------------
@@ -855,6 +878,8 @@ class Landing:
     checkpoint: str
     summary: str
     evidence: str
+    #: ``Moved-from`` and ``Moved-from-run`` for a moved candidate (E130).
+    moved: dict[str, str] = field(default_factory=dict)
 
     def message(self) -> str:
         subject = (
@@ -867,6 +892,7 @@ class Landing:
             f'Protected-paths: {self.protected_paths}',
             f'Base-SHA: {self.base}',
             f'Checkpoint-SHA: {self.checkpoint}',
+            *(f'{key}: {value}' for key, value in self.moved.items()),
         ]
         # Wrapped as the earlier landing commits are, paragraph by paragraph.
         summary = '\n\n'.join(
@@ -882,6 +908,7 @@ class Landing:
             'Protected-paths': self.protected_paths,
             'Base-SHA': self.base,
             'Checkpoint-SHA': self.checkpoint,
+            **self.moved,
         }
 
 
@@ -1011,9 +1038,7 @@ def land(
         # E130's order: X's evidence (its reviews, then its run), then the
         # same tree, the same patches and only landing commits in X..H.
         green = check_candidate_ci(tools, moved, what)
-        patches, between = check_moved(
-            tools, moved, candidate, base, args.phase_branch
-        )
+        move = check_moved(tools, moved, candidate, base, args.phase_branch)
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
     out(f'ok   the checkpoint is their merge base, {checkpoint}')
@@ -1024,9 +1049,16 @@ def land(
         )
     if moved:
         out(
-            f'ok   the candidate is {moved[:12]} moved over {between} landing '
-            f'commit(s) only: the same tree and the same {patches} patch(es) '
-            'in order'
+            f'ok   the candidate is {moved[:12]} moved over landing commits '
+            f'only ({move.landings} landing commit(s)'
+            + (
+                f', {move.landed} of its own commits already landed as '
+                'moved copies'
+                if move.landed
+                else ''
+            )
+            + f'): the same tree, commit by commit, for its {move.commits} '
+            'commit(s)'
         )
     out(f'ok   {len(args.review)} reviews approve {evidenced[:12]}')
     if args.wait_for_landing_run:
@@ -1051,10 +1083,10 @@ def land(
             f'Moved from {moved}: its run {green.get("databaseId")} is green '
             f'at {green.get("headSha")} and both reviews approve it. The '
             f'candidate {candidate} is that commit moved over landing commits '
-            'only (the same tree, the same patches in order, only landing '
-            'commits between), so it lands on that evidence (E130); this '
-            'commit changes no file, so the phase branch moves at once and '
-            'its own runs are recorded afterwards (E43 (b)).'
+            "only (each commit with its partner's tree in order, only "
+            'landing commits added), so it lands on that evidence (E130); '
+            'this commit changes no file, so the phase branch moves at once '
+            'and its own runs are recorded afterwards (E43 (b)).'
         )
     else:
         green = check_candidate_ci(tools, candidate)
@@ -1083,6 +1115,14 @@ def land(
         checkpoint=checkpoint,
         summary=summary.strip(),
         evidence=evidence,
+        moved=(
+            {
+                'Moved-from': moved,
+                'Moved-from-run': str(green.get('databaseId')),
+            }
+            if moved
+            else {}
+        ),
     )
     if args.dry_run:
         out('dry run: every check passed; the landing commit would read:\n')
@@ -1236,7 +1276,8 @@ def verify(
     if cancelled:
         # A cancelled run says nothing about the tree. Another green run on
         # the same SHA, or on the candidate, whose tree an empty landing
-        # commit shares, is the evidence instead.
+        # commit shares, or, for a moved landing, on the moved-from commit
+        # when its tree is the same, is the evidence instead.
         green = [f for f in finals if f.get('conclusion') == 'success']
         if not green and tree == parent_tree:
             parent = tools.git('rev-parse', sha + '^').strip()
@@ -1246,6 +1287,24 @@ def verify(
                 if r.get('status') == 'completed'
                 and r.get('conclusion') == 'success'
             ][:1]
+        moved = (
+            resolve_quiet(tools, trailers['Moved-from'])
+            if not green and 'Moved-from' in trailers
+            else None
+        )
+        if moved and tools.git('rev-parse', moved + '^{tree}').strip() == tree:
+            # A moved landing (E130): its tree is the moved-from commit's,
+            # whose green run it landed on (Moved-from-run).
+            wanted = trailers.get('Moved-from-run')
+            runs = [
+                r
+                for r in runs_on(tools, moved)
+                if r.get('status') == 'completed'
+                and r.get('conclusion') == 'success'
+            ]
+            green = sorted(
+                runs, key=lambda r: str(r.get('databaseId')) != wanted
+            )[:1]
         for run in cancelled:
             if green:
                 out(
