@@ -20,8 +20,18 @@ The command::
   observations (``contract/observation.schema.json``), its runner and
   cell read from each line's ``identity``, never from the file's name;
   ``compare.log``, the ``compare`` step's output (``compare.py``'s lines:
-  ``DIFFERS <rule>: <case>: ...``, ``diagnostic rule <rule>: ...``);
-  ``ratchet.log``, the ratchet step's notes.
+  ``DIFFERS <rule>: <case>: ...``, ``diagnostic rule <rule>: ...``), raw
+  or as gate.sh prints it, each line prefixed ``    | `` among the gate's
+  other lines: exactly one verdict (``compare: no differences`` or
+  ``compare: N differences``), N the ``DIFFERS`` lines read, or the run
+  fails naming ``compare.log`` (an empty one included); ``ratchet.log``,
+  the ratchet step's notes. Every expected run is there: python-core in
+  each of ``ref-pandas3``, ``dbr17-pandas2`` and ``floor-pandas2.2``,
+  python-old and rust-host, or the run fails naming the runner or cell.
+  Every observation is of the gate's run and the cases given: its
+  ``identity.commit.sha`` the gate JSON's ``sha``, its
+  ``identity.inputs.case`` the SHA-256 of its case file in ``--cases`` (or
+  ``--heldout``), or the run fails naming the case.
 - ``--gate-json``: ``evidence/gate/<sha>.json``, which stays outside the
   tree (design.md:432): the pack names it by its SHA-256 and never copies
   it, and one inside ``--out`` is refused.
@@ -64,6 +74,14 @@ The pack, in ``--out``:
     refused: ``approved improvement``, naming the entry;
   - anything else, a runner not observing the case included:
     ``regression``. A proposed or rejected entry excuses nothing.
+  - An ``INTERNAL_ERROR`` from python-core or rust-host is a panic, a
+    ``regression`` even where the reference's outcome is the same; one from
+    python-old is held only where ``ratchet.py``'s ``old_client_crash``
+    holds it (its line equal to the reference's), else ``regression``.
+  - A case a gating ``DIFFERS <rule>: <case>: ...`` line of ``compare.log``
+    names is never ``correct success`` or ``expected refusal``: it is a
+    ``regression`` unless an approved entry covers it. Diagnostic and
+    reported lines class nothing.
 
 - ``seams.md`` (item 3): a table with a ``deepest`` column, one row per
   case, and a table with an ``unproven`` column, one row per seam, the
@@ -72,10 +90,17 @@ The pack, in ``--out``:
   (``core.fetches`` not empty), ``admission`` (the core went past fetched
   data to an answer), ``inferred schema`` (``core.described``),
   ``payload`` (``core.materialized``), ``result`` (``core.predicted``'s
-  result); a case refused before any of them reached ``refusal``.
+  result); a case refused before any of them reached ``refusal``, and
+  one whose core runner answered ``INTERNAL_ERROR`` before any, ``panic``.
+  The per-case table also has a column per core runner, its header naming
+  the runner (``rust-host``, ``python-core``), so a runner stopping earlier
+  than the other shows.
 - ``comparator.md`` (item 4): a table with a ``rule`` column, one row per
-  rule with differences and their count; the register's entries by
-  approver, the owner's first.
+  rule with differences and their count (a line of no rule, under a rule
+  named ``no rule``); the register's entries by approver, the owner's
+  first. A line naming a held-out case, by its ID or its file name
+  (``h11.X.json``), is counted and never shown, and the pack says how many
+  were left out (``not shown: N``).
 
 Gating (``contract/tests/t135_gate.py``): ``t135-pending.json``'s
 ``pending["exits"]`` lists the tests that failed when written; each must
@@ -1071,9 +1096,10 @@ def test_held_out_cases_show_digests_and_counts_only(
             ('refusal', None, None, 'INVALID_REQUEST'),
             'schema',
         )
-        state['compare'][-1:-1] = [
+        state['compare'][-1:] = [
             f"DIFFERS outcome: h11.synth-b: rust-host: outcome.result: expected '{HELDOUT_CANARY}', observed 'refusal'",
             f'diagnostic rule sql.text: h11.synth-a: python-core: {HELDOUT_CANARY}',
+            'compare: 4 differences',
         ]
         paths, done = generate(tmp_path, state, heldout=True)
         for name, data in pack(paths).items():
@@ -1152,6 +1178,14 @@ def _drop_case_file(paths: dict[str, Path]) -> str:
     return 'key.refused'
 
 
+def _drop_cell(cell: str) -> Callable[[dict[str, Path]], str]:
+    def mutate(paths: dict[str, Path]) -> str:
+        (paths['gate-out'] / f'python-core-{cell}.jsonl').unlink()
+        return cell
+
+    return mutate
+
+
 @pytest.mark.parametrize(
     'mutate',
     [
@@ -1167,6 +1201,8 @@ def _drop_case_file(paths: dict[str, Path]) -> str:
         pytest.param(_drop('register'), id='register'),
         pytest.param(_drop('heldout'), id='heldout'),
         pytest.param(_drop_case_file, id='an-inventory-case-file'),
+        pytest.param(_drop_cell('dbr17-pandas2'), id='the-dbr17-cell-run'),
+        pytest.param(_drop_cell('floor-pandas2.2'), id='the-floor-cell-run'),
     ],
 )
 def test_a_missing_input_fails_by_name(
@@ -1188,6 +1224,443 @@ def test_a_missing_input_fails_by_name(
             else []
         )
         assert written == []
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+# --- T1.35 part 1's review (orchestrator's decisions) ----------------------------
+
+
+def _crash_case(state: dict[str, Any]) -> str:
+    r"""``key.crash``: the reference crashes (``INTERNAL_ERROR`` at
+    materialize), python-old crashes exactly as it did, and the core runners
+    succeed under the owner's entry KC-1."""
+    case = _case('keys', 'materialize', CRASHED, 'schema')
+    for cell in CELLS:
+        case['runs'][('python-core', cell)] = (SUCCESS_MATERIALIZE, 'payload')
+    case['runs'][('rust-host', None)] = (
+        ('success', None, None, None),
+        'payload',
+    )
+    state['cases']['key.crash'] = case
+    state['inventory'].append('key.crash')
+    state['register'].append(
+        _entry(
+            'KC-1',
+            'approved',
+            'owner',
+            [
+                *(
+                    _item(
+                        'key.crash',
+                        cell,
+                        'python-core',
+                        'refusal INTERNAL_ERROR at materialize (StructuredDataError)',
+                        'success at materialize',
+                    )
+                    for cell in CELLS
+                ),
+                _item(
+                    'key.crash',
+                    'ref-pandas3',
+                    'rust-host',
+                    'refusal INTERNAL_ERROR',
+                    'success',
+                ),
+            ],
+        )
+    )
+    return 'key.crash'
+
+
+def _rust_host_panics(state: dict[str, Any]) -> None:
+    state['cases']['key.crash']['runs'][('rust-host', None)] = (
+        ('refusal', None, None, 'INTERNAL_ERROR'),
+        'schema',
+    )
+
+
+def _python_core_panics(state: dict[str, Any]) -> None:
+    state['cases']['key.crash']['runs'][('python-core', 'ref-pandas3')] = (
+        CRASHED,
+        'schema',
+    )
+
+
+def _python_old_crashes_elsewhere(state: dict[str, Any]) -> None:
+    state['cases']['key.crash']['runs'][('python-old', 'ref-pandas3')] = (
+        ('refusal', 'from_source', 'StructuredDataError', 'INTERNAL_ERROR'),
+        'none',
+    )
+
+
+def _an_entry_states_the_panic(state: dict[str, Any]) -> None:
+    _rust_host_panics(state)
+    for entry in state['register']:
+        for item in entry.get('case_outcomes', []):
+            if item['case'] == 'key.crash' and item['runner'] == 'rust-host':
+                item['new'] = 'refusal INTERNAL_ERROR'
+
+
+@pytest.mark.parametrize(
+    ('mutate', 'expected'),
+    [
+        pytest.param(
+            None, 'approved improvement', id='python-old-as-the-reference'
+        ),
+        pytest.param(
+            _rust_host_panics,
+            'regression',
+            id='rust-host-panics-as-the-reference',
+        ),
+        pytest.param(
+            _python_core_panics,
+            'regression',
+            id='python-core-panics-as-the-reference',
+        ),
+        pytest.param(
+            _python_old_crashes_elsewhere,
+            'regression',
+            id='python-old-crashes-at-another-stage',
+        ),
+        pytest.param(
+            _an_entry_states_the_panic,
+            'regression',
+            id='an-entry-states-the-panic',
+        ),
+    ],
+)
+def test_a_core_panic_is_a_regression_even_as_the_reference(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Any]], None] | None,
+    expected: str,
+) -> None:
+    def check() -> None:
+        state = world()
+        case = _crash_case(state)
+        if mutate is not None:
+            mutate(state)
+        paths, _ = generate(tmp_path, state)
+        assert class_of(paths, case) == expected
+        if expected == 'approved improvement':
+            assert 'KC-1' in entry_of(paths, case)
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def _body(state: dict[str, Any]) -> list[str]:
+    return [
+        line for line in state['compare'] if not line.startswith('compare: ')
+    ]
+
+
+def _with_verdict(lines: list[str], count: int) -> list[str]:
+    body = [line for line in lines if not line.startswith('compare: ')]
+    verdict = (
+        'compare: no differences'
+        if count == 0
+        else f'compare: {count} differences'
+    )
+    return [*body, verdict]
+
+
+def test_the_compare_output_as_the_gate_prints_it_is_read(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    def check() -> None:
+        state = world()
+        # gate.sh's stdout around the compare step: its own lines, then the
+        # step's output, each line prefixed.
+        state['compare'] = [
+            'ratchet        ok',
+            'compare        FAIL (exit 1)',
+            *(f'    | {line}' for line in state['compare']),
+            'l0             ok',
+        ]
+        paths, _ = generate(tmp_path, state)
+        rows = table((paths['out'] / 'comparator.md').read_text(), 'rule')
+        assert '2' in row(rows, 'outcome')[1:]
+        assert '1' in row(rows, 'core')[1:]
+        assert class_of(paths, 'key.regress') == 'regression'
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def _compare_empty(state: dict[str, Any]) -> None:
+    state['compare'] = []
+
+
+def _compare_without_verdict(state: dict[str, Any]) -> None:
+    state['compare'] = [
+        line for line in state['compare'] if not line.startswith('compare: ')
+    ]
+
+
+def _compare_two_verdicts(state: dict[str, Any]) -> None:
+    state['compare'] = [*state['compare'], 'compare: 3 differences']
+
+
+def _compare_count_too_high(state: dict[str, Any]) -> None:
+    state['compare'] = _with_verdict(state['compare'], 5)
+
+
+def _compare_none_but_differs(state: dict[str, Any]) -> None:
+    state['compare'] = _with_verdict(state['compare'], 0)
+
+
+def _compare_truncated(state: dict[str, Any]) -> None:
+    # The last DIFFERS line lost: the verdict counts 3, two are read.
+    state['compare'] = [
+        line
+        for line in state['compare']
+        if not line.startswith('DIFFERS core: ')
+    ]
+
+
+def _compare_prefixed_count_too_high(state: dict[str, Any]) -> None:
+    state['compare'] = [
+        f'    | {line}' for line in _with_verdict(state['compare'], 4)
+    ]
+
+
+@pytest.mark.parametrize(
+    'mutate',
+    [
+        pytest.param(_compare_empty, id='empty'),
+        pytest.param(_compare_without_verdict, id='no-verdict'),
+        pytest.param(_compare_two_verdicts, id='two-verdicts'),
+        pytest.param(_compare_count_too_high, id='verdict-counts-more'),
+        pytest.param(
+            _compare_none_but_differs, id='no-differences-but-differs'
+        ),
+        pytest.param(_compare_truncated, id='a-difference-lost'),
+        pytest.param(
+            _compare_prefixed_count_too_high, id='prefixed-verdict-counts-more'
+        ),
+    ],
+)
+def test_a_compare_output_that_does_not_add_up_fails_by_name(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Any]], None],
+) -> None:
+    def check() -> None:
+        state = world()
+        mutate(state)
+        paths = write(state, tmp_path)
+        if not state['compare']:
+            (paths['gate-out'] / 'compare.log').write_text('')
+        done = run(arguments(paths))
+        assert done.returncode != 0
+        assert 'compare.log' in done.stdout + done.stderr
+        assert not paths['out'].exists() or not any(
+            p.is_file() for p in paths['out'].rglob('*')
+        )
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+@pytest.mark.parametrize(
+    'line',
+    [
+        pytest.param(
+            'DIFFERS payload: key.payload: rust-host: payloads[0].parsed.x: differs',
+            id='payload-on-rust-host',
+        ),
+        pytest.param(
+            'DIFFERS core: key.payload: python-core against rust-host: core.materialized: differs',
+            id='core-between-the-hosts',
+        ),
+        pytest.param(
+            'DIFFERS sql.count: key.payload: python-core: statements: expected 3, observed 4',
+            id='sql-count-on-python-core',
+        ),
+    ],
+)
+def test_a_value_difference_is_a_regression_though_the_outcomes_agree(
+    request: pytest.FixtureRequest, tmp_path: Path, line: str
+) -> None:
+    def check() -> None:
+        state = world()
+        body = _body(state)
+        state['compare'] = _with_verdict([*body, line], 4)
+        paths, _ = generate(tmp_path, state)
+        assert class_of(paths, 'key.payload') == 'regression'
+        # The diagnostic rule's line on key.payload still classes nothing
+        # alone: the rest stand.
+        assert class_of(paths, 'base.adventureworks') == 'correct success'
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def test_a_diagnostic_or_reported_line_classes_nothing(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    def check() -> None:
+        state = world()
+        body = _body(state)
+        state['compare'] = _with_verdict(
+            [
+                *body,
+                'diagnostic rule sql.text: base.adventureworks: rust-host: statement 2: differs',
+                'reported (diagnostic case): time.only-refused: rust-host: outcome.code: differs',
+            ],
+            3,
+        )
+        paths, _ = generate(tmp_path, state)
+        assert class_of(paths, 'base.adventureworks') == 'correct success'
+        assert class_of(paths, 'time.only-refused') == 'expected refusal'
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def _older_commit(paths: dict[str, Path]) -> str:
+    path = paths['gate-out'] / 'rust-host.jsonl'
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    for line in lines:
+        if line['case'] == 'key.payload':
+            line['identity']['commit']['sha'] = 'a1d' + '0' * 37
+    path.write_text(
+        ''.join(json.dumps(line, sort_keys=True) + '\n' for line in lines)
+    )
+    return 'key.payload'
+
+
+def _older_commit_in_a_cell(paths: dict[str, Path]) -> str:
+    path = paths['gate-out'] / 'python-core-floor-pandas2.2.jsonl'
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    for line in lines:
+        if line['case'] == 'nested.improved':
+            line['identity']['commit']['sha'] = 'a1d' + '0' * 37
+    path.write_text(
+        ''.join(json.dumps(line, sort_keys=True) + '\n' for line in lines)
+    )
+    return 'nested.improved'
+
+
+def _changed_case_file(paths: dict[str, Path]) -> str:
+    path = paths['cases'] / 's1' / 'key.refused.json'
+    document = json.loads(path.read_text())
+    document['why'] += ' Changed after the run.'
+    path.write_text(json.dumps(document, indent=2) + '\n')
+    return 'key.refused'
+
+
+@pytest.mark.parametrize(
+    'mutate',
+    [
+        pytest.param(_older_commit, id='an-older-commit-on-rust-host'),
+        pytest.param(_older_commit_in_a_cell, id='an-older-commit-in-a-cell'),
+        pytest.param(_changed_case_file, id='a-case-file-changed-since'),
+    ],
+)
+def test_an_observation_of_another_run_fails_by_name(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    mutate: Callable[[dict[str, Path]], str],
+) -> None:
+    def check() -> None:
+        paths = write(world(), tmp_path)
+        case = mutate(paths)
+        done = run(arguments(paths))
+        assert done.returncode != 0
+        assert case in done.stdout + done.stderr
+        assert not paths['out'].exists() or not any(
+            p.is_file() for p in paths['out'].rglob('*')
+        )
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def test_held_out_lines_are_caught_by_file_name_and_counted(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    def check() -> None:
+        state = world()
+        for name in ('h11.synth-a', 'h11.synth-b'):
+            state['heldout'][name] = _case(
+                'keys', 'materialize', SUCCESS_MATERIALIZE, 'payload'
+            )
+        body = _body(state)
+        state['compare'] = _with_verdict(
+            [
+                *body,
+                f"DIFFERS outcome: h11.synth-b: rust-host: outcome.result: expected '{HELDOUT_CANARY}'",
+                f"diagnostic: h11.synth-a: python-core: outcome.stage: expected '{HELDOUT_CANARY}'",
+                f'reported (diagnostic case): contract/cases/h11.synth-a.json: {HELDOUT_CANARY}',
+                'reported (diagnostic case): time.only-refused: rust-host: outcome.code: differs',
+            ],
+            4,
+        )
+        paths = write(state, tmp_path)
+        with (paths['gate-out'] / 'ratchet.log').open('a') as handle:
+            handle.write(
+                f'ratchet: h11.synth-b.json changed: {HELDOUT_CANARY}\n'
+            )
+        done = run(arguments(paths, heldout=True))
+        assert done.returncode == 0, done.stdout + done.stderr
+        for name, data in pack(paths).items():
+            assert HELDOUT_CANARY not in data.decode(), name
+        assert HELDOUT_CANARY not in done.stdout + done.stderr
+        text = (paths['out'] / 'comparator.md').read_text()
+        # Four held-out lines left out, each counted: three of compare's
+        # and one of the ratchet's.
+        assert re.search(r'not shown\D{0,5}4\b', text), text
+        # A line of no rule is counted under one: the held-out diagnostic,
+        # the held-out reported line and time.only-refused's.
+        rows = table(text, 'rule')
+        unruled = [cells for cells in rows[1:] if 'no rule' in cells[0]]
+        assert len(unruled) == 1, rows
+        assert '3' in unruled[0][1:]
+        assert '3' in row(rows, 'outcome')[1:]
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def _runner_columns(paths: dict[str, Path], case: str) -> dict[str, str]:
+    rows = table((paths['out'] / 'seams.md').read_text(), 'deepest')
+    cells = row(rows, case)
+    found = {}
+    for runner in ('rust-host', 'python-core'):
+        hits = [i for i, cell in enumerate(rows[0]) if runner in cell.lower()]
+        assert hits, f'no {runner} column: {rows[0]}'
+        found[runner] = {cells[i].lower() for i in hits}
+    return {runner: ', '.join(sorted(v)) for runner, v in found.items()}
+
+
+def test_a_runner_stopping_earlier_shows_in_the_seams(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    def check() -> None:
+        state = world()
+        state['cases']['base.adventureworks']['runs'][('rust-host', None)] = (
+            ('success', None, None, None),
+            'schema',
+        )
+        paths, _ = generate(tmp_path, state)
+        found = _runner_columns(paths, 'base.adventureworks')
+        assert found == {
+            'rust-host': 'inferred schema',
+            'python-core': 'result',
+        }
+
+    G.held('exits', f'py:{request.node.name}', check)
+
+
+def test_a_panic_before_any_stage_is_named_a_panic(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    def check() -> None:
+        state = world()
+        state['cases']['time.only-refused']['runs'][('rust-host', None)] = (
+            ('refusal', None, None, 'INTERNAL_ERROR'),
+            'none',
+        )
+        paths, _ = generate(tmp_path, state)
+        found = _runner_columns(paths, 'time.only-refused')
+        assert found == {'rust-host': 'panic', 'python-core': 'refusal'}
+        assert class_of(paths, 'time.only-refused') == 'regression'
 
     G.held('exits', f'py:{request.node.name}', check)
 
