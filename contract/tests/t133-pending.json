@@ -1,10 +1,7 @@
 {
  "about": "T1.33's acceptance tests that failed when the independent test author wrote them, before the implementation, at ff1beb9c. 'exits' holds T1.32f's real-data part, folded into T1.33: contract/tests/test_t133_adventureworks_cases.py (the AdventureWorks churn and Color cases' admission; python-core and python-old already answer both as python-ref, so their checks are gated but not pending) and contract/tests/test_t133_relbench_recipe.py (contract/tools/relbench.py, the prep branch's abaeaee3 and f23551fe, not yet ported: it refuses an --out or a --cache inside the worktree, and a sample writes nothing there), as 'py:<test id>'. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
-  "exits": [
-   "py:test_each_case_is_admitted[base.adventureworks.churn]",
-   "py:test_each_case_is_admitted[base.adventureworks.color]"
-  ]
+  "exits": []
  },
  "authored": {
   "exits": [

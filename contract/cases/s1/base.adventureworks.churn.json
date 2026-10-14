@@ -1,7 +1,7 @@
 {
   "format": "sdm-case/1",
   "id": "base.adventureworks.churn",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
   "paths": [
     "schema.from-source/tables/duckdb",
@@ -10,7 +10,22 @@
     "query.materialize/indices-binary/duckdb",
     "client.predict/binary/duckdb"
   ],
-  "routes": [],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
   "cells": [
     "int64/primary-key",
     "int64/foreign-key",
@@ -309,6 +324,6 @@
     "stage": "predict",
     "today": "the schema as base.adventureworks's after the same edits; task binary_classification, classes ['false', 'true'], positive class 'true'; three SDMWarnings and a UserWarning; result columns row_index int64, id int64, prediction bool, 25 rows"
   },
-  "why": "T1.32f (owner, 2026-10-12, E78(k)), folded into T1.33: the AdventureWorks notebook's inactivity_90d question, a binary classification (a count over the order headers, which have no key, compared with zero), on the same base, schema and edits as base.adventureworks, without inference_config, as the notebook asks it; diagnostic until admitted (contract/tests/t133-pending.json), its expectation the reference's",
+  "why": "T1.32f (owner, 2026-10-12, E78(k)), folded into T1.33: the AdventureWorks notebook's inactivity_90d question, a binary classification (a count over the order headers, which have no key, compared with zero), on the same base, schema and edits as base.adventureworks, without inference_config, as the notebook asks it; an acceptance case from T1.33 on base.adventureworks's routes, so python-core runs describe_source, materialize and predict on the core and rust-host the whole journey; its expectation the reference's",
   "source": "examples/databricks/adventureworks_relational.ipynb, inactivity_90d, its schema as the notebook builds it, swapped to local DuckDB (E27); the question is the notebook's, as the client's to_string() prints it (its spacing around '='), and indices its frequent_customers query's answer over the fixture (the 25 customers with the most order headers, ties by CustomerID)"
 }
