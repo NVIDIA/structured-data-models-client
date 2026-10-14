@@ -17,9 +17,12 @@ when every rule holds, 1 on any problem, each on a line of its own starting
 - T1.15's exit: ``--check`` passes on this repository, and an unresolved ID
   and a dropped path each make it fail.
 - Each rule fails on a seeded fault of its own, on a temporary repository
-  holding a copy of the manifests, their schema, the phase-1 decisions and
-  the case corpus, committed as the checkpoint; the unseeded candidate
-  passes first, so a failure is the seed's.
+  holding a copy of the manifests, their schema, the phase-1 decisions, the
+  case corpus and the reference observations (rule 6's evidence, T1.32g),
+  committed as the checkpoint; the unseeded candidate passes first, so a
+  failure is the seed's.
+- Rule 6 in the copy: a claiming case whose reference line is gone, or a
+  copy with no reference observations at all, fails closed.
 - Rule 8 passes only under a row of the checkpoint's decisions approved by
   the owner and naming the ID; a row the candidate adds never does.
 - E49: a manifest or case missing, empty, retyped, nested 100,000 deep or
@@ -59,9 +62,22 @@ DECISIONS = 'docs/design/rust-core/phase-1/decisions.md'
 CASES = 'contract/cases'
 #: What the temporary repository copies: what the check reads, and the
 #: case schema beside the corpus.
-COPIED = (PYTHON, JAVA, SCHEMA, DECISIONS, CASES, 'contract/case.schema.json')
-#: The problem lines the check prints.
-PROBLEM = re.compile(r'^(rule [1-58]|schema|read):')
+#: The reference observations rule 6 holds the cases' cell claims to.
+REFERENCE = 'contract/reference'
+COPIED = (
+    PYTHON,
+    JAVA,
+    SCHEMA,
+    DECISIONS,
+    CASES,
+    'contract/case.schema.json',
+    REFERENCE,
+)
+#: The problem lines the check prints, every rule's (rule 6's among them,
+#: from T1.32g: a problem of any rule counts, so none passes unseen).
+PROBLEM = re.compile(r'^(rule [1-8]|schema|read):')
+#: An acceptance case that claims cells.
+CLAIMING = 'base.regression'
 #: An S1 path no case names, and a cell no case names.
 PATH = 'source.open/explicit/duckdb'
 CELL = 'int8/feature'
@@ -285,6 +301,46 @@ def test_a_dropped_path_fails(repo: Path) -> None:
     assert rules(found) == {'rule 8'}, found
 
 
+# --- rule 6: the evidence the copy carries -------------------------------------
+
+
+def _without_line(name: str) -> Callable[[Path], None]:
+    def edit(repo: Path) -> None:
+        [path] = list((repo / REFERENCE).glob('*.jsonl'))
+        lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+        kept = [x for x in lines if json.loads(x)['case'] != name]
+        assert len(kept) == len(lines) - 1, name
+        path.write_text(''.join(kept), encoding='utf-8')
+
+    return edit
+
+
+def test_a_claim_whose_reference_line_is_gone_fails(repo: Path) -> None:
+    r"""T1.32g: the copy carries the reference so the claims pass on their
+    evidence, never because it is missing: without the case's line, its
+    claims fail rule 6."""
+    claiming = json.loads(case_file(repo, CLAIMING).read_text(encoding='utf-8'))
+    assert claiming['cells'], CLAIMING
+    landed = git(repo, 'rev-parse', 'HEAD')
+    commit(repo, edit=_without_line(CLAIMING))
+    found = failing(check(repo, landed), 'rule 6', CLAIMING)
+    assert rules(found) == {'rule 6'}, found
+
+
+def test_a_copy_without_the_reference_fails_closed(repo: Path) -> None:
+    landed = git(repo, 'rev-parse', 'HEAD')
+
+    def edit(repo: Path) -> None:
+        for path in (repo / REFERENCE).glob('*.jsonl'):
+            path.unlink()
+
+    commit(repo, edit=edit)
+    done = check(repo, landed)
+    found = problems(done)
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert rules(found) & {'rule 6', 'read'}, found
+
+
 # --- rule 4: every ID resolves, and the lists are generated --------------------
 
 
@@ -298,7 +354,10 @@ def test_a_case_naming_what_the_manifest_lacks_fails(
     landed = git(repo, 'rev-parse', 'HEAD')
     commit(repo, edit=case(CASE, lambda c: c[field].append(name)))
     found = failing(check(repo, landed), 'rule 4', name)
-    assert rules(found) == {'rule 4'}, found
+    # A cell claimed is also held to the case's evidence, which shows no
+    # such cell (rule 6, T1.32g).
+    wanted = {'rule 4', 'rule 6'} if field == 'cells' else {'rule 4'}
+    assert rules(found) == wanted, found
 
 
 def test_a_listed_case_whose_file_is_gone_fails(repo: Path) -> None:
