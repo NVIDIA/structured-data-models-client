@@ -13,15 +13,20 @@ r"""Writes items 2 to 4 of the Phase 1b go or no-go evidence pack (design,
 ``--gate-out`` holds what ``gate.sh --locked 1b --out DIR`` kept, with the
 local runs of the other runtime cells beside it: each ``*.jsonl`` file is
 observations, each line's runner and cell read from its ``identity``, never
-from the file's name; ``compare.log``, the ``compare`` step's output; and
-``ratchet.log``, the ratchet step's. ``--gate-json`` is the run's
-``evidence/gate/<sha>.json``, which stays outside the tree (design.md:432):
-the pack names it by its SHA-256 and never copies it, and one inside
-``--out`` is refused. ``--reference`` is the committed python-ref
-observations, ``--cases`` the case files, ``--inventory`` the Phase 1b
-inventory, ``--register`` the register, and ``--heldout`` the held-out
-cases, of which only digests and counts reach the pack. ``--out`` is
-``docs/design/rust-core/phase-1/evidence``.
+from the file's name, python-core required in each of ``run_python.py``'s
+cells, python-old and rust-host too; ``compare.log``, the ``compare`` step's
+output, raw or as gate.sh prints it (``    | `` before each line, the
+step's block taken where gate.sh names the step), with exactly one verdict
+whose count is the ``DIFFERS`` lines read; and ``ratchet.log``, the ratchet
+step's. Every observation must be of the gate's run: its commit the gate
+JSON's ``sha``, its case file's SHA-256 the one in ``--cases`` (or
+``--heldout``). ``--gate-json`` is the run's ``evidence/gate/<sha>.json``,
+which stays outside the tree (design.md:432): the pack names it by its file
+name and SHA-256 and never copies it, and one inside ``--out`` is refused.
+``--reference`` is the committed python-ref observations, ``--cases`` the
+case files, ``--inventory`` the Phase 1b inventory, ``--register`` the
+register, and ``--heldout`` the held-out cases, of which only digests and
+counts reach the pack. ``--out`` is ``docs/design/rust-core/phase-1/evidence``.
 
 The pack, in ``--out``, nothing written anywhere else:
 
@@ -33,27 +38,40 @@ The pack, in ``--out``, nothing written anywhere else:
   (``compare.py``'s ``UNOBSERVED_BY_RUST_HOST``) and written as
   ``ratchet.py``'s ``outcome_text`` writes them. The class is ``correct
   success`` or ``expected refusal`` where every runner answers as the
-  reference did; ``approved improvement`` where every difference is stated
-  by an approved entry's ``case_outcomes`` item for that case, cell (rust-host
+  reference did and the comparator names no gating difference of the case;
+  ``approved improvement`` where every outcome difference is stated by an
+  approved entry's ``case_outcomes`` item for that case, cell (rust-host
   under ``ref-pandas3``), runner and observed outcome, an owner's for a new
-  refusal and never ``INTERNAL_ERROR``; and ``regression`` otherwise, a
-  runner or the reference not observing the case included. A proposed or
-  rejected entry excuses nothing.
-- ``seams.md`` (item 3): each case's deepest stage over the core runners'
-  observations (``driver Arrow``, ``admission``, ``inferred schema``,
-  ``payload``, ``result``; ``refusal`` for a case refused before any), and
-  per seam the stages none of its cases reached, listed as unproven.
-- ``comparator.md`` (item 4): ``compare.log``'s differences counted by rule;
-  the register's entries by approver, the owner's first; the comparator's
-  lines of differences (fields' paths, never values) and the ratchet's
-  notes, but a line naming a held-out case, which is only counted.
+  refusal; and ``regression`` otherwise. A regression includes:
+  - a runner or the reference not observing the case;
+  - an ``INTERNAL_ERROR`` from python-core or rust-host, a panic, even as
+    the reference's; python-old's is held only where ``ratchet.py``'s
+    ``old_client_crash`` holds it;
+  - any gating ``DIFFERS`` line naming the case, since the gate compares
+    against expectations the approved entries already moved.
+  A proposed or rejected entry excuses nothing.
+- ``seams.md`` (item 3): each case's deepest stage, over the core runners'
+  observations and per core runner and cell (``driver Arrow``,
+  ``admission``, ``inferred schema``, ``payload``, ``result``; before any,
+  ``panic`` for an ``INTERNAL_ERROR`` and ``refusal`` for another refusal),
+  and per seam the stages none of its cases reached, listed as unproven,
+  with those rust-host alone never reached.
+- ``comparator.md`` (item 4, in part): ``compare.log``'s differences counted
+  by rule (``no rule`` for a line of none), the register's entries by
+  approver, the owner's first, and the comparator's and the ratchet's lines
+  as they printed them. ``compare.py`` prints a field's expected and
+  observed values, so these lines carry values; a line naming a held-out
+  case, by its ID or its file name, is counted and never shown. The cases
+  for the owner's call, the type-set findings and the DT and ORD results
+  are not here: they come with T1.33 part 2.
 - ``heldout.md``: the held-out bundle's digests (as-built's T1.20 recipes)
   and counts, or that none was given.
 
 A regression is not a failure here: the pack is written and says so. This
-is reporting, not a gate. An input missing or unreadable fails the run by
-name (a case the inventory lists with no case file, by its ID), with
-nothing written; so does a link where the pack writes. Exit status 1 then.
+is reporting, not a gate. An input missing, unreadable or of another run
+fails the run by name (a case the inventory lists with no case file, or an
+observation of another commit or case file, by its ID), with nothing
+written; so does a link where the pack writes. Exit status 1 then.
 """
 
 from __future__ import annotations
@@ -90,15 +108,18 @@ ARCHIVE = 'not measured'
 #: Not a bundle file: as-built's T1.20 recipe leaves them out.
 DIGEST_FILES = ('BUNDLE_SHA256', 'INPUTS_SHA256')
 #: ``compare.py``'s lines, by kind of difference: a gating rule's, a
-#: diagnostic rule's, and a diagnostic case's or a reported one.
+#: diagnostic rule's, and a diagnostic case's or a reported one; each
+#: followed by ``<rule>: <case>: ...``, or by text of no rule.
 KINDS = {
-    'gating': re.compile(r'DIFFERS (?:(?P<rule>[a-z.]+): )?'),
-    'diagnostic rule': re.compile(r'diagnostic rule (?P<rule>[a-z.]+): '),
-    'reported, not gated': re.compile(
-        r'(?:diagnostic|reported \([^)]*\)): (?P<rule>[a-z.]+): '
-    ),
+    'gating': re.compile(r'DIFFERS '),
+    'diagnostic rule': re.compile(r'diagnostic rule '),
+    'reported, not gated': re.compile(r'(?:diagnostic|reported \([^)]*\)): '),
 }
-VERDICT = re.compile(r'compare: (?:no|[0-9]+) differences')
+NO_RULE = 'no rule'
+VERDICT = re.compile(r'compare: (?P<count>no|[0-9]+) differences')
+#: How gate.sh prints a step's output, and names the step.
+PREFIX = '    | '
+COMPARE_STEP = re.compile(r'compare +(?:ok|FAIL)')
 
 
 class Refused(Exception):
@@ -187,7 +208,41 @@ def observations(
                 f'--gate-out {gate_out}: no {runner} observations '
                 f'({runner}.jsonl)'
             )
+    for cell in ratchet().register_module().runner().CELLS:
+        if ('python-core', cell) not in found:
+            raise Refused(
+                f'--gate-out {gate_out}: no python-core observations in the '
+                f'{cell} cell'
+            )
     return found
+
+
+def provenance(
+    observed: dict[tuple[str, str | None], dict[str, dict[str, Any]]],
+    commit: str,
+    digests: dict[str, str],
+) -> None:
+    r"""Every observation is of the gate's run: its commit the gate JSON's
+    ``sha``, its case file the one given, by SHA-256."""
+    at = ratchet().at
+    for runner, cell in columns(observed):
+        label = _label(runner, cell)
+        for case, line in sorted(observed[(runner, cell)].items()):
+            if at(line, 'identity.commit.sha') != commit:
+                raise Refused(
+                    f'{case}: {label} observed another commit than the gate '
+                    f"run's {commit}"
+                )
+            if case not in digests:
+                raise Refused(
+                    f'{case}: {label} observed it, with no case file in '
+                    '--cases or --heldout'
+                )
+            if at(line, 'identity.inputs.case') != digests[case]:
+                raise Refused(
+                    f'{case}: {label} observed another case file than the '
+                    'one given (its SHA-256 differs)'
+                )
 
 
 def reference(path: Path) -> dict[str, dict[str, Any]]:
@@ -202,15 +257,15 @@ def reference(path: Path) -> dict[str, dict[str, Any]]:
     return found
 
 
-def corpus(path: Path) -> dict[str, dict[str, Any]]:
-    r"""The case files under ``--cases``, by ID, read by the runner's
-    loader."""
+def corpus(path: Path) -> dict[str, tuple[dict[str, Any], str]]:
+    r"""The case files under ``--cases``, by ID, each with its file's
+    SHA-256, read by the runner's loader."""
     run_python = ratchet().register_module().runner()
     try:
         loaded = run_python.load_cases([_dir('--cases', path)])
     except run_python.RunnerFailure as error:
         raise Refused(f'--cases: {error}') from None
-    return {case['id']: case for case, _ in loaded}
+    return {case['id']: (case, sha) for case, sha in loaded}
 
 
 def _yaml(option: str, path: Path) -> Any:
@@ -221,7 +276,7 @@ def _yaml(option: str, path: Path) -> Any:
         raise Refused(f'{option}: {error}') from None
 
 
-def rows(inventory: Path, cases: dict[str, dict[str, Any]]) -> list[str]:
+def rows(inventory: Path, cases: dict[str, Any]) -> list[str]:
     r"""The per-case rows: the inventory's cases and
     :data:`BASELINE_CASE`, each with its case file."""
     document = _yaml('--inventory', inventory)
@@ -250,8 +305,9 @@ def entries(path: Path) -> list[dict[str, Any]]:
     return [entry for entry in listed if isinstance(entry, dict)]
 
 
-def gate_json(path: Path, out: Path) -> tuple[str, str]:
-    r"""The gate JSON's name and SHA-256; it must be outside ``--out``."""
+def gate_json(path: Path, out: Path) -> tuple[str, str, str]:
+    r"""The gate JSON's name, SHA-256 and the commit it gated; it must be
+    outside ``--out``."""
     data = _file('--gate-json', path).read_bytes()
     if path.resolve().is_relative_to(out.resolve()):
         raise Refused(
@@ -259,10 +315,12 @@ def gate_json(path: Path, out: Path) -> tuple[str, str]:
             'the tree, named by its SHA-256 (design.md:432)'
         )
     try:
-        json.loads(data)
-    except (ValueError, RecursionError):
-        raise Refused(f'--gate-json {path.name}: not JSON') from None
-    return path.name, hashlib.sha256(data).hexdigest()
+        commit = json.loads(data).get('sha')
+    except (ValueError, RecursionError, AttributeError):
+        raise Refused(f'--gate-json {path.name}: not a gate JSON') from None
+    if not isinstance(commit, str):
+        raise Refused(f'--gate-json {path.name}: no sha')
+    return path.name, hashlib.sha256(data).hexdigest(), commit
 
 
 # --- item 2: the per-case table ----------------------------------------------
@@ -310,8 +368,9 @@ def excused_by(
     refusal: bool,
 ) -> str | None:
     r"""The first approved entry stating this case's outcome on this runner
-    and cell (rust-host's under the reference's cell), by the owner for a
-    new refusal, never ``INTERNAL_ERROR``; or None."""
+    and cell (rust-host's under the reference's cell; a Python runner with
+    no cell recorded matches none), by the owner for a new refusal, never
+    ``INTERNAL_ERROR``; or None."""
     for entry in ratchet().approved({'entries': register}):
         if refusal and entry.get('approved_by') != 'owner':
             continue
@@ -319,7 +378,8 @@ def excused_by(
             if (
                 isinstance(item, dict)
                 and item.get('case') == case
-                and item.get('cell') == (cell or ratchet().CELL)
+                and item.get('cell')
+                == (ratchet().CELL if runner == 'rust-host' else cell)
                 and item.get('runner') == runner
                 and item.get('new') == new
                 and ratchet().PANIC not in new
@@ -333,9 +393,11 @@ def classify(
     ref: dict[str, Any] | None,
     observed: dict[tuple[str, str | None], dict[str, dict[str, Any]]],
     register: list[dict[str, Any]],
+    gating: Counter[str],
 ) -> dict[str, Any]:
     r"""One case's row: each outcome as text, its class, the entries that
-    excuse its differences and what nothing excuses."""
+    excuse its differences and what nothing excuses. ``gating`` counts the
+    comparator's gating differences by case."""
     r = ratchet()
     row: dict[str, Any] = {
         'reference': r.outcome_text(r.projection(ref, list(r.OUTCOME_FIELDS)))
@@ -347,6 +409,10 @@ def classify(
     }
     if ref is None:
         row['unexcused'].append('reference: not observed')
+    if gating[case]:
+        row['unexcused'].append(
+            f'compare: {gating[case]} gating difference(s), see comparator.md'
+        )
     for runner, cell in columns(observed):
         label = _label(runner, cell)
         line = observed[(runner, cell)].get(case)
@@ -357,6 +423,12 @@ def classify(
         now = r.projection(line, fields(runner))
         text = r.outcome_text(now)
         row['outcomes'][label] = text
+        if now['outcome.code'] == r.PANIC:
+            if not r.old_client_crash(runner, line, ref, ordered()):
+                row['unexcused'].append(
+                    f'{label}: {text}, a panic, which no entry excuses'
+                )
+            continue
         if ref is None:
             continue
         want = r.projection(ref, fields(runner))
@@ -367,11 +439,7 @@ def classify(
             and want['outcome.result'] == 'success'
         )
         entry = excused_by(register, case, runner, cell, text, refusal)
-        if entry is None and r.PANIC in text:
-            row['unexcused'].append(
-                f'{label}: {text}, a panic, which no entry excuses'
-            )
-        elif entry is None:
+        if entry is None:
             row['unexcused'].append(
                 f'{label}: {text}, no approved '
                 + ('owner ' if refusal else '')
@@ -388,6 +456,15 @@ def classify(
     else:
         row['class'] = 'expected refusal'
     return row
+
+
+@functools.cache
+def ordered() -> Any:
+    r"""The comparator policy's ``ordered`` statements, which
+    ``old_client_crash`` compares in order."""
+    path = REPO / ratchet().POLICY
+    policy = _yaml('policy', path)
+    return policy.get('ordered') if isinstance(policy, dict) else None
 
 
 def _cell(text: Any) -> str:
@@ -459,10 +536,15 @@ def cases_md(
             'fields its runner observes. The archive at 3887762 has no '
             'contract runner, so its column is not measured (C9). The class '
             'is `correct success` or `expected refusal` where every runner '
-            'answers as the reference did, `approved improvement` where '
-            "every difference is stated by an approved entry (the owner's "
-            'for a new refusal), and `regression` otherwise, a case a runner '
-            'did not observe included.',
+            'answers as the reference did and the comparator names no '
+            'gating difference of the case, `approved improvement` where '
+            'every outcome difference is stated by an approved entry (the '
+            "owner's for a new refusal), and `regression` otherwise: a case "
+            'a runner did not observe, a panic (`INTERNAL_ERROR` from a core '
+            "runner, or python-old's unless it is the reference's own "
+            'crash), or a gating difference of the comparator. An entry '
+            'states a cell: one naming only `ref-pandas3` excuses nothing '
+            'in another cell.',
             '',
             *(f'- {name}: {counts[name]}' for name in CLASSES),
             '',
@@ -501,28 +583,28 @@ def reached(line: dict[str, Any]) -> set[str]:
     return {stage for stage, shows in shown.items() if shows}
 
 
-def deepest(
-    case: str,
-    observed: dict[tuple[str, str | None], dict[str, dict[str, Any]]],
-) -> tuple[str, set[str]]:
-    r"""The deepest stage any core runner reached on ``case``, and every
-    stage reached."""
-    lines = [
-        by_case[case]
-        for (runner, _), by_case in observed.items()
-        if runner in CORE and case in by_case
-    ]
+def depth(lines: list[dict[str, Any]]) -> str:
+    r"""The deepest stage the observations reached; before any, ``panic``
+    for an ``INTERNAL_ERROR``, ``refusal`` for another refusal, else
+    ``none``; ``not observed`` for none."""
+    at = ratchet().at
     stages = set().union(*(reached(line) for line in lines))
     if stages:
-        return max(stages, key=STAGES.index), stages
+        return max(stages, key=STAGES.index)
     if not lines:
-        return 'not observed', stages
-    refused = any(
-        ratchet().at(line, 'outcome.result') == 'refusal'
-        or ratchet().at(line, 'core.error') is not None
+        return 'not observed'
+    codes = {at(line, 'outcome.code') for line in lines} | {
+        at(line, 'core.error.code') for line in lines
+    }
+    if ratchet().PANIC in codes:
+        return 'panic'
+    if any(
+        at(line, 'outcome.result') == 'refusal'
+        or at(line, 'core.error') is not None
         for line in lines
-    )
-    return ('refusal' if refused else 'none'), stages
+    ):
+        return 'refusal'
+    return 'none'
 
 
 def seams() -> list[str]:
@@ -537,19 +619,44 @@ def seams_md(
     cases: dict[str, dict[str, Any]],
     observed: dict[tuple[str, str | None], dict[str, dict[str, Any]]],
 ) -> str:
+    core = [key for key in columns(observed) if key[0] in CORE]
     per_case = []
-    by_seam: dict[str, list[set[str]]] = {seam: [] for seam in seams()}
+    by_seam: dict[str, list[tuple[set[str], set[str]]]] = {
+        seam: [] for seam in seams()
+    }
     for ident in idents:
         seam = cases[ident].get('seam') or '-'
-        stage, stages = deepest(ident, observed)
-        per_case.append([ident, seam, cases[ident].get('until'), stage])
-        by_seam.setdefault(seam, []).append(stages)
+        lines = {key: observed[key].get(ident) for key in core}
+        seen = [line for line in lines.values() if line is not None]
+        per_case.append(
+            [
+                ident,
+                seam,
+                cases[ident].get('until'),
+                depth(seen),
+                *(depth([line] if line else []) for line in lines.values()),
+            ]
+        )
+        rust = (
+            lines[('rust-host', None)] if ('rust-host', None) in lines else None
+        )
+        by_seam.setdefault(seam, []).append(
+            (
+                set().union(*(reached(line) for line in seen)),
+                reached(rust) if rust else set(),
+            )
+        )
     per_seam = []
     for seam in sorted(by_seam):
-        found = set().union(*by_seam[seam])
-        unproven = [stage for stage in STAGES if stage not in found]
+        anyone = set().union(*(found for found, _ in by_seam[seam]))
+        rust = set().union(*(found for _, found in by_seam[seam]))
         per_seam.append(
-            [seam, len(by_seam[seam]), '; '.join(unproven) or 'none']
+            [
+                seam,
+                len(by_seam[seam]),
+                '; '.join(s for s in STAGES if s not in anyone) or 'none',
+                '; '.join(s for s in STAGES if s not in rust) or 'none',
+            ]
         )
     return '\n'.join(
         [
@@ -557,17 +664,31 @@ def seams_md(
             '',
             *head,
             '',
-            'The deepest stage each case reached on a core runner '
-            '(python-core in any cell, rust-host): `driver Arrow` (the core '
-            'asked for data), `admission` (it answered past the data '
-            'fetched), `inferred schema`, `payload`, `result`; `refusal` '
-            'for a case refused before any of them.',
+            'The deepest stage each case reached on any core runner, and on '
+            'each core runner and cell: `driver Arrow` (the core asked for '
+            'data), `admission` (it answered past the data fetched), '
+            '`inferred schema`, `payload`, `result`; before any of them, '
+            '`panic` for an `INTERNAL_ERROR` and `refusal` for another '
+            'refusal.',
             '',
-            *_table(['case', 'seam', 'runs until', 'deepest'], per_case),
+            *_table(
+                [
+                    'case',
+                    'seam',
+                    'runs until',
+                    'deepest',
+                    *(_label(*key) for key in core),
+                ],
+                per_case,
+            ),
             '',
-            'Per seam, the stages no case of it reached: unproven.',
+            'Per seam, the stages no case of it reached on any core runner: '
+            'unproven; and those rust-host alone never reached.',
             '',
-            *_table(['seam', 'cases', 'unproven'], per_seam),
+            *_table(
+                ['seam', 'cases', 'unproven', 'not reached on rust-host'],
+                per_seam,
+            ),
             '',
         ]
     )
@@ -576,27 +697,65 @@ def seams_md(
 # --- item 4: the comparator report -------------------------------------------
 
 
-def differences(log: str) -> tuple[dict[str, Counter[str]], list[str]]:
-    r"""``compare.log``'s differences counted by rule and kind, and its
-    lines of differences, each a field's path, never a value
-    (``compare.py`` prints none)."""
+def compare_lines(text: str) -> list[str]:
+    r"""The compare step's lines: raw, or as gate.sh prints them, the
+    prefixed block after the line naming the step, or else every prefixed
+    line."""
+    lines = text.splitlines()
+    for number, line in enumerate(lines):
+        if COMPARE_STEP.fullmatch(line):
+            block = []
+            for after in lines[number + 1 :]:
+                if not after.startswith(PREFIX):
+                    break
+                block.append(after.removeprefix(PREFIX))
+            return block
+    if any(line.startswith(PREFIX) for line in lines):
+        return [
+            line.removeprefix(PREFIX)
+            for line in lines
+            if line.startswith(PREFIX)
+        ]
+    return lines
+
+
+def differences(
+    text: str,
+) -> tuple[list[tuple[str, str, str | None, str]], list[str]]:
+    r"""The compare step's differences, each its kind, rule (``no rule``
+    for a line of none), case and line, and its lines to show; refused by
+    name unless exactly one verdict counts the ``DIFFERS`` lines read."""
     rules = compare().RULES
-    counts: dict[str, Counter[str]] = {}
-    lines = []
-    for line in log.splitlines():
+    found = []
+    verdicts = []
+    for line in compare_lines(text):
+        verdict = VERDICT.fullmatch(line)
+        if verdict is not None:
+            verdicts.append(verdict)
+            continue
         for kind, pattern in KINDS.items():
-            found = pattern.match(line)
-            if found is None:
+            start = pattern.match(line)
+            if start is None:
                 continue
-            rule = found.group('rule')
-            rule = rule if rule in rules else '(no rule)'
-            counts.setdefault(rule, Counter())[kind] += 1
-            lines.append(line)
+            parts = line[start.end() :].split(': ', 2)
+            rule = parts[0] if parts[0] in rules else NO_RULE
+            case = parts[1] if rule != NO_RULE and len(parts) > 1 else None
+            found.append((kind, rule, case, line))
             break
-        else:
-            if VERDICT.fullmatch(line):
-                lines.append(line)
-    return counts, lines
+    if len(verdicts) != 1:
+        raise Refused(
+            f'--gate-out: compare.log: {len(verdicts)} verdict lines '
+            "('compare: ... differences'), not one"
+        )
+    said = verdicts[0].group('count')
+    count = 0 if said == 'no' else int(said)
+    read = sum(kind == 'gating' for kind, *_ in found)
+    if count != read:
+        raise Refused(
+            f'--gate-out: compare.log: the verdict counts {count} '
+            f'differences, and {read} DIFFERS lines are there'
+        )
+    return found, [line for *_, line in found] + [verdicts[0].group(0)]
 
 
 def _approver(entry: dict[str, Any]) -> tuple[int, str]:
@@ -606,18 +765,22 @@ def _approver(entry: dict[str, Any]) -> tuple[int, str]:
 
 def comparator_md(
     head: list[str],
-    log: str,
+    found: list[tuple[str, str, str | None, str]],
+    lines: list[str],
     notes: str,
     register: list[dict[str, Any]],
     hidden: set[str],
 ) -> str:
-    r"""Item 4. A line naming a held-out case is counted, never shown."""
-    counts, lines = differences(log)
+    r"""Item 4, in part. A line naming a held-out case is counted, never
+    shown."""
+    counts: dict[str, Counter[str]] = {}
+    for kind, rule, _, _ in found:
+        counts.setdefault(rule, Counter())[kind] += 1
     shown = [line for line in lines if not _names(line, hidden)]
     noted = [line for line in notes.splitlines() if not _names(line, hidden)]
     left_out = len(lines) - len(shown) + len(notes.splitlines()) - len(noted)
     kinds = tuple(KINDS)
-    order = [*compare().RULES, '(no rule)']
+    order = [*compare().RULES, NO_RULE]
     by_rule = [
         [rule, *(counts[rule][kind] for kind in kinds)]
         for rule in sorted(counts, key=order.index)
@@ -645,7 +808,9 @@ def comparator_md(
             '',
             "The `compare` step's differences, counted by rule: a gating "
             "rule's, a diagnostic rule's, and a diagnostic case's or a "
-            'reported one.',
+            "reported one. Item 4 in part: the cases for the owner's call, "
+            'the type-set findings and the DT-1, DT-2, DT-3 and ORD-1 '
+            'results come with T1.33 part 2.',
             '',
             *(
                 _table(['rule', *kinds], by_rule)
@@ -664,7 +829,8 @@ def comparator_md(
             + (', '.join(proposed) or 'none')
             + '.',
             '',
-            "The comparator's differences, field by field, and its verdict:",
+            "The comparator's lines as it printed them, values included, "
+            'and its verdict:',
             '',
             '```text',
             *shown,
@@ -690,18 +856,18 @@ def _digest_line(name: str, data: bytes) -> bytes:
     return f'{name}\0{hashlib.sha256(data).hexdigest()}\n'.encode()
 
 
-def heldout(path: Path | None) -> tuple[str, set[str]]:
-    r"""``heldout.md``, digests and counts only, and the held-out case IDs,
-    which only count elsewhere. The digests are as-built.md's T1.20
+def heldout(path: Path | None) -> tuple[str, set[str], dict[str, str]]:
+    r"""``heldout.md``, digests and counts only; the held-out case IDs,
+    which only count elsewhere; and each case file's SHA-256 by ID. The digests are as-built.md's T1.20
     recipes: BUNDLE over every file but the two digest files, INPUTS over
     the ``h11.*.json`` files without their ``expect``, as canonical JSON."""
     if path is None:
-        return '# Held-out bundle\n\nNo held-out bundle was given.\n', set()
+        return '# Held-out bundle\n\nNo held-out bundle was given.\n', set(), {}
     files = sorted(
         (file for file in _dir('--heldout', path).iterdir() if file.is_file()),
         key=lambda file: file.name.encode(),
     )
-    bundle, inputs, idents = b'', b'', set()
+    bundle, inputs, idents, digests = b'', b'', set(), {}
     for file in files:
         data = file.read_bytes()
         if file.name not in DIGEST_FILES:
@@ -717,6 +883,7 @@ def heldout(path: Path | None) -> tuple[str, set[str]]:
             raise Refused(f'--heldout: {file.name}: not a case')
         if isinstance(case.get('id'), str):
             idents.add(case['id'])
+            digests[case['id']] = hashlib.sha256(data).hexdigest()
         if file.name.startswith('h11.'):
             canonical = json.dumps(
                 {key: value for key, value in case.items() if key != 'expect'},
@@ -738,12 +905,12 @@ def heldout(path: Path | None) -> tuple[str, set[str]]:
             '',
         ]
     )
-    return text, idents
+    return text, idents, digests
 
 
 def _names(line: str, idents: set[str]) -> bool:
     return any(
-        re.search(rf'(?<![\w.-]){re.escape(ident)}(?![\w.-])', line)
+        re.search(rf'(?<![\w.-]){re.escape(ident)}(?:\.json)?(?![\w.-])', line)
         for ident in idents
     )
 
@@ -753,28 +920,42 @@ def _names(line: str, idents: set[str]) -> bool:
 
 def pack(arguments: argparse.Namespace) -> dict[str, str]:
     r"""The pack's files by name, every input read first."""
-    name, sha = gate_json(arguments.gate_json, arguments.out)
+    name, sha, commit = gate_json(arguments.gate_json, arguments.out)
     head = [
         f'Generated by `scripts/rust_core/evidence.py` from the gate run '
-        f'`{name}`, SHA-256 `{sha}`, which stays outside the tree '
+        f'`{name}` (commit `{commit}`), SHA-256 `{sha}`, which stays '
+        'outside the tree '
         '(design.md:432). Regenerate it rather than edit it.'
     ]
     observed = observations(arguments.gate_out)
-    log = _text('--gate-out', arguments.gate_out / 'compare.log')
+    differing, lines = differences(
+        _text('--gate-out', arguments.gate_out / 'compare.log')
+    )
     notes = _text('--gate-out', arguments.gate_out / 'ratchet.log')
     ref = reference(arguments.reference)
-    cases = corpus(arguments.cases)
-    idents = rows(arguments.inventory, cases)
+    loaded = corpus(arguments.cases)
+    idents = rows(arguments.inventory, loaded)
     register = entries(arguments.register)
-    held, hidden = heldout(arguments.heldout)
+    held, hidden, digests = heldout(arguments.heldout)
+    provenance(
+        observed,
+        commit,
+        {**digests, **{ident: sha for ident, (_, sha) in loaded.items()}},
+    )
+    gating = Counter(
+        case for kind, _, case, _ in differing if kind == 'gating' and case
+    )
     found = {
-        ident: classify(ident, ref.get(ident), observed, register)
+        ident: classify(ident, ref.get(ident), observed, register, gating)
         for ident in idents
     }
+    cases = {ident: case for ident, (case, _) in loaded.items()}
     return {
         'cases.md': cases_md(head, idents, found, register),
         'seams.md': seams_md(head, idents, cases, observed),
-        'comparator.md': comparator_md(head, log, notes, register, hidden),
+        'comparator.md': comparator_md(
+            head, differing, lines, notes, register, hidden
+        ),
         'heldout.md': held,
     }
 

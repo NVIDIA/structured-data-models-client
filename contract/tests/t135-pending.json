@@ -1,30 +1,7 @@
 {
  "about": "T1.35 part 1's acceptance tests (the evidence-pack generator, scripts/rust_core/evidence.py) that failed when the independent test author wrote them, before the implementation, at 8af842b2 (tests/test_t135_evidence.py, its interface in that file's docstring). 'exits' holds the Python test ids, 'py:' and the test's name with its parameters. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The test author added the review's tests (orchestrator's decisions on the subagent review of 39cccb09: a core INTERNAL_ERROR a regression even as the reference, python-old's held only by old_client_crash; the compare output as gate.sh prints it, its one verdict adding up; a gating difference never a correct outcome; every observation of the gate's commit and the cases given; held-out file names caught, unruled lines counted; seams per core runner, a panic named; every per-cell run required) on 39cccb09, failing when written.",
  "pending": {
-  "exits": [
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[a-difference-lost]",
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[empty]",
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[no-differences-but-differs]",
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[no-verdict]",
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[prefixed-verdict-counts-more]",
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[two-verdicts]",
-   "py:test_a_compare_output_that_does_not_add_up_fails_by_name[verdict-counts-more]",
-   "py:test_a_core_panic_is_a_regression_even_as_the_reference[an-entry-states-the-panic]",
-   "py:test_a_core_panic_is_a_regression_even_as_the_reference[python-core-panics-as-the-reference]",
-   "py:test_a_core_panic_is_a_regression_even_as_the_reference[rust-host-panics-as-the-reference]",
-   "py:test_a_missing_input_fails_by_name[the-dbr17-cell-run]",
-   "py:test_a_missing_input_fails_by_name[the-floor-cell-run]",
-   "py:test_a_panic_before_any_stage_is_named_a_panic",
-   "py:test_a_runner_stopping_earlier_shows_in_the_seams",
-   "py:test_a_value_difference_is_a_regression_though_the_outcomes_agree[core-between-the-hosts]",
-   "py:test_a_value_difference_is_a_regression_though_the_outcomes_agree[payload-on-rust-host]",
-   "py:test_a_value_difference_is_a_regression_though_the_outcomes_agree[sql-count-on-python-core]",
-   "py:test_an_observation_of_another_run_fails_by_name[a-case-file-changed-since]",
-   "py:test_an_observation_of_another_run_fails_by_name[an-older-commit-in-a-cell]",
-   "py:test_an_observation_of_another_run_fails_by_name[an-older-commit-on-rust-host]",
-   "py:test_held_out_lines_are_caught_by_file_name_and_counted",
-   "py:test_the_compare_output_as_the_gate_prints_it_is_read"
-  ]
+  "exits": []
  },
  "authored": {
   "exits": [
