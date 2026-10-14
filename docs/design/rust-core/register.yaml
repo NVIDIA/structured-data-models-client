@@ -4188,8 +4188,11 @@ entries:
     (sdm-data's DuckDB dialect declares DuckDB's; a host provider declares
     none): another vendor's, or none, is admitted by its storage as before
     (binary, left out). A key read in the decimal128(38, 0) tier is joined
-    as a HUGEINT, which DuckDB compares with a VARINT key exactly (it has no
-    DECIMAL(38, 0) to VARINT cast). The default route is unchanged.
+    by its decimal text (the table's key's text, a fraction of zeros
+    dropped), exact for every integer key type: no one SQL type compares it
+    exactly with a VARINT and a UHUGEINT key alike (DuckDB has no
+    DECIMAL(38, 0) to VARINT cast, and compares a UHUGEINT with a HUGEINT
+    through DOUBLE). The default route is unchanged.
   affected_inputs: >-
     Schema.from_source and materialize over a DuckDB connection with
     arrow_lossless_conversion set, holding a UUID, HUGEINT, UHUGEINT, BIT or

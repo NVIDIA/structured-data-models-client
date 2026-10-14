@@ -11,9 +11,10 @@
 //! the cases on DuckDB and fails on any statement they run that is pinned
 //! nowhere in these files. The key's type changes no statement but one:
 //! its values travel in the key set the statements join, which DuckDB reads
-//! in the key's own type; a `decimal128(38, 0)` key is joined as a HUGEINT
-//! (T1.33 part 3, register P1B-43: DuckDB has no DECIMAL(38, 0) to VARINT
-//! cast), so its statements are pinned beside the narrower decimal's.
+//! in the key's own type; a `decimal128(38, 0)` key is joined by its
+//! decimal text (T1.33 part 3, register P1B-43: no one SQL type compares
+//! it exactly with a VARINT and a UHUGEINT key alike), so its statements
+//! are pinned beside the narrower decimal's.
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
 use sdm_data::Data;
@@ -182,7 +183,7 @@ ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."oid" ASC NULLS
         r#"SELECT s."batch" AS "__kumo_batch__", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
-  ON t."user_id" = CAST(s."key" AS HUGEINT)
+  ON regexp_replace(CAST(t."user_id" AS VARCHAR), '\.0*$', '') = CAST(s."key" AS VARCHAR)
  AND CAST(t."ts" AS TIMESTAMP) <= s."end"
  AND CAST(t."ts" AS TIMESTAMP) > s."start""#,
     ),
@@ -191,7 +192,7 @@ JOIN "orders" t
         r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country"
 FROM "__sdm_seeds__" s
 JOIN "users" t
-  ON t."user_id" = CAST(s."key" AS HUGEINT)
+  ON regexp_replace(CAST(t."user_id" AS VARCHAR), '\.0*$', '') = CAST(s."key" AS VARCHAR)
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY s."batch"
 ) = 1"#,
@@ -201,7 +202,7 @@ QUALIFY ROW_NUMBER() OVER (
         r#"SELECT s."batch" AS "__kumo_batch__", t."order_id", t."user_id", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
-  ON t."user_id" = CAST(s."key" AS HUGEINT)
+  ON regexp_replace(CAST(t."user_id" AS VARCHAR), '\.0*$', '') = CAST(s."key" AS VARCHAR)
  AND CAST(t."ts" AS TIMESTAMP) <= s."time"
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY s."batch"

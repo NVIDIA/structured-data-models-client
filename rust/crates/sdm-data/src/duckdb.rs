@@ -581,13 +581,13 @@ fn neighbors(
 ) -> Result<String, CoreError> {
     let projected = joined_columns(request, columns)?;
     let mut text = format!(
-        "SELECT s.{batch} AS {helper}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = {seed_key}",
+        "SELECT s.{batch} AS {helper}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON {on}",
         batch = identifier(SEED_BATCH),
         helper = identifier(BATCH_COLUMN),
         seeds = identifier(&seeds_for(table)),
         table = identifier(table),
-        key = identifier(key),
-        seed_key = seed_key(request),
+        // The key compared exactly whatever its type (seed_join).
+        on = seed_join(request, key),
     );
     if let Some(window) = window {
         let time = format!("CAST(t.{} AS TIMESTAMP)", identifier(&window.column));
@@ -627,13 +627,13 @@ fn lookup(
     let projected = joined_columns(request, columns)?;
     let batch = identifier(SEED_BATCH);
     Ok(format!(
-        "SELECT s.{batch} AS {helper}, COUNT(*) OVER (PARTITION BY s.{batch}) AS {matches}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = {seed_key}\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n) = 1",
+        "SELECT s.{batch} AS {helper}, COUNT(*) OVER (PARTITION BY s.{batch}) AS {matches}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON {on}\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n) = 1",
         helper = identifier(BATCH_COLUMN),
         matches = identifier(MATCHES_COLUMN),
         seeds = identifier(&seeds_for(table)),
         table = identifier(table),
-        key = identifier(key),
-        seed_key = seed_key(request),
+        // The key compared exactly whatever its type (seed_join).
+        on = seed_join(request, key),
     ))
 }
 
@@ -855,14 +855,25 @@ fn text(name: &str) -> String {
 /// DuckDB's layouts only for a column naming it (register P1B-43).
 pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 
-/// The seeds' key as a join compares it with a table's key: as it is, but
-/// a `decimal128(38, 0)` key as a HUGEINT, which every key that arrives in
-/// that type compares with exactly (a DECIMAL(38, 0), HUGEINT, UHUGEINT or
-/// VARINT column), where DuckDB has no cast from DECIMAL(38, 0) to a
-/// VARINT (BIGNUM) column's type (register P1B-43: a VARINT key whose
-/// values pass int64, read in the decimal tier).
-fn seed_key(request: &DataRequest) -> String {
-    let column = format!("s.{}", identifier(SEED_KEY));
+/// The condition joining the seeds to `table`'s `key`: `t.key = s.key`,
+/// but for a seed key of `decimal128(38, 0)`, which every key read in that
+/// tier is (a DECIMAL(38, 0), a HUGEINT, or a HUGEINT, UHUGEINT or VARINT
+/// read in the big-integer rule's decimal tier, register P1B-43), the two
+/// compared as their decimal text, the key's with a fraction of zeros
+/// dropped. No one SQL type compares such a seed exactly with every key it
+/// may meet: DuckDB has no DECIMAL(38, 0) to VARINT cast, and compares a
+/// UHUGEINT with a HUGEINT through DOUBLE (2^64 + 1 equal to 2^64 + 2), and
+/// the plan cannot read the key's declared type. An integer's decimal text
+/// is its value, one text a value, so the comparison is exact for every
+/// integer type (BIGINT past whose range a seed simply matches nothing,
+/// never fails a cast), a DECIMAL of any scale and a float whose value is
+/// a whole number match the seed they equal, a fraction matches none, and
+/// a float DuckDB writes with an exponent (from 10^16) or as -0.0 matches
+/// none. It stays an equality of two expressions, each of one side, so
+/// DuckDB still joins by hash.
+fn seed_join(request: &DataRequest, key: &str) -> String {
+    let seed = format!("s.{}", identifier(SEED_KEY));
+    let key = format!("t.{}", identifier(key));
     let seeds: Option<&KeySet> = match request {
         DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => Some(seeds),
         _ => None,
@@ -876,8 +887,8 @@ fn seed_key(request: &DataRequest) -> String {
                 }
     });
     if wide {
-        format!("CAST({column} AS HUGEINT)")
+        format!(r"regexp_replace(CAST({key} AS VARCHAR), '\.0*$', '') = CAST({seed} AS VARCHAR)")
     } else {
-        column
+        format!("{key} = {seed}")
     }
 }
