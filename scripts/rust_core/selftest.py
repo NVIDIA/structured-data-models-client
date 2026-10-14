@@ -2665,10 +2665,10 @@ def scan_cases(results: list[Result]) -> None:
         'a step of installed-wheel allowed to fail',
         lambda r: edit(
             r / l0_scan.CI_FILE,
-            '  installed-wheel:\n    runs-on: ubuntu-latest\n    needs: build\n'
-            '    steps:\n      - uses: actions/checkout@v7\n',
-            '  installed-wheel:\n    runs-on: ubuntu-latest\n    needs: build\n'
-            f'    steps:\n      - uses: actions/checkout@v7\n        {ALLOWED_TO_FAIL}: true\n',
+            '  installed-wheel:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n'
+            '    needs: build\n    steps:\n      - uses: actions/checkout@v7\n',
+            '  installed-wheel:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n'
+            f'    needs: build\n    steps:\n      - uses: actions/checkout@v7\n        {ALLOWED_TO_FAIL}: true\n',
         ),
         f'`{ALLOWED_TO_FAIL}` in job installed-wheel',
     )

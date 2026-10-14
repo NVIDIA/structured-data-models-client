@@ -81,7 +81,12 @@ def _uploads(job: dict[str, Any]) -> dict[str, str]:
 def test_the_job_takes_both_hosts_observations_by_name() -> None:
     jobs = _jobs()
     job = jobs[JOB]
-    assert set(job['needs']) == {'rust-test', 'contract-python-ref-pandas3'}
+    # The landing job, for its own condition on a landing commit (E131).
+    assert set(job['needs']) == {
+        'landing',
+        'rust-test',
+        'contract-python-ref-pandas3',
+    }
     downloads = {
         each['with']['name']: each['with']['path']
         for each in job['steps']

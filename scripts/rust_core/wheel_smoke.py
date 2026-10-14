@@ -80,6 +80,10 @@ judged).
     scripts/rust_core/wheel_smoke.py --lane floor|newest \\
         --wheel SHIPPED.whl --test-ops-wheel TEST_OPS.whl --out DIR \\
         [--inputs TREE] [--commit SHA] [--container | --python PATH]
+    scripts/rust_core/wheel_smoke.py image floor|newest
+
+``image`` prints the lane's image, which CI pulls first, with retries
+(``pull_image.sh``, decision E131).
 """
 
 from __future__ import annotations
@@ -899,6 +903,16 @@ def in_container(
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ['image']:
+        if len(argv) != 2 or argv[1] not in LANES:
+            print(
+                f'usage: wheel_smoke.py image {"|".join(LANES)}',
+                file=sys.stderr,
+            )
+            return 2
+        print(LANES[argv[1]].image)
+        return 0
     parser = argparse.ArgumentParser(
         description=__doc__.split('\n\n', 1)[0],
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -25,14 +25,17 @@ on:
 
 permissions:
   contents: read
+  # For the images CI pulls from ghcr.io with GITHUB_TOKEN, once they are
+  # hosted there (E131); none is yet.
+  packages: read
 
 # A newer push cancels a topic branch's run in progress. On the phase
 # branch and the lane branches a run in progress is not cancelled (E43): a
-# landing's runs there are recorded after the fast-forward, so the next
-# landing or the lane's next package must not cancel them. A run still
-# queued there can be: GitHub keeps one pending run per group, and a newer
-# push supersedes it. No landing depends on that run alone; land.py verify
-# reports a cancelled run, and passes on another green run of the same tree.
+# candidate's run on its lane is the evidence its landing stands on (E131),
+# so the next push there must not cancel it. A run still queued there can
+# be: GitHub keeps one pending run per group, and a newer push supersedes
+# it. land.py refuses a candidate whose newest run was cancelled, and
+# land.py verify asks for a rerun rather than a revert.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ !(github.ref_name == 'rust-core-phase-1' || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
@@ -46,16 +49,70 @@ env:
   # branch it reuses, so a package's first run restores the builds the
   # lane's previous package saved (decision E43). Every run restores what
   # its own branch saved; a run that saves nothing still runs every check.
+  # pip's caches are saved on main alone (E131): one per job and Python on
+  # every long-lived branch took half the 10 GiB, and evicted the Rust
+  # builds, which cost far more to redo. Every branch restores main's.
   SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core", "rust-core-phase-1"]'), github.ref_name) || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
-  # The manylinux2014 image both wheel builds run in, pinned by digest.
+  SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+  # The images CI pulls, each named here once and pinned by digest (E131),
+  # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
+  # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
+  # The PostgreSQL server for test and engine: Docker's official image,
+  # from its public ECR mirror (Docker Hub's anonymous pull limit failed
+  # every attempt of a run), by the digest CI pulled for postgres:17. A
+  # service container's image cannot read env, so the landing job hands
+  # it on.
+  POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+  # The manylinux2014 image both wheel builds run in.
   MANYLINUX: quay.io/pypa/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
   # The binding's tests run at the E16 floor; DuckDB, at the reference's
   # version, is for the DuckDB provider's tests there (T1.11b).
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6
 
 jobs:
+  # Decision E131 (the owner's of 2026-10-14): CI does not test an empty
+  # landing commit again. land.py makes one per landing (one parent, no
+  # file changed, a subject starting `Land `) and pushes it to the topic
+  # and the phase branch; its tree is its candidate's, which land.py
+  # requires green on the candidate's own exact-SHA push run, and
+  # `land.py verify` stands on that run. On a push of such a commit to the
+  # phase branch or a branch under it every other job is left out: each
+  # needs this one, directly or through the jobs it needs, and runs only
+  # when it does not say skip. Any other push, and every pull request, runs
+  # them all. It also hands the service containers the PostgreSQL image.
+  # tests/test_ci_workflow.py runs this step's text.
+  landing:
+    name: landing commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      skip: ${{ steps.landing.outputs.skip }}
+      postgres-image: ${{ env.POSTGRES_IMAGE }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: landing
+        name: An empty landing commit is not tested again
+        run: |
+          skip=false
+          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
+            push:rust-core-phase-1 | push:rust-core-phase-1-*)
+              parents=$(git rev-list --parents -n 1 HEAD | wc -w)
+              subject=$(git log -1 --format=%s HEAD)
+              if [ "$parents" -eq 2 ] && [ "${subject#Land }" != "$subject" ] &&
+                [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'HEAD^^{tree}')" ]; then
+                skip=true
+              fi ;;
+          esac
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "an empty landing commit, so every other job is left out: $skip"
+
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -67,6 +124,9 @@ jobs:
 
   hygiene:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -80,6 +140,9 @@ jobs:
   # the organisation's allow list requires.
   rust-lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     defaults:
       run:
         working-directory: rust
@@ -142,6 +205,9 @@ jobs:
 
   rust-deny:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     defaults:
       run:
         working-directory: rust
@@ -155,6 +221,9 @@ jobs:
 
   rust-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     defaults:
       run:
         working-directory: rust
@@ -285,6 +354,9 @@ jobs:
   # and the binding's tests run beside it, in native-test-ops and binding.
   native-wheel:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     env:
       NATIVE_ARGS: --out native
     steps:
@@ -295,6 +367,12 @@ jobs:
         with:
           workspaces: rust
           save-if: ${{ env.SAVE_CACHES == 'true' }}
+      # The image, pulled with retries and, from ghcr.io, logged in (E131).
+      - &manylinux-pull
+        name: Pull the manylinux2014 image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$MANYLINUX"
       # As the runner's user, so the cache can read rust/target afterwards,
       # in a home the runner made, so that user can write it, holding the
       # runner's crate registry, which the cache restores. NATIVE_ARGS says
@@ -338,6 +416,9 @@ jobs:
   # builds or ships takes (E23).
   native-test-ops:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     env:
       NATIVE_ARGS: --out native-test-ops --test-ops
     steps:
@@ -348,6 +429,7 @@ jobs:
         with:
           workspaces: rust
           save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - *manylinux-pull
       - *manylinux-build
       - uses: actions/setup-python@v7
         with:
@@ -374,6 +456,7 @@ jobs:
   # any build passes.
   binding:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: native-wheel
     steps:
       - uses: actions/checkout@v7
@@ -408,6 +491,7 @@ jobs:
   wheel-smoke:
     name: wheel-smoke (${{ matrix.lane }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [native-wheel, native-test-ops]
     strategy:
       fail-fast: false
@@ -423,6 +507,14 @@ jobs:
         with:
           name: native-wheel-test-ops
           path: native-test-ops
+      # The lane's image, as wheel_smoke.py names it, pulled with retries
+      # and, from ghcr.io, logged in (E131): the two lanes start together,
+      # and a registry that refuses a pull for its rate often takes it a
+      # minute later. The run below then finds it pulled.
+      - name: Pull the lane's image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$(python3 scripts/rust_core/wheel_smoke.py image ${{ matrix.lane }})"
       - name: The lane's clean container
         run: |
           python3 scripts/rust_core/wheel_smoke.py --lane ${{ matrix.lane }} --container \
@@ -436,6 +528,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: native-wheel
     steps:
       - uses: actions/checkout@v7
@@ -473,7 +566,8 @@ jobs:
   # reached a release through a promise nothing checked.
   test:
     runs-on: ubuntu-latest
-    needs: native-wheel
+    timeout-minutes: 45
+    needs: [landing, native-wheel]
     strategy:
       fail-fast: false
       matrix:
@@ -482,11 +576,13 @@ jobs:
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
-      postgres:
-        # Docker's official image, from its public ECR mirror: Docker Hub's
-        # anonymous pull limit failed every attempt of a run. Pinned by the
-        # digest CI pulled for the tag postgres:17.
-        image: public.ecr.aws/docker/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+      postgres: &postgres-service
+        # POSTGRES_IMAGE, by way of the landing job. The runner logs in
+        # only with both credentials set: for ghcr.io, as this workflow.
+        image: ${{ needs.landing.outputs.postgres-image }}
+        credentials:
+          username: ${{ startsWith(env.POSTGRES_IMAGE, 'ghcr.io/') && github.actor || '' }}
+          password: ${{ startsWith(env.POSTGRES_IMAGE, 'ghcr.io/') && secrets.GITHUB_TOKEN || '' }}
         env:
           POSTGRES_DB: sdm_test
           POSTGRES_PASSWORD: postgres
@@ -509,8 +605,9 @@ jobs:
           path: native
       # pip's downloads and built wheels, keyed on the week and on every
       # distribution's manifest and restored from the newest of this job's
-      # otherwise. pip still resolves each requirement against the index, so
-      # the cache only saves downloads and changes no version (CI1).
+      # otherwise; saved on main alone, which every branch restores (E131).
+      # pip still resolves each requirement against the index, so the cache
+      # only saves downloads and changes no version (CI1).
       - id: week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - id: pip-cache
@@ -532,7 +629,7 @@ jobs:
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
             -m 'not live_nim and not live_warehouse'
-      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+      - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/pip
@@ -540,24 +637,14 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
-    needs: native-wheel
+    timeout-minutes: 45
+    needs: [landing, native-wheel]
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
+    # The same service as test's.
     services:
-      postgres:
-        # Docker's official image, from its public ECR mirror: Docker Hub's
-        # anonymous pull limit failed every attempt of a run. Pinned by the
-        # digest CI pulled for the tag postgres:17.
-        image: public.ecr.aws/docker/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
-        env:
-          POSTGRES_DB: sdm_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
+      postgres: *postgres-service
     env:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
@@ -578,8 +665,9 @@ jobs:
       - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       # pip's downloads and built wheels, keyed on the week and on every
       # distribution's manifest and restored from the newest of this job's
-      # otherwise. pip still resolves each requirement against the index, so
-      # the cache only saves downloads and changes no version (CI1).
+      # otherwise; saved on main alone, which every branch restores (E131).
+      # pip still resolves each requirement against the index, so the cache
+      # only saves downloads and changes no version (CI1).
       - id: week
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
       - id: pip-cache
@@ -621,7 +709,7 @@ jobs:
       # The contract cases and the runner's controls (contract/tests) run
       # in contract-python, from T1.18.
       - run: python -m pytest tests -q
-      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+      - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/pip
@@ -642,6 +730,7 @@ jobs:
   contract-python-ref-pandas3:
     name: contract-python (ref-pandas3)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: native-wheel
     env:
       CELL: ref-pandas3
@@ -760,8 +849,11 @@ jobs:
   cross-host:
     name: cross-host (python-core, rust-host)
     runs-on: ubuntu-latest
-    needs: [rust-test, contract-python-ref-pandas3]
-    if: ${{ !cancelled() }}
+    timeout-minutes: 20
+    # Its own !cancelled() would run it on a landing commit, whose jobs
+    # are left out (E131), so it says so itself.
+    needs: [landing, rust-test, contract-python-ref-pandas3]
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -808,6 +900,7 @@ jobs:
   contract-python-dbr17-pandas2:
     name: contract-python (dbr17-pandas2)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: native-wheel
     env:
       CELL: dbr17-pandas2
@@ -824,6 +917,7 @@ jobs:
   contract-python-floor-pandas2-2:
     name: contract-python (floor-pandas2.2)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: native-wheel
     env:
       CELL: floor-pandas2.2
@@ -839,6 +933,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: native-wheel
     steps:
       - uses: actions/checkout@v7
@@ -899,6 +994,7 @@ jobs:
   # directory where the source tree is not importable.
   installed-wheel:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     steps:
       - uses: actions/checkout@v7
@@ -951,6 +1047,7 @@ jobs:
   # native toolchain.
   sbom:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     steps:
       - uses: actions/checkout@v7
