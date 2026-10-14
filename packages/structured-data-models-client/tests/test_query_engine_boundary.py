@@ -270,13 +270,17 @@ def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
 def test_a_rows_per_call_that_is_not_a_size_is_refused(given, text):
     """The decomposed route reads the size before the gathering that
     validates it, and read it with a bare int(), which is a ValueError out of
-    a package the caller never imported."""
+    a package the caller never imported.
+
+    The message is read rather than the code, because an option that is not
+    taken at all is also an INVALID_REQUEST naming it.
+    """
     with pytest.raises(StructuredDataError) as refused:
         PredictiveQuery(text, schema()).materialize(
             indices=[5], rows_per_call=given
         )
     assert refused.value.code == 'INVALID_REQUEST'
-    assert 'rows_per_call' in str(refused.value)
+    assert 'a call scores a whole number of rows' in str(refused.value)
 
 
 def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(

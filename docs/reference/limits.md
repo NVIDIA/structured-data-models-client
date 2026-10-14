@@ -68,12 +68,14 @@ carries are what come down in the first case.
 **That 100,000 is this client's, not the endpoint's.** The endpoint is never
 asked for more than one call holds. Every batch is built before the first is
 sent, each with its own context, so the whole population is held in memory at
-once, and 100,000 entities is about a gigabyte of it. More than 100,000 entities in
-one `materialize()` is refused for that reason rather than by the endpoint,
-and so is more than 100 calls, which is the same ceiling reached from the
-other side when `rows_per_call` is set very low. Ask about fewer entities at a
-time, or raise `sdm_client.materializers.relational.MOST_ENTITIES` or
-`MOST_CALLS`.
+once, and 100,000 entities is about a gigabyte of it. One `materialize()`
+gathers at most that many, in at most 100 calls, and the refusal names
+whichever of the two it met. The second is what a small `rows_per_call`
+reaches, and what a temporal link prediction reaches at 20,001 entities, since
+it scores 200 a call.
+
+Both govern the batches of one question. A question asked in parts is one call
+per part and is held to `sdm_client.decompose.MOST_PARTS`, which is 200.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as
