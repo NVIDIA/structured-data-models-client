@@ -20,6 +20,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
@@ -559,15 +560,29 @@ def test_the_reference_observations_validate_and_meet_each_expectation(
         assert identity['runner'] == 'python-ref'
         assert identity['reference']['commit']['sha'] == reference.stem
         assert identity['native_loaded'] is False
+    # Every case's expectation is its reference's outcome, each case read
+    # here whatever compare.py can read of it.
+    by_case = {o['case']: o['outcome'] for o in observations}
+    for case, _ in run_python.load_cases([CASES]):
+        outcome = by_case[case['id']]
+        expect = case['expect']
+        assert expect['outcome'] == outcome['result'], case['id']
+        assert expect['stage'] == outcome['stage'], case['id']
+        if outcome['result'] == 'refusal':
+            assert expect.get('error') == outcome['error'], case['id']
+            assert expect.get('code') == outcome['code'], case['id']
+    # And compare.py holds the reference to them, as a runner too, on the
+    # cases whose reference can stand in for one (_not_synthesizable).
+    cases, kept = _synthesizable(tmp_path)
     run = subprocess.run(
         [
             sys.executable,
             str(COMPARE),
             '--cases',
-            str(CASES),
+            str(cases),
             '--reference',
-            str(reference),
-            str(reference),
+            str(kept),
+            str(kept),
         ],
         capture_output=True,
         text=True,
@@ -577,7 +592,7 @@ def test_the_reference_observations_validate_and_meet_each_expectation(
     # A corrupted expectation fails.
     corrupted = tmp_path / 'cases'
     corrupted.mkdir()
-    for path in CASES.rglob('*.json'):
+    for path in cases.rglob('*.json'):
         case = json.loads(path.read_text())
         if case['expect']['outcome'] == 'refusal':
             case['expect']['code'] = 'INTERNAL_ERROR'
@@ -589,8 +604,8 @@ def test_the_reference_observations_validate_and_meet_each_expectation(
             '--cases',
             str(corrupted),
             '--reference',
-            str(reference),
-            str(reference),
+            str(kept),
+            str(kept),
         ],
         capture_output=True,
         text=True,
@@ -695,12 +710,98 @@ def _reference() -> Path:
     return reference
 
 
+#: The public call whose result each core operation gives.
+_STAGE_OF = {
+    'describe_source': 'from_source',
+    'validate_query': 'materialize',
+    'materialize': 'materialize',
+    'predict': 'predict',
+}
+
+
+def _unencodable(observation: dict[str, Any]) -> bool:
+    r"""Whether a statement's result holds a value the canonical form
+    does not, which compare.py's ``sql.result`` never takes as equal, even
+    to itself."""
+    return any(
+        result['values']['unencodable']
+        for statement in observation['driver']['capture']['statements']
+        for result in statement.get('results') or []
+        if 'values' in result
+    )
+
+
+def _not_synthesizable() -> dict[str, str]:
+    r"""The acceptance cases whose reference observation cannot stand in
+    for another runner's, by why: the core reaches another call than the
+    reference did (an approved register entry, other than the placeholder
+    P1B-1, must list the case, so the difference is held, not hidden), or
+    the reference read a value the canonical form does not hold. Each is
+    held by the gate's own runs, never by these syntheses; a diagnostic
+    case is compared whatever it is, its differences reported."""
+    reference = {
+        json.loads(line)['case']: json.loads(line)
+        for line in _reference().read_text(encoding='utf-8').splitlines()
+    }
+    entries = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))['entries']
+    registered = {
+        case
+        for entry in entries
+        if entry['id'] != 'P1B-1' and entry.get('status') == 'approved'
+        for case in entry.get('cases') or []
+    }
+    found = {}
+    for case, _ in run_python.load_cases([CASES]):
+        if case['status'] != 'acceptance' or case['id'] not in reference:
+            continue
+        observed = reference[case['id']]
+        carried = [op for op in _STAGE_OF if op in case.get('core', {})]
+        reaches = _STAGE_OF[carried[-1]] if carried else None
+        stage = observed['outcome']['stage']
+        if reaches is not None and reaches != stage:
+            assert case['id'] in registered, (
+                f'{case["id"]}: the core reaches {reaches}, the reference '
+                f'{stage}, and no approved entry lists it'
+            )
+            found[case['id']] = (
+                f'the core reaches {reaches}, the reference {stage}'
+            )
+        elif _unencodable(observed):
+            found[case['id']] = 'values the canonical form does not hold'
+    return found
+
+
+def _synthesizable(tmp_path: Path) -> tuple[Path, Path]:
+    r"""The cases and the reference observations, as their files are,
+    but those :func:`_not_synthesizable` names."""
+    left_out = _not_synthesizable()
+    root = Path(tempfile.mkdtemp(prefix='synthesizable-', dir=tmp_path))
+    cases = root / 'cases'
+    cases.mkdir()
+    for path in sorted(CASES.rglob('*.json')):
+        if json.loads(path.read_bytes())['id'] not in left_out:
+            (cases / path.name).write_bytes(path.read_bytes())
+    reference = _reference()
+    kept = root / 'reference' / reference.name
+    kept.parent.mkdir()
+    kept.write_text(
+        ''.join(
+            line + '\n'
+            for line in reference.read_text(encoding='utf-8').splitlines()
+            if json.loads(line)['case'] not in left_out
+        ),
+        encoding='utf-8',
+    )
+    return cases, kept
+
+
 def _seeded(
     tmp_path: Path, change: Any, name: str = 'seeded.jsonl'
 ) -> subprocess.CompletedProcess[str]:
     r"""compare.py on the reference observations as ``change`` rewrites
-    each, the reference itself as the oracle."""
-    reference = _reference()
+    each, the reference itself as the oracle, over the cases whose
+    reference can stand in for another runner (:func:`_synthesizable`)."""
+    cases, reference = _synthesizable(tmp_path)
     lines = []
     for line in reference.read_text().splitlines():
         observation = json.loads(line)
@@ -713,7 +814,7 @@ def _seeded(
             sys.executable,
             str(COMPARE),
             '--cases',
-            str(CASES),
+            str(cases),
             '--reference',
             str(reference),
             str(seeded),
@@ -722,6 +823,45 @@ def _seeded(
         text=True,
         check=False,
     )
+
+
+def test_the_syntheses_leave_out_only_cases_held_elsewhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Seeded: an admitted case whose core reaches another call than the
+    # reference is left out under an approved entry listing it, and fails
+    # without one; one whose reference holds a value the canonical form
+    # does not is left out; a diagnostic one never is.
+    module = sys.modules[__name__]
+    cases = tmp_path / 'cases'
+    cases.mkdir()
+    for path in sorted(CASES.rglob('*.json')):
+        case = json.loads(path.read_bytes())
+        if case['id'] in ('nested.fixed-array', 'nested.map'):
+            case['status'] = 'acceptance'
+            if case['id'] == 'nested.map':
+                # Stopping where the reference does: left out only for its
+                # values.
+                case['core'] = {
+                    'describe_source': case['core']['describe_source']
+                }
+        (cases / path.name).write_text(json.dumps(case), encoding='utf-8')
+    monkeypatch.setattr(module, 'CASES', cases)
+    left_out = _not_synthesizable()
+    assert left_out['nested.map'] == 'values the canonical form does not hold'
+    assert left_out['nested.fixed-array'] == (
+        'the core reaches predict, the reference from_source'
+    )
+    assert 'nested.struct' not in left_out
+    register = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    for entry in register['entries']:
+        if entry['id'] == 'P1B-9':
+            entry['status'] = 'proposed'
+    unapproved = tmp_path / 'register.yaml'
+    unapproved.write_text(yaml.safe_dump(register), encoding='utf-8')
+    monkeypatch.setattr(module, 'REGISTER', unapproved)
+    with pytest.raises(AssertionError, match='no approved entry lists it'):
+        _not_synthesizable()
 
 
 def _as_old(observation: dict[str, Any]) -> None:
@@ -861,12 +1001,30 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                         'rows': [[{'i64': '0'}]],
                     },
                 }
+            # A query validated in place of materialize (from T1.32g:
+            # refuse.unknown-column), answered as the call was.
+            validated = None
+            if 'validate_query' in case['core']:
+                spec = case['core']['validate_query']
+                inputs.append(
+                    {
+                        'op': 'validate_query',
+                        'query': case['input']['pql'],
+                        'profile': spec['profile'],
+                        'schema': spec['schema'],
+                    }
+                )
+                validated = (
+                    observation['outcome']['result'] == 'success'
+                    if accepted is None
+                    else accepted
+                )
             observation['core'] = {
                 'inputs': inputs,
                 # A description is built from fetched rows: from T1.29 the
                 # core rule fails one with no fetch recorded.
                 'fetches': [{'request': {}, 'plan': {}}],
-                'accepted': None,
+                'accepted': validated,
                 'described': described,
                 'materialized': materialized,
                 'predicted': predicted,
