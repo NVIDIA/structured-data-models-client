@@ -1967,6 +1967,10 @@ entries:
     contract/refusal-maps/refusal.json, on python-core and rust-host. Both
     refuse; the class and code change. T1.32c resolves it when it admits
     the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+    Its first-admission case_outcomes (nested.union, T1.32g) approved by
+    both reviewers of T1.32g part 2b's review round 1 (Codex and the
+    independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-7-first-admission-rows.
   case_outcomes:
   - {case: nested.union, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: nested.union, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -2055,6 +2059,10 @@ entries:
     and sdm-testkit's tests/t132c_nested_types.rs; the old-against-core
     probe of T1.32c (as-built.md, T1.32c) met it in 18 of 60 generated
     sources, each a fixed-size list the reference fails unnamed. Approved by the owner on 2026-10-13, relayed by the orchestrator (E93): fixed-size lists left out with a warning.
+    Its first-admission case_outcomes (nested.fixed-array, T1.32g) approved
+    by both reviewers of T1.32g part 2b's review round 1 (Codex and the
+    independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-9-first-admission-rows.
   case_outcomes:
   - {case: nested.fixed-array, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: nested.fixed-array, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -2103,6 +2111,10 @@ entries:
     which first reaches it through the public call with tables named) is
     pinned, both routes' outcomes, by the client's
     tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code.
+    Its first-admission case_outcomes (nested.map and nested.struct, T1.32g)
+    approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
+    the independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-10-first-admission-rows.
   case_outcomes:
   - {case: nested.map, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at from_source (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: nested.map, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -2157,6 +2169,10 @@ entries:
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
     T1.32d. The two-fault outcome is pinned, both routes', by the client's
     tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32d its refs name the family's vectors whose source holds an empty table (the fact table, the entity table, both, a third table named or not, the fact table named, emptied by a filter, and with no entities asked for), each the same transition, the reference's unnamed RuntimeError to this entry's UNSUPPORTED_REQUEST: for a reviewer to hold to the approved meaning. The code is kept: the recommendation above, INVALID_REQUEST, would change this approved entry, so T1.32d leaves it to the owner (E91). The owner chose INVALID_REQUEST on 2026-10-13, the rule kept (relayed by the orchestrator; recorded at T1.32g, E97, never the implementer's approval): the refs above declare the reference's unnamed RuntimeError to INVALID_REQUEST, and sdm-schema's infer.rs refuses an empty table so.
+    Its first-admission case_outcomes (empty.fact-table, T1.32g) approved by
+    both reviewers of T1.32g part 2b's review round 1 (Codex and the
+    independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-11-first-admission-rows.
   case_outcomes:
   - {case: empty.fact-table, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: empty.fact-table, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -2583,6 +2599,10 @@ entries:
     a decimal class target should be taken (its classes the decimals'
     text, or the values read at float64) was T1.32b's question; T1.32b
     keeps the refusal (above).
+    Its first-admission case_outcomes (decimal.class-target-38-18, T1.32g)
+    approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
+    the independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-18-first-admission-rows.
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -3293,6 +3313,11 @@ entries:
     of T1.32b part 1's round 1 checked (the refs first proposed as P1B-70,
     moved here and that entry removed in its fix round 1). A decimal key with a scale, written as text,
     is read back by predict's result as text (key.decimal-38-10). Approved by the owner on 2026-10-13, relayed by the orchestrator.
+    Its first-admission case_outcomes (the four keys,
+    key.varchar-large-buffers added to its cases, T1.32g) approved by both
+    reviewers of T1.32g part 2b's review round 1 (Codex and the independent
+    subagent), relayed by the orchestrator:
+    APPROVE-P1B-33-first-admission-rows.
   case_outcomes:
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -3386,6 +3411,9 @@ entries:
     the three utf8-float-text.mixed.float-*-text vectors (1e16, 1.5e-07 and
     a tie mixed with text), the same transition as *.mixed.float-text, the
     host writing each float as the core writes a float entity.
+    T1.32g's ref (utf8-float-text.mixed.float-*-text) approved by both
+    reviewers of T1.32g part 2b's review round 1 (Codex and the independent
+    subagent), relayed by the orchestrator: APPROVE-P1B-35-ref.
 
 - id: P1B-36
   title: A decimal entity of a float key is rounded once, at the key's width, where the reference rounds it twice
@@ -4502,8 +4530,8 @@ entries:
     The case files of the 23 cases named, which the ratchet's cases rule
     passes only under an approved entry naming each, and their baselines.
   cases: [T1.32g, empty.entity-without-facts, empty.fact-table, empty.indices, key.declared-int32, key.uint64-above-int64-max, key.uint64-small, key.uint8, key.varchar, nested.fixed-array, nested.list-int, nested.map, nested.struct, nested.union, null.feature-all-null, null.some-foreign-keys, null.some-times, null.target-all-null, refuse.unknown-column, key.decimal-18-0, key.decimal-38-10, key.hugeint, key.varchar-large-buffers, decimal.class-target-38-18]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E95}
   notes: >-
     The admission record H19 asks for, with no deviation of its own, for
@@ -4522,6 +4550,8 @@ entries:
     admission. The outcomes below are each runner's baseline at the
     checkpoint (none where the case had none) and the projection the
     package's observations give.
+    Approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
+    the independent subagent), relayed by the orchestrator: APPROVE-P1B-53.
   case_outcomes:
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -4666,8 +4696,8 @@ entries:
     compared with a float constant (PREDICT users.f > 0.7 at DECIMAL(38,
     30)).
   cases: [T1.32b, T1.32g]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E99}
   notes: >-
     Rewritten by the owner's decision of 2026-10-13 (E99(c)): the refusal
@@ -4687,6 +4717,12 @@ entries:
     accepts; the owner withdrew the refusal on 2026-10-13, evening, E99(c),
     and the T1.32g bundle rewrites the entry as the narrow difference from
     scale 28).
+    Approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
+    the independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-71-rewrite, for the narrow exact-conversion behaviour
+    (success to success, the core exact where the reference's pyarrow
+    approximates from scale 28). Named to the owner as a difference from the
+    reference, the core being exact.
 
 - id: P1B-72
   title: Two of the decimal family's cases admitted to acceptance as the reference answers them
