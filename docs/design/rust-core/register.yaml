@@ -3699,6 +3699,86 @@ entries:
 
 # --- lane 1a entries (P1B-41..49) ---
 
+- id: P1B-41
+  title: A multi-category column asked for as a static target is refused by name where the reference fails INTERNAL_ERROR
+  kind: change
+  old_behavior: >-
+    The reference's materialize of a question whose target is a column of
+    the entity table read as multicategorical (PREDICT users.f FOR EACH
+    users.user_id) raises NotImplementedError building the task, which
+    its client reports as INTERNAL_ERROR.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    materialize refuses it UNSUPPORTED_REQUEST naming the rule
+    target_stype (sdm-core's materialize.rs, a static target whose stype is
+    not ID, categorical or numerical), before any data is read. The
+    default route is unchanged.
+  affected_inputs: >-
+    materialize under a forced core route of a static target that is a
+    multi-category column of the entity table; reached only since T1.32e
+    part 2a, which reads such text as multicategorical where the core
+    refused it before (rule multicategorical).
+  cases: [T1.32e]
+  refs:
+  - 'contract/multicategorical-vectors.json#question.static-target refusal INTERNAL_ERROR -> refusal UNSUPPORTED_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E86}
+  notes: >-
+    A refusal to refusal clarification where the reference fails
+    unnamed, so E66(b)'s class, for a reviewer to approve under it. The
+    test author's vector question.static-target marks it register-required
+    (the recorder's register.required); pending on both hosts until
+    approved.
+
+- id: P1B-42
+  title: Times of day and ratios written as text, under a name that does not say time, are read as categories, where the reference reads them as times of the day it runs
+  kind: change
+  old_behavior: >-
+    The reference reads text such as 09:30, 9:30 AM, 09:30:15, 16:9 or
+    1:2 with pandas' to_datetime, which takes it as that time on the day
+    the call runs. Under any name such a column is a timestamp: on the
+    entity table it becomes its time column, and materialize then fails
+    INVALID_REQUEST; on the fact table, beside the time column, it is sent
+    as a timestamp feature dated the day of the run. Its multi-category
+    reading is never reached.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    such text is no time under a name that does not say time, by the
+    approved DT-17 (outside the client's shapes), so the ported
+    multi-category reading decides it (sdm-schema's infer.rs,
+    text_holds_categories): split by the colon, a column of few parts is
+    multicategorical, and otherwise categorical or text; materialize and
+    predict then succeed, the values sent whole. Before T1.32e part 2a the
+    core refused such text at from_source (rule multicategorical). The
+    default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source, materialize and predict under a forced core route
+    over a source with a text column of times of day or ratios under a
+    name that does not say time. Under a name that says time such values
+    are refused text_time (DT-15), as before.
+  cases: [T1.32e]
+  refs:
+  - DT-17
+  - 'contract/multicategorical-vectors.json#text.time-of-day* refusal INVALID_REQUEST -> success'
+  - 'contract/multicategorical-vectors.json#text.ratio refusal INVALID_REQUEST -> success'
+  - 'contract/multicategorical-vectors.json#text.aspect-ratio refusal INVALID_REQUEST -> success'
+  - 'contract/multicategorical-vectors.json#large.times-then-multi-after-1000 refusal INVALID_REQUEST -> success'
+  - 'contract/multicategorical-vectors.json#fact.time-of-day success -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E86}
+  notes: >-
+    A refusal to success change (E66(b), E73(b)), for the owner. Measured
+    on the test author's 77 vectors: these 8 differ, on both hosts, and
+    stay pending until an approval. Matching the reference instead would
+    mean reading a time of day as a date the core takes from a clock (the
+    reference's answer for fact.time-of-day carries the day it was
+    recorded, 2026-10-13, so it changes with the day the reference runs)
+    and reversing DT-17 for this shape. The other choice, refusing such
+    text by name, would refuse fact.time-of-day, which the reference
+    answers.
+
 # --- lane 1b entries (P1B-52..69) ---
 
 - id: P1B-52

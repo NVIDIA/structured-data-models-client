@@ -173,6 +173,7 @@ Each lane's new rows go in its own table below, and in that table only; the rows
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
+| E86 | T1.32e part 2 in two landings, since coverage rule 6 (T1.32g part 1) has not landed: part 2a the code, part 2b the twelve cases' admission. Part 2a ports `contains_multicategorical` (owner, 2026-10-13): over the first 500 values, the most frequent of `;`, `:`, `\|` and a tab, the first met on a tie, splits the values; more than 1.5 times as many distinct values as parts, and at most 100 parts, make the column multicategorical, sent whole as `string`. The rule `multicategorical` is lifted. A time-of-day timestamp feature is warned of at materialize (`TIME_VALUES_UNREAD`). P1B-41 and P1B-42 proposed | The owner's ruling; the test author's 77 vectors. Evidence: [as-built.md](as-built.md#t132e-part-2) | owner (the port); implementer (the split, by the brief's rule); P1B-41 for a reviewer, P1B-42 for the owner |
 
 ### Lane 1b (E95 to E99, E110 to E119)
 

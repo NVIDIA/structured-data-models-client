@@ -574,7 +574,12 @@ Whole-table time inference, the reference's key rules and the real-data parity b
 
 ## T1.32e part 2
 
-Filled when the package lands.
+Part 2a, the code; part 2b, the twelve `time.*` and `feature.*` cases' admission, follows coverage rule 6 (E86).
+
+- **The multi-category reading** (owner, 2026-10-13). `sdm_schema::infer::text_holds_categories` ports the reference's `contains_multicategorical` for text: over the first 500 values of the preview, nulls left out, the separator is the most frequent of `;`, `:`, `|` and a tab, the first met on a tie; split by it, the values are multicategorical when they hold more than 1.5 times as many distinct values as distinct parts (in integers, `2 * values > 3 * parts`; an empty part counts) and at most 100 parts. `stype_of` asks it where the reference's `infer_stype` does, after the identifier and timestamp readings and before the categorical one, so text the core reads as a time is never asked. The rule `multicategorical` is gone. On the wire nothing changed: a text column travels as dtype `string` with the description's stype (`sdm_request::payload::wire_dtype`), each cell whole, since only a `text` column is split into words (`subgraph.rs`). Held by the test author's 77 vectors (`contract/multicategorical-vectors.json`) on both hosts, wire included: 68 answer as the reference does; the other 9 are P1B-41 and P1B-42.
+- **Times of day and ratios as text.** Under a name that does not say time, the core reads `09:30` or `16:9` as no time (DT-17), so the port decides them, most often multicategorical; the reference reads them as times on the day it runs. That difference is P1B-42, for the owner.
+- **A time-of-day feature's warning.** `Times::column` (`sdm-core`'s `materialize.rs`) warns `TIME_VALUES_UNREAD` for a `Time64` column whose meaning is a timestamp, as the reference's `to_datetime` warns at materialize: the values dropped, the fetch's rows, and the earliest three times of day (the reference's three follow DuckDB's row order, which varies by run). Held by the family test's warnings on `python-core` and by the family pin on both hosts.
+- **The family's SQL goldens** (E53(c)): `rust/crates/sdm-data/tests/time_feature_family.rs`, seven requests and their statements; `sdm-testkit`'s `t132e_time_feature_sql.rs` fails on any statement the family runs that no file pins.
 
 ## T1.32g
 
