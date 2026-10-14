@@ -1436,7 +1436,7 @@
         "input": {
           "base": "shop",
           "setup": [
-            "SET TimeZone = 'America/New_York'",
+            "SET GLOBAL TimeZone = 'America/New_York'",
             "ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ"
           ],
           "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
@@ -1456,7 +1456,7 @@
           "steps": []
         },
         "setup": [
-          "SET TimeZone = 'America/New_York'",
+          "SET GLOBAL TimeZone = 'America/New_York'",
           "ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ"
         ],
         "core": {

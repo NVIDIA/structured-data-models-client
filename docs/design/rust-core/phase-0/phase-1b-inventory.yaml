@@ -542,7 +542,7 @@ cases:
   cells: [timestamp-us-tz/time-column]
   base: shop
   setup:
-  - SET TimeZone = 'America/New_York'
+  - SET GLOBAL TimeZone = 'America/New_York'
   - ALTER TABLE orders ALTER ts TYPE TIMESTAMPTZ
   expect:
     outcome: success
