@@ -9,16 +9,7 @@
   "python-core": [],
   "rust-host": [],
   "exits": [],
-  "D4": [
-   "exits:py:test_d4_the_table_name_is_refused_before_the_source_is_read[key-beside-a-missing-table]",
-   "exits:py:test_d4_the_table_name_is_refused_before_the_source_is_read[time-beside-a-missing-table]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-bytes]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-int]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-none]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-tuple]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-int]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-none]"
-  ]
+  "D4": []
  },
  "authored": {
   "D3": [

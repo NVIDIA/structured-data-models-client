@@ -4574,3 +4574,44 @@ entries:
   - {case: decimal.target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
   - {case: decimal.target-38-18, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
   - {case: decimal.target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+
+- id: P1B-74
+  title: A key or time column's table named by anything but a str is refused by the host before the source is read
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source reads the source first, then looks
+    up each table primary_keys or time_columns names: a table named by a
+    non-str (3, None, a tuple, bytes) is no table of the schema, refused
+    StructuredDataError INVALID_REQUEST; a source failure (a table named
+    in tables that the source lacks) comes first. Without this entry the
+    core route writes such a name through JSON's coercion of an object
+    key (3 is the table "3", None "null", a tuple or bytes the codec's
+    refusal), so a source holding a table of that text would take it
+    (P1B-12).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    the Python bridge (_rust/schema.py::from_source) refuses it before the
+    run starts: StructuredDataError, INVALID_REQUEST, the fixed message
+    "a table is named by a string", fields field (primary_keys or
+    time_columns) and rule table_not_a_name, no table (it is not text).
+    It comes before the source is read, so it wins over a source failure
+    where the reference gives the source's. A str subclass is a name,
+    written as the plain str. The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source under a forced core route,
+    with primary_keys or time_columns naming a table by anything but a
+    str.
+  cases: [T1.32h]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E101}
+  notes: >-
+    D4 of the P1B-12 design of 2026-10-13, the owner's: a host-side
+    refusal of the host's own argument's type, where JSON's coercion
+    would otherwise name another table; it changes which error wins over
+    a source failure, so it waits for the owner, never self-approved. Its
+    implementation is one commit of T1.32h on top of the main fix and D3,
+    beside the test author's D4 commit, so either can be dropped: dropping
+    both restores the coercion P1B-12 records. Held by the client's
+    tests/test_t132h_keys_and_times.py (the m.*-table rows and
+    test_d4_the_table_name_is_refused_before_the_source_is_read).

@@ -75,7 +75,8 @@ def from_source(
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
     ``unreadable``, which the core refuses (decision E101); an iterable key
-    is read once, here, before the run starts.
+    is read once, here, before the run starts. A table named by anything
+    but a ``str`` is refused here, before the run (P1B-74).
 
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
@@ -85,6 +86,18 @@ def from_source(
     """
     from sdm_client.schema import Relationship
 
+    # A table is named by a str (P1B-74, the owner's): JSON would write
+    # another key as its text, so the host refuses it before the run.
+    for field, given in (
+        ('primary_keys', primary_keys),
+        ('time_columns', time_columns),
+    ):
+        if any(not isinstance(table, str) for table in given or {}):
+            raise StructuredDataError(
+                'a table is named by a string',
+                code='INVALID_REQUEST',
+                details={'field': field, 'rule': 'table_not_a_name'},
+            )
     spec = {
         'tables': [
             {'name': name, 'source': named}
