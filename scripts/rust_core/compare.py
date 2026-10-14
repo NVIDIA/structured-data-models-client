@@ -1130,22 +1130,32 @@ _DECIMAL = re.compile(r'DECIMAL\((\d+),(\d+)\)')
 #: ``large_list`` (E112).
 DUCKDB_ARROW_LARGE = {'VARCHAR': 'large_string', 'BLOB': 'large_binary'}
 _LARGE_BUFFERS = re.compile(
-    r'\s*SET\s+(?:GLOBAL\s+|SESSION\s+)?arrow_large_buffer_size\s*(?:=|TO)\s*'
-    r'(true|false)\s*;?\s*',
+    r'\s*(?:SET\s+(?:GLOBAL\s+|SESSION\s+)?arrow_large_buffer_size\s*'
+    r'(?:=|TO)\s*(?P<value>true|false)'
+    r'|RESET\s+(?:GLOBAL\s+|SESSION\s+)?arrow_large_buffer_size)\s*;?\s*',
     re.IGNORECASE,
 )
 
 
-def large_buffers(case: dict[str, Any]) -> bool:
-    r"""Whether the case's own setup leaves DuckDB writing Arrow's large
-    buffers: its last ``SET arrow_large_buffer_size`` says ``true``."""
+def large_buffers(
+    case: dict[str, Any], bases: dict[str, list[str]] | None = None
+) -> bool:
+    r"""Whether DuckDB writes Arrow's large buffers for the case's
+    statements: the last word on ``arrow_large_buffer_size`` in its base's
+    statements (``bases``) and then its own setup, as DuckDB runs them,
+    says ``true``; a ``RESET`` or ``false`` after it turns it off."""
+    spec = case.get('input') or {}
+    steps = [
+        *(bases or {}).get(spec.get('base'), []),
+        *(spec.get('setup') or []),
+    ]
     found = False
-    for step in (case.get('input') or {}).get('setup') or []:
+    for step in steps:
         setting = (
             _LARGE_BUFFERS.fullmatch(step) if isinstance(step, str) else None
         )
         if setting:
-            found = setting.group(1).lower() == 'true'
+            found = (setting.group('value') or '').lower() == 'true'
     return found
 
 
@@ -1317,6 +1327,7 @@ def _sql(
     reference: dict[str, Any],
     ordered: dict[str, list[int]],
     stop: str | None = None,
+    large: bool = False,
 ) -> None:
     r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
     with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported;
@@ -1332,7 +1343,6 @@ def _sql(
         )
     if not stages:
         return
-    large = large_buffers(case)
     where = f'{case["id"]}: {who} against python-ref'
     if not _complete(report, f'{case["id"]}: python-ref', reference):
         return
@@ -1399,9 +1409,11 @@ def _sql_core(
     python: dict[str, Any],
     rust: dict[str, Any],
     ordered: dict[str, list[int]],
+    large: bool = False,
 ) -> None:
     r"""The two core runners' statement results, public call by public
-    call: ``sql.count`` and ``sql.result``."""
+    call: ``sql.count`` and ``sql.result``; ``large``, :func:`large_buffers`
+    of the case."""
     stages = _stages(case, 'rust-host')
     if not stages:
         return
@@ -1430,7 +1442,7 @@ def _sql_core(
                 b,
                 position in ordered.get(stage, []),
                 ('python-core', 'rust-host'),
-                large_buffers(case),
+                large,
             )
 
 
@@ -1502,6 +1514,11 @@ def compare(
         report.fail(f'cases: {failure}')
         return report
     cases = [case for case, _ in loaded]
+    try:
+        bases = runner.load_bases(bases_file or runner.BASES)
+    except runner.RunnerFailure as failure:
+        report.fail(f'bases: {failure}')
+        return report
     digests = {case['id']: digest for case, digest in loaded}
     digests[''] = runner.digest((bases_file or runner.BASES).read_bytes())
     reference: dict[str, dict[str, Any]] = {}
@@ -1531,6 +1548,7 @@ def compare(
         if name not in every:
             report.fail(f'compare-policy.yaml: {name} is not a case')
     for case in cases:
+        large = large_buffers(case, bases)
         gating = case['status'] == 'acceptance'
         reach = policy['reach'].get(case['id'])
         ordered = policy['ordered'].get(case['id'], {})
@@ -1597,7 +1615,7 @@ def compare(
                     )
                 elif who in PYTHON:
                     _host_fields(report, case, who, observation, ref, stop=stop)
-                _sql(report, case, who, observation, ref, ordered, stop)
+                _sql(report, case, who, observation, ref, ordered, stop, large)
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']
                 if mine != theirs:
@@ -1615,7 +1633,7 @@ def compare(
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(report, case, python, rust)
-            _sql_core(report, case, python, rust, ordered)
+            _sql_core(report, case, python, rust, ordered, large)
         if not gating:
             report.demote(before, keep=('reach',) if reach else ())
     return report

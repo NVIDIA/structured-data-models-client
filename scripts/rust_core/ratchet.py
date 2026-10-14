@@ -778,9 +778,44 @@ def effective(
 
 
 #: The key of the comparator's ``--expect`` that names, by case, the
-#: runners whose effective expectation is an approved entry's new outcome
-#: (:func:`approved_move`; E112); no case id starts with ``@``.
+#: runners an approved entry moved past the reference's stop
+#: (:func:`moves`; E112); no case id starts with ``@``.
 MOVED = '@moved'
+#: The public calls in order, as an outcome's stage names them.
+STAGES = ('from_source', 'materialize', 'predict')
+#: The outcome fields a runner does not observe (``availability.yaml``):
+#: an entry's old outcome is not held to the reference's there.
+UNOBSERVED = {'rust-host': ('outcome.stage', 'outcome.error')}
+
+
+def _stated(text: Any, like: dict[str, Any]) -> dict[str, Any] | None:
+    r"""An entry's outcome text as a projection shaped as ``like``,
+    ``INTERNAL_ERROR`` included (the reference's own outcome may be one);
+    None for one that is no outcome."""
+    parts = register_module().parse_outcome(str(text))
+    if parts is None:
+        return None
+    found = {
+        'outcome.result': parts['result'],
+        'outcome.code': None if parts['code'] in (None, '-') else parts['code'],
+        'outcome.stage': parts['stage'],
+        'outcome.error': parts['error'],
+    }
+    return {name: found.get(name, like[name]) for name in like}
+
+
+def _later(new: dict[str, Any], stop: dict[str, Any]) -> bool:
+    r"""Whether ``new`` goes past the reference's refusal ``stop``: a
+    success (past every stage; ``rust-host`` observes none), or a refusal
+    at a later stage."""
+    if new.get('outcome.result') == 'success':
+        return True
+    stage = new.get('outcome.stage')
+    return (
+        new.get('outcome.result') == 'refusal'
+        and stage in STAGES
+        and STAGES.index(stage) > STAGES.index(stop['outcome.stage'])
+    )
 
 
 def approved_move(
@@ -788,34 +823,91 @@ def approved_move(
     case: str,
     runner: str,
     want: dict[str, Any],
+    stop: dict[str, Any],
 ) -> bool:
-    r"""Whether an approved entry states ``want`` as the new outcome of
-    ``case`` on ``runner`` in the reference's cell: the expectation is the
-    entry's move, made now (:func:`moved`) or held since in a baseline the
-    entry admitted. ``INTERNAL_ERROR`` is never one (``outcome_projection``
-    reads it as none)."""
+    r"""Whether one of ``entries`` (approved) moves ``case`` on ``runner``
+    in the reference's cell away from the reference's refusal ``stop``
+    to ``want``, the runner's effective expectation: its ``new`` is
+    ``want`` and past ``stop`` (:func:`_later`), and its ``old`` is
+    ``none`` (a first admission) or the reference's own outcome, on the
+    fields the runner observes. ``INTERNAL_ERROR`` is never a ``new``
+    (``outcome_projection`` reads it as none)."""
     for entry in entries:
         for item in entry.get('case_outcomes') or []:
-            if (
+            if not (
                 isinstance(item, dict)
                 and item.get('case') == case
                 and item.get('cell') == CELL
                 and item.get('runner') == runner
-                and outcome_projection(item.get('new'), want) == want
+            ):
+                continue
+            new = outcome_projection(item.get('new'), want)
+            if new != want or not _later(want, stop):
+                continue
+            if item.get('old') == 'none':
+                return True
+            old = _stated(item.get('old'), stop)
+            if old is not None and all(
+                old[name] == stop[name]
+                for name in stop
+                if name not in UNOBSERVED.get(runner, ())
             ):
                 return True
     return False
 
 
+def moves(
+    projected: dict[str, dict[str, dict[str, Any]]],
+    entries: list[dict[str, Any]],
+    this_change: list[dict[str, Any]],
+    before: dict[str, dict[str, Any]],
+    after: dict[str, dict[str, Any]],
+    ordered: dict[str, Any] | None,
+) -> dict[str, list[str]]:
+    r"""By case, the runners an approved entry moved past the reference's
+    stop (E112, the orchestrator's rule): the checkpoint's reference line
+    (``before``) refuses at a stage, and an entry moves the runner from
+    there to its effective expectation (:func:`approved_move`); where the
+    case's reference line changes in this change (``after``, in semantic
+    projection), only the entries this change adds or changes count
+    (``this_change``). A move made now and one held since in a baseline
+    are held to the same rule."""
+    found: dict[str, list[str]] = {}
+    for case, by_runner in sorted(projected.items()):
+        line = before.get(case)
+        if line is None:
+            continue
+        stop = projection(line, list(OUTCOME_FIELDS))
+        if (
+            stop['outcome.result'] != 'refusal'
+            or stop['outcome.stage'] not in STAGES
+        ):
+            continue
+        now = after.get(case)
+        counted = (
+            entries
+            if now is not None
+            and semantic(line, ordered) == semantic(now, ordered)
+            else this_change
+        )
+        runners = sorted(
+            runner
+            for runner, want in by_runner.items()
+            if approved_move(counted, case, runner, want, stop)
+        )
+        if runners:
+            found[case] = runners
+    return found
+
+
 def outcomes(
     projected: dict[str, dict[str, dict[str, Any]]],
-    entries: list[dict[str, Any]] | None = None,
+    moved_past: dict[str, list[str]] | None = None,
 ) -> Any:
     r"""Effective projections as the comparator's ``--expect`` reads them:
     outcome fields by their names in an observation's ``outcome``; and
-    under :data:`MOVED`, by case, the runners whose expectation an
-    approved entry moved (:func:`approved_move`), so the comparator can
-    tell a move past the reference's stop (E112)."""
+    under :data:`MOVED` the runners, by case, an approved entry moved past
+    the reference's stop (:func:`moves`)."""
     found: dict[str, Any] = {
         case: {
             runner: {
@@ -827,19 +919,33 @@ def outcomes(
         }
         for case, by_runner in projected.items()
     }
-    found[MOVED] = {
-        case: sorted(
-            runner
-            for runner, want in by_runner.items()
-            if approved_move(entries or [], case, runner, want)
-        )
-        for case, by_runner in sorted(projected.items())
-        if any(
-            approved_move(entries or [], case, runner, want)
-            for runner, want in by_runner.items()
-        )
-    }
+    found[MOVED] = moved_past or {}
     return found
+
+
+def effective_document(
+    checkpoint: Tree,
+    candidate: Tree,
+    entries: list[dict[str, Any]],
+    this_change: list[dict[str, Any]],
+) -> Any:
+    r"""What ``--effective-out`` writes: :func:`effective`'s expectations
+    and :func:`moves`' runners, by :func:`outcomes`."""
+    reference = reference_lines(candidate)
+    projected = effective(baselines(checkpoint), entries, reference)
+    policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
+    ordered = policy.get('ordered') if isinstance(policy, dict) else None
+    return outcomes(
+        projected,
+        moves(
+            projected,
+            entries,
+            this_change,
+            reference_lines(checkpoint),
+            reference,
+            ordered,
+        ),
+    )
 
 
 def proposal(case: str, runner: str, old: str, new: str) -> str:
@@ -1426,11 +1532,15 @@ def check(
         mine = check_register(report, checkpoint, candidate, repo)
         entries = approved(mine)
         held = baselines(checkpoint)
-        reference = reference_lines(candidate)
         if effective_out is not None:
             effective_out.write_text(
                 json.dumps(
-                    outcomes(effective(held, entries, reference), entries),
+                    effective_document(
+                        checkpoint,
+                        candidate,
+                        entries,
+                        _this_change(Report(), entries, checkpoint, bootstrap),
+                    ),
                     sort_keys=True,
                 ),
                 encoding='utf-8',
@@ -1624,13 +1734,11 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
     entries = approved(mine)
     out.write_text(
         json.dumps(
-            outcomes(
-                effective(
-                    baselines(before),
-                    entries,
-                    reference_lines(candidate),
-                ),
+            effective_document(
+                before,
+                candidate,
                 entries,
+                _this_change(Report(), entries, before, False),
             ),
             sort_keys=True,
         ),

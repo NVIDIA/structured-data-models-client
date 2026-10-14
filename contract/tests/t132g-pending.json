@@ -3,14 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_the_reviewer_s_probe_relaxes_nothing",
-   "py:test_the_probe_s_entry_held_since_relaxes_nothing",
-   "py:test_a_reference_re_recorded_as_a_refusal_under_agreement_entries_relaxes_nothing",
-   "py:test_a_reference_re_recorded_counts_only_this_change_s_entries",
-   "py:test_a_later_reset_or_false_turns_the_large_buffers_off[reset]",
-   "py:test_a_setting_made_in_the_case_s_base_counts"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
