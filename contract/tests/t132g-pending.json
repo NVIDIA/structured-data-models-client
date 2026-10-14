@@ -3,34 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_an_unsupported_setting_statement_fails_by_name[a quoted semicolon, then a set, in one element-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a quoted semicolon, then a set, in one element-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a reset and a select in one element-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a reset and a select in one element-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a reset with a comment-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a reset with a comment-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a trailing block comment-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a trailing block comment-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a trailing line comment-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a trailing line comment-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[false then true in one element-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[false then true in one element-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[the name in a comment alone-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[the name in a comment alone-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[true then false in one element-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a global reset-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a global reset-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope to a quoted TRUE-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope to a quoted TRUE-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a global scope-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a session reset-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a session reset-setup]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a session scope-base]",
-   "py:test_an_unsupported_setting_statement_fails_by_name[a session scope-setup]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
