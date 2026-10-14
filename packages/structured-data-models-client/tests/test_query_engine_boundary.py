@@ -268,6 +268,21 @@ def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
     ] == sizes
 
 
+def test_an_unset_batch_size_is_not_a_choice_on_either_route():
+    """A question asked in parts drops its unset options before passing them
+    on, so refusing `None` on the other route made the same call mean two
+    things."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        assert (
+            query()
+            .materialize(
+                indices=[5, 6], num_context_samples=20, rows_per_call=None
+            )
+            .payloads
+        )
+
+
 @pytest.mark.parametrize('given', [0, -1, 2.5, True, 'two'])
 @pytest.mark.parametrize(
     'text',

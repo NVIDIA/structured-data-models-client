@@ -119,10 +119,16 @@ def rows_one_call_scores(
 
 
 def rows_per_call_asked_for(options: Mapping[str, Any]) -> int | None:
-    r"""The batch size the caller chose, refused if it is not a size."""
-    if 'rows_per_call' not in options:
+    r"""The batch size the caller chose, refused if it is not a size.
+
+    ``None`` is not choosing one. Every gathering option travels as a keyword
+    and a caller passing one through reads an unset value as absent, so a
+    question asked in parts, which drops them before passing them on, and one
+    asked whole have to agree about that.
+    """
+    given = options.get('rows_per_call')
+    if given is None:
         return None
-    given = options['rows_per_call']
     if (
         not isinstance(given, Integral)
         or isinstance(given, bool)
