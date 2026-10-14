@@ -89,6 +89,13 @@ def test_the_inventory_loader_maps_every_case_without_loss() -> None:
 _DESCRIBE_ONLY = {
     'empty.indices',
 }
+#: A call's core operations, in order, and the one each public call ends on.
+_ORDER = ('describe_source', 'materialize', 'predict')
+_STAGE_OPERATION = {
+    'from_source': 'describe_source',
+    'materialize': 'materialize',
+    'predict': 'predict',
+}
 
 
 def _written(index: dict[str, Any]) -> str:
@@ -135,18 +142,29 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     }:
         problems.append('describe_source is not of its source')
     materialize = core.get('materialize')
-    # An acceptance case the reference refuses at from_source carries
-    # materialize only where the core reaches it (compare.py's inputs rule
-    # holds a core runner to every operation a case names); which, its
-    # family's admission test says (the nested family's REACHED).
-    stops = case['status'] == 'acceptance' and case['expect']['stage'] == (
-        'from_source'
-    )
-    if case['id'] in _DESCRIBE_ONLY:
-        if materialize is not None:
+    # The operations a case carries are its call's, in order, from
+    # describe_source. A diagnostic case carries its whole call (bar
+    # _DESCRIBE_ONLY's); an acceptance case only those its call reaches on
+    # the core, since compare.py's inputs rule holds a core runner to every
+    # operation a case names, and at least those the reference reached
+    # (its expect's stage). Which exactly, its family's admission test
+    # says (the nested family's REACHED).
+    carried = tuple(op for op in _ORDER if op in core)
+    if carried != _ORDER[: len(carried)]:
+        problems.append('the operations carried are not the call in order')
+    if case['id'] in _DESCRIBE_ONLY and case['status'] != 'acceptance':
+        # Admitted, the host carries its call (no entity) to materialize,
+        # which refuses it as the reference does; the rule below holds it.
+        if carried != _ORDER[:1]:
             problems.append('materialize present where it cannot be')
-    elif materialize is None and not stops:
-        problems.append('materialize absent')
+    elif case['status'] != 'acceptance':
+        if carried != _ORDER:
+            problems.append('a diagnostic case carries less than its call')
+    elif (
+        len(carried)
+        < _ORDER.index(_STAGE_OPERATION[case['expect']['stage']]) + 1
+    ):
+        problems.append("the operations stop before the reference's stage")
     if materialize is not None:
         call = given['materialize']
         if [_written(index) for index in materialize['indices']] != [
@@ -156,10 +174,10 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
         wanted = _anchor(call['anchor_time']) if 'anchor_time' in call else None
         if materialize['anchor_time'] != wanted:
             problems.append("materialize's anchor time is not the call's")
-    if ('predict' in core) != (materialize is not None) or core.get(
-        'predict', {'model': 'kumo-relational'}
-    ) != {'model': 'kumo-relational'}:
-        problems.append('predict does not follow materialize')
+    if core.get('predict', {'model': 'kumo-relational'}) != {
+        'model': 'kumo-relational'
+    }:
+        problems.append("predict's model is not the call's")
     return problems
 
 
@@ -276,9 +294,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         case = copy.deepcopy(committed['time.text-declared'])
         change(case['core'])
         assert _held_to_its_input(case) != [], change
-    # A case the reference refuses at from_source may stop at
-    # describe_source only once admitted (its family's test says where);
-    # diagnostic, it still carries its whole call.
+    # An acceptance case carries its call up to where the core stops and
+    # not short of the reference's stage; a diagnostic one its whole call;
+    # any, the call in order.
     case = copy.deepcopy(committed['nested.map'])
     assert case['expect']['stage'] == 'from_source'
     case['core'].pop('predict')
@@ -287,6 +305,18 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     assert _held_to_its_input(case) != []
     case['status'] = 'acceptance'
     assert _held_to_its_input(case) == []
+    case = copy.deepcopy(committed['time.text-us-date'])
+    assert case['expect']['stage'] == 'materialize'
+    case['status'] = 'acceptance'
+    assert _held_to_its_input(case) == []
+    case['core'].pop('predict')
+    assert _held_to_its_input(case) == []
+    case['core'].pop('materialize')
+    assert _held_to_its_input(case) != []
+    case = copy.deepcopy(committed['time.text-us-date'])
+    case['status'] = 'acceptance'
+    case['core'].pop('materialize')
+    assert _held_to_its_input(case) != []
     case['core'].pop('describe_source')
     with pytest.raises(KeyError):
         _held_to_its_input(case)
