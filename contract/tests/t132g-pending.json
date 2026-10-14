@@ -3,14 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_an_approved_move_past_the_reference_s_stop_compares_what_it_reached[t132g.later-key-hugeint]",
-   "py:test_an_approved_move_past_the_reference_s_stop_compares_what_it_reached[t132g.later-nested-fixed-array]",
-   "py:test_the_large_buffer_case_passes_under_an_approved_move",
-   "py:test_evidence_the_reference_produced_still_fails_when_it_differs[a materialize statement the reference ran]",
-   "py:test_large_buffer_rows_and_arrow_agree",
-   "py:test_small_strings_under_the_setting_fail"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],

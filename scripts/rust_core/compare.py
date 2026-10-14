@@ -83,6 +83,22 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
   text and typed parameters, and the relations bound, against the
   reference's: reported (H9).
 
+Past the reference's stop (E112): for a case and runner whose effective
+expectation is an approved entry's move (``--expect``'s ``@moved``) of the
+reference's refusal to a later stage, or to a success, the rules against
+the reference hold only the evidence it produced: the statements and
+bindings of each public call before its stop as above, at its stop the
+reference's own, each against the runner's at its position (the runner's
+further ones there came after the reference stopped), none after; the
+``schema`` where the reference got past ``from_source``; the ``result``
+and ``payload`` (the core's call on ``rust-host`` too) where it reached
+``predict``, the result where it recorded one; its ``warnings`` the first
+of the runner's, in order. The rules between the core runners are
+unchanged past the stop. And a row read's DuckDB types name the Arrow
+types DuckDB reads them as with ``arrow_large_buffer_size`` where the
+case's own setup sets it (``large_string``, ``large_binary``,
+``large_list``).
+
 The fields ``rust-host`` cannot observe, a stage and an exception class,
 are null there and not compared, never treated as equal; it has no public
 call, so the host rules hold the Python runners only. The first difference
@@ -394,23 +410,65 @@ def _effective(
             _differ(report, where, f'outcome.{field}', value, outcome[field])
 
 
+#: ``--expect``'s key naming, by case, the runners whose expectation an
+#: approved entry moved (``ratchet.MOVED``); no case id starts with ``@``.
+MOVED = '@moved'
+
+
 def expectations(path: Path) -> dict[str, dict[str, dict[str, Any]]]:
     r"""The effective expectations ``ratchet.py`` wrote: by case and runner,
-    outcome fields; a file of another shape is refused by name."""
+    outcome fields, and under :data:`MOVED` the runners, by case, whose
+    expectation is an approved entry's move; a file of another shape is
+    refused by name."""
     try:
         found = json.loads(path.read_text(encoding='utf-8'))
     except (ValueError, RecursionError, OSError):
         raise ValueError(f'{path.name}: not JSON it reads') from None
-    if not isinstance(found, dict) or not all(
+    if not isinstance(found, dict):
+        raise ValueError(f'{path.name}: not effective expectations')
+    moved = found.get(MOVED, {})
+    if not isinstance(moved, dict) or not all(
+        isinstance(runners, list)
+        and all(isinstance(each, str) for each in runners)
+        for runners in moved.values()
+    ):
+        raise ValueError(f'{path.name}: not effective expectations')
+    if not all(
         isinstance(by_runner, dict)
         and all(
             isinstance(wanted, dict) and set(wanted) <= set(OUTCOME)
             for wanted in by_runner.values()
         )
-        for by_runner in found.values()
+        for case, by_runner in found.items()
+        if case != MOVED
     ):
         raise ValueError(f'{path.name}: not effective expectations')
     return found
+
+
+def past_stop(
+    who: str,
+    wanted: dict[str, Any] | None,
+    moved: bool,
+    reference: dict[str, Any] | None,
+) -> str | None:
+    r"""The stage the reference stopped at, where this runner's effective
+    expectation is an approved entry's move (``moved``) of the reference's
+    refusal to a later stage, or to a success (a core runner's answer past
+    every stage; ``rust-host`` observes no stage); None otherwise, and
+    the rules against the reference are as ever (E112)."""
+    if wanted is None or not moved or reference is None:
+        return None
+    theirs = reference['outcome']
+    stop = theirs['stage']
+    if theirs['result'] != 'refusal' or stop not in STAGES:
+        return None
+    if wanted.get('result', theirs['result']) == 'success':
+        return str(stop)
+    stage = wanted.get('stage', stop)
+    if stage in STAGES and STAGES.index(stage) > STAGES.index(stop):
+        return str(stop)
+    return None
 
 
 def _route(
@@ -813,19 +871,30 @@ def _host_fields(
     observation: dict[str, Any],
     reference: dict[str, Any],
     against: str = 'python-ref',
+    stop: str | None = None,
 ) -> None:
     r"""A Python runner's public fields against the reference's (or, in a
     cell other than the reference's, ``python-old``'s, ``against``): the
-    ``schema``, ``warnings``, ``result`` and ``payload`` rules."""
+    ``schema``, ``warnings``, ``result`` and ``payload`` rules; past the
+    reference's ``stop`` (:func:`past_stop`), only what it produced."""
     where = f'{case["id"]}: {who} against {against}'
     mine, theirs = observation.get('public'), reference.get('public')
     if mine is None or theirs is None:
         report.fail(f'{where}: public: not recorded', 'schema')
         return
-    found = _path_of(mine['schema'], theirs['schema'], 'public.schema')
+    found = (
+        _path_of(mine['schema'], theirs['schema'], 'public.schema')
+        if stop is None or stop != 'from_source'
+        else None
+    )
     if found:
         report.fail(f'{where}: {found}', 'schema')
-    if observation['host']['warnings'] != reference['host']['warnings']:
+    shown = observation['host']['warnings']
+    if stop is not None:
+        # The reference's warnings, raised before it stopped, are the
+        # first of the runner's, in order.
+        shown = shown[: len(reference['host']['warnings'])]
+    if shown != reference['host']['warnings']:
         if against == 'python-old' and _runtime_only(
             observation['host'], reference['host'], report.narrowed
         ):
@@ -835,7 +904,13 @@ def _host_fields(
             )
         else:
             report.fail(f'{where}: host.warnings: differ', 'warnings')
-    found = _path_of(mine['result'], theirs['result'], 'public.result')
+    if stop is not None and stop != 'predict':
+        return
+    found = (
+        _path_of(mine['result'], theirs['result'], 'public.result')
+        if stop is None or theirs['result'] is not None
+        else None
+    )
     if found:
         report.fail(f'{where}: {found}', 'result')
     sent = [
@@ -942,10 +1017,13 @@ def _core_payload(
     who: str,
     observation: dict[str, Any],
     reference: dict[str, Any] | None,
+    stop: str | None = None,
 ) -> None:
     r"""The call the core wrote (``core.predicted.body``) is the request
     the reference sent, on ``rust-host``, and the request the endpoint
-    received, on ``python-core``: the ``payload`` rule on the core."""
+    received, on ``python-core``: the ``payload`` rule on the core; on
+    ``rust-host``, held to the reference only where it reached ``predict``
+    when past its ``stop`` (:func:`past_stop`)."""
     predicted = (observation.get('core') or {}).get('predicted')
     if not predicted or predicted.get('body') is None:
         return
@@ -962,7 +1040,11 @@ def _core_payload(
                 f'received: {found}',
                 'payload',
             )
-    if who == 'rust-host' and reference is not None:
+    if (
+        who == 'rust-host'
+        and reference is not None
+        and stop in (None, 'predict')
+    ):
         wanted = [
             _payload(each['parsed'], report.paths)
             for each in reference['public']['payloads']
@@ -1043,15 +1125,44 @@ DUCKDB_ARROW = {
 _DECIMAL = re.compile(r'DECIMAL\((\d+),(\d+)\)')
 
 
-def arrow_name(duckdb_type: str) -> str | None:
+#: What DuckDB reads as Arrow's large types under ``SET
+#: arrow_large_buffer_size = true``: text and blobs, and a list as
+#: ``large_list`` (E112).
+DUCKDB_ARROW_LARGE = {'VARCHAR': 'large_string', 'BLOB': 'large_binary'}
+_LARGE_BUFFERS = re.compile(
+    r'\s*SET\s+(?:GLOBAL\s+|SESSION\s+)?arrow_large_buffer_size\s*(?:=|TO)\s*'
+    r'(true|false)\s*;?\s*',
+    re.IGNORECASE,
+)
+
+
+def large_buffers(case: dict[str, Any]) -> bool:
+    r"""Whether the case's own setup leaves DuckDB writing Arrow's large
+    buffers: its last ``SET arrow_large_buffer_size`` says ``true``."""
+    found = False
+    for step in (case.get('input') or {}).get('setup') or []:
+        setting = (
+            _LARGE_BUFFERS.fullmatch(step) if isinstance(step, str) else None
+        )
+        if setting:
+            found = setting.group(1).lower() == 'true'
+    return found
+
+
+def arrow_name(duckdb_type: str, large: bool = False) -> str | None:
     r"""The Arrow type DuckDB reads a column of ``duckdb_type`` as, or
-    None when :data:`DUCKDB_ARROW` does not say."""
+    None when :data:`DUCKDB_ARROW` does not say; with ``large``
+    (:func:`large_buffers`), as its large buffers name it."""
     if duckdb_type.endswith('[]'):
-        inner = arrow_name(duckdb_type[:-2])
-        return None if inner is None else f'list<l: {inner}>'
+        inner = arrow_name(duckdb_type[:-2], large)
+        if inner is None:
+            return None
+        return f'large_list<l: {inner}>' if large else f'list<l: {inner}>'
     found = _DECIMAL.fullmatch(duckdb_type)
     if found and int(found.group(1)) <= 38:
         return f'decimal128({found.group(1)}, {found.group(2)})'
+    if large and duckdb_type in DUCKDB_ARROW_LARGE:
+        return DUCKDB_ARROW_LARGE[duckdb_type]
     return DUCKDB_ARROW.get(duckdb_type)
 
 
@@ -1091,9 +1202,11 @@ def _results(
     theirs: dict[str, Any],
     ordered: bool,
     who: tuple[str, str],
+    large: bool = False,
 ) -> None:
     r"""One statement's results against another's: ``sql.result``. ``who``
-    names the two runners, whose evidence :func:`_evidence` requires."""
+    names the two runners, whose evidence :func:`_evidence` requires;
+    ``large``, :func:`large_buffers` of the case."""
     if (mine['error'] is None) != (theirs['error'] is None):
         report.fail(f'{where}: one statement failed', 'sql.result')
         return
@@ -1129,7 +1242,7 @@ def _results(
             and va['types'] != vb['types']
         ):
             report.fail(f'{at}: DuckDB types differ', 'sql.result')
-        _arrow_types(report, at, a, b)
+        _arrow_types(report, at, a, b, large)
         if a['rows'] != b['rows']:
             report.fail(
                 f'{at}: {a["rows"]} rows, against {b["rows"]}', 'sql.result'
@@ -1144,7 +1257,11 @@ def _results(
 
 
 def _arrow_types(
-    report: Report, at: str, a: dict[str, Any], b: dict[str, Any]
+    report: Report,
+    at: str,
+    a: dict[str, Any],
+    b: dict[str, Any],
+    large: bool = False,
 ) -> None:
     r"""The two reads' Arrow types: both schemas where both read Arrow;
     where one read rows (the reference's catalog, by ``fetchall``) and the
@@ -1167,7 +1284,7 @@ def _arrow_types(
     if types is None:
         report.fail(f'{at}: neither read records its types', 'sql.result')
         return
-    named = [arrow_name(kind) for kind in types]
+    named = [arrow_name(kind, large) for kind in types]
     if None in named:
         report.fail(
             f'{at}: DuckDB types with no Arrow name: '
@@ -1199,12 +1316,23 @@ def _sql(
     observation: dict[str, Any],
     reference: dict[str, Any],
     ordered: dict[str, list[int]],
+    stop: str | None = None,
 ) -> None:
     r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
-    with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported."""
+    with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported;
+    past the reference's ``stop`` (:func:`past_stop`), at that stage the
+    reference's statements and bindings each against the runner's at its
+    position, and none after."""
     stages = _stages(case, who)
+    if stop is not None:
+        stages = tuple(
+            stage
+            for stage in stages
+            if STAGES.index(stage) <= STAGES.index(stop)
+        )
     if not stages:
         return
+    large = large_buffers(case)
     where = f'{case["id"]}: {who} against python-ref'
     if not _complete(report, f'{case["id"]}: python-ref', reference):
         return
@@ -1214,6 +1342,9 @@ def _sql(
     assert mine is not None and theirs is not None
     for stage in stages:
         ours, refs = mine.get(stage, []), theirs.get(stage, [])
+        if stage == stop and len(ours) > len(refs):
+            # Those after the reference's own came after it stopped.
+            ours = ours[: len(refs)]
         if len(ours) != len(refs):
             report.fail(
                 f'{where}: {stage}: {len(ours)} statements, the reference '
@@ -1234,11 +1365,14 @@ def _sql(
                 b,
                 position in ordered.get(stage, []),
                 (who, 'python-ref'),
+                large,
             )
     mine_bound = _by_stage(observation, 'bindings') or {}
     theirs_bound = _by_stage(reference, 'bindings') or {}
     for stage in stages:
         ours, refs = mine_bound.get(stage, []), theirs_bound.get(stage, [])
+        if stage == stop and len(ours) > len(refs):
+            ours = ours[: len(refs)]
         if len(ours) != len(refs):
             report.fail(
                 f'{where}: {stage}: {len(ours)} relations bound, the '
@@ -1296,6 +1430,7 @@ def _sql_core(
                 b,
                 position in ordered.get(stage, []),
                 ('python-core', 'rust-host'),
+                large_buffers(case),
             )
 
 
@@ -1425,6 +1560,12 @@ def compare(
             _inputs(report, case, who, observation, digests)
             _core_consistent(report, case, who, observation)
             wanted = effective.get(case['id'], {}).get(who)
+            stop = past_stop(
+                who,
+                wanted,
+                who in effective.get(MOVED, {}).get(case['id'], []),
+                ref,
+            )
             if wanted is not None:
                 _effective(
                     report, case, who, observation['outcome'], wanted, ref
@@ -1442,7 +1583,7 @@ def compare(
             found = counts(observation)
             if found is not None:
                 report.info.append(f'{case["id"]}: {who}: {found}')
-            _core_payload(report, case, who, observation, ref)
+            _core_payload(report, case, who, observation, ref, stop)
             if ref is not None:
                 cell = observation['identity'].get('cell')
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
@@ -1450,13 +1591,13 @@ def compare(
                     # fields against the reference are reported; python-core
                     # against python-old gates them (below).
                     since = len(report.failures)
-                    _host_fields(report, case, who, observation, ref)
+                    _host_fields(report, case, who, observation, ref, stop=stop)
                     report.reported(
                         since, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
-                    _host_fields(report, case, who, observation, ref)
-                _sql(report, case, who, observation, ref, ordered)
+                    _host_fields(report, case, who, observation, ref, stop=stop)
+                _sql(report, case, who, observation, ref, ordered, stop)
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']
                 if mine != theirs:

@@ -777,10 +777,46 @@ def effective(
     return found
 
 
-def outcomes(projected: dict[str, dict[str, dict[str, Any]]]) -> Any:
+#: The key of the comparator's ``--expect`` that names, by case, the
+#: runners whose effective expectation is an approved entry's new outcome
+#: (:func:`approved_move`; E112); no case id starts with ``@``.
+MOVED = '@moved'
+
+
+def approved_move(
+    entries: list[dict[str, Any]],
+    case: str,
+    runner: str,
+    want: dict[str, Any],
+) -> bool:
+    r"""Whether an approved entry states ``want`` as the new outcome of
+    ``case`` on ``runner`` in the reference's cell: the expectation is the
+    entry's move, made now (:func:`moved`) or held since in a baseline the
+    entry admitted. ``INTERNAL_ERROR`` is never one (``outcome_projection``
+    reads it as none)."""
+    for entry in entries:
+        for item in entry.get('case_outcomes') or []:
+            if (
+                isinstance(item, dict)
+                and item.get('case') == case
+                and item.get('cell') == CELL
+                and item.get('runner') == runner
+                and outcome_projection(item.get('new'), want) == want
+            ):
+                return True
+    return False
+
+
+def outcomes(
+    projected: dict[str, dict[str, dict[str, Any]]],
+    entries: list[dict[str, Any]] | None = None,
+) -> Any:
     r"""Effective projections as the comparator's ``--expect`` reads them:
-    outcome fields by their names in an observation's ``outcome``."""
-    return {
+    outcome fields by their names in an observation's ``outcome``; and
+    under :data:`MOVED`, by case, the runners whose expectation an
+    approved entry moved (:func:`approved_move`), so the comparator can
+    tell a move past the reference's stop (E112)."""
+    found: dict[str, Any] = {
         case: {
             runner: {
                 name.removeprefix('outcome.'): value
@@ -791,6 +827,19 @@ def outcomes(projected: dict[str, dict[str, dict[str, Any]]]) -> Any:
         }
         for case, by_runner in projected.items()
     }
+    found[MOVED] = {
+        case: sorted(
+            runner
+            for runner, want in by_runner.items()
+            if approved_move(entries or [], case, runner, want)
+        )
+        for case, by_runner in sorted(projected.items())
+        if any(
+            approved_move(entries or [], case, runner, want)
+            for runner, want in by_runner.items()
+        )
+    }
+    return found
 
 
 def proposal(case: str, runner: str, old: str, new: str) -> str:
@@ -1381,7 +1430,7 @@ def check(
         if effective_out is not None:
             effective_out.write_text(
                 json.dumps(
-                    outcomes(effective(held, entries, reference)),
+                    outcomes(effective(held, entries, reference), entries),
                     sort_keys=True,
                 ),
                 encoding='utf-8',
@@ -1572,14 +1621,16 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
         problems = [str(error)]
     if problems:
         return problems
+    entries = approved(mine)
     out.write_text(
         json.dumps(
             outcomes(
                 effective(
                     baselines(before),
-                    approved(mine),
+                    entries,
                     reference_lines(candidate),
-                )
+                ),
+                entries,
             ),
             sort_keys=True,
         ),
