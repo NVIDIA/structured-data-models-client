@@ -1,9 +1,20 @@
 {
- "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it; tests/test_t132g_python_old_as_run.py, at f504a9e9, for part 2a's fix after its review: python-old's lines as run (tests/golden/t132g-python-old-*.jsonl), host warnings and origins left out of exactly, the checkpoint's reference line, an entry's case of another type). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": []
+  "exits": [
+   "py:test_python_old_as_run_holds_the_seven[floor-pandas2.2]",
+   "py:test_python_old_as_run_holds_the_seven[ref-pandas3]",
+   "py:test_accept_proposes_python_old_as_run_and_the_admission_passes[floor-pandas2.2]",
+   "py:test_accept_proposes_python_old_as_run_and_the_admission_passes[ref-pandas3]",
+   "py:test_host_warnings_and_their_origins_are_runtime_noise[no warnings]",
+   "py:test_host_warnings_and_their_origins_are_runtime_noise[other warnings]",
+   "py:test_a_candidate_s_reference_line_cannot_make_a_held_crash_match",
+   "py:test_a_candidate_s_reference_line_cannot_make_accept_propose_a_crash",
+   "py:test_accept_refuses_an_entry_s_case_of_another_type_by_name[a list]",
+   "py:test_accept_refuses_an_entry_s_case_of_another_type_by_name[a mapping]"
+  ]
  },
  "authored": {
   "python-core": [],
@@ -32,7 +43,17 @@
    "py:test_the_approved_difference_is_each_runner_s_effective_expectation",
    "py:test_accept_writes_every_runner_s_baseline_and_the_admission_passes",
    "py:test_the_comparator_passes_an_approved_first_admission_difference",
-   "py:test_a_runner_answering_other_than_the_entry_gets_no_baseline"
+   "py:test_a_runner_answering_other_than_the_entry_gets_no_baseline",
+   "py:test_python_old_as_run_holds_the_seven[floor-pandas2.2]",
+   "py:test_python_old_as_run_holds_the_seven[ref-pandas3]",
+   "py:test_accept_proposes_python_old_as_run_and_the_admission_passes[floor-pandas2.2]",
+   "py:test_accept_proposes_python_old_as_run_and_the_admission_passes[ref-pandas3]",
+   "py:test_host_warnings_and_their_origins_are_runtime_noise[no warnings]",
+   "py:test_host_warnings_and_their_origins_are_runtime_noise[other warnings]",
+   "py:test_a_candidate_s_reference_line_cannot_make_a_held_crash_match",
+   "py:test_a_candidate_s_reference_line_cannot_make_accept_propose_a_crash",
+   "py:test_accept_refuses_an_entry_s_case_of_another_type_by_name[a list]",
+   "py:test_accept_refuses_an_entry_s_case_of_another_type_by_name[a mapping]"
   ]
  }
 }

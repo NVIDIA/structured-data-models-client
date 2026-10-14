@@ -366,7 +366,11 @@ def test_an_admission_proposing_it_lands_and_the_next_change_passes(
 
 
 def _differs_outside_the_baseline(line: dict[str, Any]) -> None:
-    line['host'] = {'warnings': ['UserWarning', 'FutureWarning']}
+    r"""The public schema of the source, outside the baseline fields and
+    inside the semantic projection. (Host warnings and their origins were
+    the seed first; E110 as the orchestrator read it leaves them out of
+    "exactly", so they are runtime noise, not the client's behaviour.)"""
+    line['public']['schema']['tables'][0]['duplicate_keys'] += 1
 
 
 DIFFERENT: dict[str, Callable[[dict[str, Any]], None]] = {
