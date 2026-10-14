@@ -381,7 +381,12 @@ def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
 
 def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
     """Fifty calls failing on the thirty-seventh used to throw away
-    thirty-six answers the endpoint had already been paid for."""
+    thirty-six answers the endpoint had already been paid for.
+
+    Ended by a failure this client did not raise, because not every one is:
+    the Databricks transport lets its OAuth refresh raise, and those calls
+    were paid for too.
+    """
     from sdm_client import KumoRelational, SDMClient
     from sdm_client.models import RELATIONAL_LIMITS
 
@@ -390,7 +395,7 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
     class FailsOnTheSecondCall(Echo):
         def predict(self, payload: dict) -> dict:
             if self.calls == 1:
-                raise StructuredDataError('the endpoint said no', code='X')
+                raise RuntimeError('the warehouse token could not be renewed')
             return super().predict(payload)
 
     client = SDMClient(url='http://localhost:8000')
@@ -400,9 +405,8 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
         request = query('PREDICT users.age FOR EACH users.user_id').materialize(
             indices=[5, 6, 7, 8, 9], num_context_samples=20
         )
-        with pytest.raises(StructuredDataError) as failed:
+        with pytest.raises(RuntimeError) as failed:
             client.predict(request, model=KumoRelational())
-    assert failed.value.code == 'X'
     assert failed.value.details['calls_answered'] == 1
     assert failed.value.details['rows_answered'] == 2
     assert len(failed.value.details['answered'].items) == 2

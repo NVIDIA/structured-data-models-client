@@ -491,11 +491,13 @@ class SDMClient:
             answered.append(position)
             try:
                 answers.append(self.predict(part, model=model, outputs=wanted))
-            except StructuredDataError as error:
+            except Exception as error:
                 answered.pop()
                 _carry_the_steps_already_paid_for(
                     error, answers, rewritten, answered, ranking
                 )
+                if not isinstance(error, StructuredDataError):
+                    raise
                 raise about_the_part(error, rewritten, about) from error
         if ranking:
             parts = rewritten.parts
@@ -822,7 +824,7 @@ def _numbered_across_calls(
 
 
 def _carry_the_steps_already_paid_for(
-    error: StructuredDataError,
+    error: BaseException,
     answers: list[PredictionResult],
     rewritten: Decomposition,
     answered: Sequence[int],
@@ -840,8 +842,9 @@ def _carry_the_steps_already_paid_for(
     """
     if not answers:
         return
-    error.details = {
-        **error.details,
+    held = getattr(error, 'details', None)
+    error.details = {  # type: ignore[attr-defined]
+        **(held if isinstance(held, dict) else {}),
         'parts_answered': len(answers),
         **(
             {}

@@ -135,7 +135,6 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
     """
     pytest.importorskip('sdm_relational_engine')
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.errors import StructuredDataError as Refused
 
     class FailsOnTheThirdCall:
         calls = 0
@@ -143,7 +142,7 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
         def predict(self, payload: dict) -> dict:
             type(self).calls += 1
             if self.calls == 3:
-                raise Refused('the endpoint said no', code='X')
+                raise RuntimeError('the warehouse token could not be renewed')
             table = payload['predict']['instance_table']
             at = table['columns'].index('instance_id')
             return {
@@ -161,7 +160,7 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
     client._transport = FailsOnTheThirdCall()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as failed:
+        with pytest.raises(RuntimeError) as failed:
             client.predict(request, model=KumoRelational())
     assert failed.value.details['parts_answered'] == 2
     kept = failed.value.details['answered'].to_pandas()
