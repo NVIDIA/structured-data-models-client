@@ -11,7 +11,7 @@ command land.py issues from a small model of a repository (commits with
 parents and trees, ancestry, the remote phase head) and of the CI runs on
 each SHA, and records what was committed and pushed, so a refusal can be
 held to having committed and pushed nothing. The CI3 cases
-(``--moved-from``) run git for real, in temporary repositories, since a
+(``--moved-from``) and CI4's verify cases run git for real, in temporary repositories, since a
 patch-id or a tree cannot be faked without fixing land.py's git commands;
 gh stays the fake. A case listed in ``land_selftest-pending.json`` must
 still fail, as when its test author wrote it, until the implementer takes
@@ -944,75 +944,6 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, 'reported with the undo, not landed' if ok else c.text
 
 
-@case('waits: a cancelled candidate run lands only after the landing run')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
-    c = Case(tmp, Fake(runs=runs)).land('--wait-for-landing-run')
-    pushes = c.fake.pushes
-    ok = (
-        c.code == 0
-        and pushes
-        == [
-            ('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{TOPIC}'),
-            ('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{PHASE}'),
-        ]
-        and 'fast-forwarded' in c.text
-    )
-    message = ' '.join((c.fake.committed or [''])[0].split())
-    named = (
-        f'Candidate CI not relied on (run 1: cancelled at {CAND}); the phase '
-        "branch moves only when this commit's own exact-SHA run is green"
-    ) in message and 'green at' not in message
-    return ok and named, (
-        'topic, watched, then phase; the message names the evidence'
-        if ok and named
-        else f'{pushes}: {message} | {c.text}'
-    )
-
-
-@case('waits: a red landing run leaves the phase branch where it was')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
-    fake = Fake(runs=runs, landing_conclusion={TOPIC: 'failure'})
-    c = Case(tmp, fake).land('--wait-for-landing-run')
-    ok = (
-        c.code == 2
-        and fake.pushes
-        == [('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{TOPIC}')]
-        and fake.remote_phase == BASE
-        and 'was not moved' in c.text
-    )
-    return ok, 'phase untouched' if ok else f'{fake.pushes}: {c.text}'
-
-
-@case('waits: a green pull_request run on the landing commit is not its run')
-def _(tmp: Path) -> tuple[bool, str]:
-    # The push run on the topic branch goes red; a newer green pull_request
-    # run on the same SHA and branch name does not stand for it.
-    runs = {
-        CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')],
-        LAND: [
-            ci_run(
-                LAND,
-                TOPIC,
-                run_id=99,
-                created='2026-10-09T02:00:00Z',
-                event='pull_request',
-            )
-        ],
-    }
-    fake = Fake(runs=runs, landing_conclusion={TOPIC: 'failure'})
-    c = Case(tmp, fake).land('--wait-for-landing-run')
-    ok = (
-        c.code == 2
-        and fake.pushes
-        == [('--quiet', '--no-verify', 'origin', f'{LAND}:refs/heads/{TOPIC}')]
-        and fake.remote_phase == BASE
-        and 'was not moved' in c.text
-    )
-    return ok, 'phase untouched' if ok else f'{fake.pushes}: {c.text}'
-
-
 # --- verify -------------------------------------------------------------------
 
 
@@ -1029,7 +960,7 @@ def _(tmp: Path) -> tuple[bool, str]:
     ok = (
         c.code == 0
         and f'VERIFIED {LAND}' in c.text
-        and c.text.count('ok  ') == 2
+        and c.text.count('ok  ') >= 2
     )
     return ok, 'verified' if ok else c.text
 
@@ -1048,17 +979,6 @@ def _(tmp: Path) -> tuple[bool, str]:
         and not c.fake.committed[1:]
     )
     return ok, 'instructions only' if ok else c.text
-
-
-@case('verify: no run on the phase branch fails')
-def _(tmp: Path) -> tuple[bool, str]:
-    c = landed(tmp)
-    c.fake.runs[LAND] = [
-        r for r in c.fake.runs[LAND] if r['headBranch'] != PHASE
-    ]
-    c.verify()
-    ok = c.code == 1 and f'no CI run on {LAND[:12]} on {PHASE}' in c.text
-    return ok, 'reported' if ok else c.text
 
 
 @case('verify: a landing commit that changes files fails')
@@ -1274,14 +1194,6 @@ def _(tmp: Path) -> tuple[bool, str]:
         and f'{TOPIC} at {OTHER[:12]}' in c.text
     )
     return ok, 'landed, the mismatch reported' if ok else c.text
-
-
-@case('waits: on a lane, the lane is confirmed after the phase push')
-def _(tmp: Path) -> tuple[bool, str]:
-    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
-    c = Case(tmp, Fake(runs=runs)).land('--wait-for-landing-run')
-    ok = c.code == 0 and f'ok   {TOPIC} equals {PHASE} at {LAND}' in c.text
-    return ok, 'confirmed' if ok else c.text
 
 
 @case('refused: a lane landed from another branch checked out')
@@ -2237,6 +2149,370 @@ def _(tmp: Path) -> tuple[bool, str]:
     m = moved(tmp)
     c = MovedCase(tmp, m, name=m.c).land(moved_from=None)
     return refused_naming(c, 'no CI run', m.c[:12])
+
+
+# --- CI4: a landing is verified on its candidate's run (decision 30) -----------
+#
+# The owner's decision 30 (2026-10-14): ci.yml skips the empty landing
+# commits on the lane and phase branches, since a landing commit (one
+# parent, no file changed, subject 'Land ', its candidate's tree) has its
+# code tested by the candidate's green exact-SHA run. So land.py stops
+# requiring the landing commit's own runs to be green.
+#
+# Interface the cases hold land.py to:
+# - ``land.py verify L`` passes (exit 0, ``VERIFIED <L>``) when L changes no
+#   file and its parent, the candidate, has a green exact-SHA push run as
+#   its newest gating run, whether L's own runs are absent or skipped; for
+#   a moved landing (``Moved-from: X``), when L's tree is X's and X's newest
+#   gating run is green. The output names the run it stands on, by id.
+# - It fails (nonzero, no ``VERIFIED``) when L changes files (naming that,
+#   ``changes files`` or ``empty``), when a moved landing's tree is not X's
+#   (naming ``tree``), when the candidate's or X's newest gating run is red
+#   (exit 1, ``VERIFY FAILED``, the run by id and the revert instructions)
+#   or cancelled (exit 1 or 3, the run by id), and when its only green run
+#   is a pull request's (naming the missing push run and the commit). It
+#   never complains that L has no run of its own.
+# - A run on L that ran and failed still fails verify (exit 1, the run by
+#   id, the revert instructions): ci.yml should skip it, so one that ran
+#   and failed is real.
+# - ``--wait-for-landing-run`` is refused as obsolete (exit 2, ``REFUSED``
+#   naming the flag and the candidate's run, nothing committed or pushed),
+#   whatever the candidate's run. It used to push L to the topic branch and
+#   move the phase branch only once L's own run was green; ci.yml now skips
+#   that run, so the flag could never land, and repurposing it to wait on
+#   the candidate's run would keep a name that says the opposite. A
+#   candidate whose run is not yet green is rerun or waited on, then landed
+#   as usual. Refusing it, rather than dropping it from argparse, tells a
+#   runbook's old command line why, not just 'unrecognized arguments'. The
+#   refusal of a candidate whose run is not green no longer suggests it.
+#
+# The verify cases run git for real, as the moved cases do; gh is the fake.
+
+#: The candidate's green run, and a red or cancelled one newer than it.
+CAND_RUN = 3131
+NEWER_RUN = 5151
+#: Runs on the landing commit itself.
+LAND_TOPIC_RUN = 7001
+LAND_PHASE_RUN = 7002
+
+
+def landing_on(
+    r: Repo,
+    base: str,
+    files: dict[str, str] | None = None,
+    moved_from: tuple[str, int] | None = None,
+) -> str:
+    """A landing commit on HEAD, with land.py's trailers (``Moved-from``
+    and ``Moved-from-run`` when moved), pushed to the topic branch and the
+    phase branch; empty unless ``files`` are written."""
+    for name, text in (files or {}).items():
+        (r.work / name).write_text(text)
+        r.git('add', '-A', name)
+    moved = (
+        f'Moved-from: {moved_from[0]}\nMoved-from-run: {moved_from[1]}\n'
+        if moved_from
+        else ''
+    )
+    message = (
+        'Land T1.99: a test package\n\n'
+        'Both reviews approve the candidate.\n\n'
+        'Reviewed-by: independent reviewer (fresh agent) and Codex, T1.99\n'
+        'Protected-paths: .github/workflows/ci.yml (no gate removed)\n'
+        f'Base-SHA: {base}\n'
+        f'Checkpoint-SHA: {base}\n'
+        f'{moved}'
+        f'{SIGNOFF}\n'
+    )
+    r.git('commit', '-q', '--allow-empty', '-m', message)
+    sha = r.git('rev-parse', 'HEAD')
+    r.git(
+        'push', '-q', 'origin',
+        f'{sha}:refs/heads/{MOVED_TOPIC}', f'{sha}:refs/heads/{PHASE}',
+    )  # fmt: skip
+    return sha
+
+
+@dataclass
+class Landed:
+    """A landing commit ``sha`` on its candidate ``cand``; for a moved
+    landing, ``x`` is the commit it was moved from."""
+
+    repo: Repo
+    cand: str
+    sha: str
+    x: str | None = None
+
+
+def plain_landed(tmp: Path, files: dict[str, str] | None = None) -> Landed:
+    r = Repo(tmp)
+    r.git('checkout', '-q', '-b', 'start')
+    base = r.commit('Land T1.97: the phase so far', {'base.txt': 'base\n'})
+    r.git('push', '-q', 'origin', f'{base}:refs/heads/{PHASE}')
+    r.git('checkout', '-q', '-b', MOVED_TOPIC)
+    cand = r.commit('T1.99: a test package', {'a.txt': 'a\n'})
+    return Landed(r, cand, landing_on(r, base, files))
+
+
+def moved_landed(tmp: Path, onto: Commits | None = None) -> Landed:
+    m = moved(tmp, onto=onto)
+    sha = landing_on(m.repo, m.h, moved_from=(m.x, X_RUN))
+    return Landed(m.repo, m.c, sha, m.x)
+
+
+def skipped_on(sha: str) -> list[dict[str, Any]]:
+    """The landing commit's runs as ci.yml now leaves them: skipped."""
+    return [
+        ci_run(sha, MOVED_TOPIC, conclusion='skipped', run_id=LAND_TOPIC_RUN),
+        ci_run(
+            sha,
+            PHASE,
+            conclusion='skipped',
+            run_id=LAND_PHASE_RUN,
+            created='2026-10-09T00:00:01Z',
+        ),
+    ]
+
+
+class Verified:
+    """``land.py verify`` on a real landing commit, gh the fake."""
+
+    def __init__(self, landed: Landed, runs: dict[str, list[dict[str, Any]]]):
+        self.landed = landed
+        self.lines: list[str] = []
+        self.code: int | str | None = None
+        tools = land.Tools(
+            run=Real(landed.repo, runs), sleep=lambda _: None, repo='o/r'
+        )
+        try:
+            with (
+                in_repo(landed.repo),
+                contextlib.redirect_stderr(io.StringIO()) as err,
+            ):
+                self.code = land.main(
+                    ['verify', landed.sha], tools, self.lines.append
+                )
+        except SystemExit as error:  # argparse
+            self.code = f'SystemExit({error.code})'
+            self.lines.append(err.getvalue().strip())
+
+    @property
+    def text(self) -> str:
+        return '\n'.join(self.lines)
+
+
+def verified_on(v: Verified, run_id: int) -> tuple[bool, str]:
+    ok = (
+        v.code == 0
+        and f'VERIFIED {v.landed.sha}' in v.text
+        and str(run_id) in v.text
+    )
+    return ok, (
+        f'verified on run {run_id}'
+        if ok
+        else f'exit {v.code}, wanted VERIFIED naming run {run_id}: '
+        f'{v.text[-600:]}'
+    )
+
+
+def failed_for(
+    v: Verified,
+    *every: str,
+    one_of: Sequence[str] = (),
+    codes: Sequence[int] = (1,),
+    revert: bool = False,
+) -> tuple[bool, str]:
+    """Failed, naming each of ``every`` and one of ``one_of``, and not for
+    want of the landing commit's own runs."""
+    text = v.text
+    ok = (
+        v.code in codes
+        and 'VERIFIED' not in text
+        and all(f in text for f in every)
+        and (not one_of or any(f in text for f in one_of))
+        and f'no CI run on {v.landed.sha[:12]}' not in text
+        and (not revert or 'Nothing was reverted' in text)
+    )
+    return ok, (
+        'failed naming the reason'
+        if ok
+        else f'exit {v.code}, wanted {list(every)} {list(one_of)} '
+        f'(codes {list(codes)}): {text[-600:]}'
+    )
+
+
+def cand_runs(landed: Landed, *conclusions: str) -> list[dict[str, Any]]:
+    """The candidate's runs, oldest first: green, then ``conclusions``."""
+    runs = [ci_run(landed.cand, MOVED_TOPIC, run_id=CAND_RUN)]
+    for n, conclusion in enumerate(conclusions):
+        runs.append(
+            ci_run(
+                landed.cand,
+                MOVED_TOPIC,
+                conclusion=conclusion,
+                run_id=NEWER_RUN + n,
+                created=f'2026-10-09T00:0{n + 1}:00Z',
+            )
+        )
+    return runs
+
+
+@case('CI4 verify: a landing with no runs of its own passes on the candidate')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp)
+    v = Verified(landed, {landed.cand: cand_runs(landed)})
+    return verified_on(v, CAND_RUN)
+
+
+@case(
+    'CI4 verify: a landing whose own runs were skipped passes on the candidate'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp)
+    runs = {landed.cand: cand_runs(landed), landed.sha: skipped_on(landed.sha)}
+    return verified_on(Verified(landed, runs), CAND_RUN)
+
+
+@case("CI4 verify: a moved landing with no runs of its own passes on X's run")
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    assert landed.x
+    v = Verified(
+        landed, {landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)]}
+    )
+    return verified_on(v, X_RUN)
+
+
+@case(
+    "CI4 verify: a moved landing whose own runs were skipped passes on X's run"
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    assert landed.x
+    runs = {
+        landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)],
+        landed.sha: skipped_on(landed.sha),
+    }
+    return verified_on(Verified(landed, runs), X_RUN)
+
+
+@case('CI4 verify: fails, the landing commit changes a file')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp, files={'a.txt': 'changed at landing\n'})
+    v = Verified(landed, {landed.cand: cand_runs(landed)})
+    return failed_for(v, one_of=('changes files', 'empty'))
+
+
+@case("CI4 verify: fails, a moved landing's tree is not X's, X green")
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(
+        tmp, onto=(('T1.99: a test package', {'a.txt': 'not X\n'}),)
+    )
+    assert landed.x
+    v = Verified(
+        landed, {landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)]}
+    )
+    return failed_for(v, 'tree')
+
+
+@case("CI4 verify: fails, the candidate's newest run is red after a green one")
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp)
+    v = Verified(landed, {landed.cand: cand_runs(landed, 'failure')})
+    return failed_for(v, 'VERIFY FAILED', f'run {NEWER_RUN}', revert=True)
+
+
+@case("CI4 verify: fails, the candidate's newest run was cancelled")
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp)
+    v = Verified(landed, {landed.cand: cand_runs(landed, 'cancelled')})
+    return failed_for(v, f'run {NEWER_RUN}', codes=(1, 3))
+
+
+@case("CI4 verify: fails, X's newest run is red after the green one landed on")
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    assert landed.x
+    runs = {
+        landed.x: [
+            ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN),
+            ci_run(
+                landed.x,
+                MOVED_TOPIC,
+                conclusion='failure',
+                run_id=NEWER_RUN,
+                created='2026-10-09T00:01:00Z',
+            ),
+        ]
+    }
+    v = Verified(landed, runs)
+    return failed_for(v, 'VERIFY FAILED', f'run {NEWER_RUN}', revert=True)
+
+
+@case("CI4 verify: fails, the candidate's only green run is a pull request's")
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp)
+    runs = {
+        landed.cand: [
+            ci_run(
+                landed.cand, MOVED_TOPIC, run_id=CAND_RUN, event='pull_request'
+            )
+        ]
+    }
+    v = Verified(landed, runs)
+    ok, detail = failed_for(v, landed.cand[:12], codes=(1, 2, 3))
+    named = bool(PUSH_RUN.search(v.text))
+    return ok and named, detail if not ok else (
+        detail if named else f'the push run is not named: {v.text[-600:]}'
+    )
+
+
+@case('CI4 verify: fails, a run on the landing commit ran and failed')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp)
+    own = skipped_on(landed.sha)
+    own[1].update(conclusion='failure')
+    runs = {landed.cand: cand_runs(landed), landed.sha: own}
+    v = Verified(landed, runs)
+    return failed_for(v, 'VERIFY FAILED', f'run {LAND_PHASE_RUN}', revert=True)
+
+
+for conclusion in ('success', 'cancelled'):
+
+    @case(
+        f'CI4 land: --wait-for-landing-run is refused as obsolete '
+        f'(candidate run {conclusion})'
+    )
+    def _(tmp: Path, conclusion: str = conclusion) -> tuple[bool, str]:
+        runs = {CAND: [ci_run(CAND, TOPIC, conclusion=conclusion)]}
+        c = Case(tmp, Fake(runs=runs))
+        try:
+            c.land('--wait-for-landing-run')
+        except SystemExit as error:  # dropped from argparse
+            return False, f'SystemExit({error.code}), not a refusal'
+        why = c.text.partition('REFUSED:')[2]
+        ok = (
+            c.code == 2
+            and 'wait-for-landing-run' in why
+            and 'candidate' in why
+            and c.untouched()
+            and 'LANDED' not in c.text
+        )
+        return ok, (
+            'refused, nothing committed or pushed'
+            if ok
+            else f'exit {c.code}, committed {len(c.fake.committed)}, pushes '
+            f'{c.fake.pushes}: {c.text[-600:]}'
+        )
+
+
+@case('CI4 land: a cancelled candidate run is refused without the old advice')
+def _(tmp: Path) -> tuple[bool, str]:
+    runs = {CAND: [ci_run(CAND, TOPIC, conclusion='cancelled')]}
+    c = Case(tmp, Fake(runs=runs)).land()
+    ok, detail = refused(c, 'not green')
+    if ok and 'wait-for-landing-run' in c.text:
+        return False, f'still suggests --wait-for-landing-run: {c.text[-600:]}'
+    return ok, detail
 
 
 # --- the pending list -----------------------------------------------------------
