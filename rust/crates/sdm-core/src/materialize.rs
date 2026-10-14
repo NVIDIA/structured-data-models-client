@@ -58,8 +58,9 @@ use std::sync::Arc;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
     Date32Type, Decimal128Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type,
-    Int64Type, TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
-    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
+    Int64Type, Time64MicrosecondType, Time64NanosecondType, TimestampMicrosecondType,
+    TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type,
+    UInt32Type, UInt64Type,
 };
 use arrow_array::{Array, ArrayRef, RecordBatch, TimestampNanosecondArray, UInt32Array};
 use arrow_schema::{DataType, TimeUnit as ArrowUnit};
@@ -726,8 +727,62 @@ impl Times {
                     .collect::<Result<Vec<_>, _>>()?;
                 Arc::new(TimestampNanosecondArray::from(nanos))
             }
+            DataType::Time64(_) => {
+                times_of_day_unread(asker, table, name, array);
+                return Ok(None);
+            }
             _ => return Ok(None),
         }))
+    }
+}
+
+/// A time of day whose meaning is a timestamp holds no time as the
+/// reference's engine reads it (its `to_datetime`): every value is dropped
+/// (the request sends each cell null, `sdm_request::payload`), and, as the
+/// reference warns, `TIME_VALUES_UNREAD` says how many of the fetch's rows
+/// were, with three distinct values (the contract's `time64` scalars).
+/// The reference's three are the first in the fetch's row order, which
+/// DuckDB varies from run to run; the core's are the earliest three times
+/// of day, the same on every run.
+fn times_of_day_unread(asker: &Asker, table: &Table, name: &str, array: &ArrayRef) {
+    let (unit, values): (Unit, BTreeSet<i64>) = match array.data_type() {
+        DataType::Time64(ArrowUnit::Microsecond) => (
+            Unit::Us,
+            array
+                .as_primitive::<Time64MicrosecondType>()
+                .iter()
+                .flatten()
+                .collect(),
+        ),
+        DataType::Time64(ArrowUnit::Nanosecond) => (
+            Unit::Ns,
+            array
+                .as_primitive::<Time64NanosecondType>()
+                .iter()
+                .flatten()
+                .collect(),
+        ),
+        _ => return,
+    };
+    let examples: Vec<Scalar> = values
+        .into_iter()
+        .take(3)
+        .map(|value| Scalar::Time64 { unit, value })
+        .collect();
+    let unread = array.len() - array.null_count();
+    if unread > 0 {
+        asker.warn(CoreWarning {
+            code: sdm_schema::assemble::TIME_VALUES_UNREAD.into(),
+            message: "a time of day's values were read as no time and dropped".into(),
+            fields: [
+                ("table".to_owned(), Detail::text(&table.name)),
+                ("column".to_owned(), Detail::text(name)),
+                ("unread".to_owned(), count(unread)),
+                ("rows".to_owned(), count(array.len())),
+                ("examples".to_owned(), Detail::List(examples)),
+            ]
+            .into(),
+        });
     }
 }
 
