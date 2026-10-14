@@ -2115,6 +2115,10 @@ entries:
     or a time column that is not a name reached the decoder,
     INVALID_MESSAGE. A key naming one column twice is the reference's
     success and the core's composite_key (E92) unless P1B-73 is approved.
+    A 0-d NumPy array as a key (np.array('order_id')) is an iterable whose
+    reading raises: TypeError (iteration over a 0-d array) on both routes,
+    the caller's exception let out unchanged, as the iteration policy
+    says (measured at T1.32h's review, P3-1).
     Contract 23 changes the shape of two cases' core inputs, their
     describe_source spec's keys and time columns now written as Given;
     their outcomes are unchanged on every runner, and their reference

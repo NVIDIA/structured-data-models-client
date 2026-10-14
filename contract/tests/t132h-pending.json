@@ -11,16 +11,12 @@
    "exits:rs-edit:edit.key-twice",
    "python-core:case:key.twice",
    "python-core:case:key.twice-before-composite",
-   "python-core:case:key.twice-missing-first",
    "python-core:key.twice",
    "python-core:key.twice-before-composite",
-   "python-core:key.twice-missing-first",
    "rust-host:case:key.twice",
    "rust-host:case:key.twice-before-composite",
-   "rust-host:case:key.twice-missing-first",
    "rust-host:key.twice",
-   "rust-host:key.twice-before-composite",
-   "rust-host:key.twice-missing-first"
+   "rust-host:key.twice-before-composite"
   ],
   "python-core": [],
   "rust-host": [],
@@ -31,7 +27,6 @@
    "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-bytes]",
    "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-int]",
    "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-none]",
-   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-str-subclass]",
    "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-tuple]",
    "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-int]",
    "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-none]"
