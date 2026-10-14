@@ -4772,6 +4772,49 @@ entries:
   case_outcomes:
   - {case: time.feature-interval, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the interval cells in canonical form, its outcome unchanged'}
 
+- id: P1B-57
+  title: time.timestamptz sets its zone for every cursor, and its reference line holds that zone
+  kind: keep
+  old_behavior: >-
+    The case's first setup statement, SET TimeZone = 'America/New_York',
+    set the zone of the DuckDB connection the setup ran on only; the
+    source reads through cursors, which take the process's local zone. The
+    committed python-ref line (python-ref at b413e9a) therefore held the
+    recorder's machine zone, timestamp[us, tz=America/Los_Angeles] and 424
+    rows in materialize's last read, and a runner in another zone (CI, in
+    UTC) read 422: the case compared equal only on a machine in the
+    recorder's zone.
+  new_behavior: >-
+    The case and its inventory entry set SET GLOBAL TimeZone =
+    'America/New_York', which every cursor of the database takes, and the
+    python-ref line is recorded again under T1.13's rules (under TZ=UTC; a
+    second recording under TZ=America/Los_Angeles has the same semantic
+    projection). Only the zone changes: the three Arrow schemas read
+    timestamp[us, tz=America/New_York], and one statement's values with
+    it; the outcome, the counts and every other result are unchanged, and
+    python-ref, python-core and rust-host answer alike under either
+    machine zone.
+  affected_inputs: >-
+    The case file of time.timestamptz, its inventory entry and the time
+    family's map (its setup), and its committed python-ref line, which the
+    ratchet's reference rule passes changed only under an approved entry
+    naming the case on python-ref.
+  cases: [time.timestamptz]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    T1.32g, a recording-environment correction with no outcome of its own,
+    as P1B-54 and P1B-56, for the reviewers (H19), never self-approved.
+    Found by the bundle's landing CI (run 38563768935): the reference
+    itself run under TZ=UTC gave tz=UTC and 422 rows, as the core did, so
+    the difference was the recorder's zone, not the product. The test
+    author's commits change the case and record the line; this entry is
+    the ratchet's authorization of the line. The outcome below is
+    python-ref's, unchanged.
+  case_outcomes:
+  - {case: time.timestamptz, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'recording-environment correction: the zone set for every cursor, the outcome unchanged'}
+
 # --- lane 1c entries (P1B-70..89) ---
 
 - id: P1B-71
