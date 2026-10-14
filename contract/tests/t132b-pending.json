@@ -35,8 +35,6 @@
    "class.static-three.d4-0",
    "class.static-three.d4-2",
    "class.static-three.d9-9",
-   "feature.orders.d9-9.max",
-   "feature.users.d9-9.max",
    "key.at-precision.d18-0",
    "key.at-precision.d19-0",
    "key.at-precision.d38-0",
@@ -49,9 +47,7 @@
    "key.negative.d9-0",
    "key.null-foreign.d18-0",
    "key.primary-only.d18-0",
-   "key.primary-only.d4-0",
-   "target.sum.d4-4.max",
-   "target.sum.d9-9.max"
+   "key.primary-only.d4-0"
   ],
   "exits": [
    "py:test_a_contradicted_cell_claim_fails[decimal-as-key]",

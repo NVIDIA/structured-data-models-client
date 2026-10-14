@@ -30,7 +30,8 @@
 //!   table), whose result has the reference's row count, and where each of
 //!   the vector's decimal columns has the reference's stype and reached the
 //!   model as the reference sent it (each part's wire dtype and stype, and
-//!   its cells, each as its JSON text, counted).
+//!   its cells counted, a number by its exact value as the payload rule
+//!   reads it, `1e-9` and `1e-09` alike, `1` and `1.0` not; text exact).
 //! - Exit "statement counts equal the reference's, cross-checked against
 //!   DuckDB's query log", over the vectors: where the outcome is the
 //!   reference's, the statements the provider ran per public call equal the
@@ -560,6 +561,39 @@ fn column_in(body: &Value, part: &str, table: &str, column: &str) -> Value {
     })
 }
 
+/// A request's cells keyed by value: each number cell (`{"number":
+/// text}`) by its kind, sign, significant digits and power of ten
+/// (`number_form`, the payload rule's reading, exact, no double), so the
+/// core's `1e-9` and the reference's `1e-09` are one cell, while `1` and
+/// `1.0` (their kinds) are not; text, nulls and structure stay exact.
+/// Cells that are one value are counted together.
+fn by_value(request: &Value) -> Value {
+    let Some(requests) = request.as_array() else {
+        return request.clone();
+    };
+    let mut out = Vec::new();
+    for parts in requests {
+        let mut each = Map::new();
+        for (part, column) in parts.as_object().into_iter().flatten() {
+            let Some(cells) = column["cells"].as_object() else {
+                each.insert(part.clone(), column.clone());
+                continue;
+            };
+            let mut counted: BTreeMap<String, u64> = BTreeMap::new();
+            for (key, count) in cells {
+                let cell: Value = serde_json::from_str(key).expect("a cell's JSON text");
+                *counted.entry(cell_text(&canonical(&cell))).or_default() +=
+                    count.as_u64().expect("a count");
+            }
+            let mut column = column.clone();
+            column["cells"] = json!(counted);
+            each.insert(part.clone(), column);
+        }
+        out.push(Value::Object(each));
+    }
+    Value::Array(out)
+}
+
 /// The vector's columns in this host's terms: each its stype as described
 /// and how it reached the model, keyed `table.column`.
 fn columns_of_core(observed: &Observed, body: Option<&Value>, columns: &Value) -> Value {
@@ -584,7 +618,7 @@ fn columns_of_core(observed: &Observed, body: Option<&Value>, columns: &Value) -
         });
         out.insert(
             format!("{table}.{column}"),
-            json!({"stype": stype, "request": request}),
+            json!({"stype": stype, "request": by_value(&request)}),
         );
     }
     Value::Object(out)
@@ -668,7 +702,7 @@ fn wanted(vector: &Value) -> Value {
             name.clone(),
             json!({
                 "stype": column["described"]["stype"],
-                "request": column["request"],
+                "request": by_value(&column["request"]),
             }),
         );
     }
@@ -1008,6 +1042,36 @@ fn the_comparison_fails_closed() {
     let mut got = want.clone();
     got["columns"]["users.f"]["stype"] = json!("timestamp");
     assert!(!agrees(&got, &want), "another stype");
+    // Cells by value: one number written two ways is one cell; a number
+    // of another kind, another value, or text is not.
+    let cells = |keys: &[(&str, u64)]| {
+        let map: Map<String, Value> = keys
+            .iter()
+            .map(|(k, n)| ((*k).to_owned(), json!(n)))
+            .collect();
+        by_value(
+            &json!([{"context": {"dtype": "float64", "stype": "numerical", "cells": map}, "predict": null}]),
+        )
+    };
+    let core = cells(&[("{\"number\":\"1e-9\"}", 2), ("null", 1)]);
+    assert_eq!(core, cells(&[("{\"number\":\"1e-09\"}", 2), ("null", 1)]));
+    assert_eq!(
+        core,
+        cells(&[
+            ("{\"number\":\"0.000000001\"}", 1),
+            ("{\"number\":\"1E-9\"}", 1),
+            ("null", 1)
+        ])
+    );
+    assert_ne!(core, cells(&[("{\"number\":\"1e-8\"}", 2), ("null", 1)]));
+    assert_ne!(core, cells(&[("{\"number\":\"-1e-9\"}", 2), ("null", 1)]));
+    assert_ne!(core, cells(&[("\"1e-9\"", 2), ("null", 1)]));
+    assert_ne!(core, cells(&[("{\"number\":\"1e-9\"}", 3)]));
+    assert_ne!(
+        cells(&[("{\"number\":\"1\"}", 1)]),
+        cells(&[("{\"number\":\"1.0\"}", 1)])
+    );
+    assert_ne!(cells(&[("\"1e-9\"", 1)]), cells(&[("\"1e-09\"", 1)]));
     // A refusal: the same code and counts, and an unnamed one is never
     // matched.
     let past = find("overflow.d4-0.sum-past");
