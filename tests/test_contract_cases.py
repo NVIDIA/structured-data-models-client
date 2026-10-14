@@ -122,6 +122,26 @@ def _anchor(text: str) -> dict[str, Any]:
     return {'t': 'ts', 'v': str(nanos), 'unit': 'ns', 'zone': None}
 
 
+def _refused_before_reading(case_id: str) -> bool:
+    r"""Whether the reference refused ``case_id``'s query before reading:
+    INVALID_REQUEST at ``materialize``, its observation holding no
+    statement of ``materialize`` (the T1.32d family test's
+    ``QUERY_REFUSALS`` rule)."""
+    for line in _reference().read_text(encoding='utf-8').splitlines():
+        observed = json.loads(line)
+        if observed['case'] != case_id:
+            continue
+        outcome = observed['outcome']
+        statements = observed['driver']['capture']['statements']
+        return (
+            outcome['result'] == 'refusal'
+            and outcome['stage'] == 'materialize'
+            and outcome['code'] == 'INVALID_REQUEST'
+            and not [s for s in statements if s['stage'] == 'materialize']
+        )
+    return False
+
+
 def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     r"""Each way a case's core operations depart from its own input: the
     source described is the one ``from_source`` names, materialize's
@@ -152,7 +172,17 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     carried = tuple(op for op in _ORDER if op in core)
     if carried != _ORDER[: len(carried)]:
         problems.append('the operations carried are not the call in order')
-    if case['id'] in _DESCRIBE_ONLY and case['status'] != 'acceptance':
+    if 'validate_query' in core:
+        # In place of materialize, where the reference refused the query
+        # before reading (as the T1.32d family test allows): python-core
+        # validates it before the core's materialize would run.
+        if not (
+            case['status'] == 'acceptance'
+            and carried == _ORDER[:1]
+            and _refused_before_reading(case['id'])
+        ):
+            problems.append('validate_query where no query is refused first')
+    elif case['id'] in _DESCRIBE_ONLY and case['status'] != 'acceptance':
         # Admitted, the host carries its call (no entity) to materialize,
         # which refuses it as the reference does; the rule below holds it.
         if carried != _ORDER[:1]:
@@ -299,8 +329,8 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # any, the call in order.
     case = copy.deepcopy(committed['nested.map'])
     assert case['expect']['stage'] == 'from_source'
-    case['core'].pop('predict')
-    case['core'].pop('materialize')
+    case['core'].pop('predict', None)
+    case['core'].pop('materialize', None)
     case['status'] = 'diagnostic'
     assert _held_to_its_input(case) != []
     case['status'] = 'acceptance'
@@ -309,17 +339,47 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     assert case['expect']['stage'] == 'materialize'
     case['status'] = 'acceptance'
     assert _held_to_its_input(case) == []
-    case['core'].pop('predict')
+    case['core'].pop('predict', None)
     assert _held_to_its_input(case) == []
-    case['core'].pop('materialize')
+    case['core'].pop('materialize', None)
     assert _held_to_its_input(case) != []
     case = copy.deepcopy(committed['time.text-us-date'])
     case['status'] = 'acceptance'
-    case['core'].pop('materialize')
+    case['core'].pop('materialize', None)
     assert _held_to_its_input(case) != []
     case['core'].pop('describe_source')
     with pytest.raises(KeyError):
         _held_to_its_input(case)
+    # validate_query in place of materialize: for an admitted case whose
+    # query the reference refused before reading, and no other.
+    assert _refused_before_reading('refuse.unknown-column')
+    assert not _refused_before_reading('time.text-us-date')
+    validated = {'profile': {'name': 'RELATIONAL'}, 'schema': {}}
+    case = copy.deepcopy(committed['refuse.unknown-column'])
+    case['core'].pop('predict', None)
+    case['core'].pop('materialize', None)
+    case['core']['validate_query'] = validated
+    case['status'] = 'acceptance'
+    assert _held_to_its_input(case) == []
+    case['status'] = 'diagnostic'
+    assert _held_to_its_input(case) != []
+    case = copy.deepcopy(committed['time.text-declared'])
+    case['core']['validate_query'] = validated
+    case['status'] = 'acceptance'
+    assert _held_to_its_input(case) != [], 'beside materialize'
+    case = copy.deepcopy(committed['time.text-us-date'])
+    case['core'].pop('predict', None)
+    case['core'].pop('materialize', None)
+    case['core']['validate_query'] = validated
+    case['status'] = 'acceptance'
+    assert _held_to_its_input(case) != [], 'the reference read data first'
+    # Without it, the refused-first case stops short of materialize.
+    case = copy.deepcopy(committed['refuse.unknown-column'])
+    case['core'].pop('validate_query', None)
+    case['core'].pop('predict', None)
+    case['core'].pop('materialize', None)
+    case['status'] = 'acceptance'
+    assert _held_to_its_input(case) != []
 
 
 def test_the_admitted_set_follows_the_families_admission_exits(
