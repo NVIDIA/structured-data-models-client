@@ -618,6 +618,10 @@ Part 2e: an interval's values in canonical form (E113), a judging-path change, a
 - **Fails closed.** A `date64` and Arrow's year-month and day-time intervals stay `["?", "arrow:<type>"]` and unencodable; an interval read as rows stays unencodable (`_LOSSY_AS_ROWS`).
 - **The reference's line.** time.feature-interval's python-ref line recorded again with the new encoder under T1.13's rules (register P1B-56, proposed): its semantic projection differs from the committed one only in `from_source` statement 6's `unencodable` and `unordered`, and the rows differ only in the interval column.
 
+Part 2f: past the reference's stop in a cell other than the reference's (E114), a judging-path change, held by the test author's `tests/test_t132g_later_stage_cells.py` on real lines (`tests/golden/t132g-later-stage`, python-old's added):
+
+- **The cell's pair.** `compare()` keeps each runner's `past_stop`; where python-core's is set and python-old's outcome is the reference's, `_cell_pair` passes it to `_host_fields`, which holds python-core to python-old only as far as python-old went (E112's stage rules); python-old otherwise than the reference, or no approved move, holds the pair in full as before.
+
 ## T1.32b
 
 The decimal family (design, the T1.32b row, as T1.32a; E100), part 1: the core and its evidence, the `decimal.*` cases still diagnostic. Part 2 admits them, once its admission entry and P1B-18 are approved (the ratchet's cases rule passes a case change only under an approved entry). Each claim with its mechanism:
