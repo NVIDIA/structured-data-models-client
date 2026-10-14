@@ -16,9 +16,14 @@ cases of ``contract/cases/s1``; each is run by
 ``Schema.from_source``, ``materialize`` and ``predict``, forced on a copy).
 
 - Admission ("the cases admitted, each with its reference observation"):
-  each case is an acceptance case with routes, carrying to the core every
-  operation up to the stage the reference answers at (``describe_source``
-  for ``from_source``, then ``materialize``, then ``predict``). Admitted,
+  each case is an acceptance case with routes, carrying to the core the
+  operations its call reaches there and no others (``REACHED``; ``compare.py``'s
+  ``inputs`` rule holds a core runner to every operation a case names):
+  the nine successes reach ``predict``; ``time.feature-interval`` stops at
+  ``from_source`` (P1B-8, the host's admission), ``describe_source`` alone;
+  and ``time.text-one-bad-value`` and ``time.text-us-date`` at
+  ``materialize`` (DT-12, the source's cast, PROVIDER_ERROR),
+  ``describe_source`` and ``materialize``. Admitted,
   the CI ``cross-host`` step's ``core`` rule gates ``python-core`` against
   ``rust-host`` on every ``core`` field of each (``contract/tests/
   test_cross_host.py`` holds that step).
@@ -83,6 +88,25 @@ OPERATIONS = {
     'from_source': ('describe_source',),
     'materialize': ('describe_source', 'materialize'),
     'predict': ('describe_source', 'materialize', 'predict'),
+}
+
+
+#: The public call each case reaches on the core, by the register's
+#: approved entries where the reference's differs (reviewed with the
+#: refusal map, ``contract/refusal-maps/time.json``).
+REACHED = {
+    'feature.bool': 'predict',
+    'time.date': 'predict',
+    'time.feature-date-and-timestamp-with-null': 'predict',
+    'time.feature-interval': 'from_source',  # P1B-8: the host's admission
+    'time.feature-time-of-day': 'predict',
+    'time.text-declared': 'predict',
+    'time.text-iso-date': 'predict',
+    'time.text-one-bad-value': 'materialize',  # DT-12: the source's cast
+    'time.text-us-date': 'materialize',  # DT-12
+    'time.timestamp-ns': 'predict',
+    'time.timestamp-s': 'predict',
+    'time.timestamptz': 'predict',
 }
 
 
@@ -253,14 +277,19 @@ def test_each_case_is_admitted(
         assert loaded['status'] == 'acceptance', loaded['status']
         assert loaded['routes'], 'an admitted case names its routes'
         core = loaded.get('core') or {}
-        observed = reference()[case]
-        stage = observed['outcome']['stage']
-        operations = OPERATIONS[stage]
-        for operation in operations:
-            assert core.get(operation), (
-                f'the case carries {operation} to the core (the reference '
-                f'answers at {stage})'
-            )
+        assert sorted(REACHED) == IDS, 'each case has the call it reaches'
+        wanted = OPERATIONS[REACHED[case]]
+        carried = tuple(op for op in OPERATIONS['predict'] if op in core)
+        assert carried == wanted, (
+            f'the case carries {carried} to the core; its call reaches '
+            f'{REACHED[case]} there, so {wanted}'
+        )
+        assert set(core) == set(wanted), sorted(core)
+        for operation in wanted:
+            assert core[operation], f'{operation} carries no inputs'
+        # Never short of the reference's stage.
+        stage = reference()[case]['outcome']['stage']
+        assert set(OPERATIONS[stage]) <= set(wanted), stage
         if 'materialize' in core:
             # The entities the core is handed are the public call's.
             assert len(core['materialize']['indices']) == len(
