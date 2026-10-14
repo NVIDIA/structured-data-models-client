@@ -837,6 +837,9 @@ def bound(given: dict[str, Any], document: dict[str, Any]) -> list[str]:
 #: The stage whose result each core operation gives.
 STAGE_OF = {
     'describe_source': 'from_source',
+    # A query the client refuses before the core's materialize, which it
+    # validates first (refuse.unknown-column): the materialize call's.
+    'validate_query': 'materialize',
     'materialize': 'materialize',
     'predict': 'predict',
 }
@@ -913,10 +916,15 @@ def write(
             twin['input'] = derived['python-core'][name]
         if rust is not None:
             core = derived['rust-host'][name]
-            if set(core) == {'describe_source'}:
+            if (
+                set(core) == {'describe_source'}
+                and (rust.get('derive') or {}).get('from') != 'case'
+            ):
                 # A case naming describe_source alone (the AdventureWorks
                 # case): the probe's later inputs are held to its twin's
-                # at run time, not derived, so they stay as written.
+                # at run time, not derived, so they stay as written. The
+                # case's own probe is the case's core exactly (a case
+                # refused at from_source names describe_source alone).
                 core = {**rust.get('core', {}), **core}
             rust['setup'] = twin['input'].get('setup') if twin else None
             rust['core'] = core
