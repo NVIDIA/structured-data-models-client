@@ -1,7 +1,8 @@
 # Releasing
 
-Five distributions, one version, published together. A release is a tag; the
-tag is the only manual step.
+Five distributions, one version, published together. A release is a tag and
+then an approval: the `pypi` environment has required reviewers, so the job
+that creates the GitHub Release and publishes to PyPI waits for one.
 
 The tag has to sit on a commit that is on `main` and whose CI run passed.
 The publish workflow checks both before it builds anything, so a tag on an
@@ -55,7 +56,8 @@ done
 Internal pins (`structured-data-models-api==1.0.0` in `structured-data-models-client`'s dependencies) move with them.
 
 Update `CHANGELOG.md`: the entries for the release go under its own heading
-with today's date, so the tag carries a changelog that names the version it
+with the date you are tagging on, not the date you wrote them, so the tag
+carries a changelog that names the version it
 publishes.
 
 ## Tagging
@@ -64,7 +66,7 @@ publishes.
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-That is the whole release. `.github/workflows/publish.yml` builds the four
+That starts the release. `.github/workflows/publish.yml` builds the four
 pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
 (cp310 to cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
 the engine's `[tool.cibuildwheel]`), and then refuses to
@@ -74,35 +76,114 @@ release missing it publishes an extra nobody can install. It then generates the
 SBOM, and takes the release's notes from the changelog's entry for that
 version, refusing a tag that has none: notes that read like a diff are fixable
 afterwards and a distribution on PyPI is not, so both happen before anything is
-uploaded. It uploads through PyPI Trusted Publishing with PEP 740 attestations,
-then creates the GitHub Release for the tag with those notes and attaches the
-SBOM to it, so the dependency inventory outlives the ninety days an Actions
-artifact gets.
+uploaded. It attaches every distribution and the SBOM to the GitHub Release for the
+tag, and then asks Kitmaker's Portal to publish from those asset URLs.
 
-**There is no stored PyPI token.** Publishing authenticates with the
-workflow's OIDC identity, which PyPI exchanges for a token minted on the spot
-and good for about fifteen minutes. That is why `publish` is the only job
-holding `id-token: write`. If you find yourself wanting to add a token to the
-repository's secrets, something is wrong with the trusted-publisher
-configuration instead.
+**Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
+NVIDIA's PyPI organization and this project's OSRB record commits to releasing
+through it. Kitmaker does not accept an upload; it fetches each artifact from a
+URL and publishes it itself, to pypi.org and pypi.nvidia.com together. It only
+accepts an Artifactory path or a GitHub release asset, and it refuses private
+GitHub assets, so **a release cannot publish while the repository is
+internal**.
+
+One Portal project exists per distribution, because Kitmaker matches the
+project name against the distribution name parsed from each filename. Their
+ids are in `.github/workflows/kitmaker_release.py`, and each is checked against
+the name it should carry before anything is sent, so a renamed or reassigned id
+fails early rather than being trusted. Every project that has something left to publish is validated
+and dry-run to a terminal state before *any* of them publishes, because the five
+distributions pin each other by exact version and a client live without its
+engine is worse than a release that never started. Kitmaker batches are
+sequential and not atomic, and a published file cannot be recalled.
+
+The GitHub Release is created in the same job that publishes, behind the
+protected `pypi` environment. A release cannot be a draft, because Kitmaker
+needs a public URL, so creating it in an earlier ungated job would make it
+public before anyone approved the upload.
+
+**There is a stored credential.** `KITMAKER_API_TOKEN` is a long-lived bearer
+token, read only by the `release` job behind the protected `pypi` environment.
+It must be an **environment** secret on `pypi`, not a repository secret:
+approval gates environment secrets, so a repository secret is readable by a
+workflow on any branch and the approval protects nothing. The previous Trusted
+Publishing setup avoided a stored token; this is the cost of publishing through
+Kitmaker.
+
+**This workflow no longer signs what it ships.** PEP 740 attestations go to
+whoever uploads, and that is Kitmaker, so nothing here produces one naming this
+repository. SECURITY.md tells consumers what they can check instead.
+
+### If a run fails partway
+
+**Use "Re-run failed jobs", never "Re-run all jobs."** These builds are not
+byte reproducible, so rebuilding produces a different wheel and sdist for the
+same version. The workflow will not clobber an already-attached asset, so a
+full re-run would leave the release holding the original bytes while `dist/`
+holds new ones. The publish step compares each attached asset's digest against
+what this run built and refuses before submitting anything, since Kitmaker
+fetches the asset rather than the local file and a published file cannot be
+recalled. "Re-run failed jobs" reuses the original `distributions` artifact,
+which is what you want.
+
+`kitmaker-summary.txt`, printed at the end of the job, is the record to read
+before doing anything else. It names each of the five projects. For any whose upload was requested it says
+what **PyPI** holds for this version, not what Portal reported: Portal's batches
+are not atomic, so a failure can follow files that already published, and a
+refusal is not proof that nothing did. Only the index knows. The other states
+describe what this run did, since the index has nothing to say about a project
+it was never offered.
+
+| The summary says | What it means |
+| --- | --- |
+| `published` | Every file is on PyPI with the bytes this run built. Nothing to do. |
+| `already published before this run` | It was there before this run started. |
+| `not reached` | No upload was requested for it. A dry run may still have run. |
+| `not on PyPI` | The index reports nothing for this version. Usually means nothing landed, but see the caveat below. |
+| `PARTLY on PyPI, missing [...]` | Some files landed. A re-run finishes the rest. |
+| `on PyPI with UNEXPECTED bytes for [...]` | Needs a person. |
+| `on PyPI with files this run did not build` | Needs a person. |
+| `UNKNOWN, could not ask PyPI` | The index could not be reached, or did not answer sensibly. Look by hand. |
+
+A re-run is safe for the first five states and needs a person for the last
+three. **The caveat: PyPI's JSON endpoint is cached**, so a project published
+in the last few minutes can still read as `not on PyPI`. That state is what the
+index said, not proof that nothing landed. If the summary surprises you, check
+the project page on pypi.org before re-running, or you may submit the same
+files twice. Confirm every expected file, not just that the version exists: a
+batch that stopped halfway leaves only some of them.
+
+Before each project is submitted, PyPI is asked what it already holds at that
+version. A project fully published with the artifact's bytes is skipped, and one
+that is part-published is reduced to the files still missing, since PyPI takes
+files into a version one at a time. A re-run after a partial publish therefore
+finishes what did not land.
+
+**If the build artifact is gone**, neither re-run works, and they fail
+differently. "Re-run failed jobs" stops at `actions/download-artifact`, since
+an expired artifact cannot be downloaded. "Re-run all jobs" builds fresh,
+non-reproducible files, finds the earlier assets still attached, and stops at
+"release assets are not the bytes this run built". This happens once the
+artifact's retention runs out, and after any change to the workflow that needs
+a fresh build.
+
+Recovery depends on the index: if nothing for this version is on PyPI, delete
+the release assets and run again; if anything is, the version is spent, so
+release a patch.
+
+Two states it refuses to guess at, both needing a hand:
+
+- **PyPI holds different bytes than the artifact.** Someone published this
+  version from other artifacts. PyPI will not replace a file, so do not
+  re-run; work out what was published first, then yank and release a patch.
+- **PyPI holds files this run did not build.** Same reasoning: the version on
+  PyPI is not the one in `dist/`.
 
 ## After
 
-The `verify` job has already checked every distribution this workflow built
-against this repository's identity, so there is nothing to confirm by hand. It runs beside
-the job that creates the GitHub Release rather than before it: an upload
-cannot be undone, and a release whose SBOM never got attached because a cache
-was cold is worse than one whose verification has to be re-run. A red `verify`
-on a green `publish` means the files are on PyPI and something about their
-attestations needs looking at, not that the release did not happen.
-
-It checks the artifacts the build produced against the provenance PyPI
-serves, which is the stronger direction: for each file this workflow built, it
-answers whether PyPI attested those exact bytes. It does not compare the
-index's file list against the build, so it would not notice an upload that
-published all of them faithfully and added one more. SECURITY.md's "Verifying
-a release" section is the same command written for a consumer, who starts from
-the file they downloaded instead.
+Check the five projects on pypi.org and confirm each shows NVIDIA organization
+ownership. Portal reporting that a release completed is not the same as the
+package being installable, so install it the way a user would.
 
 ## Yanking
 

@@ -13,26 +13,25 @@ these packages. All five distributions share one version and one entry.
   are gathered in batches of 10,000, or 200 for a temporal link prediction,
   and `predict()` sends one call per batch and returns one result in the order
   the indices were given. It used to refuse more than 1,000 and ask for the
-  calls to be split by hand. A batch whose request would exceed the endpoint's
-  30 MiB body is still refused at `materialize()`; ask for fewer entities at a
-  time on a wide graph.
+  calls to be split by hand.
 
   `materialize()` takes `rows_per_call` to ask in smaller batches than the
   endpoint's cap, which is what a graph wide enough to outrun the 30 MiB body
   needs, and what a deployment holding to less than 10,000 needs. It only goes
   down: a larger call buys a refusal rather than a bigger call. Where the
-  context is itself over the body, no batch is small enough and the refusal
+  context is itself over the body, no batch is small enough, and the refusal
   says which options do come down instead.
 
   Two things are still refused. Every batch is built before the first is sent,
   so more than 100,000 entities, or more than 100 calls, in one
-  `materialize()` is refused rather than held in memory at once; and a question asked in parts, a ranking or a
-  forecast, is not batched, because each part is already a call and the
-  fan-out budget counts those.
+  `materialize()` is refused rather than held in memory at once; and a
+  question asked in parts, a ranking or a forecast, is not batched, because
+  each part is already a call and the fan-out budget counts those.
 
-- A call that fails part way through a batched `predict()` carries the answers
-  already paid for on the error, as `details['answered']` and
-  `details['rows_answered']`, rather than discarding them.
+- A call that fails part way through carries the answers already paid for on
+  the error, as `details['answered']` and `details['rows_answered']`, rather
+  than discarding them. A question asked in parts keeps its answered parts the
+  same way.
 
 - In the relational engine, `batch_mode(batch_size='max')` now means 10,000
   entities a batch rather than 1,000, following the size the endpoint answers.
@@ -40,18 +39,7 @@ these packages. All five distributions share one version and one entry.
   on the first batch where it used to be gathered as batches of 1,000; pass an
   explicit `batch_size=` for the old behaviour.
 
-- The Databricks example notebook is now a get-started notebook,
-  `examples/databricks/kumo_relational_quickstart.ipynb`, in place of
-  `adventureworks_relational.ipynb`. It deploys the model to a serving
-  endpoint, loads the AdventureWorks sample tables into your schema, and
-  checks each prediction against what actually happened.
-
-### Fixed
-
-- A Databricks metric view name may hold a part SQL reads only quoted, such as
-  the catalog in `my-catalog.sales.metrics`, without backticks.
-
-## 1.0.0 - 2026-10-08
+## 1.0.0 - 2026-10-13
 
 First public release. The five distributions are versioned and published
 together, and a given version of one is tested only against the same version
@@ -71,12 +59,18 @@ of the others.
   expressions a view's author wrote.
 - `SDMClient.for_databricks_serving(endpoint)` for a model served on Databricks,
   with `warehouse()` and `lakebase()` for the SQL warehouse and Lakebase.
+- A Databricks get-started notebook,
+  `examples/databricks/kumo_relational_quickstart.ipynb`, which deploys the
+  model to a serving endpoint, loads the AdventureWorks sample tables into
+  your schema, and checks each prediction against what actually happened.
+- A Databricks metric view name may hold a part SQL reads only quoted, such as
+  the catalog in `my-catalog.sales.metrics`, without backticks.
 - Wheels for the relational engine on CPython 3.10 to 3.13, manylinux_2_28,
   x86-64 and aarch64.
 - A stated compatibility and deprecation contract, in
   [`docs/reference/stability.md`](docs/reference/stability.md).
-- Publishing through PyPI Trusted Publishing with PEP 740 attestations, and a
-  CycloneDX SBOM attached to each GitHub Release.
+- Publishing to PyPI through NVIDIA's Kitmaker service, which owns the PyPI
+  project, and a CycloneDX SBOM attached to each GitHub Release.
 
 ### Distributions
 
