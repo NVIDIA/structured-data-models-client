@@ -245,6 +245,16 @@ fn problem(row: &Value, bases: &Bases, template: &Case) -> Option<String> {
     let mut case = template.clone();
     case.id = format!("t133p3.{id}");
     case.input.setup = Some(witness(row));
+    if let Some(indices) = row.get("indices") {
+        // The entities predicted for, as contract scalars, where the row's
+        // keys are not the base's 0 and 1.
+        let materialize = case
+            .core
+            .as_mut()
+            .and_then(|c| c.materialize.as_mut())
+            .expect("nested.list-int materializes");
+        materialize.indices = indices.as_array().unwrap().clone();
+    }
     let observed = match catch_unwind(AssertUnwindSafe(|| host::run(&case, bases))) {
         Ok(Ok(observed)) => observed,
         Ok(Err(failure)) => return Some(format!("host failure: {failure}")),
@@ -294,8 +304,148 @@ fn problem(row: &Value, bases: &Bases, template: &Case) -> Option<String> {
         }
         _ => {}
     }
-    if want["joins"] == "own" {
-        return joined_elsewhere(&predicted["body"]);
+    if want["joins"] == "own"
+        && let Some(why) = joined_elsewhere(&predicted["body"])
+    {
+        return Some(why);
+    }
+    if want["related"] == "duckdb" {
+        return related_elsewhere(bases, row, &predicted["body"]);
+    }
+    None
+}
+
+/// Each instance of the body, in `predict` and `context`: its part, id,
+/// entity (the `__kumo_entity_ref_0` cell as text), anchor time as
+/// written, and `TARGET` (context only).
+fn instances(body: &Value) -> Vec<(String, String, String, String, Option<String>)> {
+    let mut found = Vec::new();
+    for part in ["predict", "context"] {
+        let table = &body[part]["instance_table"];
+        let Some(columns) = table["columns"].as_array() else {
+            continue;
+        };
+        let at = |name: &str| columns.iter().position(|c| c == name);
+        let (Some(entity), Some(anchor)) = (at("__kumo_entity_ref_0"), at("__kumo_anchor_time"))
+        else {
+            continue;
+        };
+        for row in table["rows"].as_array().into_iter().flatten() {
+            found.push((
+                part.to_owned(),
+                cell_text(&row[0]).unwrap_or_default(),
+                cell_text(&row[entity]).unwrap_or_default(),
+                cell_text(&row[anchor]).unwrap_or_default(),
+                at("TARGET").and_then(|t| cell_text(&row[t])),
+            ));
+        }
+    }
+    found
+}
+
+fn number(text: &str) -> f64 {
+    text.parse().unwrap_or(f64::NAN)
+}
+
+/// Where the body's related rows or labels differ from DuckDB's own
+/// numeric join, or `None` (round 3, Codex's P1: a DECIMAL(38, 0) key
+/// against a DOUBLE foreign key, joined by printed text, lost -0.0 and
+/// exponent-form doubles). For each instance, on `shop` and the witness:
+/// its `orders` rows (each a time and a price) are the orders DuckDB joins
+/// to its user (`orders.user_id = users.user_id`, the user whose key's
+/// text is the instance's entity) at or before its anchor; and a context
+/// instance's `TARGET` is the SUM of those orders' prices in the 30 days
+/// after its anchor, 0 for none (the query's `SUM(orders.price, 0, 30,
+/// days)`). Every user of the table is some instance's.
+fn related_elsewhere(bases: &Bases, row: &Value, body: &Value) -> Option<String> {
+    let connection = duck::open().unwrap();
+    for statement in bases["shop"].iter().cloned().chain(witness(row)) {
+        connection.execute_batch(&statement).unwrap();
+    }
+    let all = instances(body);
+    let users: BTreeSet<String> = connection
+        .prepare("SELECT CAST(user_id AS VARCHAR) FROM users")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let seen: BTreeSet<String> = all.iter().map(|i| i.2.clone()).collect();
+    if let Some(missing) = users.difference(&seen).next() {
+        return Some(format!(
+            "user {missing} is no instance's: nothing checked of it"
+        ));
+    }
+    let mut held: BTreeMap<(String, String), Vec<(String, String)>> = BTreeMap::new();
+    for part in ["predict", "context"] {
+        let orders = &body[part]["related_tables"]["orders"];
+        // No orders at all is a body holding none: each instance's are
+        // then checked as empty.
+        let Some(columns) = orders["columns"].as_array() else {
+            continue;
+        };
+        let at = |name: &str| columns.iter().position(|c| c == name);
+        let (Some(ts), Some(price)) = (at("ts"), at("price")) else {
+            return Some(format!("{part}: orders has no ts or price"));
+        };
+        for r in orders["rows"].as_array().into_iter().flatten() {
+            held.entry((part.to_owned(), cell_text(&r[0]).unwrap_or_default()))
+                .or_default()
+                .push((
+                    cell_text(&r[ts]).unwrap_or_default(),
+                    number(&cell_text(&r[price]).unwrap_or_default()).to_string(),
+                ));
+        }
+    }
+    for (part, id, entity, anchor, target) in &all {
+        let anchor_sql = anchor.trim_end_matches('Z').replace('T', " ");
+        let entity_sql = entity.replace('\'', "''");
+        let rows = |sql: &str| -> Vec<(String, f64)> {
+            connection
+                .prepare(sql)
+                .unwrap()
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        let joined = format!(
+            "FROM orders o JOIN users u ON o.user_id = u.user_id \
+             WHERE CAST(u.user_id AS VARCHAR) = '{entity_sql}'"
+        );
+        let mut want: Vec<(String, String)> = rows(&format!(
+            "SELECT strftime(o.ts, '%Y-%m-%dT%H:%M:%S.%fZ'), CAST(o.price AS DOUBLE) {joined} \
+             AND o.ts <= TIMESTAMP '{anchor_sql}'"
+        ))
+        .into_iter()
+        .map(|(t, p)| (t, p.to_string()))
+        .collect();
+        let mut got = held
+            .get(&(part.clone(), id.clone()))
+            .cloned()
+            .unwrap_or_default();
+        want.sort();
+        got.sort();
+        if got != want {
+            return Some(format!(
+                "{part}: instance {id} of user {entity} at {anchor} holds {} orders {got:?}, DuckDB joins {} {want:?}",
+                got.len(),
+                want.len()
+            ));
+        }
+        if let Some(target) = target {
+            let sum = rows(&format!(
+                "SELECT 'sum', COALESCE(SUM(o.price), 0)::DOUBLE {joined} \
+                 AND o.ts > TIMESTAMP '{anchor_sql}' \
+                 AND o.ts <= TIMESTAMP '{anchor_sql}' + INTERVAL 30 DAY"
+            ))[0]
+                .1;
+            if (number(target) - sum).abs() > 1e-9 {
+                return Some(format!(
+                    "{part}: instance {id} of user {entity} at {anchor}: label {target}, DuckDB {sum}"
+                ));
+            }
+        }
     }
     None
 }

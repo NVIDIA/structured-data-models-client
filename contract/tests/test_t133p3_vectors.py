@@ -179,3 +179,27 @@ def test_a_big_integer_key_joins_only_its_own_rows() -> None:
     assert by_id['uhugeint-key.low-bits']['witness'][0] == LOSSLESS
     low = by_id['uhugeint-key.low-bits']['witness'][-1]
     assert f'{2**64 + 1}::UHUGEINT' in low and f'{2**64 + 2}::UHUGEINT' in low
+
+
+def test_a_mixed_numeric_key_is_held_to_duckdb_s_own_join() -> None:
+    # Codex's round 3 P1: a DECIMAL(38, 0) key against a DOUBLE foreign
+    # key, -0.0 and exponent-form doubles among them, with the controls,
+    # each instance's orders and labels held to DuckDB's numeric join.
+    by_id = {r['id']: r for r in ROWS}
+    for row_id in (
+        'mixed-key.negative-zero',
+        'mixed-key.exponent-doubles',
+        'bigint-double-key.control',
+        'uhugeint-key.low-bits',
+        'uhugeint-key.past-37-digits',
+        'hugeint-key.past-37-digits',
+        'bigint-key.control',
+    ):
+        assert by_id[row_id]['want']['related'] == 'duckdb', row_id
+    zero = by_id['mixed-key.negative-zero']['witness']
+    assert "'-0.0'::DOUBLE" in zero[0] and 'DECIMAL(38, 0)' in zero[1]
+    wide = by_id['mixed-key.exponent-doubles']
+    assert f'{10**16}::DOUBLE + 16 * user_id' in wide['witness'][0]
+    assert [i['v'] for i in wide['indices']] == [str(10**16), str(10**16 + 16)]
+    for row_id in ('mixed-key.negative-zero', 'mixed-key.exponent-doubles'):
+        assert by_id[row_id]['want']['received'] == D38, row_id

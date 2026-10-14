@@ -1,6 +1,6 @@
 {
  "format": "sdm-t133p3-vectors/1",
- "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). The types' rows (P1B-43, the big-integer rule) are contract/type-set-vectors.json's, those with `cells`, read by the same test; these are its controls and the text_time rows. Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. The varint-key rows (fix round 1) instead make the key itself, users.user_id and orders.user_id, a VARINT, `column` the key, so materialize's seed joins run on it in each big-integer tier. The key rows of round 2 (`want.joins`: \"own\") also hold every users and orders row of each instance, in the body's predict and context, to that instance's own user: a seed join matching a key it does not equal puts another user's rows there. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
+ "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). The types' rows (P1B-43, the big-integer rule) are contract/type-set-vectors.json's, those with `cells`, read by the same test; these are its controls and the text_time rows. Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. The varint-key rows (fix round 1) instead make the key itself, users.user_id and orders.user_id, a VARINT, `column` the key, so materialize's seed joins run on it in each big-integer tier. The key rows of round 2 (`want.joins`: \"own\") also hold every users and orders row of each instance, in the body's predict and context, to that instance's own user: a seed join matching a key it does not equal puts another user's rows there. Round 3's (`want.related`: \"duckdb\") hold each instance's orders rows and each context label to DuckDB's own numeric join of orders to users on the same data (the mixed DECIMAL(38, 0) and DOUBLE keys of Codex's round 3 P1, its controls, and the round 2 key rows); a row's `indices`, where given, are the entities predicted for. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
  "rows": [
   {
    "id": "text.control",
@@ -149,7 +149,8 @@
      "precision": 38,
      "scale": 0
     },
-    "joins": "own"
+    "joins": "own",
+    "related": "duckdb"
    },
    "why": "the subagent's round 2 P1: a lossless UHUGEINT key (users.user_id and orders.user_id) received decimal128(38, 0), users 6 and 7 holding 2^64+1 and 2^64+2, which differ in their low bits only; DuckDB 1.5.6 holds CAST(2^64+1 AS UHUGEINT) = CAST(2^64+2 AS HUGEINT) true, so a seed cast to HUGEINT joins each to the other's rows. Each instance's users and orders rows must be its own user's"
   },
@@ -169,7 +170,8 @@
      "precision": 38,
      "scale": 0
     },
-    "joins": "own"
+    "joins": "own",
+    "related": "duckdb"
    },
    "why": "the same UHUGEINT key with users 6 and 7 holding 10^37 and 10^37+1, also equal to each other against a HUGEINT seed on DuckDB 1.5.6: each instance's rows must be its own user's"
   },
@@ -189,7 +191,8 @@
      "precision": 38,
      "scale": 0
     },
-    "joins": "own"
+    "joins": "own",
+    "related": "duckdb"
    },
    "why": "a lossless HUGEINT key with users 6 and 7 holding 10^37 and 10^37+1, received decimal128(38, 0): each instance's rows must be its own user's (HUGEINT against a HUGEINT seed compares exactly)"
   },
@@ -206,9 +209,75 @@
     "received": {
      "type": "int64"
     },
-    "joins": "own"
+    "joins": "own",
+    "related": "duckdb"
    },
    "why": "a control: a BIGINT key with users 6 and 7 holding 2^62+1 and 2^62+2, received int64: each instance's rows are its own user's, as the seed joins hold today"
+  },
+  {
+   "id": "mixed-key.negative-zero",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 0 THEN '-0.0'::DOUBLE ELSE user_id::DOUBLE END) AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), user_id::DECIMAL(38, 0) AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "decimal128",
+     "precision": 38,
+     "scale": 0
+    },
+    "related": "duckdb"
+   },
+   "why": "Codex's round 3 P1: users.user_id DECIMAL(38, 0) (received decimal128(38, 0)) and orders.user_id DOUBLE, an integer/float relationship the schema allows (sdm-schema assemble.rs), user 0's orders written -0.0. DuckDB's own join (o.user_id = u.user_id) matches -0.0 to 0, as the pre-part-3 t.key = s.key did: user 0's instance holds its 8 orders before 2024-03-01, and each context label is DuckDB's SUM. Comparing printed text, '-0.0' is not '0', and user 0 has no orders today"
+  },
+  {
+   "id": "mixed-key.exponent-doubles",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((10000000000000000::DOUBLE + 16 * user_id) AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (10000000000000000::DECIMAL(38, 0) + 16 * user_id) AS user_id FROM users"
+   ],
+   "indices": [
+    {
+     "t": "i64",
+     "v": "10000000000000000"
+    },
+    {
+     "t": "i64",
+     "v": "10000000000000016"
+    }
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "decimal128",
+     "precision": 38,
+     "scale": 0
+    },
+    "related": "duckdb"
+   },
+   "why": "Codex's round 3 P1: users.user_id DECIMAL(38, 0) 10^16 + 16k and orders.user_id the DOUBLEs that hold those values exactly, which DuckDB writes in exponent form (1e+16 and so on). Each user's instances hold its own orders and labels, as DuckDB's numeric join gives them; by printed text nothing matches today. The entities predicted for are 10^16 and 10^16 + 16"
+  },
+  {
+   "id": "bigint-double-key.control",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE (user_id::DOUBLE AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), user_id AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "int64"
+    },
+    "related": "duckdb"
+   },
+   "why": "a control: the base's BIGINT users.user_id against a DOUBLE orders.user_id, an integer/float relationship joined natively today: each instance's orders and labels are DuckDB's"
   }
  ]
 }
