@@ -156,3 +156,26 @@ def test_a_varint_key_has_each_tier() -> None:
             '::VARINT AS user_id' in orders and '::VARINT AS user_id' in users
         )
         assert not any(s.startswith('SET ') for s in row['witness'])
+
+
+def test_a_big_integer_key_joins_only_its_own_rows() -> None:
+    # The subagent's round 2 P1: keys in the decimal tier that differ in
+    # low bits only, each instance's rows held to its own user.
+    by_id = {r['id']: r for r in ROWS}
+    keys = {
+        'uhugeint-key.low-bits': ('UHUGEINT', D38),
+        'uhugeint-key.past-37-digits': ('UHUGEINT', D38),
+        'hugeint-key.past-37-digits': ('HUGEINT', D38),
+        'bigint-key.control': ('BIGINT', I64),
+    }
+    for row_id, (sql_type, received) in keys.items():
+        row = by_id[row_id]
+        assert row['column'] == 'user_id', row_id
+        assert row['want']['joins'] == 'own', row_id
+        assert row['want']['received'] == received, row_id
+        orders, users = row['witness'][-2:]
+        for statement in (orders, users):
+            assert f'::{sql_type} END) AS user_id' in statement, row_id
+    assert by_id['uhugeint-key.low-bits']['witness'][0] == LOSSLESS
+    low = by_id['uhugeint-key.low-bits']['witness'][-1]
+    assert f'{2**64 + 1}::UHUGEINT' in low and f'{2**64 + 2}::UHUGEINT' in low

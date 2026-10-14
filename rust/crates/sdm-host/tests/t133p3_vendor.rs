@@ -37,10 +37,12 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use arrow_array::cast::AsArray;
+use arrow_array::types::Int64Type;
 use arrow_array::{ArrayRef, BinaryArray, FixedSizeBinaryArray, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_core::ArrowData;
-use sdm_host::admit;
+use sdm_host::{admit, admit_from};
 
 const PENDING: &str = "contract/tests/t133p3-pending.json";
 const GROUP: &str = "host-vendor";
@@ -129,9 +131,22 @@ fn as_storage(values: &ArrayRef) -> ArrowData {
 /// `type_name` of `vendor`, holding `values`, through `admit`: admitted
 /// as its storage is, never decoded: the storage's admitted type, the
 /// same values.
-fn admitted_as_storage(type_name: &str, vendor: Option<&str>, values: &ArrayRef) {
+///
+/// `declared` is the vendor the source declares at the data boundary:
+/// `None` admits through `admit` (which declares none), `Some` through
+/// `admit_from`, as `HostRun` admits a fetch (runs.rs).
+fn admitted_as_storage(
+    type_name: &str,
+    vendor: Option<&str>,
+    declared: Option<&str>,
+    values: &ArrayRef,
+) {
     let data = opaque(type_name, vendor, Arc::clone(values));
-    let admitted = match admit(&data) {
+    let result = match declared {
+        None => admit(&data),
+        Some(declared) => admit_from(&data, Some(declared)),
+    };
+    let admitted = match result {
         Ok(admitted) => admitted,
         Err(refused) => panic!("{type_name} of vendor {vendor:?}: refused {refused:?}"),
     };
@@ -153,9 +168,9 @@ fn admitted_as_storage(type_name: &str, vendor: Option<&str>, values: &ArrayRef)
     );
 }
 
-fn not_decoded(vendor: Option<&str>) {
+fn not_decoded(vendor: Option<&str>, declared: Option<&str>) {
     for (type_name, values) in cases() {
-        admitted_as_storage(type_name, vendor, &values);
+        admitted_as_storage(type_name, vendor, declared, &values);
     }
 }
 
@@ -165,7 +180,7 @@ fn not_decoded(vendor: Option<&str>) {
 fn another_vendor_s_hugeint_is_not_read_as_a_number() {
     held("another_vendor_s_hugeint_is_not_read_as_a_number", || {
         let seven = 7i128.to_le_bytes();
-        admitted_as_storage("hugeint", Some("other-vendor"), &fixed(16, &[&seven]));
+        admitted_as_storage("hugeint", Some("other-vendor"), None, &fixed(16, &[&seven]));
     });
 }
 
@@ -173,7 +188,7 @@ fn another_vendor_s_hugeint_is_not_read_as_a_number() {
 fn a_hugeint_naming_no_vendor_is_not_read_as_a_number() {
     held("a_hugeint_naming_no_vendor_is_not_read_as_a_number", || {
         let seven = 7i128.to_le_bytes();
-        admitted_as_storage("hugeint", None, &fixed(16, &[&seven]));
+        admitted_as_storage("hugeint", None, None, &fixed(16, &[&seven]));
     });
 }
 
@@ -181,7 +196,7 @@ fn a_hugeint_naming_no_vendor_is_not_read_as_a_number() {
 fn another_vendor_s_opaque_types_are_admitted_as_before_part_3() {
     held(
         "another_vendor_s_opaque_types_are_admitted_as_before_part_3",
-        || not_decoded(Some("other-vendor")),
+        || not_decoded(Some("other-vendor"), None),
     );
 }
 
@@ -189,6 +204,66 @@ fn another_vendor_s_opaque_types_are_admitted_as_before_part_3() {
 fn opaque_types_naming_no_vendor_are_admitted_as_before_part_3() {
     held(
         "opaque_types_naming_no_vendor_are_admitted_as_before_part_3",
-        || not_decoded(None),
+        || not_decoded(None, None),
     );
+}
+
+// Round 2 (the subagent's P3-2): the tests above go through `admit`, which
+// declares no vendor and so never reaches the comparison of a column's
+// `vendor_name` with the declared one. These go through `admit_from` with
+// "DuckDB" declared, as `HostRun` admits a DuckDB source's fetch: the
+// comparison decides each. Each failed with the comparison removed
+// (checked in a scratch edit of extensions.rs at 59a4efef).
+
+const DUCKDB: &str = "DuckDB";
+
+#[test]
+fn duckdb_declared_another_vendor_s_opaque_types_are_admitted_as_before_part_3() {
+    held(
+        "duckdb_declared_another_vendor_s_opaque_types_are_admitted_as_before_part_3",
+        || not_decoded(Some("other-vendor"), Some(DUCKDB)),
+    );
+}
+
+#[test]
+fn duckdb_declared_opaque_types_naming_no_vendor_are_admitted_as_before_part_3() {
+    held(
+        "duckdb_declared_opaque_types_naming_no_vendor_are_admitted_as_before_part_3",
+        || not_decoded(None, Some(DUCKDB)),
+    );
+}
+
+/// The positive control: DuckDB declared and named, each type is read by
+/// DuckDB's layout, never admitted as its storage.
+#[test]
+fn duckdb_declared_duckdb_s_opaque_types_are_read() {
+    held("duckdb_declared_duckdb_s_opaque_types_are_read", || {
+        for (type_name, values) in cases() {
+            let data = opaque(type_name, Some(DUCKDB), Arc::clone(&values));
+            let admitted = admit_from(&data, Some(DUCKDB))
+                .unwrap_or_else(|e| panic!("{type_name}: refused {e:?}"));
+            let storage = as_storage(&values);
+            let read = admitted.schema.field(0).data_type();
+            assert_ne!(
+                read,
+                storage.schema.field(0).data_type(),
+                "{type_name} of DuckDB, DuckDB declared, was not read"
+            );
+            let column = admitted.batches[0].column(0);
+            match type_name {
+                "hugeint" | "uhugeint" | "bignum" => {
+                    assert_eq!(read, &DataType::Int64, "{type_name}");
+                    assert_eq!(column.as_primitive::<Int64Type>().value(0), 7);
+                }
+                "bit" => {
+                    assert_eq!(read, &DataType::Utf8, "{type_name}");
+                    assert_eq!(column.as_string::<i32>().value(0), "101");
+                }
+                _ => assert!(
+                    matches!(read, DataType::Time64(_) | DataType::Timestamp(..)),
+                    "{type_name} read as {read}"
+                ),
+            }
+        }
+    });
 }

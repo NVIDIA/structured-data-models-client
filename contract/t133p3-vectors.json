@@ -1,6 +1,6 @@
 {
  "format": "sdm-t133p3-vectors/1",
- "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). The types' rows (P1B-43, the big-integer rule) are contract/type-set-vectors.json's, those with `cells`, read by the same test; these are its controls and the text_time rows. Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. The varint-key rows (fix round 1) instead make the key itself, users.user_id and orders.user_id, a VARINT, `column` the key, so materialize's seed joins run on it in each big-integer tier. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
+ "about": "T1.33 part 3 (written by the package's independent test author, before the implementation), on the owner's answers of 2026-10-14 (items 24 and 26). The types' rows (P1B-43, the big-integer rule) are contract/type-set-vectors.json's, those with `cells`, read by the same test; these are its controls and the text_time rows. Each row adds a column `column` to contract/bases.yaml's `shop` `users` by its `witness`, the DuckDB statements run after shop's, and runs nested.list-int's case on rust-host through real DuckDB (rust/crates/sdm-testkit/tests/t133p3_reads.rs). `want`: the column described with `dtype` as the wire names it (and `stype`, and the table's `time_column`, where given); and its cells in the predict call's body: `cast`, each row's cell equal to DuckDB's own CAST(column AS VARCHAR) for that user (a number's cell as its text, so exact), `null`, every cell null, as the core sends a time of day, or none checked. The varint-key rows (fix round 1) instead make the key itself, users.user_id and orders.user_id, a VARINT, `column` the key, so materialize's seed joins run on it in each big-integer tier. The key rows of round 2 (`want.joins`: \"own\") also hold every users and orders row of each instance, in the body's predict and context, to that instance's own user: a seed join matching a key it does not equal puts another user's rows there. Expected values come from DuckDB at run time, never written here. The reference's answers for the text rows were probed with contract/tools/nested_type_record.py's run in the reference environment (DuckDB 1.5.6).",
  "rows": [
   {
    "id": "text.control",
@@ -132,6 +132,83 @@
     }
    },
    "why": "a control: the same VARINT key with user 7's id 10^42, past 38 digits, so received utf8; VARINT against VARCHAR compares in DuckDB, so materialize succeeds, each key cell exact (passed at 08c531b5, the subagent's probe)"
+  },
+  {
+   "id": "uhugeint-key.low-bits",
+   "column": "user_id",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 6 THEN 18446744073709551617::UHUGEINT WHEN user_id = 7 THEN 18446744073709551618::UHUGEINT ELSE user_id::UHUGEINT END) AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 6 THEN 18446744073709551617::UHUGEINT WHEN user_id = 7 THEN 18446744073709551618::UHUGEINT ELSE user_id::UHUGEINT END) AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "decimal128",
+     "precision": 38,
+     "scale": 0
+    },
+    "joins": "own"
+   },
+   "why": "the subagent's round 2 P1: a lossless UHUGEINT key (users.user_id and orders.user_id) received decimal128(38, 0), users 6 and 7 holding 2^64+1 and 2^64+2, which differ in their low bits only; DuckDB 1.5.6 holds CAST(2^64+1 AS UHUGEINT) = CAST(2^64+2 AS HUGEINT) true, so a seed cast to HUGEINT joins each to the other's rows. Each instance's users and orders rows must be its own user's"
+  },
+  {
+   "id": "uhugeint-key.past-37-digits",
+   "column": "user_id",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 6 THEN 10000000000000000000000000000000000000::UHUGEINT WHEN user_id = 7 THEN 10000000000000000000000000000000000001::UHUGEINT ELSE user_id::UHUGEINT END) AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 6 THEN 10000000000000000000000000000000000000::UHUGEINT WHEN user_id = 7 THEN 10000000000000000000000000000000000001::UHUGEINT ELSE user_id::UHUGEINT END) AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "decimal128",
+     "precision": 38,
+     "scale": 0
+    },
+    "joins": "own"
+   },
+   "why": "the same UHUGEINT key with users 6 and 7 holding 10^37 and 10^37+1, also equal to each other against a HUGEINT seed on DuckDB 1.5.6: each instance's rows must be its own user's"
+  },
+  {
+   "id": "hugeint-key.past-37-digits",
+   "column": "user_id",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 6 THEN 10000000000000000000000000000000000000::HUGEINT WHEN user_id = 7 THEN 10000000000000000000000000000000000001::HUGEINT ELSE user_id::HUGEINT END) AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 6 THEN 10000000000000000000000000000000000000::HUGEINT WHEN user_id = 7 THEN 10000000000000000000000000000000000001::HUGEINT ELSE user_id::HUGEINT END) AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "decimal128",
+     "precision": 38,
+     "scale": 0
+    },
+    "joins": "own"
+   },
+   "why": "a lossless HUGEINT key with users 6 and 7 holding 10^37 and 10^37+1, received decimal128(38, 0): each instance's rows must be its own user's (HUGEINT against a HUGEINT seed compares exactly)"
+  },
+  {
+   "id": "bigint-key.control",
+   "column": "user_id",
+   "witness": [
+    "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE ((CASE WHEN user_id = 6 THEN 4611686018427387905::BIGINT WHEN user_id = 7 THEN 4611686018427387906::BIGINT ELSE user_id::BIGINT END) AS user_id) FROM orders",
+    "CREATE OR REPLACE TABLE users AS SELECT * EXCLUDE (user_id), (CASE WHEN user_id = 6 THEN 4611686018427387905::BIGINT WHEN user_id = 7 THEN 4611686018427387906::BIGINT ELSE user_id::BIGINT END) AS user_id FROM users"
+   ],
+   "want": {
+    "dtype": "int64",
+    "cells": "cast",
+    "received": {
+     "type": "int64"
+    },
+    "joins": "own"
+   },
+   "why": "a control: a BIGINT key with users 6 and 7 holding 2^62+1 and 2^62+2, received int64: each instance's rows are its own user's, as the seed joins hold today"
   }
  ]
 }

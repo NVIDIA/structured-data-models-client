@@ -294,6 +294,51 @@ fn problem(row: &Value, bases: &Bases, template: &Case) -> Option<String> {
         }
         _ => {}
     }
+    if want["joins"] == "own" {
+        return joined_elsewhere(&predicted["body"]);
+    }
+    None
+}
+
+/// Where the body joins a row to another entity's, or `None`: under
+/// `nested.list-int`'s query (users, their orders by `user_id`, and those
+/// orders' users), every `users` and `orders` row an instance holds, in
+/// `predict` and `context`, has the `user_id` of the instance's own
+/// entity. A seed join that matches a key it does not equal (the
+/// subagent's round 2 P1: a UHUGEINT key against a HUGEINT seed) puts
+/// another user's rows under an instance.
+fn joined_elsewhere(body: &Value) -> Option<String> {
+    for part in ["predict", "context"] {
+        let instances = &body[part]["instance_table"];
+        let columns = instances["columns"].as_array()?;
+        let entity_at = columns.iter().position(|c| c == "__kumo_entity_ref_0")?;
+        let entity: BTreeMap<String, Option<String>> = instances["rows"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|r| Some((cell_text(&r[0])?, cell_text(&r[entity_at]))))
+            .collect();
+        for table in ["users", "orders"] {
+            let held = &body[part]["related_tables"][table];
+            let Some(columns) = held["columns"].as_array() else {
+                return Some(format!("{part}: no {table} rows"));
+            };
+            let at = |name: &str| columns.iter().position(|c| c == name);
+            let (Some(instance), Some(key)) = (at("instance_id"), at("user_id")) else {
+                return Some(format!("{part}: {table} has no instance_id or user_id"));
+            };
+            for row in held["rows"].as_array().into_iter().flatten() {
+                let id = cell_text(&row[instance]);
+                let own = id.as_ref().and_then(|i| entity.get(i)).cloned().flatten();
+                let user = cell_text(&row[key]);
+                if user != own {
+                    return Some(format!(
+                        "{part}: instance {id:?} of user {own:?} holds a {table} row of user {user:?}"
+                    ));
+                }
+            }
+        }
+    }
     None
 }
 
