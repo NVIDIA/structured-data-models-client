@@ -683,7 +683,8 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
 /// `request` with its seed key column naming the joined key's declared
 /// type ([`SEED_KEY_TYPE`]), read from the source's catalog, for a
 /// `neighbors` or `lookup` whose seed key is `decimal128(38, 0)` on a data
-/// layer that joins by it (`Asker::reads_key_types`): the one seed type no
+/// layer that joins by it (`Asker::reads_key_types`), for [`ask`] and
+/// [`ask_all_vec`] alike: the one seed type no
 /// single comparison joins exactly with every key it may meet (a VARINT
 /// and a UHUGEINT key alike, or a DOUBLE as before part 3; register
 /// P1B-43). Any other request is as it came.
@@ -807,6 +808,11 @@ pub(crate) async fn ask_all_vec(
     asker: &Asker,
     requests: Vec<DataRequest>,
 ) -> Result<Vec<ArrowData>, CoreError> {
+    let mut typed = Vec::with_capacity(requests.len());
+    for request in requests {
+        typed.push(typed_seeds(asker, request).await?);
+    }
+    let requests = typed;
     let names: Vec<&'static str> = requests.iter().map(DataRequest::name).collect();
     let asks = requests
         .into_iter()
