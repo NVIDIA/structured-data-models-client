@@ -4545,12 +4545,14 @@ entries:
   affected_inputs: >-
     The case files of the 23 cases named, which the ratchet's cases rule
     passes only under an approved entry naming each, and their baselines.
-  cases: [T1.32g, empty.entity-without-facts, empty.fact-table, empty.indices, key.declared-int32, key.uint64-above-int64-max, key.uint64-small, key.uint8, key.varchar, nested.fixed-array, nested.list-int, nested.map, nested.struct, nested.union, null.feature-all-null, null.some-foreign-keys, null.some-times, null.target-all-null, refuse.unknown-column, key.decimal-18-0, key.decimal-38-10, key.hugeint, key.varchar-large-buffers, decimal.class-target-38-18]
+  cases: [T1.32g]
   status: approved
   approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E95}
   notes: >-
-    The admission record H19 asks for, with no deviation of its own, for
+    The admission record H19 asks for, with no deviation of its own; its
+    cases the package alone, as P1B-72's, so it excuses no case's outcome
+    (its case_outcomes authorize the case files), for
     both reviewers to approve (as P1B-26), never the implementer. Where the
     core's outcome is not the reference's, the entry stating it carries the
     first admission's case_outcomes too (P1B-7, P1B-9, P1B-10, P1B-11, each
@@ -4656,12 +4658,14 @@ entries:
   affected_inputs: >-
     The case files of the 12 cases named, which the ratchet's cases rule
     passes only under an approved entry naming each, and their baselines.
-  cases: [T1.32e, T1.32g, feature.bool, time.date, time.feature-date-and-timestamp-with-null, time.feature-interval, time.feature-time-of-day, time.text-declared, time.text-iso-date, time.text-one-bad-value, time.text-us-date, time.timestamp-ns, time.timestamp-s, time.timestamptz]
+  cases: [T1.32e, T1.32g]
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E98}
   notes: >-
-    The admission record H19 asks for, with no deviation of its own, for
+    The admission record H19 asks for, with no deviation of its own; its
+    cases the package alone, as P1B-72's, so it excuses no case's outcome
+    (its case_outcomes authorize the case files), for
     both reviewers to approve (as P1B-26 and P1B-53), never the
     implementer. P1B-8 and DT-12, each owner-approved, carry the first
     admission's case_outcomes where the core's outcome is not the
