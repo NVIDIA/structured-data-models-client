@@ -4154,8 +4154,8 @@ entries:
   cases: [T1.33]
   refs:
   - 'contract/type-set-vectors.json#struct.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
   notes: >-
     A named refusal where the reference fails unnamed, E66(b)'s class, for the
@@ -4165,6 +4165,13 @@ entries:
     pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
     to its transition by contract/tests/test_t133_type_set.py, pending until
     an approved entry names it. Never self-approved.
+    Approved by both reviewers of T1.33 part 2's review round 2 at 2954c46b
+    (Codex and the independent subagent: APPROVE-P1B-47, a named refusal where
+    the reference fails unnamed, within E66(b); reports
+    /tmp/sdm-rust-t1.33-p2-codex-r2.md and
+    ~/.local/share/sdm-dbx/phase-1-rereview/t1.33-p2-subagent-r2.md), relayed
+    by the orchestrator, recorded at T1.33 fix 1; never the implementer's
+    approval.
 
 - id: P1B-48
   title: An ENUM column is refused by name where the reference fails unnamed
@@ -4190,8 +4197,8 @@ entries:
   - 'contract/type-set-vectors.json#dictionary.uint8-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   - 'contract/type-set-vectors.json#dictionary.uint16-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   - 'contract/type-set-vectors.json#dictionary.uint32-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
   notes: >-
     A named refusal where the reference fails unnamed, E66(b)'s class, for the
@@ -4207,6 +4214,13 @@ entries:
     (300 and 70,000 members), which both reviews found reachable: the same
     transition. Codex's APPROVE-P1B-48 of review round 1 covered the uint8 ref
     alone, so the entry, changed, waits for both reviewers.
+    Approved by both reviewers of T1.33 part 2's review round 2 at 2954c46b
+    (Codex and the independent subagent: APPROVE-P1B-48, a named refusal where
+    the reference fails unnamed, within E66(b); reports
+    /tmp/sdm-rust-t1.33-p2-codex-r2.md and
+    ~/.local/share/sdm-dbx/phase-1-rereview/t1.33-p2-subagent-r2.md), relayed
+    by the orchestrator, recorded at T1.33 fix 1; never the implementer's
+    approval.
 
 - id: P1B-49
   title: A struct, map or union DuckDB hands over in another Arrow form is refused by name where the reference fails unnamed
@@ -4238,8 +4252,8 @@ entries:
   - 'contract/type-set-vectors.json#map.utf8-int64 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   - 'contract/type-set-vectors.json#large.union refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
   - 'contract/type-set-vectors.json#view.union refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
   notes: >-
     A named refusal where the reference fails unnamed, E66(b)'s class, for the
@@ -4255,6 +4269,13 @@ entries:
     sdm-host's tests/t133_type_set.rs; each transition held by
     contract/tests/test_t133_type_set.py, pending until an approved entry
     names it. Never self-approved.
+    Approved by both reviewers of T1.33 part 2's review round 2 at 2954c46b
+    (Codex and the independent subagent: APPROVE-P1B-49, a named refusal where
+    the reference fails unnamed, within E66(b); reports
+    /tmp/sdm-rust-t1.33-p2-codex-r2.md and
+    ~/.local/share/sdm-dbx/phase-1-rereview/t1.33-p2-subagent-r2.md), relayed
+    by the orchestrator, recorded at T1.33 fix 1; never the implementer's
+    approval.
 
 # --- lane 1b entries (P1B-52..69) ---
 
