@@ -152,28 +152,20 @@ def _refuse_more_entities_than_fit_in_memory(
     asked = int(asked)
     calls = math.ceil(asked / per_call)
     met = [
-        (said, name)
-        for said, name, over in (
-            (
-                f'{MOST_ENTITIES:,} entities',
-                'MOST_ENTITIES',
-                asked > MOST_ENTITIES,
-            ),
-            (f'{MOST_CALLS:,} calls', 'MOST_CALLS', calls > MOST_CALLS),
+        said
+        for said, over in (
+            (f'{MOST_ENTITIES:,} entities', asked > MOST_ENTITIES),
+            (f'{MOST_CALLS:,} calls', calls > MOST_CALLS),
         )
         if over
     ]
     if not met:
         return
-    too_many = ' and '.join(said for said, _ in met)
-    raisable = ' and '.join(name for _, name in met)
     raise StructuredDataError(
         f'{asked:,} entities are gathered as {calls:,} calls of '
         f'{per_call:,}, and every one is built, with its own context, before '
-        f'any is sent. That is past the {too_many} this will hold at once; '
-        f'ask about fewer entities at a time, or raise '
-        f'sdm_client.materializers.relational.{raisable} if the memory is '
-        f'yours to spend',
+        f'any is sent. That is past the {" and ".join(met)} this will hold at '
+        f'once; ask about fewer entities at a time',
         code='UNSUPPORTED_REQUEST',
         details={
             'entities': asked,
