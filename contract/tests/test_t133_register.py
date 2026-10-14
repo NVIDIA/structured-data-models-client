@@ -13,8 +13,11 @@ design.md "Register v2"; H19), held on ``docs/design/rust-core/
 register.yaml`` and ``phase-1/decisions.md``:
 
 - "no proposed entry left without its approver": every entry still
-  ``proposed`` carries ``approver``, ``owner`` or ``reviewer``, who must
-  approve it (the register's ``approved_by`` stays null until then);
+  ``proposed`` says in its ``notes`` who must approve it, by the plain
+  convention ``Approver: owner`` or ``Approver: reviewer`` (case-sensitive;
+  exactly one of the two), so the register's schema, which the
+  checkpoint's ``register.py`` reads, gains no field (orchestrator
+  decision); ``approved_by`` stays null until then;
 - "every changed case's entry complete": every case flagged ``register``
   (a case whose answer the core changes) is named, in ``cases`` or
   ``case_outcomes``, by an entry that is not rejected and is not one of
@@ -40,6 +43,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -54,7 +58,8 @@ DECISIONS = ROOT / 'docs/design/rust-core/phase-1/decisions.md'
 CASES = ROOT / 'contract/cases'
 #: The umbrella entries the owner closed as superseded.
 UMBRELLAS = ('P1B-1', 'P1B-2', 'P1B-3', 'P1B-4')
-APPROVERS = ('owner', 'reviewer')
+#: How a proposed entry's notes name its approver.
+APPROVER = re.compile(r'Approver: (owner|reviewer)\b')
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -97,6 +102,11 @@ def _cases() -> list[dict[str, Any]]:
     ]
 
 
+def _approvers(entry: dict[str, Any]) -> set[str]:
+    r"""Who the entry's notes say must approve it (``Approver: ...``)."""
+    return set(APPROVER.findall(str(entry.get('notes') or '')))
+
+
 def _held(name: str, check: Any) -> None:
     G.held('exits', f'py:{name}', check)
 
@@ -107,9 +117,9 @@ def _held(name: str, check: Any) -> None:
 def test_no_entry_is_proposed_without_its_approver() -> None:
     def check() -> None:
         missing = [
-            f'{e["id"]}: approver {e.get("approver")!r}'
+            f'{e["id"]}: approvers named {_approvers(e)}'
             for e in _entries()
-            if e['status'] == 'proposed' and e.get('approver') not in APPROVERS
+            if e['status'] == 'proposed' and len(_approvers(e)) != 1
         ]
         assert missing == [], missing
 
@@ -181,7 +191,7 @@ def test_dt_7_is_the_reviewer_s() -> None:
         entry = _entry('DT-7')
         assert entry['status'] in ('proposed', 'approved'), entry['status']
         if entry['status'] == 'proposed':
-            assert entry.get('approver') == 'reviewer'
+            assert _approvers(entry) == {'reviewer'}
         else:
             assert entry['approved_by'] == 'reviewer'
 
