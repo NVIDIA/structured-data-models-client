@@ -1,11 +1,15 @@
 {
- "about": "T1.32b's acceptance tests that failed when the independent test author wrote them, before the implementation, at ca9a8b5f (contract/tests/test_t132b_decimal_vectors.py, test_t132b_decimal_family.py, tests/test_t132b_cell_claims.py, packages/structured-data-models-client/tests_test_ops/test_t132b_canary.py, sdm-testkit's tests/t132b_decimal_vectors.rs and t132b_decimal_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The cell-claim seeds wait for coverage rule 6 (T1.32a part 2); decimal.class-target-38-18's answer waits for P1B-18's approval.",
+ "about": "T1.32b's acceptance tests that failed when the independent test author wrote them, before the implementation, at ca9a8b5f (contract/tests/test_t132b_decimal_vectors.py, test_t132b_decimal_family.py, tests/test_t132b_cell_claims.py, packages/structured-data-models-client/tests_test_ops/test_t132b_canary.py, sdm-testkit's tests/t132b_decimal_vectors.rs and t132b_decimal_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The cell-claim seeds wait for coverage rule 6 (T1.32a part 2); decimal.class-target-38-18's answer waits for P1B-18's approval. T1.32's bundled admission (the owner's decision on P1B-71, 2026-10-13: a float constant at a decimal's scale of 23 to 38 read exactly, no refusal) adds four rust: exits, sdm-engine's labels.rs unit tests, written by the independent test author on rust-core-phase-1-lane-1b at 469c1924, failing then because the core refused every float past scale 22 by name (condition_value).",
  "pending": {
   "python-core": [],
   "rust-host": [],
   "exits": [
    "py:test_a_contradicted_cell_claim_fails[type]",
-   "py:test_each_case_is_admitted[decimal.class-target-38-18]"
+   "py:test_each_case_is_admitted[decimal.class-target-38-18]",
+   "rust:a_float_constant_half_way_past_scale_22_rounds_to_even",
+   "rust:a_float_constant_its_decimal_cannot_hold_past_scale_22_is_the_caller_s_error",
+   "rust:a_float_constant_reads_exactly_at_scales_23_to_38",
+   "rust:a_static_decimal_past_scale_22_is_compared_with_a_float_exactly"
   ]
  },
  "authored": {
@@ -331,7 +335,11 @@
    "py:test_null_decimal_18_2_is_cleared",
    "py:test_python_core_answers_each_case_as_python_ref[decimal.class-target-38-18]",
    "rust:every_statement_the_family_runs_is_pinned_in_sdm_data_s_tests",
-   "rust:rust_host_answers_each_case_as_python_ref"
+   "rust:rust_host_answers_each_case_as_python_ref",
+   "rust:a_float_constant_half_way_past_scale_22_rounds_to_even",
+   "rust:a_float_constant_its_decimal_cannot_hold_past_scale_22_is_the_caller_s_error",
+   "rust:a_float_constant_reads_exactly_at_scales_23_to_38",
+   "rust:a_static_decimal_past_scale_22_is_compared_with_a_float_exactly"
   ]
  }
 }
