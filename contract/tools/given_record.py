@@ -142,6 +142,13 @@ NOT_A_NAME = {
     'rule': 'time_column_not_a_name',
 }
 EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
+#: D3's refusal of a key naming ``order_id`` twice.
+TWICE = {
+    'field': 'primary_keys',
+    'table': 'orders',
+    'column': 'order_id',
+    'rule': 'key_column_twice',
+}
 COMPOSITE = refused(
     'UNSUPPORTED_REQUEST', operation='describe_source', rule='composite_key'
 )
@@ -252,12 +259,32 @@ VECTORS: list[dict[str, Any]] = [
         spec({'orders': U}),
         refused('INVALID_REQUEST', **NOT_NAMES),
     ),
+    # D3 (P1B-73, the owner's): a key naming a column twice is refused by
+    # describe_source, after its columns' existence and before a composite
+    # key; edit_schema takes it as it does today. Without D3 the core
+    # refuses it as any composite key (E92), the default this vector held.
     case(
         'key.twice',
         {'primary_keys': {'orders': ['order_id', 'order_id']}},
         spec({'orders': V(['order_id', 'order_id'])}),
-        COMPOSITE,
-        {'phase2': 'composite_key'},
+        refused('INVALID_REQUEST', **TWICE),
+        {'entry': 'P1B-73', 'transition': 'success -> refusal INVALID_REQUEST'},
+        owner='D3',
+    ),
+    case(
+        'key.twice-before-composite',
+        {'primary_keys': {'orders': ['order_id', 'user_id', 'order_id']}},
+        spec({'orders': V(['order_id', 'user_id', 'order_id'])}),
+        refused('INVALID_REQUEST', **TWICE),
+        {'entry': 'P1B-73', 'transition': 'success -> refusal INVALID_REQUEST'},
+        owner='D3',
+    ),
+    case(
+        'key.twice-missing-first',
+        {'primary_keys': {'orders': ['nope', 'nope']}},
+        spec({'orders': V(['nope', 'nope'])}),
+        refused('INVALID_REQUEST', **EMPTY_KEY, column='nope'),
+        owner='D3',
     ),
     case(
         'key.composite',
@@ -486,6 +513,26 @@ VECTORS: list[dict[str, Any]] = [
         'register': None,
         'reference_why': 'the setter clears the time column, as '
         'describe_source does',
+    },
+    {
+        'id': 'edit.key-twice',
+        'kind': 'edit',
+        'owner': 'D3',
+        'set': {
+            'table': 'orders',
+            'attribute': 'primary_key',
+            'value': ['order_id', 'order_id'],
+        },
+        'edit': {
+            'edit': 'primary_key',
+            'table': 'orders',
+            'key': V(['order_id', 'order_id']),
+        },
+        'core': described((['order_id', 'order_id'], 'ts')),
+        'pair': 'key.twice',
+        'register': None,
+        'reference_why': 'D3 is describe_source only: the setter takes the '
+        'key as it does today, as the reference does',
     },
 ]
 

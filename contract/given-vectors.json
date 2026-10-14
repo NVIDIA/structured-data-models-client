@@ -483,7 +483,7 @@
   {
    "id": "key.twice",
    "kind": "case",
-   "owner": null,
+   "owner": "D3",
    "from_source": {
     "primary_keys": {
      "orders": [
@@ -507,14 +507,17 @@
    "core": {
     "outcome": "refusal",
     "at": "run",
-    "code": "UNSUPPORTED_REQUEST",
+    "code": "INVALID_REQUEST",
     "fields": {
-     "operation": "describe_source",
-     "rule": "composite_key"
+     "field": "primary_keys",
+     "table": "orders",
+     "column": "order_id",
+     "rule": "key_column_twice"
     }
    },
    "register": {
-    "phase2": "composite_key"
+    "entry": "P1B-73",
+    "transition": "success -> refusal INVALID_REQUEST"
    },
    "reference": {
     "result": "success",
@@ -536,6 +539,115 @@
       "time_column": null
      }
     }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.twice-before-composite",
+   "kind": "case",
+   "owner": "D3",
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "user_id",
+      "order_id"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "order_id",
+       "user_id",
+       "order_id"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "column": "order_id",
+     "rule": "key_column_twice"
+    }
+   },
+   "register": {
+    "entry": "P1B-73",
+    "transition": "success -> refusal INVALID_REQUEST"
+   },
+   "reference": {
+    "result": "success",
+    "stage": "from_source",
+    "error": null,
+    "code": null,
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id",
+       "user_id",
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "reference_why": null
+  },
+  {
+   "id": "key.twice-missing-first",
+   "kind": "case",
+   "owner": "D3",
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "nope",
+      "nope"
+     ]
+    }
+   },
+   "spec": {
+    "tables": [],
+    "primary_keys": {
+     "orders": {
+      "value": [
+       "nope",
+       "nope"
+      ]
+     }
+    },
+    "time_columns": {}
+   },
+   "core": {
+    "outcome": "refusal",
+    "at": "run",
+    "code": "INVALID_REQUEST",
+    "fields": {
+     "field": "primary_keys",
+     "table": "orders",
+     "column": "nope"
+    }
+   },
+   "register": null,
+   "reference": {
+    "result": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "tables": null
    },
    "reference_why": null
   },
@@ -1867,6 +1979,52 @@
    "pair": "time.null",
    "register": null,
    "reference_why": "the setter clears the time column, as describe_source does",
+   "reference": null
+  },
+  {
+   "id": "edit.key-twice",
+   "kind": "edit",
+   "owner": "D3",
+   "set": {
+    "table": "orders",
+    "attribute": "primary_key",
+    "value": [
+     "order_id",
+     "order_id"
+    ]
+   },
+   "edit": {
+    "edit": "primary_key",
+    "table": "orders",
+    "key": {
+     "value": [
+      "order_id",
+      "order_id"
+     ]
+    }
+   },
+   "core": {
+    "outcome": "success",
+    "at": "run",
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id",
+       "order_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
+    }
+   },
+   "pair": "key.twice",
+   "register": null,
+   "reference_why": "D3 is describe_source only: the setter takes the key as it does today, as the reference does",
    "reference": null
   }
  ]

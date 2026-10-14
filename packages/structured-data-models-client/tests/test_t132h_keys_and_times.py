@@ -455,12 +455,36 @@ ROWS = [
         'k.bytearray', lambda: bytearray(b'order_id'), U, NOT_NAMES, REF_REFUSED
     ),
     key('k.empty', lambda: [], V([]), refused(EMPTY_KEY), REF_REFUSED),
+    # D3 (P1B-73, the owner's): a column named twice, refused by name.
     key(
         'k.twice',
         lambda: ['order_id', 'order_id'],
         V(['order_id', 'order_id']),
-        refused(COMPOSITE, 'UNSUPPORTED_REQUEST', 'UnsupportedRequestError'),
+        refused(
+            {
+                'field': 'primary_keys',
+                'table': 'orders',
+                'column': 'order_id',
+                'rule': 'key_column_twice',
+            }
+        ),
         REF_OK,
+        owner='D3',
+    ),
+    key(
+        'k.twice-generator',
+        lambda: _names('order_id', 'user_id', 'order_id'),
+        V(['order_id', 'user_id', 'order_id']),
+        refused(
+            {
+                'field': 'primary_keys',
+                'table': 'orders',
+                'column': 'order_id',
+                'rule': 'key_column_twice',
+            }
+        ),
+        REF_OK,
+        owner='D3',
     ),
     key('k.member-int', lambda: ['order_id', 3], U, NOT_NAMES, REF_REFUSED),
     key('k.member-nan', lambda: [NAN], U, NOT_NAMES, REF_REFUSED),

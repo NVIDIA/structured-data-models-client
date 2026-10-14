@@ -1,9 +1,28 @@
 {
+ "D3": "D3 (added by the D3 commit, P1B-73, owner-pending): a key naming a column twice refused INVALID_REQUEST key_column_twice by describe_source alone, after the columns' existence and before composite_key; its vectors key.twice, key.twice-before-composite, key.twice-missing-first and edit.key-twice, and the client's k.twice rows. Dropping the D3 commit restores key.twice's default (UNSUPPORTED_REQUEST composite_key, E92).",
  "about": "T1.32h's acceptance tests that failed when the independent test author wrote them, before the implementation, at ea8bef64 (contract/tests/test_t132h_given_vectors.py, packages/structured-data-models-client/tests/test_t132h_keys_and_times.py, sdm-testkit's tests/t132h_given.rs; the vectors contract/given-vectors.json, recorded by contract/tools/given_record.py). 'python-core' and 'rust-host' are vector ids, a vector run as a case 'case:<id>'; 'exits' holds the other tests: 'py:' the Python test ids, 'py-register:' and 'py-edit:' the register and edit checks of a vector on python-core, 'rs:' and 'rs-edit:' the Rust checks. A group named for an owner decision (D3, D4) is added by that decision's own commit and dropped with it; its ids are the ids above prefixed with the group they would otherwise be in. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. Ids a D3 or D4 commit replaces sit where that commit's own lines are: D3's first in the python-core, rust-host and exits lists, D4's last in exits, so either commit can be dropped alone.",
  "pending": {
+  "D3": [
+   "exits:py-edit:edit.key-twice",
+   "exits:py-register:key.twice",
+   "exits:py-register:key.twice-before-composite",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[k.twice-generator]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[k.twice]",
+   "exits:rs-edit:edit.key-twice",
+   "python-core:case:key.twice",
+   "python-core:case:key.twice-before-composite",
+   "python-core:case:key.twice-missing-first",
+   "python-core:key.twice",
+   "python-core:key.twice-before-composite",
+   "python-core:key.twice-missing-first",
+   "rust-host:case:key.twice",
+   "rust-host:case:key.twice-before-composite",
+   "rust-host:case:key.twice-missing-first",
+   "rust-host:key.twice",
+   "rust-host:key.twice-before-composite",
+   "rust-host:key.twice-missing-first"
+  ],
   "python-core": [
-   "key.twice",
-   "case:key.twice",
    "case:key.bool",
    "case:key.composite",
    "case:key.empty",
@@ -62,8 +81,6 @@
    "wire.time-bare-string"
   ],
   "rust-host": [
-   "key.twice",
-   "case:key.twice",
    "case:key.bool",
    "case:key.composite",
    "case:key.empty",
@@ -121,7 +138,6 @@
    "wire.time-bare-string"
   ],
   "exits": [
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[k.twice]",
    "py-edit:edit.key-not-names",
    "py-edit:edit.key-null",
    "py-edit:edit.time-not-a-name",
@@ -211,9 +227,27 @@
   ]
  },
  "authored": {
+  "D3": [
+   "exits:py-edit:edit.key-twice",
+   "exits:py-register:key.twice",
+   "exits:py-register:key.twice-before-composite",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[k.twice-generator]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[k.twice]",
+   "exits:rs-edit:edit.key-twice",
+   "python-core:case:key.twice",
+   "python-core:case:key.twice-before-composite",
+   "python-core:case:key.twice-missing-first",
+   "python-core:key.twice",
+   "python-core:key.twice-before-composite",
+   "python-core:key.twice-missing-first",
+   "rust-host:case:key.twice",
+   "rust-host:case:key.twice-before-composite",
+   "rust-host:case:key.twice-missing-first",
+   "rust-host:key.twice",
+   "rust-host:key.twice-before-composite",
+   "rust-host:key.twice-missing-first"
+  ],
   "python-core": [
-   "key.twice",
-   "case:key.twice",
    "case:key.bool",
    "case:key.composite",
    "case:key.empty",
@@ -272,8 +306,6 @@
    "wire.time-bare-string"
   ],
   "rust-host": [
-   "key.twice",
-   "case:key.twice",
    "case:key.bool",
    "case:key.composite",
    "case:key.empty",
@@ -331,7 +363,6 @@
    "wire.time-bare-string"
   ],
   "exits": [
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[k.twice]",
    "py-edit:edit.key-not-names",
    "py-edit:edit.key-null",
    "py-edit:edit.time-not-a-name",
