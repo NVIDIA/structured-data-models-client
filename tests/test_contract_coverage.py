@@ -434,26 +434,63 @@ def test_the_generated_cell_list_passes(repo: Path) -> None:
     passing(check(repo, landed))
 
 
-@pytest.mark.parametrize('how', ['a diagnostic', 'a subset', 'out of order'])
+def _demotable(repo: Path, listed: list[str]) -> str:
+    r"""An acceptance case of ``listed`` whose every path another
+    acceptance case also names, so demoting it to diagnostic leaves the
+    active slice's paths covered (rule 5) and changes no claim (rule 6)."""
+    accepted = [each for each in corpus(repo) if each['status'] == 'acceptance']
+    for name in reversed(listed):
+        mine = next(each for each in accepted if each['id'] == name)
+        others = {
+            path
+            for each in accepted
+            if each['id'] != name
+            for path in each['paths']
+        }
+        if set(mine['paths']) <= others:
+            return name
+    raise AssertionError(f'no case naming {KEYED_CELL} can be demoted')
+
+
+@pytest.mark.parametrize(
+    'how',
+    ['a diagnostic', 'a diagnostic made here', 'a subset', 'out of order'],
+)
 def test_a_hand_edited_cell_list_fails(repo: Path, how: str) -> None:
     r"""A cell's list that is not the generated one fails rule 4, even when
     every case it holds names the cell: a diagnostic case naming it (the
     seed T1.15 wrote, when no acceptance case named a cell), one acceptance
-    case of the several naming it, or the generated cases out of order."""
+    case of the several naming it, or the generated cases out of order.
+
+    The diagnostic is one of the corpus's where a diagnostic case names the
+    cell; where none does (the families admitted), or always for ``a
+    diagnostic made here``, the candidate demotes one of the acceptance
+    cases naming it and lists that, so admissions never leave the seed
+    without its fixture."""
     landed = git(repo, 'rev-parse', 'HEAD')
     listed = _cell_cases(repo, 'acceptance')
+    assert len(listed) > 2, 'no three acceptance cases name the cell'
     diagnostic = _cell_cases(repo, 'diagnostic')
-    assert len(listed) > 1, 'no two acceptance cases name the cell'
-    assert diagnostic, 'no diagnostic case names the cell'
+    edits: list[Callable[[Path], None]] = []
+    if how == 'a diagnostic made here' or (
+        how == 'a diagnostic' and not diagnostic
+    ):
+        demoted = _demotable(repo, listed)
+        edits.append(case(demoted, lambda c: c.update(status='diagnostic')))
+        diagnostic = [demoted]
     edited = {
         'a diagnostic': diagnostic[:1],
+        'a diagnostic made here': diagnostic[:1],
         'a subset': listed[:1],
         'out of order': listed[::-1],
     }[how]
-    commit(
-        repo,
-        edit=manifest(PYTHON, update('cells', KEYED_CELL, cases=edited)),
-    )
+    edits.append(manifest(PYTHON, update('cells', KEYED_CELL, cases=edited)))
+
+    def edit(tree: Path) -> None:
+        for each in edits:
+            each(tree)
+
+    commit(repo, edit=edit)
     found = failing(check(repo, landed), 'rule 4', KEYED_CELL)
     assert rules(found) == {'rule 4'}, found
 
