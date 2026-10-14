@@ -979,6 +979,11 @@ entries:
     Reached at T1.24b too through an edit naming a text column the time
     column (the E49 differential, one source): the same codes on each
     route.
+  case_outcomes:
+  - {case: time.text-one-bad-value, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: time.text-one-bad-value, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: time.text-us-date, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: time.text-us-date, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: DT-13
   title: A zoned time column read in the fetching cursor's zone, as the reference reads it
@@ -2006,6 +2011,9 @@ entries:
     admission/interval of contract/refusal-maps/time.json, on python-core and
     rust-host. Both refuse; the class and code change. T1.32e resolves it
     when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32c its refs name the nested family's interval vectors (scalar.interval*, orders.interval), the same transition; T1.32e, which admits time.feature-interval, should know they exist. From T1.32d also the empty-null family's null.interval, an INTERVAL column all null on the entity table, the same transition: for a reviewer to hold to the approved meaning.
+  case_outcomes:
+  - {case: time.feature-interval, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: time.feature-interval, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-9
   title: nested.fixed-array is described on the core route where the reference fails with an unnamed RuntimeError
@@ -4030,8 +4038,8 @@ entries:
   cases: [T1.32e]
   refs:
   - 'contract/multicategorical-vectors.json#question.static-target refusal INTERNAL_ERROR -> refusal UNSUPPORTED_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E86}
   notes: >-
     A refusal to refusal clarification where the reference fails
@@ -4041,6 +4049,11 @@ entries:
     approved.
     Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to a named
     refusal, E66(b)'s class; its approval is recorded at the T1.32g bundle).
+    Approved by both reviewers of T1.32e part 2a's review round 2 (Codex and
+    the independent subagent: APPROVE-P1B-41, the reference's INTERNAL_ERROR
+    at materialize to the core's named UNSUPPORTED_REQUEST, within E66(b)),
+    relayed by the orchestrator, recorded at T1.32g; never the implementer's
+    approval.
 
 - id: P1B-42
   title: Times of day and ratios written as text, under a name that does not say time, are read as categories, where the reference reads them as times of the day it runs
@@ -4076,8 +4089,8 @@ entries:
   - 'contract/multicategorical-vectors.json#text.aspect-ratio refusal INVALID_REQUEST -> success'
   - 'contract/multicategorical-vectors.json#large.times-then-multi-after-1000 refusal INVALID_REQUEST -> success'
   - 'contract/multicategorical-vectors.json#fact.time-of-day success -> success'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E86}
   notes: >-
     A refusal to success change (E66(b), E73(b)), for the owner. Measured
@@ -4092,6 +4105,9 @@ entries:
     Approver: owner (T1.33: a refusal to success, kept by E66(b) for
     individual decision; the owner approved it on 2026-10-13, evening,
     recorded at the T1.32g bundle, E99(b), not here).
+    Approved by the owner on 2026-10-13 (evening, E99(b): text such as 09:30
+    in a column not named as a time stays categorical), relayed by the
+    orchestrator, recorded at T1.32g; never the implementer's approval.
 
 - id: P1B-43
   title: A column DuckDB hands over as an Arrow extension type is read by its storage, where the reference fails unnamed or reads it as a time
@@ -4617,6 +4633,77 @@ entries:
   - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+
+- id: P1B-55
+  title: The time and feature cases admitted to acceptance, each runner held to its observed outcome
+  kind: keep
+  old_behavior: >-
+    The 12 cases named were diagnostic: run and reported, gating nothing;
+    the family's code and register entries landed with T1.32e's parts 1
+    and 2a.
+  new_behavior: >-
+    Acceptance cases (T1.32g, E98's bundle): each names the DuckDB routes
+    of the public calls it reaches on the core and the paths it covers,
+    and carries the operations that start there (time.feature-interval
+    describe_source alone; time.text-one-bad-value and time.text-us-date
+    through materialize; the nine others through predict). Every runner
+    is held to its observed outcome, its baseline: python-ref's own where
+    the core agrees, and where it differs the approved entry that states
+    it (P1B-8 time.feature-interval, DT-12 the two text times); python-old
+    keeps the reference's answers, its INTERNAL_ERROR on the two text
+    times the old client's crash with the reference's result as its
+    baseline (E110). No outcome changes by this entry.
+  affected_inputs: >-
+    The case files of the 12 cases named, which the ratchet's cases rule
+    passes only under an approved entry naming each, and their baselines.
+  cases: [T1.32e, T1.32g, feature.bool, time.date, time.feature-date-and-timestamp-with-null, time.feature-interval, time.feature-time-of-day, time.text-declared, time.text-iso-date, time.text-one-bad-value, time.text-us-date, time.timestamp-ns, time.timestamp-s, time.timestamptz]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E98}
+  notes: >-
+    The admission record H19 asks for, with no deviation of its own, for
+    both reviewers to approve (as P1B-26 and P1B-53), never the
+    implementer. P1B-8 and DT-12, each owner-approved, carry the first
+    admission's case_outcomes where the core's outcome is not the
+    reference's; python-old's INTERNAL_ERROR is no entry's (E110). The
+    outcomes below are each runner's baseline at the checkpoint (none
+    where the case had none) and the projection the package's
+    observations give.
+  case_outcomes:
+  - {case: feature.bool, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: feature.bool, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: feature.bool, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.date, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.date, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.date, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-date-and-timestamp-with-null, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-date-and-timestamp-with-null, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-date-and-timestamp-with-null, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-interval, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-interval, cell: ref-pandas3, runner: python-old, old: 'none', new: 'refusal - at from_source (RuntimeError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-interval, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-time-of-day, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-time-of-day, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.feature-time-of-day, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-declared, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-declared, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-declared, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-iso-date, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-iso-date, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-iso-date, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-one-bad-value, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-one-bad-value, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-us-date, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.text-us-date, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-ns, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-ns, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-ns, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-s, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-s, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamp-s, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamptz, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamptz, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: time.timestamptz, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
 
 - id: P1B-56
   title: time.feature-interval's reference line holds its interval values in canonical form

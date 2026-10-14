@@ -7,42 +7,10 @@
   "key-python-core": [],
   "key-rust-host": [],
   "sampled-python-core": [],
-  "mc-python-core": [
-   "fact.time-of-day",
-   "large.times-then-multi-after-1000",
-   "question.static-target",
-   "text.aspect-ratio",
-   "text.ratio",
-   "text.time-of-day",
-   "text.time-of-day-8-rows",
-   "text.time-of-day-am-pm",
-   "text.time-of-day-seconds"
-  ],
-  "mc-rust-host": [
-   "fact.time-of-day",
-   "large.times-then-multi-after-1000",
-   "question.static-target",
-   "text.aspect-ratio",
-   "text.ratio",
-   "text.time-of-day",
-   "text.time-of-day-8-rows",
-   "text.time-of-day-am-pm",
-   "text.time-of-day-seconds"
-  ],
+  "mc-python-core": [],
+  "mc-rust-host": [],
   "p2-exits": [
-   "py:test_a_contradicted_cell_claim_fails[type]",
-   "py:test_each_case_is_admitted[feature.bool]",
-   "py:test_each_case_is_admitted[time.date]",
-   "py:test_each_case_is_admitted[time.feature-date-and-timestamp-with-null]",
-   "py:test_each_case_is_admitted[time.feature-interval]",
-   "py:test_each_case_is_admitted[time.feature-time-of-day]",
-   "py:test_each_case_is_admitted[time.text-declared]",
-   "py:test_each_case_is_admitted[time.text-iso-date]",
-   "py:test_each_case_is_admitted[time.text-one-bad-value]",
-   "py:test_each_case_is_admitted[time.text-us-date]",
-   "py:test_each_case_is_admitted[time.timestamp-ns]",
-   "py:test_each_case_is_admitted[time.timestamp-s]",
-   "py:test_each_case_is_admitted[time.timestamptz]"
+   "py:test_a_contradicted_cell_claim_fails[type]"
   ]
  },
  "authored": {

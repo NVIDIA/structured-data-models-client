@@ -1,10 +1,29 @@
 {
   "format": "sdm-case/1",
   "id": "time.text-iso-date",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
-  "routes": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
   "seam": "time",
   "cells": [
     "utf8/time-column"
