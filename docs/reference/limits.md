@@ -35,9 +35,10 @@ A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a
 context of its own, sampled around that batch's rows rather than copied from
 the first, and `predict()` sends one call per batch and returns one result.
-Its `row_index` counts across the whole request, in the order the indices were
-given. A session scores those batches against the context it
-pinned, so the context is uploaded once rather than once per call.
+Its `row_index` counts across the whole request rather than from zero per
+call, so `to_pandas()`, which orders by it, gives the indices back in the
+order they were asked for. A session scores those batches against the context
+it pinned, so the context is uploaded once rather than once per call.
 
 **The 10,000 is the deployment's, not this client's.** It is the serving
 layer's `TFM_MAX_TEST_ROWS`, whose default it is, so a deployment may hold to

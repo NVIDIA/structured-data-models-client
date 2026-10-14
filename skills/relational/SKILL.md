@@ -163,7 +163,8 @@ would break rather than letting the endpoint return a 500.
 
 **More rows than one call scores are not refused.** They are gathered in
 batches of at most that many, and `predict()` sends one call per batch and
-returns one result, numbered and ordered as the indices were given. The
+returns one result, whose rows are numbered across the whole request, so
+`to_pandas()` gives the indices back in the order they were asked for. The
 10,000 is the deployment's `TFM_MAX_TEST_ROWS`, not a property of the
 protocol; pass `rows_per_call=` to ask in smaller batches, which is what a
 graph too wide for a full one needs. It only goes down.

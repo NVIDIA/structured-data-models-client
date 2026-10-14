@@ -11,9 +11,11 @@ these packages. All five distributions share one version and one entry.
 
 - A relational `materialize()` takes more entities than one call scores. They
   are gathered in batches of 10,000, or 200 for a temporal link prediction,
-  and `predict()` sends one call per batch and returns one result in the order
-  the indices were given. It used to refuse more than 1,000 and ask for the
-  calls to be split by hand.
+  and `predict()` sends one call per batch and returns one result. Each call's
+  rows are numbered from where the last call's ended, so `to_pandas()`, which
+  orders by that number, gives the indices back in the order they were asked
+  for rather than interleaving the batches. It used to refuse more than 1,000
+  and ask for the calls to be split by hand.
 
   `materialize()` takes `rows_per_call` to ask in smaller batches than the
   endpoint's cap, which is what a graph wide enough to outrun the 30 MiB body
@@ -30,8 +32,10 @@ these packages. All five distributions share one version and one entry.
 
 - A call that fails part way through carries the answers already paid for on
   the error, as `details['answered']` and `details['rows_answered']`, rather
-  than discarding them. A question asked in parts keeps its answered parts the
-  same way.
+  than discarding them. A forecast keeps its answered steps the same way, with
+  how many under `details['parts_answered']`. A ranking keeps only that count,
+  because an order over some of its candidates is a different answer rather
+  than part of the one that was asked for.
 
 - In the relational engine, `batch_mode(batch_size='max')` now means 10,000
   entities a batch rather than 1,000, following the size the endpoint answers.
