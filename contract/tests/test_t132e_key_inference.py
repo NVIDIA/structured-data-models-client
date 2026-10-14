@@ -364,7 +364,7 @@ def test_each_vector_is_a_case_the_runner_takes() -> None:
             named = vector['primary_keys']
             source = case['core']['describe_source']['source']
             assert source['primary_keys'] == {
-                t: [c] for t, c in (named or {}).items()
+                t: {'value': [c]} for t, c in (named or {}).items()
             }
             if named is None:
                 assert 'from_source' not in case['input']

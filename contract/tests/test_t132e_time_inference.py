@@ -301,7 +301,9 @@ def test_each_vector_is_a_case_the_runner_takes() -> None:
             assert case['input']['setup'] == vector['setup']
             named = vector['time_columns']
             source = case['core']['describe_source']['source']
-            assert source['time_columns'] == (named or {})
+            assert source['time_columns'] == {
+                t: {'value': c} for t, c in (named or {}).items()
+            }
             given = {}
             if vector['tables']:
                 given['tables'] = vector['tables']
