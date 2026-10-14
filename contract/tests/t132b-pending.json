@@ -3,10 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_swapped_histogram_no_conversion_explains_is_unexplained",
-   "py:test_the_exact_conversion_s_own_consequence_is_unexplained_with_a_hint"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [
