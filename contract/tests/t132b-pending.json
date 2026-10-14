@@ -1,9 +1,19 @@
 {
- "about": "T1.32b's acceptance tests that failed when the independent test author wrote them, before the implementation, at ca9a8b5f (contract/tests/test_t132b_decimal_vectors.py, test_t132b_decimal_family.py, tests/test_t132b_cell_claims.py, packages/structured-data-models-client/tests_test_ops/test_t132b_canary.py, sdm-testkit's tests/t132b_decimal_vectors.rs and t132b_decimal_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The cell-claim seeds wait for coverage rule 6 (T1.32a part 2); decimal.class-target-38-18 is admitted and enforced on every runner, by the owner's final decision of 2026-10-13 (python-old's INTERNAL_ERROR, equal to python-ref's, recorded as the old client's crash by T1.32g part 2a's ratchet change); its admission exit, briefly retired, is restored. T1.32's bundled admission (the owner's decision on P1B-71, 2026-10-13: a float constant at a decimal's scale of 23 to 38 read exactly, no refusal) adds four rust: exits, sdm-engine's tests/t132b_float_constants.rs (moved there from labels.rs's unit tests, whose include_str! the L0 scan refuses), written by the independent test author on rust-core-phase-1-lane-1b at 469c1924, failing then because the core refused every float past scale 22 by name (condition_value).",
+ "about": "T1.32b's acceptance tests that failed when the independent test author wrote them, before the implementation, at ca9a8b5f (contract/tests/test_t132b_decimal_vectors.py, test_t132b_decimal_family.py, tests/test_t132b_cell_claims.py, packages/structured-data-models-client/tests_test_ops/test_t132b_canary.py, sdm-testkit's tests/t132b_decimal_vectors.rs and t132b_decimal_sql.rs). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's. The cell-claim seeds wait for coverage rule 6 (T1.32a part 2); decimal.class-target-38-18 is admitted and enforced on every runner, by the owner's final decision of 2026-10-13 (python-old's INTERNAL_ERROR, equal to python-ref's, recorded as the old client's crash by T1.32g part 2a's ratchet change); its admission exit, briefly retired, is restored. T1.32's bundled admission (the owner's decision on P1B-71, 2026-10-13: a float constant at a decimal's scale of 23 to 38 read exactly, no refusal) adds four rust: exits, sdm-engine's tests/t132b_float_constants.rs (moved there from labels.rs's unit tests, whose include_str! the L0 scan refuses), written by the independent test author on rust-core-phase-1-lane-1b at 469c1924, failing then because the core refused every float past scale 22 by name (condition_value). After Codex's review of T1.32g part 2b (P2: decimal_probe.py's EXPLAINED took every difference of a static float condition at scale 28 or more as P1B-71's), the bundle's test author adds contract/tests/test_t132b_decimal_probe.py at f093ae99: nine py: exits, its negative controls (an emptied schema, an unrelated payload or result change, a warnings change, a label flipped with no value near the constant, a request changed with its labels unchanged, more labels flipped than values near the constant) and the static vectors naming their values, failing then because the probe explained each under P1B-71; its positive control (the exact conversion's own one-label consequence, explained) passes and is not listed.",
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": []
+  "exits": [
+   "py:test_a_label_flip_with_no_value_near_the_constant_is_unexplained",
+   "py:test_a_request_change_without_a_label_change_is_unexplained",
+   "py:test_a_warnings_change_is_unexplained",
+   "py:test_an_emptied_schema_is_unexplained",
+   "py:test_an_unrelated_payload_or_result_change_is_unexplained[feature-cells]",
+   "py:test_an_unrelated_payload_or_result_change_is_unexplained[payload-rows]",
+   "py:test_an_unrelated_payload_or_result_change_is_unexplained[result]",
+   "py:test_each_static_vector_names_its_values",
+   "py:test_more_labels_flipped_than_values_near_the_constant_is_unexplained"
+  ]
  },
  "authored": {
   "python-core": [
@@ -332,7 +342,16 @@
    "rust:a_float_constant_its_decimal_cannot_hold_past_scale_22_is_the_caller_s_error",
    "rust:a_float_constant_reads_exactly_at_scales_23_to_38",
    "rust:a_static_decimal_past_scale_22_is_compared_with_a_float_exactly",
-   "py:test_each_case_is_admitted[decimal.class-target-38-18]"
+   "py:test_each_case_is_admitted[decimal.class-target-38-18]",
+   "py:test_a_label_flip_with_no_value_near_the_constant_is_unexplained",
+   "py:test_a_request_change_without_a_label_change_is_unexplained",
+   "py:test_a_warnings_change_is_unexplained",
+   "py:test_an_emptied_schema_is_unexplained",
+   "py:test_an_unrelated_payload_or_result_change_is_unexplained[feature-cells]",
+   "py:test_an_unrelated_payload_or_result_change_is_unexplained[payload-rows]",
+   "py:test_an_unrelated_payload_or_result_change_is_unexplained[result]",
+   "py:test_each_static_vector_names_its_values",
+   "py:test_more_labels_flipped_than_values_near_the_constant_is_unexplained"
   ]
  }
 }
