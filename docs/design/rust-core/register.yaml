@@ -979,6 +979,10 @@ entries:
     Reached at T1.24b too through an edit naming a text column the time
     column (the E49 differential, one source): the same codes on each
     route.
+    Its first-admission case_outcomes (time.text-one-bad-value and
+    time.text-us-date, T1.32g) approved by both reviewers of T1.32g part
+    2b's final review round (Codex and the independent subagent), relayed by
+    the orchestrator: APPROVE-DT-12-first-admission-rows.
   case_outcomes:
   - {case: time.text-one-bad-value, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: time.text-one-bad-value, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -2011,6 +2015,10 @@ entries:
     admission/interval of contract/refusal-maps/time.json, on python-core and
     rust-host. Both refuse; the class and code change. T1.32e resolves it
     when it admits the case. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32c its refs name the nested family's interval vectors (scalar.interval*, orders.interval), the same transition; T1.32e, which admits time.feature-interval, should know they exist. From T1.32d also the empty-null family's null.interval, an INTERVAL column all null on the entity table, the same transition: for a reviewer to hold to the approved meaning.
+    Its first-admission case_outcomes (time.feature-interval, T1.32g)
+    approved by both reviewers of T1.32g part 2b's final review round (Codex
+    and the independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-8-first-admission-rows.
   case_outcomes:
   - {case: time.feature-interval, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: time.feature-interval, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -4543,8 +4551,9 @@ entries:
     and on python-old as the old client's crash, its baseline the
     reference's result (E110). No outcome changes by this entry.
   affected_inputs: >-
-    The case files of the 23 cases named, which the ratchet's cases rule
-    passes only under an approved entry naming each, and their baselines.
+    The case files of the 23 cases named in its case_outcomes, which the
+    ratchet's cases rule passes only under an approved entry naming each,
+    and their baselines.
   cases: [T1.32g]
   status: approved
   approved_by: reviewer
@@ -4570,6 +4579,9 @@ entries:
     package's observations give.
     Approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
     the independent subagent), relayed by the orchestrator: APPROVE-P1B-53.
+    Re-confirmed as narrowed to the package alone by both reviewers of
+    T1.32g part 2b's final review round (Codex and the independent
+    subagent), relayed by the orchestrator: APPROVE-P1B-53.
   case_outcomes:
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -4656,11 +4668,12 @@ entries:
     times the old client's crash with the reference's result as its
     baseline (E110). No outcome changes by this entry.
   affected_inputs: >-
-    The case files of the 12 cases named, which the ratchet's cases rule
-    passes only under an approved entry naming each, and their baselines.
+    The case files of the 12 cases named in its case_outcomes, which the
+    ratchet's cases rule passes only under an approved entry naming each,
+    and their baselines.
   cases: [T1.32e, T1.32g]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E98}
   notes: >-
     The admission record H19 asks for, with no deviation of its own; its
@@ -4673,6 +4686,9 @@ entries:
     outcomes below are each runner's baseline at the checkpoint (none
     where the case had none) and the projection the package's
     observations give.
+    Approved by both reviewers of T1.32g part 2b's final review round (Codex
+    and the independent subagent), relayed by the orchestrator:
+    APPROVE-P1B-55.
   case_outcomes:
   - {case: feature.bool, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: feature.bool, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
