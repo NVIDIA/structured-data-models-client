@@ -1,6 +1,6 @@
 {
  "format": "sdm-type-set-vectors/1",
- "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed, and `witness`, where given, the DuckDB statements that hand it over, run after contract/bases.yaml's `shop` and adding the column `f` to `users`, as contract/tools/nested_type_record.py's vectors' `setup` is run). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json. `reached` holds the Arrow forms DuckDB 1.5.6 hands over that no vector is: those only a session setting gives (`duckdb_arrow_by_setting`, measured for each DuckDB type under each setting that changes what DuckDB hands over), and extension types (`extension`, the field's ARROW:extension:name), each with `type`, the storage type admission sees, and its `inference` derived as the vectors' are, but for `arrow.bool8`, a boolean, read as one. They run through real DuckDB only (sdm-testkit's tests/t133_type_reach.rs, which runs every witnessed row there). `recorded` names the recorder of every `duckdb_arrow`, `reference_answer` and witnessed `reference`: contract/tools/type_set_record.py, under the reference's interpreter.",
+ "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed, and `witness`, where given, the DuckDB statements that hand it over, run after contract/bases.yaml's `shop` and adding the column `f` to `users`, as contract/tools/nested_type_record.py's vectors' `setup` is run). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json. `reached` holds the Arrow forms DuckDB 1.5.6 hands over that no vector is: those only a session setting gives (`duckdb_arrow_by_setting`, measured for each DuckDB type under each setting that changes what DuckDB hands over), and extension types (`extension`, the field's ARROW:extension:name), each with `type`, the storage type admission sees, and its `inference` derived as the vectors' are, but for `arrow.bool8`, a boolean, read as one. They run through real DuckDB only (sdm-testkit's tests/t133_type_reach.rs, which runs every witnessed row there). `recorded` names the recorder of every `duckdb_arrow`, `reference_answer` and witnessed `reference`: contract/tools/type_set_record.py, under the reference's interpreter. From T1.33 part 3 (the owner's items 24 and 26, 2026-10-14): a row with `cells` is held by sdm-testkit's tests/t133p3_reads.rs, to predict, as well: each users row's cell of `f` in the model call's body equal to DuckDB's own CAST(f AS VARCHAR) (`cast`) or null (`null`), and, with `received`, the described column's received type (the contract's ColumnType): the big-integer rule's int64, decimal128(38, 0) or utf8.",
  "arrow_schema": "58.4.0",
  "derived_from": [
   "rust/crates/sdm-host/src/admission.rs:9-22 (the admission table) and :101-149 (convert_type)",
@@ -1255,23 +1255,9 @@
     "left_out": "binary"
    },
    "core": "success",
-   "reach": "UUID with arrow_lossless_conversion (extension arrow.uuid)",
-   "reference": "refusal UNNAMED",
-   "evidence": "probe: lossless UUID, RuntimeError at from_source",
-   "witness": [
-    "SET arrow_lossless_conversion = true",
-    "CREATE OR REPLACE TABLE users AS SELECT *, uuid() AS f FROM users"
-   ],
-   "duckdb_arrow": "extension<arrow.uuid>",
-   "reference_answer": {
-    "outcome": {
-     "result": "refusal",
-     "stage": "from_source",
-     "error": "RuntimeError",
-     "code": null
-    },
-    "described": null
-   }
+   "reach": "none bare: DuckDB hands fixed_size_binary(16) over only as a UUID under arrow_lossless_conversion, the extension arrow.uuid (the reached row lossless.uuid)",
+   "reference": "not reachable",
+   "evidence": "DuckDB 1.5.6 hands no bare fixed_size_binary(16) over; see lossless.uuid"
   },
   {
    "id": "large-binary",
@@ -3222,7 +3208,7 @@
     "dtype": "bool"
    },
    "core": "success",
-   "reach": "BOOLEAN under arrow_lossless_conversion: int8 storage of the extension arrow.bool8, a boolean",
+   "reach": "BOOLEAN under arrow_lossless_conversion: int8 storage of the extension arrow.bool8, a boolean | a boolean read as one, each value DuckDB's",
    "reference": "success",
    "reference_answer": {
     "outcome": {
@@ -3236,23 +3222,24 @@
      "stype": "categorical"
     }
    },
-   "duckdb_arrow": "extension<arrow.bool8>"
+   "duckdb_arrow": "extension<arrow.bool8>",
+   "cells": "cast"
   },
   {
    "id": "lossless.hugeint",
    "witness": [
     "SET arrow_lossless_conversion = true",
-    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT AS f FROM users"
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000 AS f FROM users"
    ],
    "type": {
     "FixedSizeBinary": 16
    },
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "int"
    },
    "core": "success",
-   "reach": "HUGEINT under arrow_lossless_conversion: arrow.opaque (type_name hugeint) of fixed_size_binary(16)",
+   "reach": "HUGEINT under arrow_lossless_conversion: arrow.opaque (type_name hugeint) of fixed_size_binary(16) | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out; the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: values that fit int64",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3263,23 +3250,27 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "int64"
+   }
   },
   {
    "id": "lossless.uhugeint",
    "witness": [
     "SET arrow_lossless_conversion = true",
-    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT AS f FROM users"
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT + 5 AS f FROM users"
    ],
    "type": {
     "FixedSizeBinary": 16
    },
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "int"
    },
    "core": "success",
-   "reach": "UHUGEINT under arrow_lossless_conversion: arrow.opaque (type_name uhugeint) of fixed_size_binary(16)",
+   "reach": "UHUGEINT under arrow_lossless_conversion: arrow.opaque (type_name uhugeint) of fixed_size_binary(16) | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out; the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: values that fit int64",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3290,7 +3281,11 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=uhugeint, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=uhugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "int64"
+   }
   },
   {
    "id": "lossless.bit",
@@ -3301,10 +3296,10 @@
    "type": "Binary",
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "string"
    },
    "core": "success",
-   "reach": "BIT under arrow_lossless_conversion: arrow.opaque (type_name bit) of binary",
+   "reach": "BIT under arrow_lossless_conversion: arrow.opaque (type_name bit) of binary | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out: its text of 0 and 1",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3315,7 +3310,8 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bit, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bit, vendor_name=DuckDB]>",
+   "cells": "cast"
   },
   {
    "id": "lossless.json",
@@ -3329,7 +3325,7 @@
     "dtype": "string"
    },
    "core": "success",
-   "reach": "JSON under arrow_lossless_conversion: utf8 storage of the extension arrow.json",
+   "reach": "JSON under arrow_lossless_conversion: utf8 storage of the extension arrow.json | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out: text",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3340,7 +3336,8 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.json>"
+   "duckdb_arrow": "extension<arrow.json>",
+   "cells": "cast"
   },
   {
    "id": "lossless.timetz",
@@ -3353,10 +3350,10 @@
    },
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "time"
    },
    "core": "success",
-   "reach": "TIMETZ under arrow_lossless_conversion: arrow.opaque (type_name time_tz) of fixed_size_binary(8)",
+   "reach": "TIMETZ under arrow_lossless_conversion: arrow.opaque (type_name time_tz) of fixed_size_binary(8) | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out: a time of day, as a TIME is (every cell null, as the core sends one)",
    "reference": "success",
    "reference_answer": {
     "outcome": {
@@ -3370,20 +3367,21 @@
      "stype": "timestamp"
     }
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[8], type_name=time_tz, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[8], type_name=time_tz, vendor_name=DuckDB]>",
+   "cells": "null"
   },
   {
    "id": "varint",
    "witness": [
-    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT AS f FROM users"
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
    ],
    "type": "Binary",
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "int"
    },
    "core": "success",
-   "reach": "VARINT (BIGNUM) with no setting: arrow.opaque (type_name bignum) of binary",
+   "reach": "VARINT (BIGNUM) with no setting: arrow.opaque (type_name bignum) of binary | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out; the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: values that fit int64",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3394,21 +3392,25 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "int64"
+   }
   },
   {
    "id": "varint.large",
    "witness": [
     "SET arrow_large_buffer_size = true",
-    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT AS f FROM users"
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
    ],
    "type": "LargeBinary",
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "int"
    },
    "core": "success",
-   "reach": "VARINT under arrow_large_buffer_size: arrow.opaque of large_binary",
+   "reach": "VARINT under arrow_large_buffer_size: arrow.opaque of large_binary | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out; the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: values that fit int64",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3419,21 +3421,25 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=large_binary, type_name=bignum, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=large_binary, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "int64"
+   }
   },
   {
    "id": "varint.view",
    "witness": [
     "SET arrow_output_version = '1.5'",
-    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::VARINT AS f FROM users"
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
    ],
    "type": "BinaryView",
    "extension": "arrow.opaque",
    "inference": {
-    "left_out": "binary"
+    "dtype": "int"
    },
    "core": "success",
-   "reach": "VARINT under arrow_output_version '1.5': arrow.opaque of binary_view",
+   "reach": "VARINT under arrow_output_version '1.5': arrow.opaque of binary_view | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out; the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: values that fit int64",
    "reference": "refusal UNNAMED",
    "reference_answer": {
     "outcome": {
@@ -3444,7 +3450,11 @@
     },
     "described": null
    },
-   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary_view, type_name=bignum, vendor_name=DuckDB]>"
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary_view, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "int64"
+   }
   },
   {
    "id": "view.list-utf8",
@@ -3758,6 +3768,252 @@
     "described": null
    },
    "duckdb_arrow": "map<string, int64>"
+  },
+  {
+   "id": "lossless.uuid",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, ('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD38' || lpad(user_id::VARCHAR, 4, '0'))::UUID AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.uuid",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "UUID under arrow_lossless_conversion: fixed_size_binary(16) of the extension arrow.uuid | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out: its canonical lower-case 8-4-4-4-12 text",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.uuid>",
+   "cells": "cast",
+   "received": {
+    "type": "utf8"
+   }
+  },
+  {
+   "id": "lossless.hugeint-wide",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000000000000000000000000000000 AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "HUGEINT under arrow_lossless_conversion, values past int64 | the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: decimal128(38, 0)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "decimal128",
+    "precision": 38,
+    "scale": 0
+   }
+  },
+  {
+   "id": "lossless.hugeint-past-38-digits",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 170141183460469231731687303715884105727::HUGEINT ELSE user_id::HUGEINT END AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "HUGEINT under arrow_lossless_conversion, a value of 39 digits | the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: text",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "utf8"
+   }
+  },
+  {
+   "id": "lossless.uhugeint-wide",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT * 1000000000000000000000000000000 AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "UHUGEINT under arrow_lossless_conversion, values past int64 | the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: decimal128(38, 0)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=uhugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "decimal128",
+    "precision": 38,
+    "scale": 0
+   }
+  },
+  {
+   "id": "lossless.uhugeint-past-38-digits",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 340282366920938463463374607431768211455::UHUGEINT ELSE user_id::UHUGEINT END AS f FROM users"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "UHUGEINT under arrow_lossless_conversion, a value of 39 digits | the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: text",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=uhugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "utf8"
+   }
+  },
+  {
+   "id": "varint-wide",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id::VARCHAR || repeat('0', 30))::VARINT AS f FROM users"
+   ],
+   "type": "Binary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "VARINT with no setting, values past int64 within 38 digits | the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: decimal128(38, 0)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "decimal128",
+    "precision": 38,
+    "scale": 0
+   }
+  },
+  {
+   "id": "varint-past-38-digits",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (CASE WHEN user_id = 3 THEN '1' || repeat('0', 40) ELSE user_id::VARCHAR END)::VARINT AS f FROM users"
+   ],
+   "type": "Binary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "string"
+   },
+   "core": "success",
+   "reach": "VARINT with no setting, a value of 41 digits | the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: text",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "utf8"
+   }
+  },
+  {
+   "id": "lossless.varint",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
+   ],
+   "type": "Binary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "VARINT on a lossless connection | P1B-43 as the owner decided (2026-10-14, item 26): read, not left out; the big-integer rule (orchestrator, 2026-10-14): int64 where every value fits it, else decimal128(38, 0) where every value fits 38 digits, else text: values that fit int64",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "int64"
+   }
   }
  ],
  "duckdb_arrow_by_setting": {

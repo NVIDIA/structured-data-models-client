@@ -41,11 +41,20 @@ def _gate() -> Any:
 
 G = _gate()
 LOSSLESS = 'SET arrow_lossless_conversion = true'
+TYPE_SET: dict[str, Any] = json.loads(
+    (ROOT / 'contract/type-set-vectors.json').read_text(encoding='utf-8')
+)
+TYPES = {r['id']: r for r in TYPE_SET['vectors'] + TYPE_SET['reached']}
+I64 = {'type': 'int64'}
+D38 = {'type': 'decimal128', 'precision': 38, 'scale': 0}
+UTF8 = {'type': 'utf8'}
 
 
 def test_the_pending_list_only_shrinks() -> None:
     assert G.only_shrinks() == []
-    ids = {row['id'] for row in ROWS}
+    ids = {row['id'] for row in ROWS} | {
+        i for i, r in TYPES.items() if r.get('cells') is not None
+    }
     assert set(G.gating()['pending']['rust-host']) <= ids
 
 
@@ -62,7 +71,11 @@ def test_each_row_is_a_witness_and_a_reading() -> None:
 
 
 def test_every_lossless_type_is_read_none_left_out() -> None:
-    lossless = {r['id']: r for r in ROWS if r['witness'][0] == LOSSLESS}
+    lossless = {
+        i: r
+        for i, r in TYPES.items()
+        if (r.get('witness') or [''])[0] == LOSSLESS
+    }
     assert {
         'lossless.uuid',
         'lossless.bit',
@@ -73,14 +86,40 @@ def test_every_lossless_type_is_read_none_left_out() -> None:
         'lossless.json',
     } <= set(lossless)
     for row in lossless.values():
-        assert row['want']['cells'] is not None, row['id']
-    text = {'lossless.uuid', 'lossless.bit', 'lossless.json'}
-    assert all(lossless[i]['want']['dtype'] == 'string' for i in text)
-    by_id = {r['id']: r for r in ROWS}
-    assert by_id['lossless.timetz']['want'] == by_id['time.control']['want']
-    for row in ROWS:
-        if 'past-38-digits' in row['id']:
-            assert row['want'] == {'dtype': 'string', 'cells': 'cast'}
+        assert 'left_out' not in row['inference'], row['id']
+    for i in ('lossless.uuid', 'lossless.bit', 'lossless.json'):
+        assert lossless[i]['inference'] == {'dtype': 'string'}
+        assert lossless[i]['cells'] == 'cast'
+    timetz = lossless['lossless.timetz']
+    control = {r['id']: r for r in ROWS}['time.control']['want']
+    assert timetz['inference'] == {'dtype': 'time'}
+    assert timetz['cells'] == control['cells'] == 'null'
+
+
+def test_the_big_integer_rule_has_each_tier() -> None:
+    tiers = {
+        'lossless.hugeint': I64,
+        'lossless.hugeint-wide': D38,
+        'lossless.hugeint-past-38-digits': UTF8,
+        'lossless.uhugeint': I64,
+        'lossless.uhugeint-wide': D38,
+        'lossless.uhugeint-past-38-digits': UTF8,
+        'varint': I64,
+        'varint.large': I64,
+        'varint.view': I64,
+        'lossless.varint': I64,
+        'varint-wide': D38,
+        'varint-past-38-digits': UTF8,
+    }
+    for row_id, received in tiers.items():
+        row = TYPES[row_id]
+        assert row['received'] == received, row_id
+        assert row['cells'] == 'cast', row_id
+        dtype = 'string' if received == UTF8 else 'int'
+        assert row['inference'] == {'dtype': dtype}, row_id
+    # VARINT with no session setting, in each storage DuckDB gives it.
+    for row_id in ('varint', 'varint-wide', 'varint-past-38-digits'):
+        assert not TYPES[row_id]['witness'][0].startswith('SET ')
 
 
 def test_a_time_named_column_of_no_times_is_text() -> None:

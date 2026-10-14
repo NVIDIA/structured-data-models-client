@@ -287,9 +287,15 @@ def test_a_lossless_connection_is_described() -> None:
     assert plain['reference'] == plain['core'] == 'success'
     assert _reference_described(plain) == _core_described(plain) == 'int64'
     assert by_id['lossless.boolean']['inference'] == {'dtype': 'bool'}
-    uuid = {v['id']: v for v in ALL}['fixed-size-binary.16']
+    # T1.33 part 3 (the owner's item 26): a lossless UUID is read as text;
+    # DuckDB hands fixed_size_binary(16) over only under arrow.uuid.
+    uuid = by_id['lossless.uuid']
     assert uuid['witness'][0] == 'SET arrow_lossless_conversion = true'
-    assert uuid['inference'] == {'left_out': 'binary'}
+    assert uuid['extension'] == 'arrow.uuid'
+    assert uuid['inference'] == {'dtype': 'string'}
+    bare = {v['id']: v for v in ALL}['fixed-size-binary.16']
+    assert bare['reference'] == 'not reachable'
+    assert bare['inference'] == {'left_out': 'binary'}
 
 
 # --- the register --------------------------------------------------------------

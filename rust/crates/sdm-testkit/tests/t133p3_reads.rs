@@ -6,12 +6,19 @@
 //! independent test author) to `contract/t133p3-vectors.json`, on the
 //! owner's answers of 2026-10-14:
 //!
+//! The types' rows are `contract/type-set-vectors.json`'s with `cells`
+//! (one source of truth with T1.33 part 2's type set); this file's own
+//! rows are controls and the `text_time` rows.
+//!
 //! - Item 26 (P1B-43): support, not skip, the types a lossless DuckDB
 //!   connection hands over. A UUID and a BIT are read as text (the
 //!   canonical lower-case 8-4-4-4-12 and the '0'/'1' string), a TIMETZ as a
-//!   time of day as a TIME is today (`time.control`), a HUGEINT, a
-//!   UHUGEINT and a VARINT as a number where every value fits
-//!   decimal128(38, 0), else as text, and lossless JSON stays text.
+//!   time of day as a TIME is today (`time.control`), and lossless JSON
+//!   stays text. A HUGEINT, a UHUGEINT and a VARINT (with or without the
+//!   setting) follow the big-integer rule (the orchestrator's, 2026-10-14):
+//!   received as `int64` where every value fits it, else as
+//!   `decimal128(38, 0)` where every value fits 38 digits, else as text
+//!   (`utf8`), each cell DuckDB's exact text in every case.
 //! - Item 24 (text_time): a column whose name says time but whose values
 //!   are no times is text, not refused (rel-trial's `time_frame`, "up to
 //!   12 weeks"); one whose values read as times stays the time column.
@@ -47,6 +54,7 @@ use serde_json::{Value, json};
 
 const PENDING: &str = "contract/tests/t133p3-pending.json";
 const VECTORS: &str = "contract/t133p3-vectors.json";
+const TYPE_SET: &str = "contract/type-set-vectors.json";
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -57,10 +65,33 @@ fn read_json(path: &str) -> Value {
     serde_json::from_str(&text).unwrap()
 }
 
+/// This test's rows: the type set's rows with `cells` (the types P1B-43
+/// reads, by the big-integer rule), as rows of this file's shape, then
+/// `contract/t133p3-vectors.json`'s own (controls and `text_time`).
 fn rows() -> Vec<Value> {
+    let types = read_json(TYPE_SET);
+    assert_eq!(types["format"], "sdm-type-set-vectors/1");
+    let mut found: Vec<Value> = types["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(types["reached"].as_array().unwrap())
+        .filter(|row| row.get("cells").is_some_and(|c| !c.is_null()))
+        .map(|row| {
+            let mut want = json!({
+                "dtype": wire(row["inference"]["dtype"].as_str().expect("a row with cells is read")),
+                "cells": row["cells"],
+            });
+            if let Some(received) = row.get("received") {
+                want["received"] = received.clone();
+            }
+            json!({"id": row["id"], "column": "f", "witness": row["witness"], "want": want})
+        })
+        .collect();
     let all = read_json(VECTORS);
     assert_eq!(all["format"], "sdm-t133p3-vectors/1");
-    all["rows"].as_array().unwrap().clone()
+    found.extend(all["rows"].as_array().unwrap().iter().cloned());
+    found
 }
 
 fn ids(value: &Value) -> BTreeSet<String> {
@@ -195,6 +226,7 @@ fn project(observed: &Observed, column: &str) -> Value {
         "answer": answer,
         "dtype": described.as_ref().map(|c| wire(c["dtype"].as_str().unwrap_or("?"))),
         "stype": described.as_ref().map(|c| c["stype"].clone()),
+        "received": described.as_ref().map(|c| c["received"].clone()),
         "time_column": users.as_ref().map(|u| u["time_column"].clone()),
     })
 }
@@ -223,6 +255,11 @@ fn problem(row: &Value, bases: &Bases, template: &Case) -> Option<String> {
         && &got["stype"] != stype
     {
         return Some(format!("described {got}, want stype {stype}"));
+    }
+    if let Some(received) = want.get("received")
+        && &got["received"] != received
+    {
+        return Some(format!("described {got}, want received {received}"));
     }
     if let Some(time_column) = want.get("time_column")
         && &got["time_column"] != time_column
