@@ -148,7 +148,7 @@ jobs:
       # uninstallable for the release it names. What is built, and the smoke
       # test each wheel must pass, is the engine's `[tool.cibuildwheel]`.
       - name: Build the relational engine's wheels
-        uses: pypa/cibuildwheel@adba99c781d3746d38b3a09b1cf797965bcb7fe6 # v4.3.0
+        uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
         with:
           package-dir: packages/structured-data-models-relational-engine
           output-dir: dist
