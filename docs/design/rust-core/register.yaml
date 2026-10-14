@@ -3372,17 +3372,25 @@ entries:
     The case files of decimal.feature-38-0-wide and decimal.target-38-18,
     which the ratchet's cases rule passes only under an approved entry
     naming each.
-  cases: [T1.32b, decimal.feature-38-0-wide, decimal.target-38-18]
-  status: proposed
-  approved_by: null
+  cases: [T1.32b]
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E100}
   notes: >-
     The admission record H19 asks for, with no deviation of its own, as
     P1B-26 is T1.29's: the change that admits a case approves its
-    deviations, and these cases have none against the reference. For the
-    reviewers to approve, never the implementer. The outcomes below are
-    each runner's baseline at the checkpoint (none) and the projection the
-    package's observations give.
+    deviations, and these cases have none against the reference. Its
+    cases list the package alone: the case_outcomes below name the two
+    cases, and a case listed in cases would excuse its every difference
+    from the reference in the test author's family test. Approved by both
+    reviewers of T1.32b part 2's review round 1 at 71bac66 (Codex and the
+    independent subagent: APPROVE-P1B-72, the keep-class admission of the
+    two cases the reference answers; reports
+    /tmp/sdm-rust-t1.32b-p2-codex.md and
+    ~/.local/share/sdm-dbx/phase-1-rereview/t1.32b-p2-subagent.md),
+    relayed by the orchestrator, never the implementer. The outcomes below
+    are each runner's baseline at the checkpoint (none) and the projection
+    the package's observations give.
   case_outcomes:
   - {case: decimal.feature-38-0-wide, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
   - {case: decimal.feature-38-0-wide, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
