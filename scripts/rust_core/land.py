@@ -90,7 +90,7 @@ candidate, whose tree the landing commit shares, is green, and otherwise
 asks for a rerun. On a failure it prints how to revert the fast-forward and
 changes nothing: it never reverts by itself.
 
-``--moved-from X`` (decision E120, the owner's of 2026-10-14) lands a
+``--moved-from X`` (decision E130, the owner's of 2026-10-14) lands a
 candidate C on X's reviews and X's green run, with no reviewer re-run and
 no new CI, when C is X moved over landing commits only. Every check above
 still applies to C (the branches, the lane and its commits' ownership,
@@ -739,7 +739,7 @@ def check_moved(
     tools: Tools, moved: str, candidate: str, base: str, phase: str
 ) -> tuple[int, int]:
     """Refuses unless the candidate is ``moved`` (X) moved over landing
-    commits only (decision E120): the same tree, the same patches in the
+    commits only (decision E130): the same tree, the same patches in the
     same order since the phase head, and only landing commits between X
     and the phase head. Returns the number of patches and of landing
     commits between. X's reviews and CI are checked by the caller."""
@@ -1039,7 +1039,7 @@ def land(
             f'at {green.get("headSha")} and both reviews approve it. The '
             f'candidate {candidate} is that commit moved over landing commits '
             'only (the same tree, the same patches in order, only landing '
-            'commits between), so it lands on that evidence (E120); this '
+            'commits between), so it lands on that evidence (E130); this '
             'commit changes no file, so the phase branch moves at once and '
             'its own runs are recorded afterwards (E43 (b)).'
         )
@@ -1299,7 +1299,7 @@ def parser_for(command: str) -> argparse.ArgumentParser:
             '--moved-from',
             metavar='SHA',
             help="land on this commit's reviews and green run: the "
-            'candidate is it moved over landing commits only (E120)',
+            'candidate is it moved over landing commits only (E130)',
         )
     parser.add_argument('--phase-branch', default=PHASE_BRANCH)
     parser.add_argument('--remote', default='origin')
