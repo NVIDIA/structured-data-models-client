@@ -1,6 +1,6 @@
 {
  "format": "sdm-type-set-vectors/1",
- "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json.",
+ "about": "T1.33's type set (written by the package's independent test author, before the implementation): every variant of the DataType of arrow-schema 58.4.0 (rust/Cargo.lock), each parameterized family with its parameters, classified as admission treats it, and with its received-type inference vector. Each vector is one Arrow type (`type`: a variant's name, or {variant: parameters}; `arrow` its arrow-rs spelling). `class` is admission's (sdm-host's admitted_type and admit): `accepted` kept as received, `admitted` widened to `admitted_as`, `refused` with UNSUPPORTED_TYPE naming the column and the Arrow type. `inference` is what the core makes of a three-row column `f` of the type (a value, a null, a value) beside an `id` key, arriving from the driver in a describe_source run of the core through a host provider, each fetch reply admitted as HostRun admits it: its dtype in the description, the dtype its COLUMNS_LEFT_OUT warning names (`left_out`), or the refusal by name (UNSUPPORTED_REQUEST and its rule, or UNSUPPORTED_TYPE and its column and Arrow type); null for a type no array can be built of (`buildable` false), held at admission only. A panic or a refusal naming nothing never passes. `core` is that answer's class (`success` where the column is described or left out, or `refusal <CODE>`), and `reference` the reference's through DuckDB 1.5.6 (`success`, `refusal UNNAMED` for its unnamed exception, or `not reachable` where DuckDB hands no such type over; `reach` says how a DuckDB source hands it over, `evidence` where the answer is recorded or probed, and `witness`, where given, the DuckDB statements that hand it over, run after contract/bases.yaml's `shop` and adding the column `f` to `users`, as contract/tools/nested_type_record.py's vectors' `setup` is run). Every expected value is derived from `derived_from`, never recorded from the core. Where `reference` and `core` differ, a register entry names the vector with its transition in `refs`: `covered_by`'s vector where one is given (an earlier package's vectors, the same DuckDB type), else this file's, `contract/type-set-vectors.json#<id or glob> <reference> -> <core>`. Held by rust/crates/sdm-host/tests/t133_type_set.rs (rust-host) and contract/tests/test_t133_type_set.py (the shape, the register and HOST-2); gated by contract/tests/t133p2-pending.json.",
  "arrow_schema": "58.4.0",
  "derived_from": [
   "rust/crates/sdm-host/src/admission.rs:9-22 (the admission table) and :101-149 (convert_type)",
@@ -408,9 +408,13 @@
     "dtype": "date"
    },
    "core": "success",
-   "reach": "none",
-   "reference": "not reachable",
-   "evidence": "DuckDB 1.5.6 hands no such type over"
+   "reach": "TIMESTAMPTZ under SET TimeZone = 'UTC'",
+   "reference": "success",
+   "evidence": "probe (T1.33 part 2 review): timestamp[us, tz=UTC], described timestamp, success through predict",
+   "witness": [
+    "SET TimeZone = 'UTC'",
+    "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' AS f FROM users"
+   ]
   },
   {
    "id": "timestamp.ns.naive",
@@ -1469,9 +1473,13 @@
     }
    },
    "core": "refusal UNSUPPORTED_REQUEST",
-   "reach": "none",
-   "reference": "not reachable",
-   "evidence": "DuckDB 1.5.6 hands no such type over"
+   "reach": "STRUCT(a VARCHAR) with arrow_large_buffer_size",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe (T1.33 part 2 review): struct<a: large_string>, RuntimeError at from_source",
+   "witness": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 'value' || user_id} AS f FROM users"
+   ]
   },
   {
    "id": "struct.interval",
@@ -1600,9 +1608,13 @@
     }
    },
    "core": "refusal UNSUPPORTED_REQUEST",
-   "reach": "none",
-   "reference": "not reachable",
-   "evidence": "DuckDB 1.5.6 hands no such type over"
+   "reach": "MAP(VARCHAR, BIGINT) with arrow_large_buffer_size",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe (T1.33 part 2 review): map<large_string, int64>, RuntimeError at from_source",
+   "witness": [
+    "SET arrow_large_buffer_size = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
+   ]
   },
   {
    "id": "union.sparse",
@@ -1849,9 +1861,13 @@
     }
    },
    "core": "refusal UNSUPPORTED_REQUEST",
-   "reach": "none",
-   "reference": "not reachable",
-   "evidence": "DuckDB 1.5.6 hands no such type over"
+   "reach": "an ENUM of 300 members",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe (T1.33 part 2 review): dictionary<uint16, string>, RuntimeError at from_source",
+   "witness": [
+    "CREATE TYPE probe_enum AS ENUM (SELECT 'v' || range FROM range(300))",
+    "CREATE OR REPLACE TABLE users AS SELECT *, 'v1'::probe_enum AS f FROM users"
+   ]
   },
   {
    "id": "dictionary.uint32-utf8",
@@ -1873,9 +1889,13 @@
     }
    },
    "core": "refusal UNSUPPORTED_REQUEST",
-   "reach": "none",
-   "reference": "not reachable",
-   "evidence": "DuckDB 1.5.6 hands no such type over"
+   "reach": "an ENUM of 70000 members",
+   "reference": "refusal UNNAMED",
+   "evidence": "probe (T1.33 part 2 review): dictionary<uint32, string>, RuntimeError at from_source",
+   "witness": [
+    "CREATE TYPE probe_enum AS ENUM (SELECT 'v' || range FROM range(70000))",
+    "CREATE OR REPLACE TABLE users AS SELECT *, 'v1'::probe_enum AS f FROM users"
+   ]
   },
   {
    "id": "dictionary.uint64-utf8",

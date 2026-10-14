@@ -162,6 +162,40 @@ def test_each_vector_has_one_class_and_its_inference(
         vector['reference']
     ), vector['reference']
     assert vector['evidence'] or vector['reference'] == 'not reachable'
+    witness = vector.get('witness')
+    if witness is not None:
+        # The DuckDB statements that hand the type over, after `shop`: a
+        # reachable type's, ending in the one that adds `f` to `users`.
+        assert vector['reference'] != 'not reachable'
+        assert witness and all(isinstance(s, str) and s for s in witness)
+        assert witness[-1].startswith('CREATE OR REPLACE TABLE users AS ')
+        assert ' AS f FROM users' in witness[-1]
+
+
+#: The vectors a review found reachable after they were marked not
+#: reachable (T1.33 part 2, Codex's review): each with its witness, and
+#: the reference's answer through it.
+REVIEWED_REACHABLE = {
+    'timestamp.us.utc': 'success',
+    'dictionary.uint16-utf8': 'refusal UNNAMED',
+    'dictionary.uint32-utf8': 'refusal UNNAMED',
+    'struct.large-utf8': 'refusal UNNAMED',
+    'map.large-utf8-int64': 'refusal UNNAMED',
+}
+
+
+def test_the_types_a_review_found_reachable_are_reached() -> None:
+    by_id = {v['id']: v for v in ALL}
+    for vector_id, reference in REVIEWED_REACHABLE.items():
+        vector = by_id[vector_id]
+        assert vector['reference'] == reference, vector_id
+        assert vector.get('witness'), vector_id
+    # Each difference among them is one the register check holds.
+    differing = {v['id'] for v in DIFFERING}
+    assert differing >= {
+        i for i, r in REVIEWED_REACHABLE.items() if r != by_id[i]['core']
+    }
+    assert 'timestamp.us.utc' not in differing
 
 
 # --- the register --------------------------------------------------------------
