@@ -25,24 +25,26 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
 | request body | relational | 30 MiB per call | at `materialize()` |
 | request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
-| calls one request is gathered as | relational | 10 | at `materialize()` |
+| calls one question is gathered as | relational | 10 | at `materialize()` |
 | an explanation | relational | exactly one entity | before sending |
 | an explanation | relational | only within the 1,000-row context budget | before sending |
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
 
 A relational request for more entities than one call scores is not refused.
-`materialize()` gathers it in batches of at most that many, each carrying its
-own copy of the context, and `predict()` sends one call per batch and returns
-one result. Its `row_index` counts across the whole request, in the order the
+`materialize()` gathers it in batches of at most that many, each with a
+context of its own, sampled around that batch's rows rather than copied from
+the first, and `predict()` sends one call per batch and returns one result. Its `row_index` counts across the whole request, in the order the
 indices were given. A session scores those batches against the context it
 pinned, so the context is uploaded once rather than once per call.
 
 Every batch is built before the first is sent, each with its own context, so
-the whole population is held in memory at once. More than ten batches is
-refused at `materialize()` for that reason rather than by the endpoint; ask
-about fewer entities at a time, or raise
-`sdm_client.materializers.relational.MOST_CALLS`.
+the whole population is held in memory at once. More than ten batches of one
+question is refused at `materialize()` for that reason rather than by the
+endpoint; ask about fewer entities at a time, or raise
+`sdm_client.materializers.relational.MOST_CALLS`. A question asked in parts is
+counted by its parts instead, against `sdm_client.decompose.MOST_PARTS`, since
+no part of one is batched.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as
@@ -57,10 +59,11 @@ against a smaller 16 MB, and only at send time, so a wide graph can pass
 a time there.
 
 **A decomposed question is not batched.** A ranking is asked as one call per
-candidate, and a forecast as one per step. More entities than one call scores
-is refused for those, because a candidate is reported unscored for the whole
-ranking rather than per batch, so one batch whose context held a single class
-would drop it from every row.
+candidate, and a forecast as one per step, and both are counted as that many
+calls. Batching a part would multiply them by the batches, so more entities
+than one call scores is refused for both. A ranking has a second reason: a
+candidate is reported unscored for the whole ranking rather than per batch, so
+one batch whose context held a single class would drop it from every row.
 
 The tabular cap was measured at the boundary rather than read from a document:
 10,000 context rows are answered and 10,001 come back as

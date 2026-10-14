@@ -164,9 +164,10 @@ would break rather than letting the endpoint return a 500.
 **More rows than one call scores are not refused.** They are gathered in
 batches of at most that many, and `predict()` sends one call per batch and
 returns one result, numbered and ordered as the indices were given. Every
-batch is built before the first is sent, so more than ten of them is refused
-rather than held at once, and a ranking or a forecast is not batched at all:
-it is already a call per candidate or step.
+batch is built before the first is sent, so more than ten batches of one
+question is refused rather than held at once, and a ranking or a forecast is
+not batched at all: it is already a call per candidate or step, and batching
+one would make that many times as many calls.
 
 **The table limit is on the graph a request carries, not on the schema.** A
 schema may describe far more than fifteen tables; what counts is how many the
@@ -255,8 +256,8 @@ change. The ones worth knowing:
 |---|---|
 | every candidate's context holds one class | each gathered entity reached it, or none did, so there is nothing to tell apart and nothing is sent; widen with `num_context_samples` or ask over a table of pairs. One such candidate among several is dropped with a warning instead, and named on `result.unscored_candidates` |
 | no entity existed at the anchor | the entity table's time column starts after the anchor, so nothing existed to ask about |
-| more entities than ten calls hold | every batch is built before any is sent; ask about fewer at a time |
-| more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and a candidate is scored or not for the whole answer; ask about fewer at a time |
+| more entities than ten batches hold | every batch is built before any is sent; ask about fewer at a time |
+| more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, so batching would multiply them; ask about fewer at a time |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |
 | an aggregation the model does not answer | `COUNT_DISTINCT`, `FIRST`, `LAST`, or any aggregation of a category |

@@ -718,9 +718,10 @@ class Request:
         request rather than pinning the first one's.
 
         A sum is not what any one call sends, and the endpoint's cap is per
-        call. A request batched for size carries the same context in every
-        envelope, so this reports it once per batch; `_context_rows_per_call`
-        is the figure the cap is held against, and `__repr__` says both.
+        call. A request batched for size gathers a context for each batch,
+        around that batch's own rows, so this counts every one of them;
+        `_context_rows_per_call` is the largest, which is the figure the cap
+        is held against, and `__repr__` says both.
         """
         return self._rows('context')
 
@@ -774,15 +775,15 @@ class Request:
     def __repr__(self) -> str:
         r"""What this request asks, and how much of it travels per call.
 
-        A request gathered in several calls repeats its context in each, so
-        the total alone reads as a context far wider than any call carries.
-        The number of calls is said where there is more than one, and the
-        context is the one call's.
+        A request gathered in several calls carries a context in each, so the
+        total alone reads as a context far wider than any call carries. The
+        number of calls is said where there is more than one, and the context
+        is the widest one call's, since that is what the cap is held to.
         """
         shape = 'relational' if self.is_relational else 'single-table'
-        calls = len(self.payloads)
+        calls = len(self.payloads or ())
         context = (
-            f'{self._context_rows_per_call()} context rows per call '
+            f'up to {self._context_rows_per_call()} context rows per call '
             f'across {calls} calls'
             if calls > 1
             else f'{self.context_rows} context rows'

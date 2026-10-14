@@ -139,26 +139,34 @@ def refuse_a_part_asked_in_several_calls(
     r"""Refuse a decomposed question whose parts would each take several calls.
 
     A part is one call, and the fan-out guard above counts parts because of
-    it: were a part batched, a ranking over 200 candidates would make 200
-    times as many calls as the guard allows.
+    it. Were a part batched, the calls would be the parts times the batches:
+    a ranking over 200 candidates and 50,000 entities passes the guard as 200
+    and makes 1,000. That is true of a forecast's steps as much as a ranking's
+    candidates, and it is the reason both are refused.
 
-    It would also change the answer. Each batch samples its own context, and a
+    A ranking has a second reason. Each batch samples its own context, and a
     batch whose context holds one class leaves the candidate out of every row
     rather than out of its own, because a candidate is reported unscored for
-    the whole ranking. Refusing is what the client did before parts could be
-    batched at all.
+    the whole ranking. A forecast's steps are ordinary regressions and are put
+    back together per step, so only the fan-out is said of them.
     """
     calls = len(getattr(part, 'payloads', ()) or ())
     if calls <= 1:
         return
     asked = len(getattr(part, 'indices', ()) or ())
     each = 'candidate' if rewritten.kind == RANKING else 'step'
+    why = (
+        'And a candidate is reported unscored for the whole ranking, so a '
+        'batch whose context taught it nothing would drop it from every row '
+        'rather than from its own. '
+        if rewritten.kind == RANKING
+        else ''
+    )
     raise StructuredDataError(
         f'{asked:,} entities are more than one call scores, and this question '
-        f'is asked as {len(rewritten.parts)} of them, one per {each}, each of '
-        f'which would take {calls} calls. A {each} is scored or not for the '
-        f'whole answer, so a batch whose context taught it nothing would drop '
-        f'it from every row rather than from its own. Ask about fewer '
+        f'is asked as {len(rewritten.parts)} of them, one per {each}, so '
+        f'batching would make {len(rewritten.parts) * calls:,} calls where '
+        f'{len(rewritten.parts):,} were counted. {why}Ask about fewer '
         f'entities at a time',
         code='UNSUPPORTED_REQUEST',
         details={'entities': asked, 'calls_per_part': calls},

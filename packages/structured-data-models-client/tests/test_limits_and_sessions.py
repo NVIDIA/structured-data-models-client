@@ -292,7 +292,23 @@ def test_a_batched_request_reports_the_context_one_call_carries():
     2,000-row context, and the cap they are held to is 1,000."""
     request = gathered_in_calls(calls=2, context_rows=1_000)
     assert request.context_rows == 2_000
-    assert '1000 context rows per call across 2 calls' in repr(request)
+    assert 'up to 1000 context rows per call across 2 calls' in repr(request)
+
+
+def test_a_request_built_from_frames_still_describes_itself():
+    """`payloads` is None on that route, and counting it is how a description
+    of the gathered one stopped every direct request from being printed."""
+    import pandas as pd
+
+    from sdm_client import Request
+
+    request = Request(
+        context=pd.DataFrame({'x': [1, 2], 'y': [0, 1]}),
+        predict=pd.DataFrame({'x': [3]}),
+        target='y',
+        task='classification',
+    )
+    assert '2 context rows, 1 to score' in repr(request)
 
 
 def correlated_payload(*, rows: int, kind: str = 'regression') -> dict:
