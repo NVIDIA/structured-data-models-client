@@ -67,7 +67,9 @@ checkpoint's files, read from git at ``--checkpoint``:
   observation's projection (``compare-policy.yaml``'s ``baseline`` fields, the
   checkpoint's), or an approved entry states that case, cell, runner and
   exact old and new outcome, an owner-approved one for a new refusal;
-  ``INTERNAL_ERROR`` never passes; the candidate's proposed baselines equal
+  ``INTERNAL_ERROR`` never passes, held or proposed, but python-old's equal
+  to the committed reference line (:func:`old_client_crash`), which is noted
+  as the old client's crash; the candidate's proposed baselines equal
   the observations and hold every acceptance case; and ``availability``: each
   observation has every field its runner has available and none it has not.
 
@@ -84,8 +86,9 @@ while every other field is still compared with the reference.
 ``accept`` writes the proposed baselines from the observations of every
 runner given: each case every runner meets, its effective expectation where
 ``--checkpoint``'s baselines hold it, and the committed reference's
-projection otherwise (the first baselines, T1.14, had only the latter); it
-is the package's to commit and the reviewer's to review (H3).
+projection otherwise (the first baselines, T1.14, had only the latter),
+none where a runner's line is an ``INTERNAL_ERROR`` the baselines rule
+refuses; it is the package's to commit and the reviewer's to review (H3).
 
 ``effective`` writes the effective expectations ``check --effective-out``
 writes, for the checkpoint ``checkpoint`` resolves, with no other rule run:
@@ -467,6 +470,16 @@ def at(document: Any, dotted: str) -> Any:
     return document
 
 
+def reference_lines(tree: Tree) -> dict[str, dict[str, Any]]:
+    r"""The committed ``python-ref`` lines, by case."""
+    found: dict[str, dict[str, Any]] = {}
+    for path in tree.files(REFERENCE):
+        found.update(
+            {line['case']: line for line in jsonl(tree.read(path), path)}
+        )
+    return found
+
+
 def projection(
     observation: dict[str, Any], fields: list[str]
 ) -> dict[str, Any]:
@@ -527,6 +540,26 @@ def semantic(
         payload.pop('sha256', None)
         payload['parsed'] = capture_check().masked(payload.get('parsed'))
     return line
+
+
+def old_client_crash(
+    runner: str,
+    observation: dict[str, Any] | None,
+    reference: dict[str, Any] | None,
+    ordered: dict[str, Any] | None,
+) -> bool:
+    r"""Whether ``observation`` is the old client's own crash: python-old's
+    ``INTERNAL_ERROR`` equal to the case's committed reference line in its
+    semantic projection, the reference's own ``StructuredDataError``, held
+    with the reference result as its baseline (E110, the owner's). Every other
+    ``INTERNAL_ERROR`` is a panic, which no baseline holds."""
+    return (
+        runner == 'python-old'
+        and observation is not None
+        and reference is not None
+        and at(observation, 'outcome.code') == PANIC
+        and semantic(observation, ordered) == semantic(reference, ordered)
+    )
 
 
 # --- entries -------------------------------------------------------------------
@@ -1155,8 +1188,15 @@ def check_baselines(
     corpus: dict[str, tuple[dict[str, Any], str]],
     entries: list[dict[str, Any]],
     gone: set[str],
+    reference: dict[str, dict[str, Any]],
+    ordered: dict[str, Any] | None,
 ) -> None:
     for runner, by_case in sorted(observed.items()):
+        crashes = {
+            case
+            for case, observation in by_case.items()
+            if old_client_crash(runner, observation, reference.get(case), ordered)
+        }
         for case, line in sorted(held.get(runner, {}).items()):
             if case in gone:
                 continue
@@ -1168,7 +1208,7 @@ def check_baselines(
                 )
                 continue
             now = projection(observation, old_fields)
-            if now.get('outcome.code') == PANIC:
+            if now.get('outcome.code') == PANIC and case not in crashes:
                 report.fail(
                     'baselines',
                     f'{case}: {runner}: {PANIC}, a panic, which no entry accepts',
@@ -1197,6 +1237,16 @@ def check_baselines(
         for case, line in sorted(mine.items()):
             observation = by_case.get(case)
             if (
+                line['projection'].get('outcome.code') == PANIC
+                and case not in crashes
+            ):
+                report.fail(
+                    'baselines',
+                    f'{case}: {runner}: the proposed baseline is {PANIC}, a '
+                    'panic, which no entry accepts',
+                )
+                continue
+            if (
                 observation is None
                 or projection(observation, new_fields) != line['projection']
             ):
@@ -1215,6 +1265,12 @@ def check_baselines(
                     'baselines',
                     f'{case}: {runner}: an acceptance case with no proposed baseline',
                 )
+        for case in sorted(crashes & (set(mine) | set(held.get(runner, {})))):
+            report.note(
+                'baselines',
+                f"{case}: {runner}: {PANIC}, the old client's crash, held as "
+                'the reference recorded it',
+            )
 
 
 def check(
@@ -1341,6 +1397,10 @@ def check(
                 corpus,
                 entries,
                 gone,
+                reference_lines(candidate),
+                (new_policy or {}).get('ordered')
+                if isinstance(new_policy, dict)
+                else None,
             )
     except Unreadable as error:
         report.fail('read', str(error))
@@ -1365,7 +1425,9 @@ def accept(
     candidate's approved entries), otherwise the committed reference's
     projection, fields a runner cannot observe left out of that comparison.
     Without a checkpoint (the first baselines) only reference equality
-    admits a case."""
+    admits a case. A case is left out where a runner's line would be an
+    ``INTERNAL_ERROR`` other than the old client's crash
+    (:func:`old_client_crash`), which ``check`` refuses."""
     tree = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
     expected = (
         effective(
@@ -1378,11 +1440,7 @@ def accept(
     policy = _yaml(tree.read(POLICY), POLICY)
     fields = [str(f) for f in policy['baseline']]
     marks = (_yaml(tree.read(AVAILABILITY), AVAILABILITY) or {})['runners']
-    reference = {}
-    for path in tree.files(REFERENCE):
-        reference.update(
-            {line['case']: line for line in jsonl(tree.read(path), path)}
-        )
+    reference = reference_lines(tree)
     observed = observations(observation_files)
     found: dict[str, list[dict[str, Any]]] = {runner: [] for runner in observed}
     for case in sorted(cases(tree)):
@@ -1403,7 +1461,13 @@ def accept(
             )
             for runner, by_case in observed.items()
         ]
-        if not all(meets):
+        if not all(meets) or any(
+            at(by_case[case], 'outcome.code') == PANIC
+            and not old_client_crash(
+                runner, by_case[case], ref, policy.get('ordered')
+            )
+            for runner, by_case in observed.items()
+        ):
             continue
         for runner, by_case in observed.items():
             projected = projection(by_case[case], fields)
