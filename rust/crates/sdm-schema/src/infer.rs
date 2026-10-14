@@ -624,7 +624,9 @@ fn stype_of(
             if text_holds_dates(name, sample, times, day_first)? {
                 return Ok(Stype::Timestamp);
             }
-            text_holds_single_values(sample)?;
+            if text_holds_categories(sample) {
+                return Ok(Stype::Multicategorical);
+            }
         }
         _ => {}
     }
@@ -725,18 +727,56 @@ fn text_holds_dates(
     }
 }
 
-/// Text holding a separator (`;`, `:`, `|` or a tab) in its first 500
-/// values may hold several categories per value, which is not ported.
-fn text_holds_single_values(sample: &[Option<Value>]) -> Result<(), CoreError> {
-    let separated = sample
+/// The most categories a multi-category column holds in its first 500
+/// values (the reference's `MAX_CAT`).
+const MOST_CATEGORIES: usize = 100;
+
+/// Text holds several categories per value, as the reference reads it
+/// (`contains_multicategorical`): over its first 500 values, nulls left
+/// out, the separator is whichever of `;`, `:`, `|` and a tab occurs most
+/// often, the first met on a tie (none of them, no categories); split by
+/// it, the values hold at most 100 distinct parts, and the values
+/// themselves are more than one and a half times as many distinct as the
+/// parts. An empty part counts as a part.
+fn text_holds_categories(sample: &[Option<Value>]) -> bool {
+    let first: Vec<&str> = sample
         .iter()
         .take(500)
         .flatten()
-        .any(|v| matches!(v, Value::Text(text) if text.contains([';', ':', '|', '\t'])));
-    if separated {
-        return Err(not_yet("multicategorical"));
+        .filter_map(|v| match v {
+            Value::Text(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    // Each separator's count, in the order the values first hold it.
+    let mut counts: Vec<(char, usize)> = Vec::new();
+    for c in first.iter().flat_map(|text| text.chars()) {
+        if !matches!(c, ';' | ':' | '|' | '\t') {
+            continue;
+        }
+        match counts.iter_mut().find(|(seen, _)| *seen == c) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((c, 1)),
+        }
     }
-    Ok(())
+    // The most frequent, the first met on a tie.
+    let Some(separator) = counts
+        .iter()
+        .fold(None::<(char, usize)>, |best, &(c, n)| match best {
+            Some((_, most)) if most >= n => best,
+            _ => Some((c, n)),
+        })
+        .map(|(c, _)| c)
+    else {
+        return false;
+    };
+    let values: BTreeSet<&str> = first.iter().copied().collect();
+    let parts: BTreeSet<&str> = first
+        .iter()
+        .flat_map(|text| text.split(separator))
+        .collect();
+    // `values > 1.5 * parts`, in integers.
+    2 * values.len() > 3 * parts.len() && parts.len() <= MOST_CATEGORIES
 }
 
 /// The table's key among its identifiers, or, with none, among the columns
