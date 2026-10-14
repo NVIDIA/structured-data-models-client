@@ -1403,7 +1403,8 @@ entries:
     DuckDB HUGEINT, large_string and decimal keys, decimal targets, ARRAY,
     STRUCT, MAP, UNION and INTERVAL features, empty fact tables, and text time
     columns the backend's cast cannot read.
-  cases:
+  cases: []
+  refs:
   - key.hugeint
   - key.varchar-large-buffers
   - key.decimal-18-0
@@ -1442,6 +1443,10 @@ entries:
     time.text-one-bad-value DT-12's; time.feature-interval P1B-8's. Relayed by
     the orchestrator, recorded at T1.33 part 2; never the implementer's
     approval.
+    Its cases are emptied at T1.33 fix 3 (the orchestrator's decision), moved
+    to refs, which excuse nothing: an approved entry listing a case in its
+    cases would excuse that case's every difference from the reference, and
+    each of the 13 has its own entry, named above.
 
 - id: P1B-2
   title: Schema.from_source on the core route refuses what T1.11b's thin describe_source does not infer yet
@@ -1524,7 +1529,8 @@ entries:
     Schema.from_source over DuckDB under a forced core route, with any of the
     inputs above; base.regression is none of them, and its schema is the
     reference's.
-  cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d, T1.21e, T1.23, T1.24, T1.25, T1.25b, T1.26a, T1.32c, T1.32d, T1.32e]
+  cases: []
+  refs: [docs/design/rust-core/phase-1/not-yet-refusals.md, E92]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
@@ -1557,6 +1563,12 @@ entries:
     text_time by the core and described by the reference, as a Phase 2 refusal
     or as DT-17's permanent reading. Relayed by the orchestrator, recorded at
     T1.33 part 2; never the implementer's approval.
+    Its cases are emptied at T1.33 fix 3 (the orchestrator's decision):
+    per-case entries now name every inventory case, and an approved entry
+    listing a case in its cases would excuse that case's every difference from
+    the reference, where this entry approves only E92's Phase 2 class. They
+    were [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d,
+    T1.21e, T1.23, T1.24, T1.25, T1.25b, T1.26a, T1.32c, T1.32d, T1.32e].
 
 - id: P1B-3
   title: materialize on the core route refuses what T1.11c's thin route does not port yet
@@ -1667,7 +1679,8 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source's schema
     under a forced core route, with any of the inputs above; base.regression
     is none of them, and its payload is the reference's.
-  cases: [base.regression, base.adventureworks, base.binary, base.multiclass, decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.28a, T1.29]
+  cases: []
+  refs: [docs/design/rust-core/phase-1/not-yet-refusals.md, E92]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
@@ -1733,6 +1746,13 @@ entries:
     T1.25 is out of date: sdm-core's materialize.rs still refuses it
     (not-yet-refusals.md, rule 50), one of those T1.33 rules. Relayed by the
     orchestrator, recorded at T1.33 part 2; never the implementer's approval.
+    Its cases are emptied at T1.33 fix 3 (the orchestrator's decision):
+    per-case entries now name every inventory case, and an approved entry
+    listing a case in its cases would excuse that case's every difference from
+    the reference, where this entry approves only E92's Phase 2 class. They
+    were [base.regression, base.adventureworks, base.binary, base.multiclass,
+    decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27,
+    T1.28, T1.28a, T1.29].
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1784,7 +1804,8 @@ entries:
     source, under a forced core route, with any of the inputs or answers
     above; base.regression is none of them, and its request and result are
     the reference's.
-  cases: [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28, T1.28a, T1.28b, T1.29]
+  cases: []
+  refs: [docs/design/rust-core/phase-1/not-yet-refusals.md, E92]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
@@ -1816,6 +1837,12 @@ entries:
     rules are E92's Phase 2 class (approved above), lifted at T1.28b and
     T1.29, or their families' entries and T1.33's. Relayed by the
     orchestrator, recorded at T1.33 part 2; never the implementer's approval.
+    Its cases are emptied at T1.33 fix 3 (the orchestrator's decision):
+    per-case entries now name every inventory case, and an approved entry
+    listing a case in its cases would excuse that case's every difference from
+    the reference, where this entry approves only E92's Phase 2 class. They
+    were [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28,
+    T1.28a, T1.28b, T1.29].
 
 - id: P1B-5
   title: A DuckDB table named with a double quote is described on the core route where the reference refuses it

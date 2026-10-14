@@ -96,8 +96,12 @@ static target; the generated corpus, and so each seed's sources, are
 unchanged.
 
 An entry approved (by the owner or as E66(b)'s class) is an approved
-class; a proposed one, a proposed entry the review sees. The tool approves
-nothing.
+class; a proposed one, a proposed entry the review sees. The umbrellas
+P1B-1 to P1B-4, closed as superseded (T1.33), are approved by the owner for
+E92's Phase 2 class alone (``PHASE_2_CLASS``): any other rule under one is
+``proposed:<entry>``, as before the closing, and a rule the owner has still
+to answer (``PENDING_OWNER``: ``text_time``) ``pending-owner:<entry>``. The
+tool approves nothing.
 """
 
 from __future__ import annotations
@@ -162,6 +166,62 @@ FROM_SOURCE_RULES = {'empty_table': 'P1B-11'}
 #: until T1.32e ported the one and fixed the other (E92: neither is a
 #: Phase 2 refusal), so a core refusing either again is UNCLASSIFIED.
 DESCRIBED_RULES = {'text_time': 'P1B-2'}
+#: The umbrella entries the owner closed as superseded (T1.33, E88(e)):
+#: each is approved by the owner for E92's Phase 2 class alone, so it
+#: classifies as approved only a rule of that class.
+UMBRELLAS = frozenset({'P1B-1', 'P1B-2', 'P1B-3', 'P1B-4'})
+#: E92's Phase 2 class, the not-yet rules the owner approved on 2026-10-13
+#: as named refusals until Phase 2: not-yet-refusals.md's 40, less
+#: `key_missing`, `key_repeats` and `keyless_neighbors`, which the owner
+#: moved into T1.32e the same day (E84), 37 rules.
+PHASE_2_CLASS = frozenset(
+    {
+        'composite_key',
+        'float_nan',
+        'float_signed_zero',
+        'key_name_order',
+        'key_tie',
+        'aggregation',
+        'anchor_entity',
+        'assuming',
+        'condition',
+        'context_anchor_time',
+        'entity_filter',
+        'entity_ids',
+        'evaluate',
+        'exclude_cols_dict',
+        'explain',
+        'lag_timesteps',
+        'logical_target',
+        'max_pq_iterations',
+        'num_hops',
+        'num_neighbors',
+        'open_window',
+        'parent_table',
+        'problem_type',
+        'return_embeddings',
+        'static_target',
+        'target_filter',
+        'target_transform_null',
+        'inference_config_text',
+        'text_time_rules',
+        'top_k',
+        'unseeded',
+        'use_prediction_time',
+        'instance_id_type',
+        'model',
+        'prediction_statistic',
+        'prediction_type',
+        'response_field',
+    }
+)
+#: An umbrella's rule the owner has still to answer for (T1.33's owner
+#: list): its class names the question, never `approved`.
+PENDING_OWNER = {
+    # Free text under a time-like name: a Phase 2 refusal (P1B-2) or DT-17's
+    # permanent reading? (as-built, T1.33, the owner's list.)
+    ('P1B-2', 'text_time'): 'pending-owner',
+}
 #: The entry a static target's refusal by a rule is under, where it is not
 #: the rule's own.
 STATIC_RULES = {'target_type': 'P1B-18'}
@@ -1154,7 +1214,7 @@ def classify(
     time_of_day: bool = False,
 ) -> tuple[str, str]:
     r"""``(class, why)``: ``agree``, ``approved:<entry>``,
-    ``proposed:<entry>`` or ``UNCLASSIFIED``; ``edits`` is how many edits
+    ``proposed:<entry>``, ``pending-owner:<entry>`` or ``UNCLASSIFIED``; ``edits`` is how many edits
     the source's spec makes; ``time_of_day`` whether it makes a time of
     day a table's time column (:func:`time_of_day_is_a_time_column`)."""
 
@@ -1174,6 +1234,20 @@ def classify(
         if found.get('status') == 'rejected':
             return 'UNCLASSIFIED', f'{why}; {entry} is rejected'
         status = 'approved' if found.get('status') == 'approved' else 'proposed'
+        if entry in UMBRELLAS and status == 'approved':
+            # Closed as superseded (T1.33): approved for E92's class alone.
+            pending = PENDING_OWNER.get((entry, rule or ''))
+            if pending is not None:
+                return (
+                    f'{pending}:{entry}',
+                    f"{why}; {rule} is the owner's open question",
+                )
+            if rule not in PHASE_2_CLASS:
+                return (
+                    f'proposed:{entry}',
+                    f"{why}; {rule} is not in E92's Phase 2 class, which "
+                    f'alone {entry} approves',
+                )
         return f'{status}:{entry}', why
 
     # Each route's from_source outcome, a non-empty list, is the evidence
