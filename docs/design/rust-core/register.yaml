@@ -3338,13 +3338,16 @@ entries:
     nested.union, which the ratchet's reference rule passes changed only
     under an approved entry naming each case on python-ref.
   cases: [nested.map, nested.union]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E111}
   notes: >-
     T1.32g part 2c, an encoding-only re-record with no outcome of its own,
     for the reviewers (H19), never self-approved; the orchestrator put the
-    re-record in scope. A control recorded at the tests' tree (6b247cd7,
+    re-record in scope. Approved by both reviewers of part 2c's review
+    round 1 (Codex and the independent subagent: APPROVE-P1B-54, each having
+    rebuilt the two cases' statement 6 and reproduced both the old and the
+    re-recorded digests). A control recorded at the tests' tree (6b247cd7,
     the old encoder) equals the committed lines in semantic projection, so
     the re-recorded lines differ by the encoder alone. The outcomes below
     are python-ref's, unchanged.
