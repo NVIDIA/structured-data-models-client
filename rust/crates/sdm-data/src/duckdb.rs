@@ -47,7 +47,7 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, IndexColumns, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, IndexAdvice, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
+    Filter, IndexAdvice, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
     SEED_BATCH, SEED_KEY, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak,
     TieTerm, Window, field,
 };
@@ -97,6 +97,11 @@ const RENDERED: &[OptionalRequest] = &[
     OptionalRequest::Neighbors,
     OptionalRequest::Lookup,
 ];
+
+/// The vendor DuckDB names in the metadata of its opaque Arrow extension
+/// types (`arrow.opaque`'s `vendor_name`), which the host layer reads by
+/// DuckDB's layouts only for a column naming it (register P1B-43).
+pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 
 /// The name a statement reads its seeds by: the key set the provider binds
 /// for it (registered as a relation, on the statement's own cursor), unless
@@ -220,6 +225,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 table,
                 key,
                 columns,
+                &seed_key(seeds),
                 window.as_ref(),
                 *per_seed,
                 order.as_ref(),
@@ -235,7 +241,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 keys: seeds.clone(),
                 relation: seeds_for(table),
             });
-            lookup(request, table, key, columns)?
+            lookup(request, table, key, columns, &seed_key(seeds))?
         }
         DataRequest::Scan {
             table,
@@ -565,29 +571,53 @@ fn order_term(term: &TieTerm) -> String {
     )
 }
 
+/// The seeds' key as a join compares it with a table's key: as it is, but
+/// a `decimal128(38, 0)` key as a HUGEINT, which every key that arrives in
+/// that type compares with exactly (a DECIMAL(38, 0), HUGEINT, UHUGEINT or
+/// VARINT column), where DuckDB has no cast from DECIMAL(38, 0) to a
+/// VARINT (BIGNUM) column's type (register P1B-43: a VARINT key whose
+/// values pass int64, read in the decimal tier).
+fn seed_key(seeds: &KeySet) -> String {
+    let column = format!("s.{}", identifier(SEED_KEY));
+    let wide = seeds.columns.iter().any(|c| {
+        c.name == SEED_KEY
+            && c.column_type
+                == ColumnType::Decimal128 {
+                    precision: 38,
+                    scale: 0,
+                }
+    });
+    if wide {
+        format!("CAST({column} AS HUGEINT)")
+    } else {
+        column
+    }
+}
+
 /// The reference's neighbor reads (`_by_time` and `_by_fkey` on DuckDB):
 /// the rows of `table` whose `key` is a seed's key, within the seed's
 /// window in the source's own `CAST(column AS TIMESTAMP)` wall clock, and,
 /// with a limit per seed, the first rows of each seed in `order`, the
 /// result in `(batch, order)`.
+#[allow(clippy::too_many_arguments)]
 fn neighbors(
     request: &DataRequest,
     table: &str,
     key: &str,
     columns: &[String],
+    seed_key: &str,
     window: Option<&Window>,
     per_seed: Option<u64>,
     order: Option<&TieBreak>,
 ) -> Result<String, CoreError> {
     let projected = joined_columns(request, columns)?;
     let mut text = format!(
-        "SELECT s.{batch} AS {helper}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = s.{seed_key}",
+        "SELECT s.{batch} AS {helper}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = {seed_key}",
         batch = identifier(SEED_BATCH),
         helper = identifier(BATCH_COLUMN),
         seeds = identifier(&seeds_for(table)),
         table = identifier(table),
         key = identifier(key),
-        seed_key = identifier(SEED_KEY),
     );
     if let Some(window) = window {
         let time = format!("CAST(t.{} AS TIMESTAMP)", identifier(&window.column));
@@ -623,17 +653,17 @@ fn lookup(
     table: &str,
     key: &str,
     columns: &[String],
+    seed_key: &str,
 ) -> Result<String, CoreError> {
     let projected = joined_columns(request, columns)?;
     let batch = identifier(SEED_BATCH);
     Ok(format!(
-        "SELECT s.{batch} AS {helper}, COUNT(*) OVER (PARTITION BY s.{batch}) AS {matches}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = s.{seed_key}\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n) = 1",
+        "SELECT s.{batch} AS {helper}, COUNT(*) OVER (PARTITION BY s.{batch}) AS {matches}, {projected}\nFROM {seeds} s\nJOIN {table} t\n  ON t.{key} = {seed_key}\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.{batch}\n) = 1",
         helper = identifier(BATCH_COLUMN),
         matches = identifier(MATCHES_COLUMN),
         seeds = identifier(&seeds_for(table)),
         table = identifier(table),
         key = identifier(key),
-        seed_key = identifier(SEED_KEY),
     ))
 }
 

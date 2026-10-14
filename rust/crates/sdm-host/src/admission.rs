@@ -202,14 +202,32 @@ fn out_of_range(column: &str, received: &DataType, admitted: &DataType) -> CoreE
 }
 
 /// Admits `data`: checks each batch against its declared schema, then
-/// admits the schema and every batch, column by column.
+/// admits the schema and every batch, column by column. No opaque column
+/// is read by a vendor's layout ([`admit_from`]).
 pub fn admit(data: &ArrowData) -> Result<ArrowData, CoreError> {
-    admit_with_capacity(data, OFFSET_CAPACITY)
+    admit_from(data, None)
+}
+
+/// [`admit`], for data a provider whose opaque Arrow extension types are
+/// `vendor`'s handed over (`Run::opaque_vendor`): a top-level opaque
+/// column naming that vendor is read as what it means (crate::extensions,
+/// register P1B-43); one naming another vendor or none is admitted by its
+/// storage, as before.
+pub fn admit_from(data: &ArrowData, vendor: Option<&str>) -> Result<ArrowData, CoreError> {
+    admitted(data, OFFSET_CAPACITY, vendor)
 }
 
 /// [`admit`], with offsets bounded by `capacity` instead of int32's, so
 /// tests can split and refuse without gigabytes of data.
 pub fn admit_with_capacity(data: &ArrowData, capacity: usize) -> Result<ArrowData, CoreError> {
+    admitted(data, capacity, None)
+}
+
+fn admitted(
+    data: &ArrowData,
+    capacity: usize,
+    vendor: Option<&str>,
+) -> Result<ArrowData, CoreError> {
     let capacity = capacity.min(OFFSET_CAPACITY);
     for batch in &data.batches {
         check_declared(&data.schema, batch)?;
@@ -217,7 +235,7 @@ pub fn admit_with_capacity(data: &ArrowData, capacity: usize) -> Result<ArrowDat
     // After check (a), before the table: a column of one of DuckDB's
     // extension types (a UUID, a BIT, a TIMETZ, a HUGEINT, a UHUGEINT or a
     // BIGNUM) is read as what it means (crate::extensions, P1B-43).
-    let (read, read_batches) = crate::extensions::read(&data.schema, &data.batches)?;
+    let (read, read_batches) = crate::extensions::read(&data.schema, &data.batches, vendor)?;
     let fields: Vec<Field> = read
         .fields()
         .iter()

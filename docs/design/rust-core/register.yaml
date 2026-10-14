@@ -4183,7 +4183,13 @@ entries:
     A lossless connection is described as any other (T1.33's fix of the
     catalog read: arrow.bool8 admitted as boolean). A value whose bytes the
     type's layout does not read is refused UNSUPPORTED_TYPE naming the
-    column, never guessed. The default route is unchanged.
+    column, never guessed. An opaque column is read by DuckDB's layouts only
+    when its metadata names the vendor the run's provider declares
+    (sdm-data's DuckDB dialect declares DuckDB's; a host provider declares
+    none): another vendor's, or none, is admitted by its storage as before
+    (binary, left out). A key read in the decimal128(38, 0) tier is joined
+    as a HUGEINT, which DuckDB compares with a VARINT key exactly (it has no
+    DECIMAL(38, 0) to VARINT cast). The default route is unchanged.
   affected_inputs: >-
     Schema.from_source and materialize over a DuckDB connection with
     arrow_lossless_conversion set, holding a UUID, HUGEINT, UHUGEINT, BIT or

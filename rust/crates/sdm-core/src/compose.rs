@@ -67,6 +67,13 @@ impl DataAccess {
         &self.capabilities
     }
 
+    /// The vendor of the opaque Arrow extension types the run's provider
+    /// hands over, as the data layer declares it for the provider
+    /// (`DataLayer::opaque_vendor`).
+    pub fn opaque_vendor(&self) -> Option<&'static str> {
+        self.layer.opaque_vendor(&self.provider)
+    }
+
     /// How the run's provider answers `request`. A request whose fields
     /// contradict each other is refused with `INVALID_REQUEST`, an optional
     /// request the provider did not declare with `UNSUPPORTED_REQUEST`

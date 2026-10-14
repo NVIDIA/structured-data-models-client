@@ -9,9 +9,11 @@
 //! renders for it. A statement that changes without its pin changing here
 //! fails this test, and `sdm-testkit`'s `tests/t132a_keys_sql.rs` runs
 //! the cases on DuckDB and fails on any statement they run that is pinned
-//! nowhere in these files. The key's type changes no statement: its
-//! values travel in the key set the statements join, which DuckDB reads
-//! in the key's own type.
+//! nowhere in these files. The key's type changes no statement but one:
+//! its values travel in the key set the statements join, which DuckDB reads
+//! in the key's own type; a `decimal128(38, 0)` key is joined as a HUGEINT
+//! (T1.33 part 3, register P1B-43: DuckDB has no DECIMAL(38, 0) to VARINT
+//! cast), so its statements are pinned beside the narrower decimal's.
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
 use sdm_data::Data;
@@ -174,6 +176,38 @@ QUALIFY ROW_NUMBER() OVER (
   ORDER BY CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."oid" ASC NULLS LAST
 ) <= 32
 ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."oid" ASC NULLS LAST"#,
+    ),
+    (
+        r#"{"columns": ["price", "ts"], "key": "user_id", "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
+        r#"SELECT s."batch" AS "__kumo_batch__", t."price", t."ts"
+FROM "__sdm_seeds__" s
+JOIN "orders" t
+  ON t."user_id" = CAST(s."key" AS HUGEINT)
+ AND CAST(t."ts" AS TIMESTAMP) <= s."end"
+ AND CAST(t."ts" AS TIMESTAMP) > s."start""#,
+    ),
+    (
+        r#"{"columns": ["user_id", "age", "country"], "key": "user_id", "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": "users"}"#,
+        r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country"
+FROM "__sdm_seeds__" s
+JOIN "users" t
+  ON t."user_id" = CAST(s."key" AS HUGEINT)
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY s."batch"
+) = 1"#,
+    ),
+    (
+        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": "user_id", "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
+        r#"SELECT s."batch" AS "__kumo_batch__", t."order_id", t."user_id", t."price", t."ts"
+FROM "__sdm_seeds__" s
+JOIN "orders" t
+  ON t."user_id" = CAST(s."key" AS HUGEINT)
+ AND CAST(t."ts" AS TIMESTAMP) <= s."time"
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY s."batch"
+  ORDER BY CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC NULLS LAST
+) <= 32
+ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC NULLS LAST"#,
     ),
 ];
 

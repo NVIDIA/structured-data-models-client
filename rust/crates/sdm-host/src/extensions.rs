@@ -24,6 +24,14 @@
 //! bytes the type's layout does not read is refused with `UNSUPPORTED_TYPE`
 //! naming the column and the type received, never guessed. Any other
 //! extension, or one of these over another storage, is left to admission.
+//!
+//! An opaque type (`arrow.opaque`) is read only when its metadata's
+//! `vendor_name` is the vendor the run's provider declares at the data
+//! boundary (`DataLayer::opaque_vendor`, which `sdm-data` answers for its
+//! DuckDB dialect): another vendor's `hugeint` or `bit` need not have
+//! DuckDB's layout, and a fixed-size integer's bytes always decode, so a
+//! column naming another vendor, or none, is admitted by its storage as it
+//! was before (binary, left out), never decoded.
 
 use std::sync::Arc;
 
@@ -61,11 +69,13 @@ fn is_binary(data_type: &DataType) -> bool {
 }
 
 /// What `field`'s extension type means, if it is one read here over the
-/// storage DuckDB gives it. An opaque type is known by its `type_name` and
-/// storage; its vendor is not read, since a vendor's name is a dialect's,
-/// which `l0_scan.py`'s `dialects` check keeps in `sdm-data` (a value whose
-/// bytes do not read in the layout is refused, never guessed).
-fn meaning(field: &Field) -> Option<Meaning> {
+/// storage it comes in. An opaque type is read by its vendor's layout only
+/// when its metadata's `vendor_name` is `vendor`, the vendor the run's
+/// provider declares at the data boundary (`DataLayer::opaque_vendor`; the
+/// dialect's name stays in `sdm-data`); a column naming another vendor, or
+/// none, is left to admission by its storage, never decoded by a layout it
+/// may not have. A canonical `arrow.uuid` has one layout and no vendor.
+fn meaning(field: &Field, vendor: Option<&str>) -> Option<Meaning> {
     let metadata = field.metadata();
     let storage = field.data_type();
     match metadata.get(EXTENSION_NAME).map(String::as_str)? {
@@ -73,6 +83,9 @@ fn meaning(field: &Field) -> Option<Meaning> {
         OPAQUE => {
             let opaque: serde_json::Value =
                 serde_json::from_str(metadata.get(EXTENSION_METADATA)?).ok()?;
+            if opaque.get("vendor_name")?.as_str()? != vendor? {
+                return None;
+            }
             match (opaque.get("type_name")?.as_str()?, storage) {
                 ("hugeint", DataType::FixedSizeBinary(16)) => Some(Meaning::HugeInt),
                 ("uhugeint", DataType::FixedSizeBinary(16)) => Some(Meaning::UHugeInt),
@@ -340,13 +353,16 @@ fn read_field(field: &Field, read_as: DataType) -> Field {
 }
 
 /// `schema` and `batches` with each top-level column of an extension type
-/// read here (see the module's table) as what it means; unchanged where
-/// there is none. The batches are those checked against `schema`.
+/// read here (see the module's table) as what it means, an opaque one only
+/// when it names `vendor`; unchanged where there is none. The batches are
+/// those checked against `schema`.
 pub(crate) fn read(
     schema: &SchemaRef,
     batches: &[RecordBatch],
+    vendor: Option<&str>,
 ) -> Result<(SchemaRef, Vec<RecordBatch>), CoreError> {
-    let meanings: Vec<Option<Meaning>> = schema.fields().iter().map(|f| meaning(f)).collect();
+    let meanings: Vec<Option<Meaning>> =
+        schema.fields().iter().map(|f| meaning(f, vendor)).collect();
     if meanings.iter().all(Option::is_none) {
         return Ok((Arc::clone(schema), batches.to_vec()));
     }

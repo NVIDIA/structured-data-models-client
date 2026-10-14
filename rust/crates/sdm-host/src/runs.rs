@@ -50,7 +50,7 @@ use sdm_core::{
     Run, RunState,
 };
 
-use crate::admission::admit;
+use crate::admission::admit_from;
 use crate::codec::{Outgoing, decode, write, write_error};
 use crate::zones::{ZoneResolver, ZoneRoot, ZoneSource};
 
@@ -378,7 +378,7 @@ impl HostRun {
                                 // await: finished, stale, or not a fetch.
                                 return run.submit_fetch(reply.id, FetchResult::Data(arrow));
                             }
-                            match admit(&arrow) {
+                            match admit_from(&arrow, run.opaque_vendor()) {
                                 Ok(admitted) => FetchResult::Data(admitted),
                                 Err(refusal) => {
                                     run.end()?;

@@ -365,6 +365,9 @@ pub struct Run {
     /// `None` once the run has finished, been cancelled or poisoned.
     body: Option<Body>,
     shared: Arc<Mutex<Shared>>,
+    /// The opaque vendor the run's provider hands over, as its data layer
+    /// declares it ([`DataAccess::opaque_vendor`]).
+    opaque_vendor: Option<&'static str>,
 }
 
 fn protocol(code: ErrorCode, message: impl Into<String>) -> CoreError {
@@ -395,6 +398,7 @@ impl Run {
         F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
     {
         let shared = Arc::new(Mutex::new(Shared::default()));
+        let opaque_vendor = data.as_ref().and_then(DataAccess::opaque_vendor);
         let body = make(Asker {
             shared: Arc::clone(&shared),
             data,
@@ -403,7 +407,17 @@ impl Run {
             state: State::Ready,
             body: Some(Box::pin(body)),
             shared,
+            opaque_vendor,
         }
+    }
+
+    /// The vendor of the opaque Arrow extension types the run's provider
+    /// hands over, as its data layer declares it; `None` for a provider
+    /// that declares none, or an operation that names no provider. The host
+    /// layer reads an opaque column by its vendor's layout only when the
+    /// column names this vendor (register P1B-43).
+    pub fn opaque_vendor(&self) -> Option<&'static str> {
+        self.opaque_vendor
     }
 
     /// The run's attachment numbering; see [`AttachmentIds`].

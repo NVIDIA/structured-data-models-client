@@ -640,6 +640,18 @@ pub trait DataLayer: Send + Sync {
         provider: &ProviderChoice,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError>;
+
+    /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
+    /// metadata's `vendor_name`) the run's provider hands over, declared by
+    /// the layer that knows the source: the host layer reads an opaque
+    /// column by that vendor's layout only when the column names this
+    /// vendor (register P1B-43). `None`, the default and a host provider's,
+    /// declares none, and no opaque column is read as anything but its
+    /// storage.
+    fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
+        let _ = provider;
+        None
+    }
 }
 
 /// The columns of the answers whose shape the contract fixes (decision

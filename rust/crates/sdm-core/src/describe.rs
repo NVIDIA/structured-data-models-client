@@ -326,7 +326,11 @@ fn falls_back(failed: &CoreError) -> bool {
 /// where the preview may have left rows unread, the column's smallest and
 /// largest values are asked of the source (`column_ranges`, one request for
 /// every such column), and the column takes the widest tier of the preview
-/// and those two. Where the source fails that request or does not take it,
+/// and those two (a column already read as text, the widest tier, is not
+/// asked). The request is the time column's own kind, but asked apart,
+/// before inference: a big integer's tier decides its inference (an int or
+/// a string, and so whether it may be the key), which the time column's
+/// candidates follow. Where the source fails that request or does not take it,
 /// as [`falls_back`] reads it, the preview's tier stands, and a later fetch
 /// past it is refused by name.
 async fn whole_column_tiers(
@@ -339,6 +343,8 @@ async fn whole_column_tiers(
         .fields()
         .iter()
         .filter_map(|f| big_integer::tier(f).map(|t| (f.name().clone(), t)))
+        // Text is the widest tier: no range widens it.
+        .filter(|(_, tier)| *tier != arrow_schema::DataType::Utf8)
         .collect();
     let rows: usize = preview.batches.iter().map(|b| b.num_rows()).sum();
     if big.is_empty() || (rows as u64) < PREVIEW_ROWS {
@@ -669,7 +675,8 @@ async fn count_keys(
 
 /// The data a request's answer holds, or the provider's error.
 pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData, CoreError> {
-    data(asker.fetch(request)?.await)
+    let name = request.name();
+    data(asker.fetch(request)?.await, name)
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,
@@ -744,17 +751,28 @@ pub(crate) async fn ask_all_vec(
     asker: &Asker,
     requests: Vec<DataRequest>,
 ) -> Result<Vec<ArrowData>, CoreError> {
+    let names: Vec<&'static str> = requests.iter().map(DataRequest::name).collect();
     let asks = requests
         .into_iter()
         .map(|request| asker.fetch(request))
         .collect::<Result<Vec<_>, _>>()?;
-    Together::new(asks).await.into_iter().map(data).collect()
+    Together::new(asks)
+        .await
+        .into_iter()
+        .zip(names)
+        .map(|(reply, name)| data(reply, name))
+        .collect()
 }
 
-fn data(reply: Reply) -> Result<ArrowData, CoreError> {
+/// The data a fetch's reply holds, or the provider's error naming the
+/// request it failed (`request`, its name: never the driver's text, H17),
+/// so no provider error leaves the core saying nothing of where it failed.
+fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
     match reply {
         Reply::Fetch(FetchResult::Data(data)) => Ok(data),
-        Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
+        Reply::Fetch(FetchResult::Error(error)) => {
+            Err(CoreError::provider(&error).with_field("request", Detail::text(request)))
+        }
         Reply::Model(_) => Err(internal("a fetch was answered by the model")),
     }
 }

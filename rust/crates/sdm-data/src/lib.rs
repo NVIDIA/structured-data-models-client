@@ -101,6 +101,15 @@ impl DataLayer for Data {
         }
     }
 
+    fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
+        match provider {
+            ProviderChoice::Host { .. } => None,
+            ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
+                Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
+            },
+        }
+    }
+
     fn read(
         &self,
         request: &DataRequest,
