@@ -249,6 +249,18 @@ impl InferredTable {
     }
 }
 
+/// The owner's switch of P1B-11 (2026-10-13): an empty table is refused as
+/// an invalid request, which the reference's unnamed error says it is, not
+/// as a rule the core lacks; the operation and rule stay named.
+fn invalid_request(refusal: CoreError) -> CoreError {
+    CoreError {
+        kind: ErrorKind::InvalidRequest,
+        code: ErrorCode::InvalidRequest,
+        message: "a table of the source holds no rows".to_owned(),
+        ..refusal
+    }
+}
+
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
 /// admitted), which holds the catalog's columns in order, reading text as
@@ -396,7 +408,7 @@ pub fn preview(
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
         // The reference refuses an empty table as a RuntimeError.
-        return Err(not_yet("empty_table"));
+        return Err(invalid_request(not_yet("empty_table")));
     }
     let single = |kinds: &[KeyKind]| -> BTreeSet<String> {
         constraints

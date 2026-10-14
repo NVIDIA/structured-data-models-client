@@ -2103,9 +2103,10 @@ entries:
     engine's preview.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    same call is refused at from_source with UnsupportedRequestError, code
-    UNSUPPORTED_REQUEST, fields operation describe_source and rule
-    empty_table, naming no table (decision H17). An input with a second
+    same call is refused at from_source with StructuredDataError, code
+    INVALID_REQUEST (UnsupportedRequestError, UNSUPPORTED_REQUEST until the
+    owner's switch of 2026-10-13, built at T1.32g), fields operation
+    describe_source and rule empty_table, naming no table (decision H17). An input with a second
     fault the core checks first is refused for that one: an empty table
     the source lists under a name the schema may not give (a backtick, a
     dot) is INVALID_REQUEST naming the field tables, where the reference
@@ -2118,16 +2119,16 @@ entries:
     named as a table, whose preview holds no row, which the reference
     fails with its RuntimeError (pinned by the client's
     tests/test_the_schema_route.py).
-  cases: [empty.fact-table, T1.21e, T1.23, T1.24, T1.32d]
+  cases: [empty.fact-table, T1.21e, T1.23, T1.24, T1.32d, T1.32g]
   refs:
-  - 'contract/empty-null-vectors.json#empty.orders refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#empty.users refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#empty.both refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#empty.third-table refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#empty.third-table-named refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#empty.orders-named refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#empty.orders-filtered-out refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/empty-null-vectors.json#edge.no-entities-empty-orders refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.orders refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.users refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.both refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.third-table refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.third-table-named refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.orders-named refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#empty.orders-filtered-out refusal UNNAMED -> refusal INVALID_REQUEST'
+  - 'contract/empty-null-vectors.json#edge.no-entities-empty-orders refusal UNNAMED -> refusal INVALID_REQUEST'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
@@ -2140,7 +2141,7 @@ entries:
     INVALID_REQUEST, which the reference gives a table it cannot read,
     would say that. Recommendation: INVALID_REQUEST with the rule kept, at
     T1.32d. The two-fault outcome is pinned, both routes', by the client's
-    tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32d its refs name the family's vectors whose source holds an empty table (the fact table, the entity table, both, a third table named or not, the fact table named, emptied by a filter, and with no entities asked for), each the same transition, the reference's unnamed RuntimeError to this entry's UNSUPPORTED_REQUEST: for a reviewer to hold to the approved meaning. The code is kept: the recommendation above, INVALID_REQUEST, would change this approved entry, so T1.32d leaves it to the owner (E91).
+    tests/test_the_schema_route.py. Never self-approved. Approved by the owner on 2026-10-11 as a class (E66(b): where the reference crashes or gives an unnamed or internal error, a named refusal or a clearer code is approved), relayed by the orchestrator; checked at T1.26b to fit it: the reference's answer is an unnamed or internal error, and the core's a named refusal or a clearer code. From T1.32d its refs name the family's vectors whose source holds an empty table (the fact table, the entity table, both, a third table named or not, the fact table named, emptied by a filter, and with no entities asked for), each the same transition, the reference's unnamed RuntimeError to this entry's UNSUPPORTED_REQUEST: for a reviewer to hold to the approved meaning. The code is kept: the recommendation above, INVALID_REQUEST, would change this approved entry, so T1.32d leaves it to the owner (E91). The owner chose INVALID_REQUEST on 2026-10-13, the rule kept (relayed by the orchestrator; recorded at T1.32g, E97, never the implementer's approval): the refs above declare the reference's unnamed RuntimeError to INVALID_REQUEST, and sdm-schema's infer.rs refuses an empty table so.
 
 - id: P1B-12
   title: Schema.from_source's keys and time columns of the wrong type are refused by the core, by name, where the reference refuses them or fails unnamed

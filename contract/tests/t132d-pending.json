@@ -4,7 +4,6 @@
   "python-core": [],
   "rust-host": [],
   "exits": [
-   "py:test_an_empty_table_is_refused_invalid_request",
    "py:test_each_case_is_admitted[empty.entity-without-facts]",
    "py:test_each_case_is_admitted[empty.fact-table]",
    "py:test_each_case_is_admitted[empty.indices]",
@@ -13,7 +12,6 @@
    "py:test_each_case_is_admitted[null.some-times]",
    "py:test_each_case_is_admitted[null.target-all-null]",
    "py:test_each_case_is_admitted[refuse.unknown-column]",
-   "py:test_the_empty_fact_table_is_refused_invalid_request",
    "rust:rust_host_answers_each_case_as_python_ref"
   ]
  },

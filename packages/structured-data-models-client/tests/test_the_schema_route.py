@@ -449,11 +449,13 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
 ) -> None:
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     refusals = [
-        # An empty table, which the reference refuses unnamed (P1B-11).
+        # An empty table, which the reference refuses unnamed (P1B-11):
+        # INVALID_REQUEST since the owner's switch of 2026-10-13 (T1.32g).
         (
             lambda: _connection('CREATE TABLE z (z_id BIGINT)'),
             {},
             'empty_table',
+            'INVALID_REQUEST',
         ),
         # A struct column, which the reference fails unnamed (P1B-10).
         (
@@ -463,18 +465,20 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
             ),
             {},
             'column_type',
+            'UNSUPPORTED_REQUEST',
         ),
         # A key of two columns, which this core does not hold yet.
         (
             _connection,
             {'primary_keys': {'orders': ['order_id', 'user_id']}},
             'composite_key',
+            'UNSUPPORTED_REQUEST',
         ),
     ]
-    for build, arguments, rule in refusals:
+    for build, arguments, rule, code in refusals:
         with pytest.raises(StructuredDataError) as refused:
             Schema.from_source(DuckDBSource(build()), **arguments)
-        assert refused.value.code == 'UNSUPPORTED_REQUEST'
+        assert refused.value.code == code
         assert refused.value.details['rule'] == rule
 
 
@@ -1286,7 +1290,8 @@ SYSTEM_VIEWS = [
     # reference fails unnamed, reading the map as text.
     ('one table', 'duckdb_tables', 'column_type', 'RuntimeError'),
     ('shop', 'duckdb_tables', 'column_type', 'RuntimeError'),
-    # Register entry P1B-11: a view whose preview holds no row.
+    # Register entry P1B-11: a view whose preview holds no row, refused
+    # INVALID_REQUEST since the owner's switch of 2026-10-13 (T1.32g).
     ('one table', 'duckdb_views', 'empty_table', 'RuntimeError'),
     # Views the reference describes, whose text the core refused as text
     # that could hold dates (P1B-2) until its text was read by the list
@@ -1340,7 +1345,11 @@ def test_a_system_view_named_as_a_table_is_pinned_on_both_routes(
     else:
         with pytest.raises(StructuredDataError) as refused:
             _named_view(monkeypatch, tables, base, view)
-        assert type(refused.value).__name__ == 'UnsupportedRequestError'
+        assert type(refused.value).__name__ == (
+            'StructuredDataError'
+            if core_rule == 'empty_table'
+            else 'UnsupportedRequestError'
+        )
         assert refused.value.details['rule'] == core_rule
     if importlib.util.find_spec('sdm_relational_engine') is None:
         return

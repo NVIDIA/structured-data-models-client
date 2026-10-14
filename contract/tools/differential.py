@@ -157,8 +157,9 @@ RULES = {
 #: the answer to a classification among them, T1.28b's).
 PREDICT_RULES = {'problem_type': 'P1B-4', 'outputs': 'P1B-4'}
 #: The core's refusals at ``Schema.from_source`` where the reference fails
-#: unnamed, by the entry naming each.
-FROM_SOURCE_RULES = {'empty_table': 'P1B-11'}
+#: unnamed, by rule: the entry naming each and the code it declares
+#: (``empty_table`` INVALID_REQUEST since the owner's switch of P1B-11).
+FROM_SOURCE_RULES = {'empty_table': ('P1B-11', 'INVALID_REQUEST')}
 #: From T1.32f: the core's refusals at ``Schema.from_source`` of a source
 #: the reference describes, by the entry naming each (describe_source's
 #: not-yet rules, measured on real data: text the core's list of formats
@@ -1273,11 +1274,11 @@ def classify(
             and len(fo) > 1
             and fo[1] in (None, 'INTERNAL_ERROR')
             and len(fc) == 3
-            and fc[1] == 'UNSUPPORTED_REQUEST'
             and fc[2] in FROM_SOURCE_RULES
+            and fc[1] == FROM_SOURCE_RULES[fc[2]][1]
         ):
             return under(
-                FROM_SOURCE_RULES[fc[2]],
+                FROM_SOURCE_RULES[fc[2]][0],
                 fc[2],
                 f'E66(b): the reference {fo}, the core {fc}',
             )

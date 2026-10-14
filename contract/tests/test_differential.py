@@ -422,8 +422,8 @@ def test_an_empty_table_refused_by_name_is_e66b_s_entry() -> None:
     core = {
         'id': 'g00',
         'from_source': [
-            'UnsupportedRequestError',
-            'UNSUPPORTED_REQUEST',
+            'StructuredDataError',
+            'INVALID_REQUEST',
             'empty_table',
         ],
     }
@@ -431,20 +431,29 @@ def test_an_empty_table_refused_by_name_is_e66b_s_entry() -> None:
         'approved:P1B-11'
     )
     for refused in (
-        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'other'],
+        # The code before the owner's switch of P1B-11 (T1.32g).
+        ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'empty_table'],
+        ['StructuredDataError', 'INVALID_REQUEST', 'other'],
         ['StructuredDataError', 'INVALID_REQUEST', None],
         ['ok'],
     ):
         assert differential.classify(
             old, {**core, 'from_source': refused}, [0, 1], T128A, 0
         )[0] == ('UNCLASSIFIED'), refused
+    # The reference refusing by name under another code is not E66(b)'s
+    # class; under the same code both refuse alike.
     named = {
         **old,
-        'from_source': ['StructuredDataError', 'INVALID_REQUEST', None],
+        'from_source': ['StructuredDataError', 'UNSUPPORTED_TYPE', None],
     }
     assert differential.classify(named, core, [0, 1], T128A, 0)[0] == (
         'UNCLASSIFIED'
     )
+    same = {
+        **old,
+        'from_source': ['StructuredDataError', 'INVALID_REQUEST', None],
+    }
+    assert differential.classify(same, core, [0, 1], T128A, 0)[0] == 'agree'
 
 
 def test_the_source_s_failure_under_the_provider_s_code_is_dt_18_s() -> None:
