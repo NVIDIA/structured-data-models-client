@@ -273,7 +273,7 @@ From T1.32e part 2 on, each package writes its notes and fix-round paragraphs in
 
 ### T1.32b
 
-None yet.
+**T1.32b, part 2.** The two decimal cases the reference answers admitted under P1B-72 (approved by both reviewers of round 1, its `cases` the package alone, the subagent's P2); rebased onto T1.32g part 1's landing (Codex's P2: the admission after rule 6); the gate against that landing passes every check. `decimal.class-target-38-18` left to T1.32g part 2a by the owner's decision. Its measurements are in the package's row.
 
 ### T1.32f
 
