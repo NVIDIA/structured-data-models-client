@@ -11,9 +11,9 @@ Written by the package's independent test author on records built here,
 after the implementer's hand checks, so they are committed seeds:
 
 - ``DESCRIBED_RULES``: the core refusing ``text_time`` at
-  ``Schema.from_source`` where the reference describes is P1B-2's (pending
-  the owner, never approved, from T1.33's umbrella decision); it is
-  the only rule left. ``multicategorical`` (ported) and
+  ``Schema.from_source`` where the reference describes is DT-15's, approved
+  (T1.33 part 3, the owner's item 24: "text"; nothing of it is pending the
+  owner, gated by ``t133p3_gate.py``); it is the only rule left. ``multicategorical`` (ported) and
   ``time_whole_table`` (fixed), both by T1.32e (E92), are differences again,
   UNCLASSIFIED even under an entry that names them.
 - A rejected entry classifies nothing: P1B-11 approved gives
@@ -115,21 +115,44 @@ def _described(rule: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return old, core
 
 
+def _p3() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        't133p3_gate', ROOT / 'contract/tests/t133p3_gate.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _held(name: str, check: Any) -> None:
+    _p3().held('exits', f'py:test_t133_differential_classes::{name}', check)
+
+
 def test_text_time_is_the_only_described_rule() -> None:
-    assert differential.DESCRIBED_RULES == {'text_time': 'P1B-2'}
+    # T1.33 part 3 (the owner's item 24): text_time is DT-15's, and nothing
+    # of it is pending the owner.
+    def check() -> None:
+        assert differential.DESCRIBED_RULES == {'text_time': 'DT-15'}
+        assert ('P1B-2', 'text_time') not in differential.PENDING_OWNER
+
+    _held('test_text_time_is_the_only_described_rule', check)
 
 
-def test_a_core_refusing_text_time_is_p1b_2_s() -> None:
-    # Under a proposed P1B-2. Approved, it reads as pending the owner, never
-    # approved (T1.33: text_time, P1B-2 or DT-17, is the owner's open
-    # question): test_t133_umbrellas.py's
-    # test_text_time_reads_as_pending_the_owner.
+def test_a_core_refusing_text_time_is_dt_15_s() -> None:
     old, core = _described('text_time')
-    register = entry('P1B-2', 'proposed', 'text_time multicategorical')
-    kind, why = differential.classify(old, core, [0], register, 0)
-    assert kind in ('proposed:P1B-2', 'pending-owner:P1B-2') or (
-        kind == 'UNCLASSIFIED' and 'owner' in why.lower()
-    ), (kind, why)
+
+    def check() -> None:
+        for register in (committed(), entry('DT-15', 'approved', 'text_time')):
+            kind, why = differential.classify(old, core, [0], register, 0)
+            assert kind == 'approved:DT-15', (kind, why)
+        # Under DT-15 proposed, a proposed entry the review sees.
+        kind, _ = differential.classify(
+            old, core, [0], entry('DT-15', 'proposed', 'text_time'), 0
+        )
+        assert kind == 'proposed:DT-15'
+
+    _held('test_a_core_refusing_text_time_is_dt_15_s', check)
 
 
 @pytest.mark.parametrize('rule', ['multicategorical', 'time_whole_table'])
@@ -149,26 +172,33 @@ def test_multicategorical_and_time_whole_table_are_unclassified(
 
 def test_a_text_time_refusal_fails_closed() -> None:
     old, core = _described('text_time')
-    # P1B-2 rejected, not naming the rule, or not in the register.
-    unclassified = [
-        entry('P1B-2', 'rejected', 'text_time'),
-        entry('P1B-2', 'approved', 'multicategorical'),
-        entry('P1B-3', 'approved', 'text_time'),
-    ]
-    for register in unclassified:
-        kind, _ = differential.classify(old, core, [0], register, 0)
-        assert kind == 'UNCLASSIFIED', register
-    kind, why = differential.classify(
-        old, core, [0], entry('P1B-2', 'rejected', 'text_time'), 0
-    )
-    assert 'P1B-2 is rejected' in why
-    # Under another code, or with the reference refusing too, it is no
-    # described refusal.
-    other = {**core, 'from_source': [REFUSED, 'INVALID_REQUEST', 'text_time']}
-    kind, _ = differential.classify(
-        old, other, [0], entry('P1B-2', 'approved', 'text_time'), 0
-    )
-    assert kind == 'UNCLASSIFIED'
+
+    def check() -> None:
+        # DT-15 rejected, not naming the rule, or not in the register (an
+        # umbrella naming it classifies nothing).
+        unclassified = [
+            entry('DT-15', 'rejected', 'text_time'),
+            entry('DT-15', 'approved', 'multicategorical'),
+            entry('P1B-2', 'approved', 'text_time'),
+        ]
+        for register in unclassified:
+            kind, _ = differential.classify(old, core, [0], register, 0)
+            assert kind == 'UNCLASSIFIED', register
+        kind, why = differential.classify(
+            old, core, [0], entry('DT-15', 'rejected', 'text_time'), 0
+        )
+        assert 'DT-15 is rejected' in why
+        # Under another code, it is no described refusal.
+        other = {
+            **core,
+            'from_source': [REFUSED, 'INVALID_REQUEST', 'text_time'],
+        }
+        kind, _ = differential.classify(
+            old, other, [0], entry('DT-15', 'approved', 'text_time'), 0
+        )
+        assert kind == 'UNCLASSIFIED'
+
+    _held('test_a_text_time_refusal_fails_closed', check)
 
 
 # --- a rejected entry -----------------------------------------------------------

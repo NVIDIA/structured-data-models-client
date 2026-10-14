@@ -147,6 +147,12 @@ fn duckdb_text(bases: &Bases, row: &Value) -> BTreeMap<String, Option<String>> {
                     .iter()
                     .map(|v| v.map(str::to_owned))
                     .collect::<Vec<_>>(),
+                // Under arrow_large_buffer_size, DuckDB's text is large.
+                DataType::LargeUtf8 => array
+                    .as_string::<i64>()
+                    .iter()
+                    .map(|v| v.map(str::to_owned))
+                    .collect(),
                 _ => array
                     .as_string::<i32>()
                     .iter()

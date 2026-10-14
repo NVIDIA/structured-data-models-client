@@ -9,7 +9,9 @@
    "py:test_a_difference_from_the_reference_is_registered[decimal64.18-2]",
    "py:test_a_difference_from_the_reference_is_registered[large-list-view.int32]",
    "py:test_a_difference_from_the_reference_is_registered[utf8-view]",
-   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]"
+   "py:test_a_difference_from_the_reference_is_registered[view.list-utf8]",
+   "py:test_a_difference_from_the_reference_is_registered[lossless.hugeint-wide-after-preview]",
+   "py:test_a_difference_from_the_reference_is_registered[varint-wide-after-preview]"
   ],
   "rust-host-duckdb": []
  },
@@ -57,8 +59,6 @@
    "py:test_host_2_marks_each_type_reference_accepted_or_not",
    "py:test_no_entry_is_proposed_without_its_approver",
    "py:test_p1b_1_is_replaced_case_by_case",
-   "py:test_text_time_reads_as_pending_the_owner[P1B-2 approved]",
-   "py:test_text_time_reads_as_pending_the_owner[committed]",
    "py:test_the_owner_approved_it[DT-14]",
    "py:test_the_owner_approved_it[ORD-1]",
    "py:test_the_owner_approved_it[P1B-36]",
@@ -81,7 +81,9 @@
    "py:test_a_difference_from_the_reference_is_registered[lossless.uhugeint-past-38-digits]",
    "py:test_a_difference_from_the_reference_is_registered[varint-wide]",
    "py:test_a_difference_from_the_reference_is_registered[varint-past-38-digits]",
-   "py:test_a_difference_from_the_reference_is_registered[lossless.varint]"
+   "py:test_a_difference_from_the_reference_is_registered[lossless.varint]",
+   "py:test_a_difference_from_the_reference_is_registered[lossless.hugeint-wide-after-preview]",
+   "py:test_a_difference_from_the_reference_is_registered[varint-wide-after-preview]"
   ],
   "rust-host-duckdb": [
    "fixed-size-binary.16",

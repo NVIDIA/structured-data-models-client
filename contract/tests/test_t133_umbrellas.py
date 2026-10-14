@@ -18,9 +18,10 @@ decision (T1.33 part 2), before the change:
   ``approved:P1B-3``; ``problem_type`` ``approved:P1B-4``). Every other rule
   an umbrella names (``condition_value``, ``target_stype``, ...) never
   reads as an umbrella's ``approved``.
-- ``text_time`` is an open owner question (P1B-2 or DT-17): it reads as
-  pending the owner (``pending-owner:P1B-2``, or UNCLASSIFIED saying so),
-  never ``approved``.
+- ``text_time``: from T1.33 part 3 (the owner's item 24, "text"), no
+  longer the owner's open question; a remaining text_time refusal reads
+  under DT-15, approved, never under an umbrella (gated by
+  ``t133p3_gate.py``).
 - An umbrella that does list a case excuses nothing per case: every
   ``registered_case`` of the family tests returns None for it, while an
   approved entry of its own still excuses its case. The Rust families'
@@ -299,30 +300,44 @@ def _text_time() -> tuple[dict[str, Any], dict[str, Any]]:
     return old, core
 
 
-@pytest.mark.parametrize('register', ['committed', 'P1B-2 approved'])
-def test_text_time_reads_as_pending_the_owner(
-    register: str, request: pytest.FixtureRequest
+def _p3() -> ModuleType:
+    return _module('t133p3_gate', ROOT / 'contract/tests/t133p3_gate.py')
+
+
+@pytest.mark.parametrize('path', ['from_source', 'materialize'])
+def test_a_remaining_text_time_refusal_reads_under_dt_15(
+    path: str, request: pytest.FixtureRequest
 ) -> None:
-    entries = committed()
-    if register == 'P1B-2 approved':
-        entries = {
-            'P1B-2': {
-                'id': 'P1B-2',
-                'status': 'approved',
-                'approved_by': 'owner',
-                'new_behavior': 'text_time',
-            }
+    # T1.33 part 3 (the owner's item 24): text_time no longer refuses by a
+    # column's name, and the owner's answer is "text", so nothing of it is
+    # pending the owner. What text_time refusals remain (a chosen time
+    # column's values at materialize) are DT-15's, approved; never an
+    # umbrella's.
+    if path == 'from_source':
+        old, core = _text_time()
+        query = None
+    else:
+        old, core = refused_by('text_time', 'materialize')
+        query = QUERY
+    p2_only = {
+        'P1B-2': {
+            'id': 'P1B-2',
+            'status': 'approved',
+            'approved_by': 'owner',
+            'new_behavior': 'text_time',
         }
-    old, core = _text_time()
+    }
 
     def check() -> None:
-        kind, why = differential.classify(old, core, [0], entries, 0)
-        assert not kind.startswith('approved'), (kind, why)
-        assert kind == 'pending-owner:P1B-2' or (
-            kind == 'UNCLASSIFIED' and 'owner' in why.lower()
-        ), (kind, why)
+        assert ('P1B-2', 'text_time') not in differential.PENDING_OWNER
+        kind, why = differential.classify(
+            old, core, [0, 1], committed(), 0, query
+        )
+        assert kind == 'approved:DT-15', (kind, why)
+        kind, why = differential.classify(old, core, [0, 1], p2_only, 0, query)
+        assert kind == 'UNCLASSIFIED', (kind, why)
 
-    held(request, check)
+    _p3().held('exits', f'py:test_t133_umbrellas::{request.node.name}', check)
 
 
 # --- the families' registered_case ---------------------------------------------

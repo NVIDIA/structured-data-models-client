@@ -4014,6 +4014,69 @@
    "received": {
     "type": "int64"
    }
+  },
+  {
+   "id": "lossless.hugeint-wide-after-preview",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT user_id, (20 + user_id)::INTEGER AS age, ['US', 'DE', 'IN'][1 + user_id % 3] AS country, CASE WHEN user_id < 2 THEN (user_id + 1)::HUGEINT * 1000000000000000000000000000000 ELSE user_id::HUGEINT END AS f FROM (SELECT i::BIGINT AS user_id FROM range(1200) t(i) ORDER BY i DESC)"
+   ],
+   "type": {
+    "FixedSizeBinary": 16
+   },
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "a 1,200-row users whose wide values come last | the big-integer tier decided for the whole column (orchestrator, 2026-10-14): the first 1,000 rows a preview reads fit int64, the last two (users 0 and 1, the entities predicted for) do not, so the column is decimal128(38, 0) and each cell exact, never int64 then wider values",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=fixed_size_binary[16], type_name=hugeint, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "decimal128",
+    "precision": 38,
+    "scale": 0
+   }
+  },
+  {
+   "id": "varint-wide-after-preview",
+   "witness": [
+    "CREATE OR REPLACE TABLE users AS SELECT user_id, (20 + user_id)::INTEGER AS age, ['US', 'DE', 'IN'][1 + user_id % 3] AS country, (CASE WHEN user_id < 2 THEN (user_id + 1)::VARCHAR || repeat('0', 30) ELSE user_id::VARCHAR END)::VARINT AS f FROM (SELECT i::BIGINT AS user_id FROM range(1200) t(i) ORDER BY i DESC)"
+   ],
+   "type": "Binary",
+   "extension": "arrow.opaque",
+   "inference": {
+    "dtype": "int"
+   },
+   "core": "success",
+   "reach": "a 1,200-row users whose wide values come last | the big-integer tier decided for the whole column (orchestrator, 2026-10-14): the first 1,000 rows a preview reads fit int64, the last two (users 0 and 1, the entities predicted for) do not, so the column is decimal128(38, 0) and each cell exact, never int64 then wider values",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "extension<arrow.opaque[storage_type=binary, type_name=bignum, vendor_name=DuckDB]>",
+   "cells": "cast",
+   "received": {
+    "type": "decimal128",
+    "precision": 38,
+    "scale": 0
+   }
   }
  ],
  "duckdb_arrow_by_setting": {
