@@ -651,14 +651,21 @@ jobs:
         run: |
           printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
           pip install --upgrade pip
-          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist \
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
             './packages/structured-data-models-connectors[duckdb]' \
             ./packages/structured-data-models-relational-engine "$(ls native/*.whl)[test]"
       # In parallel, each test file on one worker so its module fixtures are
-      # built once; the results match a serial run's, test by test.
+      # built once; the results match a serial run's, test by test. The
+      # files whose module fixtures hold a family run parsed share one
+      # worker, one after the other (contract/tests/conftest.py), so this
+      # runner's memory holds one at a time. A test past 10 minutes fails
+      # with its stack, and a worker that dies ends the run rather than
+      # leaving xdist waiting on it.
       - name: The runner's controls and the route tests
-        run: python -m pytest contract/tests -q -n auto --dist loadfile
+        run: |
+          python -m pytest contract/tests -q -n auto --dist loadfile \
+            --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
       # Every cell gates, the floor's too (T1.18's own run alone reported

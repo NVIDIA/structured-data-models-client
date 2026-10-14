@@ -176,7 +176,7 @@ def _forced(tmp: Path) -> Path:
     return out
 
 
-def _run(cases: Path, out: Path, *extra: str) -> list[dict[str, Any]]:
+def _execute(cases: Path, out: Path, *extra: str) -> None:
     done = subprocess.run(
         [
             sys.executable,
@@ -194,6 +194,9 @@ def _run(cases: Path, out: Path, *extra: str) -> list[dict[str, Any]]:
         cwd=ROOT,
     )
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+def _read(out: Path) -> list[dict[str, Any]]:
     return [
         json.loads(line)
         for line in out.read_text(encoding='utf-8').splitlines()
@@ -204,11 +207,14 @@ def _run(cases: Path, out: Path, *extra: str) -> list[dict[str, Any]]:
 def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     tmp = tmp_path_factory.mktemp('t132e2')
     cases = _forced(tmp)
-    on = _run(cases, tmp / 'on.jsonl')
-    off = _run(cases, tmp / 'off.jsonl', '--no-capture')
+    # The capture-off run is read from its file by the capture check alone,
+    # never parsed here, and runs before the captured run is parsed: on
+    # Linux a run parsed holds about 3.5 GB and the runner making one about
+    # as much, past CI's runner when they overlap.
+    _execute(cases, tmp / 'on.jsonl')
+    _execute(cases, tmp / 'off.jsonl', '--no-capture')
     return {
-        'on': {o['case']: o for o in on},
-        'off': {o['case']: o for o in off},
+        'on': {o['case']: o for o in _read(tmp / 'on.jsonl')},
         'on_path': tmp / 'on.jsonl',
         'off_path': tmp / 'off.jsonl',
         'tmp': tmp,

@@ -41,6 +41,7 @@ import copy
 import json
 import re
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -341,8 +342,7 @@ def _first_difference(on: Any, off: Any, path: str) -> str | None:
     return None if on == off else f'{path}: differs'
 
 
-def _cases(run: list[dict[str, Any]], name: str) -> list[str]:
-    ids = [item['case'] for item in run]
+def _cases(ids: list[str], name: str) -> list[str]:
     problems = []
     if not ids:
         problems.append(f'the {name} run holds no case')
@@ -352,24 +352,30 @@ def _cases(run: list[dict[str, Any]], name: str) -> list[str]:
     return problems
 
 
-def check(
-    on: list[dict[str, Any]],
-    off: list[dict[str, Any]],
-    required: tuple[str, ...] | list[str] = (),
+#: One captured observation and its capture-off twin (``None`` when the
+#: capture-off run lacks the case).
+Pair = tuple[dict[str, Any], dict[str, Any] | None]
+
+
+def _check(
+    on_ids: list[str],
+    off_ids: list[str],
+    required: tuple[str, ...] | list[str],
+    pairs: Iterable[Pair],
 ) -> list[str]:
-    r"""Every problem with the capture over two runs of the same cases,
-    each case in ``required`` among them."""
-    problems = _cases(on, 'captured') + _cases(off, 'uncaptured')
-    by_case = {item['case']: item for item in off}
-    if [item['case'] for item in on] != [item['case'] for item in off]:
+    r""":func:`check` over the two runs' case ids and their observations
+    in pairs, taken one pair at a time, so a caller reading files holds
+    one pair in memory, never a whole run."""
+    problems = _cases(on_ids, 'captured') + _cases(off_ids, 'uncaptured')
+    if on_ids != off_ids:
         problems.append('the two runs hold different cases')
+    on_set, off_set = set(on_ids), set(off_ids)
     for case in required:
-        if case not in by_case or case not in {i['case'] for i in on}:
+        if case not in off_set or case not in on_set:
             problems.append(f'{case}: required, and not in both runs')
-    for item in on:
+    for item, other in pairs:
         case = item['case']
         problems.extend(f'{case}: {p}' for p in complete(item))
-        other = by_case.get(case)
         if other is None:
             continue
         if other['driver']['capture'] is not None:
@@ -382,12 +388,88 @@ def check(
     return problems
 
 
-def _read(path: Path) -> list[dict[str, Any]]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-        if line
-    ]
+def check(
+    on: list[dict[str, Any]],
+    off: list[dict[str, Any]],
+    required: tuple[str, ...] | list[str] = (),
+) -> list[str]:
+    r"""Every problem with the capture over two runs of the same cases,
+    each case in ``required`` among them."""
+    by_case = {item['case']: item for item in off}
+    return _check(
+        [item['case'] for item in on],
+        [item['case'] for item in off],
+        required,
+        ((item, by_case.get(item['case'])) for item in on),
+    )
+
+
+def _lines(path: Path) -> Iterator[tuple[int, bytes]]:
+    r"""Each non-empty line of ``path`` with the offset it starts at."""
+    with path.open('rb') as handle:
+        while True:
+            offset = handle.tell()
+            line = handle.readline()
+            if not line:
+                return
+            if line.strip(b'\r\n'):
+                yield offset, line
+
+
+def _index(path: Path) -> list[tuple[str, int]]:
+    r"""Each observation's case id and the offset of its line, in file
+    order; one line is parsed at a time."""
+    return [(json.loads(line)['case'], offset) for offset, line in _lines(path)]
+
+
+def _at(path: Path, offset: int) -> dict[str, Any]:
+    with path.open('rb') as handle:
+        handle.seek(offset)
+        loaded: dict[str, Any] = json.loads(handle.readline())
+        return loaded
+
+
+def _summary(item: dict[str, Any]) -> str | None:
+    capture = item['driver']['capture']
+    logged = item['driver']['query_log']
+    if capture is None:
+        return None
+    return (
+        f'{item["case"]}: {len(capture["statements"])} statements and '
+        f'{len(capture["bindings"])} bindings captured on '
+        f'{capture["cursors"]} derived cursors; query log '
+        f'{logged["statements"]} and {logged["bindings"]}; '
+        f'{logged["compared"]} statement texts compared with it'
+    )
+
+
+def check_files(
+    on: Path, off: Path, required: tuple[str, ...] | list[str] = ()
+) -> tuple[list[str], list[str]]:
+    r""":func:`check` over two observation files, and each captured
+    case's summary line, reading one pair of observations at a time: a
+    family's runs reach hundreds of megabytes, which parsed whole took
+    gigabytes (T1.32e's time and feature family: 6.6 GB on Linux)."""
+    on_index, off_index = _index(on), _index(off)
+    off_at = dict(off_index)
+    summaries: list[str] = []
+
+    def pairs() -> Iterator[Pair]:
+        for case, offset in on_index:
+            item = _at(on, offset)
+            summary = _summary(item)
+            if summary is not None:
+                summaries.append(summary)
+            where = off_at.get(case)
+            yield item, None if where is None else _at(off, where)
+
+    problems = _check(
+        [case for case, _ in on_index],
+        [case for case, _ in off_index],
+        required,
+        pairs(),
+    )
+    return problems, summaries
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -396,22 +478,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--off', type=Path, required=True)
     parser.add_argument('--require', action='append', default=[])
     arguments = parser.parse_args(argv)
-    on, off = _read(arguments.on), _read(arguments.off)
-    problems = check(on, off, arguments.require)
+    problems, summaries = check_files(
+        arguments.on, arguments.off, arguments.require
+    )
     for problem in problems:
         print(problem, file=sys.stderr)
-    for item in on:
-        capture = item['driver']['capture']
-        logged = item['driver']['query_log']
-        if capture is None:
-            continue
-        print(
-            f'{item["case"]}: {len(capture["statements"])} statements and '
-            f'{len(capture["bindings"])} bindings captured on '
-            f'{capture["cursors"]} derived cursors; query log '
-            f'{logged["statements"]} and {logged["bindings"]}; '
-            f'{logged["compared"]} statement texts compared with it'
-        )
+    for summary in summaries:
+        print(summary)
     print('capture: ' + ('FAILED' if problems else 'complete and conserving'))
     return 1 if problems else 0
 
