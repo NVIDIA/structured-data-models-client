@@ -59,18 +59,30 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = Path.home() / 'code/sdmc-reference'
 AGGREGATIONS = ('SUM', 'AVG', 'MIN', 'MAX', 'COUNT')
 OPS = ('>', '>=', '<', '<=', '=', '!=')
+#: The largest scale the core reads a float constant at
+#: (``sdm_engine::labels::EXACT_SCALE``).
+EXACT_SCALE = 22
 #: The differences a register entry of the package explains: a predicate
-#: on the source and on both answers' outcomes, and the entry.
+#: on the source and on both answers, and the entry. P1B-71: a float
+#: compared with a static decimal of a scale past ``EXACT_SCALE``, which
+#: the reference takes and the core refuses by ``condition_value``.
 EXPLAINED: list[tuple[str, Any]] = [
     (
         'P1B-71',
         lambda vector, ref, core: (
             vector.get('static_condition')
+            and vector.get('float_constant')
+            and vector.get('scale', 0) > EXACT_SCALE
             and ref['outcome']['result'] == 'success'
             and core['outcome']['code'] == 'UNSUPPORTED_REQUEST'
+            and core.get('core_rule') == 'condition_value'
         ),
     ),
 ]
+
+
+def _is_float(constant: str) -> bool:
+    return any(c in constant for c in '.eE')
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -173,6 +185,8 @@ def generated(seed: int, n: int) -> list[dict[str, Any]]:
                     'pql': f'PREDICT users.f {op} {constant} FOR EACH users.user_id',
                     'anchor_time': None,
                     'static_condition': True,
+                    'scale': s,
+                    'float_constant': _is_float(constant),
                 }
             )
     return out
@@ -200,6 +214,8 @@ def targeted() -> list[dict[str, Any]]:
                 'pql': f'PREDICT users.f {condition} FOR EACH users.user_id',
                 'anchor_time': None,
                 'static_condition': True,
+                'scale': s,
+                'float_constant': _is_float(condition.split()[-1]),
             }
         )
 
@@ -211,8 +227,11 @@ def targeted() -> list[dict[str, Any]]:
     static('ge-float-rounds', 4, 2, '>= 0.255')
     static('lt-float-half', 4, 0, '< 0.5')
     static('gt-float-small-scale', 18, 18, '> 0.1')
-    static('gt-float-large-scale', 38, 20, '> 0.1')
-    static('gt-float-large-scale-exact', 38, 20, '> 0.25')
+    static('gt-float-scale-20', 38, 20, '> 0.1')
+    static('gt-float-scale-22', 38, 22, '> 0.1')
+    static('gt-float-scale-23', 38, 23, '> 0.1')
+    static('gt-float-scale-23-exact', 38, 23, '> 0.25')
+    static('gt-float-scale-30', 38, 30, '> 0.7')
     static('gt-int-large-scale', 38, 38, '> 0')
     static('gt-int-past-int64', 38, 0, '> 10000000000000000000')
     static('ne-null', 9, 2, '!= NULL')
@@ -263,7 +282,43 @@ def observe(mode: str, vectors_path: Path, out: Path) -> None:
             reference=REFERENCE if mode == 'python-ref' else None,
         )
     answers = {v['id']: R.project(observed[v['id']], v) for v in vectors}
+    if mode == 'python-core':
+        for vector in vectors:
+            answer = answers[vector['id']]
+            if (
+                vector.get('static_condition')
+                and answer['outcome']['code'] == 'UNSUPPORTED_REQUEST'
+            ):
+                answer['core_rule'] = core_rule(vector)
     out.write_text(json.dumps(answers, indent=1), encoding='utf-8')
+
+
+def core_rule(vector: dict[str, Any]) -> str | None:
+    r"""The rule the core's refusal of ``vector`` names, from the same
+    public calls in process (the runner's observation keeps no rule)."""
+    import os
+    import warnings
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client.errors import StructuredDataError
+    from sdm_connectors import DuckDBSource
+
+    runner = _module('run_python', ROOT / 'contract/runners/run_python.py')
+    case = recorder().case_for(vector, core=True)
+    connection = runner._connection(case, runner.load_bases())
+    os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(DuckDBSource(connection))
+            PredictiveQuery(case['input']['pql'], schema).materialize(
+                **runner._materialize_arguments(case['input']['materialize'])
+            )
+    except StructuredDataError as refused:
+        return (getattr(refused, 'details', None) or {}).get('rule')
+    finally:
+        os.environ.pop('SDM_CORE_ROUTES', None)
+    return None
 
 
 def _outcome(answer: dict[str, Any]) -> str:

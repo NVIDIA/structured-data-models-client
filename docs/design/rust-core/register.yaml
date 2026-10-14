@@ -2336,8 +2336,8 @@ entries:
   refs:
   - 'contract/decimal-vectors.json#class.static-many.* refusal INTERNAL_ERROR -> refusal UNSUPPORTED_REQUEST'
   - 'contract/decimal-vectors.json#class.static-three.* refusal INTERNAL_ERROR -> refusal UNSUPPORTED_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E100}
   notes: >-
     T1.32b: the test author's nine static decimal targets
@@ -2349,7 +2349,13 @@ entries:
     of a failure, both refusing: E66(b)'s class, which a reviewer may
     approve. T1.32b keeps the refusal: the reference defines no answer to
     take (its task table takes no decimal target), so taking one would be
-    a behavior of the core's own. Measured at T1.27: the decimal family's map
+    a behavior of the core's own. Approved by both reviewers of T1.32b
+    part 1's review round 1 at 318e5ee (Codex and the independent
+    subagent: APPROVE-P1B-18-refs, the nine vectors' transition within
+    E66(b)'s refusal-to-refusal class; reports
+    /tmp/sdm-rust-t1.32b-p1-codex.md and
+    ~/.local/share/sdm-dbx/phase-1-rereview/t1.32b-p1-subagent.md),
+    relayed by the orchestrator. Measured at T1.27: the decimal family's map
     (contract/refusal-maps/decimal.json) holds both runners to
     materialize/target_type, owned by T1.32b, which admits the case; the
     reference observation is INTERNAL_ERROR at materialize (P1B-1). Fits
@@ -3040,6 +3046,11 @@ entries:
   - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-37.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> success'
+  - 'contract/decimal-vectors.json#key.at-precision.* refusal INTERNAL_ERROR -> success'
+  - 'contract/decimal-vectors.json#key.both.* refusal INTERNAL_ERROR -> success'
+  - 'contract/decimal-vectors.json#key.negative.* refusal INTERNAL_ERROR -> success'
+  - 'contract/decimal-vectors.json#key.null-foreign.* refusal INTERNAL_ERROR -> success'
+  - 'contract/decimal-vectors.json#key.primary-only.* refusal INTERNAL_ERROR -> success'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3047,9 +3058,15 @@ entries:
     This entry changes a refusal into success and requires individual owner
     approval under E66(b) and E73(b); never self-approved. Its refusal-to-refusal
     vectors are P1B-37's. key.varchar-large-buffers is
-    P1B-6's case. Decimal features keep wire_dtype's refusal (T1.32b): no
-    question sums a key, so the declared precision a decimal sum is held to
-    does not arise for one. A decimal key with a scale, written as text,
+    P1B-6's case. No question sums a key, so the declared precision a
+    decimal sum is held to (T1.32b) does not arise for one. T1.32b's 13
+    decimal-key vectors (contract/decimal-vectors.json's key.both.*,
+    key.primary-only.*, key.negative.*, key.at-precision.* and
+    key.null-foreign.*: DECIMAL(4, 0) to (38, 0), (9, 2) and (18, 2), the
+    reference's INTERNAL_ERROR, the core's success) are named in refs here,
+    within this entry's affected inputs and transition, as both reviewers
+    of T1.32b part 1's round 1 checked (the refs first proposed as P1B-70,
+    moved here and that entry removed in its fix round 1). A decimal key with a scale, written as text,
     is read back by predict's result as text (key.decimal-38-10). Approved by the owner on 2026-10-13, relayed by the orchestrator.
 
 - id: P1B-34
@@ -3254,86 +3271,45 @@ entries:
 
 # --- The decimals family (T1.32b) --------------------------------------------
 
-- id: P1B-70
-  title: The decimal family's decimal keys are sampled, where the reference fails on every entity
-  kind: change
-  old_behavior: >-
-    The reference's engine fails with INTERNAL_ERROR at materialize when
-    the entity key it samples is a decimal ("unsupported data type ...
-    for column 'ENTITY'"): measured by T1.32b's test author at DECIMAL(4,
-    0), (9, 0), (18, 0), (19, 0), (38, 0), (9, 2) and (18, 2), with the
-    entity table's key and the fact table's foreign key both decimal or
-    the primary key alone, negative keys, keys at the precision's end and
-    a null foreign key, the entities given as integers.
-  new_behavior: >-
-    On the core route, which only SDM_CORE_ROUTES forces in this build, the
-    core samples such a key as P1B-33 says (sdm_engine::keys::read, the
-    payload's key_dtype, the entities cast under T1.32a's rule table), and
-    the call reaches predict's result. The default route is unchanged.
-  affected_inputs: >-
-    PredictiveQuery.materialize with indices over a DuckDB source under a
-    forced core route whose entity key is a decimal of no negative scale,
-    at any precision and scale.
-  cases: [T1.32b]
-  refs:
-  - 'contract/decimal-vectors.json#key.at-precision.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.both.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.negative.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.null-foreign.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.primary-only.* refusal INTERNAL_ERROR -> success'
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E100}
-  notes: >-
-    Measured at T1.32b on both hosts: 13 vectors of
-    contract/decimal-vectors.json, each the reference's INTERNAL_ERROR and
-    the core's success, the core unchanged by T1.32b for them. The same
-    behavior as P1B-33 (approved by the owner, E82), at the family's
-    precisions; kept a separate entry so the owner approves these vectors
-    individually. This changes a refusal into success and requires
-    individual owner approval under E66(b) and E73(b); never
-    self-approved. Should the owner prefer, its refs may move onto P1B-33
-    instead.
-
 - id: P1B-71
-  title: A float compared with a static decimal column of a scale past 18 is refused by name, where the reference compares it
+  title: A float compared with a static decimal column of a scale past 22 is refused by name, where the reference compares it
   kind: change
   old_behavior: >-
     The reference's executor reads a condition's constant at the static
     column's decimal128(p, s) (pd.Series([value], dtype=left.dtype)) and
-    compares exactly; for a float constant pyarrow rounds its value at the
-    scale, by an approximation past small scales (0.1 at DECIMAL(38, 38)
-    is 0.10000000000000000555111512312578270210, where the double's exact
-    value rounds to ...270212), and the call reaches predict's result.
+    compares exactly; pyarrow reads a float at the scale exactly, rounded
+    half to even, through scale 22 (Arrow's Decimal128::FromReal multiplies
+    at once there), and past it by an iterative approximation, and the
+    call reaches predict's result.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, a
     float constant is read at the column's scale rounded half to even from
-    its exact value where the scale is 18 or less, as pyarrow reads it
-    there (measured), and refused by name past 18: UnsupportedRequestError,
-    UNSUPPORTED_REQUEST, rule condition_value, at materialize
-    (sdm_engine::labels::decimal_constant). A constant the type does not
-    hold is INVALID_REQUEST at materialize, as the reference refuses it.
-    The default route is unchanged.
+    its exact value where the scale is 22 or less, as pyarrow reads it
+    there, and refused by name at scales 23 to 38:
+    UnsupportedRequestError, UNSUPPORTED_REQUEST, rule condition_value, at
+    materialize (sdm_engine::labels::decimal_constant, EXACT_SCALE). A
+    constant the type does not hold is INVALID_REQUEST at materialize, as
+    the reference refuses it. The default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize over a DuckDB source under a forced core
-    route, a static target held in a DECIMAL column of a scale past 18
+    route, a static target held in a DECIMAL column of a scale of 23 to 38
     compared with a float constant (PREDICT users.f > 0.1).
   cases: [T1.32b]
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E100}
   notes: >-
-    Measured at T1.32b by contract/tools/decimal_probe.py run --targeted:
-    users.f > 0.1 and users.f > 0.25 at DECIMAL(38, 20), the reference's
-    success at predict, the core's condition_value; at DECIMAL(4, 2) and
-    (18, 18) both agree. Held by sdm-engine's labels.rs unit test
-    a_static_decimal_is_compared_exactly_and_refused_as_a_target (the
-    diagnostic test). This refuses input the reference accepts and
-    requires individual owner approval under E66(b) and E73(b); never
-    self-approved. The alternative is porting Arrow's Decimal128::FromReal
-    approximation for large scales.
-
-# --- The sampler's kept behaviors (T1.27) ------------------------------------
+    Measured at T1.32b's fix round 1 by contract/tools/decimal_probe.py
+    run --targeted: users.f > 0.1 at DECIMAL(38, 23), users.f > 0.25 at
+    (38, 23) and users.f > 0.7 at (38, 30), the reference's success at
+    predict, the core's condition_value; at (4, 2), (18, 18), (38, 20) and
+    (38, 22) both agree. The subagent of round 1 measured pyarrow 25
+    reading floats exactly through scale 22 and first differing at 28; the
+    cutoff is Arrow's exact range. Held by sdm-engine's labels.rs unit
+    tests (a float at scale 22 read, at 23 refused: the diagnostic test).
+    This refuses input the reference accepts and requires individual owner
+    approval under E66(b) and E73(b); never self-approved. The alternative
+    is porting Arrow's FromReal approximation for scales past 22.
 
 - id: SMP-1
   title: A table repeating a key past 1.05 times its distinct keys is read through its distinct rows

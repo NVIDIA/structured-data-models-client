@@ -480,15 +480,21 @@ fn float_at_scale(value: f64, scale: u32) -> Option<i128> {
     Some(if value < 0.0 { -magnitude } else { magnitude })
 }
 
+/// The largest scale a float constant is read at exactly
+/// ([`decimal_constant`]).
+const EXACT_SCALE: u32 = 22;
+
 /// A condition's constant read at a decimal column's `decimal128(precision,
 /// scale)`, as `execute_rel_op` reads it (`pd.Series([value],
 /// dtype=left.dtype)`), as an unscaled value at the scale: an integer of
-/// int64 exactly; a float rounded half to even at a scale of up to 18
-/// ([`float_at_scale`]). A constant the type does not hold is the caller's
+/// int64 exactly; a float rounded half to even at a scale of up to 22
+/// ([`float_at_scale`]), the scales Arrow's `Decimal128::FromReal` reads a
+/// double at exactly (its 38 digits less a double's 16, multiplied at
+/// once; measured on pyarrow 25: no difference through scale 25). A constant the type does not hold is the caller's
 /// error, `INVALID_REQUEST`, as pyarrow refuses it (`ArrowInvalid`) and the
 /// reference's client reports it. Refused by name (`condition_value`): an
 /// integer past int64; a float that is not finite; a float at a scale past
-/// 18, which pyarrow rounds by an approximation this does not port
+/// 22, which pyarrow rounds by an approximation this does not port
 /// (register P1B-71); a negative scale.
 fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128, CoreError> {
     let refused = || not_yet("condition_value");
@@ -511,7 +517,9 @@ fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128
                 .and_then(|unit| i128::from(value).checked_mul(unit))
                 .ok_or_else(not_held)?
         }
-        Constant::Float(value) if !value.is_finite() || scale > 18 => return Err(refused()),
+        Constant::Float(value) if !value.is_finite() || scale > EXACT_SCALE => {
+            return Err(refused());
+        }
         Constant::Float(value) => float_at_scale(value, scale).ok_or_else(not_held)?,
     };
     let largest = 10_u128.pow(u32::from(precision.clamp(1, 38))) - 1;
@@ -937,6 +945,21 @@ mod tests {
             float_at_scale(1e30, 0),
             Some(1_000_000_000_000_000_019_884_624_838_656)
         );
+        // At scale 22, the largest Arrow reads exactly (pyarrow 25,
+        // decimal128(38, 22)).
+        assert_eq!(float_at_scale(0.1, 22), Some(1_000_000_000_000_000_055_511));
+        assert_eq!(
+            float_at_scale(2.0 / 3.0, 22),
+            Some(6_666_666_666_666_666_296_592)
+        );
+        assert_eq!(
+            float_at_scale(-0.7, 22),
+            Some(-6_999_999_999_999_999_555_911)
+        );
+        assert_eq!(
+            decimal_constant(Constant::Float(0.1), 38, 22).unwrap(),
+            1_000_000_000_000_000_055_511
+        );
         assert_eq!(float_at_scale(f64::NAN, 0), None);
         assert_eq!(float_at_scale(f64::INFINITY, 0), None);
         assert_eq!(float_at_scale(1e300, 0), None);
@@ -971,7 +994,7 @@ mod tests {
         // A constant DECIMAL(4, 2) does not hold is the caller's error, as
         // the reference refuses it (measured: users.f > 100, INVALID_REQUEST
         // at materialize); an integer past int64 and a float at a scale past
-        // 18 are refused by name.
+        // 22 are refused by name; at 22 a float is read.
         for (constant, precision, scale, code) in [
             (Constant::Int(100), 4, 2, ErrorCode::InvalidRequest),
             (Constant::Float(100.0), 4, 2, ErrorCode::InvalidRequest),
@@ -983,7 +1006,7 @@ mod tests {
                 0,
                 ErrorCode::UnsupportedRequest,
             ),
-            (Constant::Float(0.5), 38, 19, ErrorCode::UnsupportedRequest),
+            (Constant::Float(0.5), 38, 23, ErrorCode::UnsupportedRequest),
         ] {
             let column = Column::Decimal {
                 values: vec![Some(1)],
