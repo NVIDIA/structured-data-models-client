@@ -10,7 +10,12 @@ Nothing here runs git or gh or reaches the network: ``Fake`` answers each
 command land.py issues from a small model of a repository (commits with
 parents and trees, ancestry, the remote phase head) and of the CI runs on
 each SHA, and records what was committed and pushed, so a refusal can be
-held to having committed and pushed nothing. Run it as
+held to having committed and pushed nothing. The CI3 cases
+(``--moved-from``) run git for real, in temporary repositories, since a
+patch-id or a tree cannot be faked without fixing land.py's git commands;
+gh stays the fake. A case listed in ``land_selftest-pending.json`` must
+still fail, as when its test author wrote it, until the implementer takes
+it out. Run it as
 
     python3 scripts/rust_core/land_selftest.py
 
@@ -19,8 +24,12 @@ Decision E43; the checks themselves are documented in land.py.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
@@ -1376,7 +1385,657 @@ def _(tmp: Path) -> tuple[bool, str]:
     return not wrong, 'as expected' if not wrong else f'wrong: {wrong}'
 
 
+# --- CI3: a candidate moved over landing commits lands on its source's evidence
+#
+# ``--moved-from X``: the candidate C is X moved over landing commits only,
+# so C lands on X's two reviews and X's green CI run (owner's decision,
+# 2026-10-14). These cases run land.py against real temporary git
+# repositories (``git patch-id`` and tree comparison cannot be faked without
+# dictating land.py's git commands); gh is still the scripted ``Fake``.
+#
+# Interface the cases hold land.py to:
+# - ``--moved-from REV`` names X; without it nothing changes.
+# - The checks are made in the order the decision lists them: X's evidence,
+#   the same tree, the same patches, only landing commits in X..H; each
+#   refusal names its condition: the reviews' refusal X's SHA (its first
+#   twelve digits), X's CI refusal X's run id or X's SHA, the tree refusal
+#   the word "tree", the patch refusal "patch" (or, for an empty commit,
+#   "empty"), and the X..H refusal "landing commit" and the offending
+#   commit's SHA (its first twelve digits).
+# - The landing commit's message names X by its full SHA, X's green run by
+#   its id, and says C was moved over landing commits only (the words
+#   "moved" and "landing commits only").
+#
+# Cases listed in ci3-pending.json failed when they were written, before
+# land.py had --moved-from; ``main`` holds each listed case to failing.
+
+MOVED_TOPIC = f'{PHASE}-t1.99'
+#: X's green run.
+X_RUN = 4242
+GIT_ENV = {
+    'GIT_CONFIG_GLOBAL': os.devnull,
+    'GIT_CONFIG_NOSYSTEM': '1',
+    'GIT_AUTHOR_NAME': 'Test Person',
+    'GIT_AUTHOR_EMAIL': 'test@example.com',
+    'GIT_COMMITTER_NAME': 'Test Person',
+    'GIT_COMMITTER_EMAIL': 'test@example.com',
+    'GIT_TERMINAL_PROMPT': '0',
+}
+
+
+def git_env() -> dict[str, str]:
+    # Drop GIT_DIR, GIT_INDEX_FILE and the like a hook running this sets.
+    env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    env.update(GIT_ENV)
+    return env
+
+
+class Repo:
+    """A bare ``origin`` and a clone of it to land from."""
+
+    def __init__(self, tmp: Path) -> None:
+        self.origin = tmp / 'origin.git'
+        self.work = tmp / 'work'
+        self.env = git_env()
+        self.run_git(tmp, 'init', '-q', '--bare', str(self.origin))
+        self.run_git(tmp, 'clone', '-q', str(self.origin), str(self.work))
+
+    def run_git(self, where: Path, *args: str) -> str:
+        proc = subprocess.run(
+            ['git', *args],
+            cwd=where,
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f'git {args}: {proc.stderr.strip()}')
+        return proc.stdout
+
+    def git(self, *args: str) -> str:
+        return self.run_git(self.work, *args).strip()
+
+    def commit(
+        self, subject: str, files: dict[str, str | None] | None = None
+    ) -> str:
+        """A commit on HEAD: each file written, or removed when None; no
+        files is an empty commit."""
+        for name, text in (files or {}).items():
+            path = self.work / name
+            if text is None:
+                path.unlink()
+            else:
+                path.write_text(text)
+            self.git('add', '-A', name)
+        self.git('commit', '-q', '--allow-empty', '-m', subject)
+        return self.git('rev-parse', 'HEAD')
+
+    def remote(self, branch: str) -> str | None:
+        proc = subprocess.run(
+            ['git', 'rev-parse', '--verify', '--quiet', f'refs/heads/{branch}'],
+            cwd=self.origin,
+            env=self.env,
+            capture_output=True,
+            text=True,
+        )
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+
+Commits = Sequence[tuple[str, dict[str, str | None] | None]]
+LAND_98: Commits = (('Land T1.98: the earlier package', None),)
+WORK_99: Commits = (('T1.99: a test package', {'a.txt': 'a\n'}),)
+
+
+@dataclass
+class Moved:
+    """X, built on the earlier package's candidate A; the phase head H,
+    A's landing commit (or what ``between`` seeds); and C, X moved onto H
+    (X's commits cherry-picked, or what ``onto`` seeds)."""
+
+    repo: Repo
+    a: str
+    x: str
+    h: str
+    c: str
+    between: list[str]
+
+
+def moved(
+    tmp: Path,
+    work: Commits = WORK_99,
+    between: Commits = LAND_98,
+    onto: Commits | None = None,
+) -> Moved:
+    r = Repo(tmp)
+    r.git('checkout', '-q', '-b', 'start')
+    r.commit('Land T1.97: the phase so far', {'base.txt': 'base\n'})
+    a = r.commit('T1.98: the earlier package', {'b98.txt': '98\n'})
+    r.git('checkout', '-q', '-b', 'x', a)
+    for subject, files in work:
+        x = r.commit(subject, files)
+    r.git('checkout', '-q', '-b', 'phase', a)
+    seeded = [r.commit(subject, files) for subject, files in between]
+    h = seeded[-1] if seeded else a
+    r.git('push', '-q', 'origin', f'{h}:refs/heads/{PHASE}')
+    r.git('checkout', '-q', '-b', MOVED_TOPIC, h)
+    if onto is None:
+        r.git('cherry-pick', '--allow-empty', f'{a}..{x}')
+    else:
+        for subject, files in onto:
+            r.commit(subject, files)
+    r.git('fetch', '-q', 'origin')
+    return Moved(r, a, x, h, r.git('rev-parse', 'HEAD'), seeded)
+
+
+class Real:
+    """land.py's git against a real repository; gh against ``Fake``."""
+
+    def __init__(self, repo: Repo, runs: dict[str, list[dict[str, Any]]]):
+        self.repo = repo
+        self.fake = Fake(runs=runs)
+
+    def __call__(
+        self, argv: Sequence[str], *_: Any, **kw: Any
+    ) -> land.Completed:
+        args = list(argv)
+        if args[0] == 'gh':
+            return self.fake.gh(args[1:])
+        stdin = kw.get('input', kw.get('stdin'))
+        proc = subprocess.run(
+            args,
+            cwd=self.repo.work,
+            env=self.repo.env,
+            capture_output=True,
+            text=True,
+            input=stdin if isinstance(stdin, str) else None,
+        )
+        return land.Completed(proc.returncode, proc.stdout, proc.stderr)
+
+
+class MovedCase:
+    """One land.py invocation on a moved candidate."""
+
+    def __init__(
+        self,
+        tmp: Path,
+        m: Moved,
+        runs: dict[str, list[dict[str, Any]]] | None = None,
+        name: str | None = None,
+    ) -> None:
+        self.tmp = tmp
+        self.m = m
+        self.runs = (
+            {m.x: [ci_run(m.x, MOVED_TOPIC, run_id=X_RUN)]}
+            if runs is None
+            else runs
+        )
+        named = m.x if name is None else name
+        self.reviews = [
+            self.review('a.txt', f'APPROVE\n\nReviewed {named[:7]}.\n'),
+            self.review('b.txt', f'APPROVE\nCandidate {named}.\n'),
+        ]
+        self.lines: list[str] = []
+        self.code: int | str | None = None
+
+    def review(self, name: str, text: str) -> str:
+        path = self.tmp / name
+        path.write_text(text)
+        return str(path)
+
+    def land(self, *extra: str, moved_from: str | None = '') -> MovedCase:
+        argv = [
+            '--candidate', self.m.c[:12], '--topic-branch', MOVED_TOPIC,
+            '--title', 'T1.99: a test package',
+            '--protected-paths', '.github/workflows/ci.yml (no gate removed)',
+        ]  # fmt: skip
+        for path in self.reviews:
+            argv += ['--review', path]
+        if moved_from is not None:
+            argv += ['--moved-from', moved_from or self.m.x[:12]]
+        tools = land.Tools(
+            run=Real(self.m.repo, self.runs), sleep=lambda _: None, repo='o/r'
+        )
+        try:
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self.code = land.main([*argv, *extra], tools, self.lines.append)
+        except SystemExit as error:  # argparse: an unknown option
+            self.code = f'SystemExit({error.code})'
+            self.lines.append(err.getvalue().strip().splitlines()[-1])
+        return self
+
+    @property
+    def text(self) -> str:
+        return '\n'.join(self.lines)
+
+    @property
+    def refusal(self) -> str:
+        return self.text.partition('REFUSED:')[2]
+
+    def untouched(self) -> bool:
+        r = self.m.repo
+        return (
+            r.git('rev-parse', 'HEAD') == self.m.c
+            and r.remote(PHASE) == self.m.h
+            and r.remote(MOVED_TOPIC) is None
+        )
+
+    def message(self) -> str:
+        return self.m.repo.git('log', '-1', '--format=%B', 'HEAD')
+
+
+def refused_naming(
+    c: MovedCase, *every: str, one_of: Sequence[str] = ()
+) -> tuple[bool, str]:
+    why = c.refusal
+    ok = (
+        c.code == 2
+        and bool(why)
+        and all(f in why for f in every)
+        and (not one_of or any(f in why for f in one_of))
+        and c.untouched()
+    )
+    return ok, (
+        'refused naming the condition, nothing committed or pushed'
+        if ok
+        else f'exit {c.code}, wanted {list(every)} {list(one_of)}: '
+        f'{c.text[-600:]}'
+    )
+
+
+@case("moved: lands C on X's reviews and green run over a landing commit")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    c = MovedCase(tmp, m).land()
+    r = m.repo
+    sha = r.git('rev-parse', 'HEAD')
+    ok = (
+        c.code == 0
+        and f'LANDED {sha}' in c.text
+        and r.git('rev-parse', 'HEAD^') == m.c
+        and r.git('rev-parse', 'HEAD^{tree}')
+        == r.git('rev-parse', f'{m.c}^{{tree}}')
+        and r.remote(PHASE) == sha
+        and r.remote(MOVED_TOPIC) == sha
+        and f'Base-SHA: {m.h}' in c.message()
+    )
+    return ok, 'landed on C' if ok else f'exit {c.code}: {c.text[-600:]}'
+
+
+@case('moved: lands over several landing commits')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        between=(
+            ('Land T1.98: the earlier package', None),
+            ('Land T1.96: another lane', None),
+            ('Land T1.95: a third', None),
+        ),
+    )
+    c = MovedCase(tmp, m).land()
+    ok = c.code == 0 and m.repo.remote(PHASE) == m.repo.git('rev-parse', 'HEAD')
+    return ok, 'landed' if ok else f'exit {c.code}: {c.text[-600:]}'
+
+
+@case('moved: lands a package of several commits, moved in order')
+def _(tmp: Path) -> tuple[bool, str]:
+    work: Commits = (
+        ('T1.99: a test package', {'a.txt': 'a\n'}),
+        ('T1.99 fix 1: review findings', {'a.txt': 'a2\n', 'c.txt': 'c\n'}),
+    )
+    m = moved(tmp, work=work)
+    c = MovedCase(tmp, m).land()
+    return c.code == 0, 'landed' if c.code == 0 else c.text[-600:]
+
+
+@case('moved: the landing message names X, its green run, and the move')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    c = MovedCase(tmp, m).land()
+    message = c.message() if c.code == 0 else ''
+    flat = ' '.join(message.split())
+    ok = (
+        m.x in flat
+        and re.search(rf'(?<!\d){X_RUN}(?!\d)', flat) is not None
+        and re.search(r'\bmoved\b', flat) is not None
+        and 'landing commits only' in flat
+        and f'Base-SHA: {m.h}' in message
+        and f'Checkpoint-SHA: {m.h}' in message
+    )
+    return (
+        ok,
+        'names X, its run, the move' if ok else f'{c.text[-300:]} | {message}',
+    )
+
+
+@case('moved: --dry-run checks and changes nothing')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    c = MovedCase(tmp, m).land('--dry-run')
+    ok = (
+        c.code == 0
+        and c.untouched()
+        and 'nothing committed, nothing pushed' in c.text
+        and m.x in ' '.join(c.text.split())
+    )
+    return ok, 'checked only' if ok else f'exit {c.code}: {c.text[-600:]}'
+
+
+# Condition 1: X's evidence, as today's for a candidate.
+
+
+@case('moved: refused, the reviews name C instead of X')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {
+        m.x: [ci_run(m.x, MOVED_TOPIC, run_id=X_RUN)],
+        m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)],
+    }
+    c = MovedCase(tmp, m, runs=runs, name=m.c).land()
+    return refused_naming(c, 'review', m.x[:12])
+
+
+@case('moved: refused, the reviews name neither C nor X')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    return refused_naming(
+        MovedCase(tmp, m, name=m.a).land(), 'review', m.x[:12]
+    )
+
+
+@case('moved: refused, one review names X and the other C')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    c = MovedCase(tmp, m)
+    c.reviews[1] = c.review('b.txt', f'APPROVE\nCandidate {m.c}.\n')
+    return refused_naming(c.land(), 'review', m.x[:12])
+
+
+@case("moved: refused, X's newest run failed after a green one")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {
+        m.x: [
+            ci_run(m.x, MOVED_TOPIC, run_id=X_RUN),
+            ci_run(m.x, MOVED_TOPIC, conclusion='failure', run_id=X_RUN + 7,
+                   created='2026-10-09T05:00:00Z'),
+        ],
+        m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)],
+    }  # fmt: skip
+    c = MovedCase(tmp, m, runs=runs).land()
+    return refused_naming(c, 'not green', str(X_RUN + 7))
+
+
+@case("moved: refused, X's run was cancelled")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {
+        m.x: [ci_run(m.x, MOVED_TOPIC, conclusion='cancelled', run_id=X_RUN)],
+        m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)],
+    }
+    c = MovedCase(tmp, m, runs=runs).land()
+    return refused_naming(c, 'not green', 'cancelled', str(X_RUN))
+
+
+@case("moved: refused, X's run is unfinished")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {m.x: [ci_run(m.x, MOVED_TOPIC, status='in_progress', run_id=X_RUN)]}
+    c = MovedCase(tmp, m, runs=runs).land()
+    return refused_naming(c, 'not green', str(X_RUN))
+
+
+@case('moved: refused, X has no CI run, though C has a green one')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)]}
+    c = MovedCase(tmp, m, runs=runs).land()
+    return refused_naming(c, 'no CI run', m.x[:12])
+
+
+@case("moved: refused, X's only green run is a pull request's")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {m.x: [ci_run(m.x, MOVED_TOPIC, run_id=X_RUN, event='pull_request')]}
+    c = MovedCase(tmp, m, runs=runs).land()
+    return refused_naming(c, 'no CI run', m.x[:12])
+
+
+# Condition 2: the same tree.
+
+
+@case('moved: refused, C changes a file X does not')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp, onto=(('T1.99: a test package', {'a.txt': 'other\n'}),))
+    return refused_naming(MovedCase(tmp, m).land(), 'tree')
+
+
+@case('moved: refused, C adds a commit that changes a file')
+def _(tmp: Path) -> tuple[bool, str]:
+    onto: Commits = (*WORK_99, ('T1.99 fix 1: one more', {'d.txt': 'd\n'}))
+    m = moved(tmp, onto=onto)
+    return refused_naming(MovedCase(tmp, m).land(), 'tree')
+
+
+# Condition 3: the same patches, in order, none empty or extra.
+
+TWO: Commits = (
+    ('T1.99: a test package', {'a.txt': 'a\n'}),
+    ('T1.99 fix 1: review findings', {'c.txt': 'c\n'}),
+)
+
+
+@case("moved: refused, C squashes X's two commits into one")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        work=TWO,
+        onto=(('T1.99: a test package', {'a.txt': 'a\n', 'c.txt': 'c\n'}),),
+    )
+    return refused_naming(MovedCase(tmp, m).land(), one_of=('patch', 'Patch'))
+
+
+@case("moved: refused, C splits X's one commit into two")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        work=(('T1.99: a test package', {'a.txt': 'a\n', 'c.txt': 'c\n'}),),
+        onto=TWO,
+    )
+    return refused_naming(MovedCase(tmp, m).land(), one_of=('patch', 'Patch'))
+
+
+@case("moved: refused, C has X's commits in another order")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp, work=TWO, onto=(TWO[1], TWO[0]))
+    return refused_naming(MovedCase(tmp, m).land(), one_of=('patch', 'Patch'))
+
+
+@case('moved: refused, C adds an empty commit')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp, onto=(*WORK_99, ('T1.99 note: nothing changed', None)))
+    return refused_naming(
+        MovedCase(tmp, m).land(), one_of=('patch', 'Patch', 'empty')
+    )
+
+
+@case('moved: refused, X has an empty commit C dropped')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        work=(*WORK_99, ('T1.99 note: nothing changed', None)),
+        onto=WORK_99,
+    )
+    return refused_naming(
+        MovedCase(tmp, m).land(), one_of=('patch', 'Patch', 'empty')
+    )
+
+
+# Condition 4: only landing commits in X..H. Each seeded commit that changes
+# files is undone by another, so C's tree and patches are X's and only this
+# condition fails; the refusal names either offending commit.
+
+ADD_Z = {'z.txt': 'z\n'}
+DROP_Z: dict[str, str | None] = {'z.txt': None}
+
+
+@case('moved: refused, X..H has a commit that is not a landing commit')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        between=(
+            ('T1.97 fix 1: a stray change', ADD_Z),
+            ('Land T1.98: the earlier package', None),
+            ('T1.97 fix 2: undone', DROP_Z),
+        ),
+    )
+    stray = (m.between[0][:12], m.between[2][:12])
+    return refused_naming(
+        MovedCase(tmp, m).land(), 'landing commit', one_of=stray
+    )
+
+
+@case("moved: refused, X..H has a commit titled 'Land' that changes files")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        between=(
+            ('Land T1.98: the earlier package', ADD_Z),
+            ('Land T1.96: another lane', DROP_Z),
+        ),
+    )
+    stray = (m.between[0][:12], m.between[1][:12])
+    return refused_naming(
+        MovedCase(tmp, m).land(), 'landing commit', one_of=stray
+    )
+
+
+@case("moved: refused, X..H has an empty commit not titled 'Land '")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(
+        tmp,
+        between=(
+            ('Land T1.98: the earlier package', None),
+            ('T1.98 tracker: the earlier package landed', None),
+        ),
+    )
+    return refused_naming(
+        MovedCase(tmp, m).land(), 'landing commit', m.between[1][:12]
+    )
+
+
+@case("moved: refused, X..H has an empty commit titled 'Landed'")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp, between=(('Landed T1.98: the earlier package', None),))
+    return refused_naming(
+        MovedCase(tmp, m).land(), 'landing commit', m.between[0][:12]
+    )
+
+
+@case('moved: refused, X..H has a merge commit')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    r = m.repo
+    # A merge of the landing commit and an empty side commit, both trees
+    # A's, made in place of the plain phase head.
+    r.git('checkout', '-q', '-b', 'side', m.a)
+    side = r.commit('Land T1.96: a side landing')
+    r.git('checkout', '-q', 'phase')
+    r.git('merge', '-q', '--no-ff', '-m', 'Land T1.98: merged', side)
+    h = r.git('rev-parse', 'HEAD')
+    r.git('push', '-q', 'origin', f'{h}:refs/heads/{PHASE}')
+    r.git('checkout', '-q', '-B', MOVED_TOPIC, h)
+    r.git('cherry-pick', f'{m.a}..{m.x}')
+    r.git('fetch', '-q', 'origin')
+    m = Moved(r, m.a, m.x, h, r.git('rev-parse', 'HEAD'), [h])
+    return refused_naming(MovedCase(tmp, m).land(), 'landing commit', h[:12])
+
+
+# Condition 5: the rest of land.py's checks still hold C.
+
+
+@case('moved: refused, C is X itself, not moved onto the phase head')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    m.repo.git('checkout', '-q', '-B', MOVED_TOPIC, m.x)
+    m = Moved(m.repo, m.a, m.x, m.h, m.x, m.between)
+    return refused_naming(MovedCase(tmp, m).land(), 'does not descend')
+
+
+@case('moved: refused, a dirty worktree')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    (m.repo.work / 'stray.txt').write_text('x\n')
+    return refused_naming(MovedCase(tmp, m).land(), 'not clean')
+
+
+@case('moved: refused, --moved-from is not a commit')
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    return refused_naming(
+        MovedCase(tmp, m).land(moved_from='f' * 12), 'is not a commit'
+    )
+
+
+# Without --moved-from nothing changes.
+
+
+@case("unmoved: X's reviews and run do not land C without --moved-from")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    c = MovedCase(tmp, m).land(moved_from=None)
+    return refused_naming(c, f'does not name the candidate {m.c[:12]}')
+
+
+@case("unmoved: C's own reviews and run land it as before")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    runs = {m.c: [ci_run(m.c, MOVED_TOPIC, run_id=X_RUN + 1)]}
+    c = MovedCase(tmp, m, runs=runs, name=m.c).land(moved_from=None)
+    message = c.message() if c.code == 0 else ''
+    ok = (
+        c.code == 0
+        and f'Candidate run {X_RUN + 1} green at {m.c}'
+        in ' '.join(message.split())
+        and m.x not in message
+        and 'landing commits only' not in ' '.join(message.split())
+        and m.repo.remote(PHASE) == m.repo.git('rev-parse', 'HEAD')
+    )
+    return ok, 'landed as before' if ok else f'{c.text[-300:]} | {message}'
+
+
+@case("unmoved: C with no run of its own is refused though X's is green")
+def _(tmp: Path) -> tuple[bool, str]:
+    m = moved(tmp)
+    c = MovedCase(tmp, m, name=m.c).land(moved_from=None)
+    return refused_naming(c, 'no CI run', m.c[:12])
+
+
+# --- the pending list -----------------------------------------------------------
+
+PENDING = Path(__file__).with_name('land_selftest-pending.json')
+
+
+def pending_list() -> tuple[set[str], list[str]]:
+    """The cases listed pending, and what breaks the list's rules: pending
+    within authored, every name a case."""
+    if not PENDING.exists():
+        return set(), []
+    loaded = json.loads(PENDING.read_text(encoding='utf-8'))
+    pending = set(loaded['pending']['cases'])
+    authored = set(loaded['authored']['cases'])
+    names = {name for name, _ in CASES}
+    problems = [
+        f'{PENDING.name}: {name!r} is pending but was never authored'
+        for name in sorted(pending - authored)
+    ] + [
+        f'{PENDING.name}: {name!r} is not a self-test'
+        for name in sorted(authored - names)
+    ]
+    return pending, problems
+
+
 def main() -> int:
+    pending, problems = pending_list()
     results: list[Result] = []
     for name, check in CASES:
         with tempfile.TemporaryDirectory(prefix='sdm-land-') as tmp:
@@ -1384,16 +2043,27 @@ def main() -> int:
                 ok, detail = check(Path(tmp))
             except Exception as error:  # a crash is a failed self-test
                 ok, detail = False, f'raised {type(error).__name__}: {error}'
-        results.append(Result(name, ok, detail.replace('\n', ' | ')[:400]))
+        detail = detail.replace('\n', ' | ')[:400]
+        if name in pending:
+            # Pending: it must still fail, as when it was written.
+            mark = 'pend' if not ok else 'FAIL'
+            if ok:
+                detail = f'passes now: take it out of {PENDING.name} pending'
+            ok = not ok
+        else:
+            mark = 'ok  ' if ok else 'FAIL'
+        results.append(Result(name, ok, f'{mark} {name}: {detail}'))
     for result in results:
-        print(
-            f'{"ok  " if result.ok else "FAIL"} {result.name}: {result.detail}'
-        )
+        print(result.detail)
+    for problem in problems:
+        print(f'FAIL {problem}')
     failed = [r for r in results if not r.ok]
+    held = sum(1 for r in results if r.name in pending and r.ok)
     print(
         f'{len(results) - len(failed)} of {len(results)} self-tests as expected'
+        f' ({held} pending, failing as listed in {PENDING.name})'
     )
-    return 1 if failed else 0
+    return 1 if failed or problems else 0
 
 
 if __name__ == '__main__':
