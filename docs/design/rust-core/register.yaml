@@ -3292,8 +3292,8 @@ entries:
     Phase 1b inventory entry, which the ratchet's cases rule passes only
     under an approved entry naming the case.
   cases: [T1.32g, time.feature-date-and-timestamp-with-null]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E96}
   notes: >-
     T1.32g part 1, a claim-only correction of a diagnostic case with no
@@ -3301,6 +3301,11 @@ entries:
     alternative, holding a column the reference made the time column as a
     feature too, would let any time column satisfy a feature claim, which
     weakens rule 6. The outcome below is python-ref's, unchanged.
+    Approved by both reviewers of T1.32g part 1's review round 1 of
+    b219884 (Codex and the independent subagent: APPROVE-P1B-52, the
+    reference describes users.f_date, received as date32, as the users
+    time column, and the re-recorded line differs only in identity),
+    relayed by the orchestrator (H19); never the implementer's approval.
   case_outcomes:
   - {case: time.feature-date-and-timestamp-with-null, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: the cells the reference observation shows, its outcome unchanged'}
 

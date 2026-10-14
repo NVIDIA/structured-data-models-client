@@ -299,6 +299,12 @@ def read_reference(tree: Any, report: Report) -> dict[str, Any] | None:
                 report.fail('read', f'{where}: not an observation of a case')
                 unread = True
                 continue
+            if observation['case'] in found:
+                report.fail(
+                    'read', f'{where}: a second line of {observation["case"]}'
+                )
+                unread = True
+                continue
             found[observation['case']] = observation
     return None if unread else found
 
@@ -542,7 +548,33 @@ def cell_type(arrow: str) -> str | None:
     r"""The cell type the core admits a column the driver returned as
     ``arrow`` (pyarrow's text of the type) as, or None for a type outside
     the set: the admission table, read at the cell's grain (a list is a
-    list whatever its items; L5 checks the host's conversions)."""
+    list whatever its items; L5 checks the host's conversions). A
+    dictionary or run-end type is unwrapped to its values, at most
+    :data:`MAX_DEPTH` levels; deeper is :class:`Unevidenced`, by name."""
+    dictionary = False
+    for _ in range(MAX_DEPTH + 1):
+        head = _HEAD.match(arrow)
+        if head is not None and arrow.startswith('dictionary<values='):
+            # Only the innermost dictionary decides: a dictionary of text.
+            dictionary = True
+            arrow = _inner(arrow, len('dictionary<values='))
+        elif (
+            head is not None
+            and head.group(1) == 'run_end_encoded'
+            and ', values: ' in arrow
+        ):
+            dictionary = False
+            arrow = _inner(arrow, arrow.index(', values: ') + len(', values: '))
+        else:
+            break
+    else:
+        raise Unevidenced('a type it does not read')
+    cell = _plain_type(arrow)
+    return 'dictionary-utf8' if dictionary and cell == 'utf8' else cell
+
+
+def _plain_type(arrow: str) -> str | None:
+    r"""The cell type of a type that wraps no other's values."""
     if arrow in _PLAIN:
         return _PLAIN[arrow]
     unit = _UNIT.fullmatch(arrow)
@@ -558,15 +590,7 @@ def cell_type(arrow: str) -> str | None:
             '-tz' if zone else ''
         )
     head = _HEAD.match(arrow)
-    if head is None:
-        return None
-    if head.group(1) == 'dictionary' and arrow.startswith('dictionary<values='):
-        values = cell_type(_inner(arrow, len('dictionary<values=')))
-        return 'dictionary-utf8' if values == 'utf8' else values
-    if head.group(1) == 'run_end_encoded' and ', values: ' in arrow:
-        found = arrow.index(', values: ') + len(', values: ')
-        return cell_type(_inner(arrow, found))
-    return _HEADS.get(head.group(1))
+    return None if head is None else _HEADS.get(head.group(1))
 
 
 def _strs(value: Any) -> bool:
@@ -750,6 +774,9 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     given = case['input'] if isinstance(case.get('input'), dict) else {}
     options = given.get('from_source') or {}
     named = options.get('tables') if isinstance(options, dict) else None
+    if _strs(named):
+        # A list of tables names each as itself (Schema.from_source).
+        named = {name: name for name in named}
     if named is not None and not isinstance(named, dict):
         raise Unevidenced('table options it does not read')
     types = received(line)

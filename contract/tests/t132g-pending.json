@@ -3,10 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_type_nested_past_the_bound_is_refused_by_name[dictionary]",
-   "py:test_a_type_nested_past_the_bound_is_refused_by_name[run_end_encoded]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
