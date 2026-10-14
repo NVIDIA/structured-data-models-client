@@ -27,12 +27,15 @@ included), each table written as parquet under ``DIR/samples``. Its spec is
 samples with ``read_parquet``, so the spec names local paths and is never
 committed either.
 
-``--cache`` and ``--out`` must name places outside the worktree this
-tool is in, in any spelling (absolute, relative or through ``..``, read
-from the working directory, links resolved): the cache holds RelBench's
-tables and the samples, ``--out`` the spec or every probe's payloads, and
-none of them is ever committed. Each command refuses such a path, with exit
-status 2, before it reads, writes, fetches or starts an environment.
+``--cache`` and ``--out`` are read once, ``~`` expanded, and that value
+is the one checked and used. No path a command touches may be inside a git
+work tree, this worktree or any other (:func:`refused`: every link
+followed, the nearest existing directory compared by file identity and
+asked of git): the roots, and below them the downloads, the samples, the
+sampler's DuckDB spill (``temp_directory``, under the cache), the spec and
+each probe's output. Each command refuses such a path, with exit status 2,
+before it reads, writes, fetches or starts an environment, and each write
+is checked again right before it is made.
 
 ``run`` samples, then runs ``differential.py probe`` on each route, the
 reference corrected for register P1B-13 among them (real data holds null
@@ -47,6 +50,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import urllib.request
@@ -244,12 +248,102 @@ RECIPES: dict[str, dict[str, Any]] = {
 }
 
 
-def inside_worktree(path: Path) -> bool:
-    r"""Whether ``path``, read from the working directory with ``..`` and
-    links resolved, is the worktree this tool is in or below it."""
-    root = ROOT.resolve()
-    resolved = path.expanduser().resolve()
-    return resolved == root or root in resolved.parents
+def given(text: str) -> Path:
+    r"""A ``--cache`` or ``--out`` as given: ``~`` expanded once, here, and
+    made absolute against the working directory, nothing else changed;
+    every check and every use reads this one value."""
+    path = Path(os.path.expanduser(text))
+    return path if path.is_absolute() else Path.cwd() / path
+
+
+def _nearest_existing(path: Path) -> Path:
+    for candidate in (path, *path.parents):
+        if candidate.exists():
+            return candidate
+    return Path(path.anchor)
+
+
+def refused(path: Path) -> str | None:
+    r"""Why ``path`` may not hold RelBench data, or None.
+
+    ``path`` is resolved as the system would write it (every link followed,
+    a dangling one to its target), then its nearest existing directory is
+    compared by file identity: refused when it, or a directory above it,
+    is the worktree this tool is in (``os.path.samefile``, so another
+    letter case on a disk that folds case is the same directory), or when
+    git places it in any work tree or git directory (this repository's
+    other worktrees, any other repository). Git not answering is a
+    refusal."""
+    resolved = Path(os.path.realpath(path))
+    existing = _nearest_existing(resolved)
+    if not existing.is_dir():
+        existing = existing.parent
+    for here in (existing, *existing.parents):
+        try:
+            if os.path.samefile(here, ROOT):
+                return f'inside the worktree this tool is in ({ROOT})'
+        except OSError:
+            continue
+    clean = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+    try:
+        answer = subprocess.run(
+            [
+                'git',
+                '-C',
+                str(existing),
+                'rev-parse',
+                '--is-inside-work-tree',
+                '--is-inside-git-dir',
+            ],
+            capture_output=True,
+            text=True,
+            env=clean,
+            check=False,
+        )
+    except OSError as error:
+        return f'git cannot say whether it is in a work tree ({error})'
+    if 'true' in answer.stdout.split():
+        return f'inside a git work tree or git directory ({existing})'
+    if answer.returncode != 0 and 'not a git repository' not in answer.stderr:
+        return f'git cannot say whether it is in a work tree ({existing})'
+    return None
+
+
+def guard(path: Path) -> None:
+    r"""Refuses ``path`` by name (:func:`refused`); called once for every
+    path a command will touch before it starts, and again right before
+    each write."""
+    why = refused(path)
+    if why is not None:
+        raise SystemExit(
+            f'{path}: {why}. RelBench data, samples, specs and payloads '
+            'are never committed, so they live outside every work tree'
+        )
+
+
+def temp_directory(cache: Path) -> Path:
+    r"""Where the sampler's DuckDB spills: under the cache, never the
+    working directory (DuckDB's default, ``.tmp``)."""
+    return cache / 'duckdb-tmp'
+
+
+def touched(
+    cache: Path, names: list[str], *, downloads: bool = False
+) -> list[Path]:
+    r"""Every path a command reads or writes under ``cache`` for
+    ``names``: the cache, the tables and their downloads, the samples and
+    the sampler's spill."""
+    paths = [cache, cache / 'samples', temp_directory(cache)]
+    for name in names:
+        where = directory(cache, name)
+        paths.append(where)
+        for table in _tables(name):
+            paths.append(where / f'{table}.parquet')
+            if downloads:
+                paths.append(where / f'{table}.part')
+            paths.append(cache / 'samples' / name / f'{table}.parquet')
+        paths.append(cache / 'samples' / name)
+    return paths
 
 
 def registry() -> dict[str, Any]:
@@ -285,6 +379,7 @@ def fetch(cache: Path, names: list[str]) -> None:
         repository = found['datasets'][name]['repository']
         revision = found['revisions'][repository]
         where = directory(cache, name)
+        guard(where)
         where.mkdir(parents=True, exist_ok=True)
         for table, spec in _tables(name).items():
             path = where / f'{table}.parquet'
@@ -298,12 +393,14 @@ def fetch(cache: Path, names: list[str]) -> None:
             part = path.with_suffix('.part')
             print(f'{name}/{table}: fetching {url}', flush=True)
             with urllib.request.urlopen(url, timeout=60) as answer:
+                guard(part)
                 with part.open('wb') as out:
                     for block in iter(lambda: answer.read(1 << 20), b''):
                         out.write(block)
             if _sha256(part) != spec['sha256']:
                 part.unlink()
                 raise SystemExit(f'{name}/{table}: not the pinned SHA-256')
+            guard(path)
             part.replace(path)
 
 
@@ -422,6 +519,7 @@ def sample_dataset(con: Any, cache: Path, name: str) -> dict[str, Path]:
     else:
         raise SystemExit(f'{name}: the closure did not settle')
     out = cache / 'samples' / name
+    guard(out)
     out.mkdir(parents=True, exist_ok=True)
     paths = {}
     for table in tables:
@@ -431,6 +529,7 @@ def sample_dataset(con: Any, cache: Path, name: str) -> dict[str, Path]:
         if not rows:
             raise SystemExit(f'{name}: {table} is empty in the sample')
         paths[table] = out / f'{table}.parquet'
+        guard(paths[table])
         con.execute(
             f'COPY {_q("s_" + table)} TO {_text(str(paths[table]))} '
             '(FORMAT parquet)'
@@ -471,6 +570,9 @@ def spec(cache: Path, names: list[str]) -> dict[str, Any]:
     sources = []
     for name in names:
         con = duckdb.connect()
+        spill = temp_directory(cache)
+        guard(spill)
+        con.execute(f'SET temp_directory = {_text(str(spill))}')
         paths = sample_dataset(con, cache, name)
         tables = _tables(name)
         exclude = RECIPES[name].get('exclude', {})
@@ -519,16 +621,23 @@ def spec(cache: Path, names: list[str]) -> dict[str, Any]:
 # --- run --------------------------------------------------------------------
 
 
+#: What ``run`` writes under ``--out``.
+OUTPUTS = ('spec.json', 'old.json', 'core.json', 'corrected.json')
+
+
 def run(args: argparse.Namespace) -> int:
+    guard(args.out)
     args.out.mkdir(parents=True, exist_ok=True)
     me = str(Path(__file__).resolve())
     differential = str(HERE / 'differential.py')
     spec_path = args.out / 'spec.json'
+    guard(spec_path)
     # The sampler needs DuckDB, which the reference environment has.
     subprocess.run(
         [
             args.reference_python,
             '-I',
+            '-B',
             me,
             'sample',
             '--cache',
@@ -544,10 +653,12 @@ def run(args: argparse.Namespace) -> int:
         (args.candidate_python, 'core'),
         (args.reference_python, 'corrected'),
     ):
+        guard(args.out / f'{route}.json')
         subprocess.run(
             [
                 python,
                 '-I',
+                '-B',
                 differential,
                 'probe',
                 str(spec_path),
@@ -561,6 +672,7 @@ def run(args: argparse.Namespace) -> int:
         [
             args.reference_python,
             '-I',
+            '-B',
             differential,
             'compare',
             str(args.out / 'old.json'),
@@ -580,17 +692,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = parser.add_subparsers(dest='command', required=True)
     f = sub.add_parser('fetch')
-    f.add_argument('--cache', type=Path, required=True)
+    f.add_argument('--cache', type=given, required=True)
     f.add_argument('datasets', nargs='*', default=list(RECIPES))
     s = sub.add_parser('sample')
-    s.add_argument('--cache', type=Path, required=True)
-    s.add_argument('--out', type=Path, required=True)
+    s.add_argument('--cache', type=given, required=True)
+    s.add_argument('--out', type=given, required=True)
     s.add_argument('datasets', nargs='*', default=list(RECIPES))
     r = sub.add_parser('run')
-    r.add_argument('--cache', type=Path, required=True)
+    r.add_argument('--cache', type=given, required=True)
     r.add_argument('--reference-python', required=True)
     r.add_argument('--candidate-python', required=True)
-    r.add_argument('--out', type=Path, required=True)
+    r.add_argument('--out', type=given, required=True)
     r.add_argument(
         '--register',
         type=Path,
@@ -601,21 +713,30 @@ def main(argv: list[str] | None = None) -> int:
     unknown = sorted(set(args.datasets) - set(RECIPES))
     if unknown:
         parser.error(f'no recipe for {unknown}')
-    for option in ('cache', 'out'):
-        given = getattr(args, option, None)
-        if given is not None and inside_worktree(given):
+    # Every concrete path the command will touch, checked before it reads,
+    # writes, fetches or starts an environment; each write checks again.
+    paths = touched(
+        args.cache, args.datasets, downloads=args.command == 'fetch'
+    )
+    if args.command == 'sample':
+        paths.append(args.out)
+    if args.command == 'run':
+        paths += [args.out, *(args.out / name for name in OUTPUTS)]
+    for path in paths:
+        why = refused(path)
+        if why is not None:
             parser.error(
-                f'--{option} {given} is inside the worktree ({ROOT}): '
-                'RelBench data, samples, specs and payloads are never '
-                'committed, so they live outside it'
+                f'{path}: {why}. RelBench data, samples, specs and '
+                'payloads are never committed, so they live outside every '
+                'work tree'
             )
     if args.command == 'fetch':
         fetch(args.cache, args.datasets)
         return 0
     if args.command == 'sample':
-        args.out.write_text(
-            json.dumps(spec(args.cache, args.datasets), indent=1) + '\n'
-        )
+        found = spec(args.cache, args.datasets)
+        guard(args.out)
+        args.out.write_text(json.dumps(found, indent=1) + '\n')
         return 0
     return run(args)
 

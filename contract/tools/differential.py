@@ -1337,6 +1337,58 @@ REQUEST = (
 )
 
 
+def malformed(record: Any) -> str | None:
+    r"""What ``record`` lacks for the stages it reached, or None: its
+    ``from_source`` outcome a non-empty list; past a ``from_source`` that
+    succeeded, the edits, schema, seeds and warnings and a ``materialize``
+    outcome; past a ``materialize`` that succeeded, its payload and a
+    ``predict`` outcome; past a ``predict`` that succeeded, its result.
+    Absent evidence is no request: two records equally without it are not
+    two equal requests."""
+    if not isinstance(record, dict):
+        return 'not a record'
+
+    def outcome(key: str) -> Any:
+        found = record.get(key)
+        return found if isinstance(found, list) and found else None
+
+    if outcome('from_source') is None:
+        return 'no from_source outcome'
+    if record['from_source'] != ['ok']:
+        return None
+    for key, kind in (
+        ('edits', list),
+        ('schema', dict),
+        ('seeds', list),
+        ('warnings', list),
+    ):
+        if not isinstance(record.get(key), kind):
+            return f'no {key}'
+    if outcome('materialize') is None:
+        return 'no materialize outcome'
+    if record['materialize'] != ['ok']:
+        return None
+    if record.get('payload') is None:
+        return 'no payload'
+    if outcome('predict') is None:
+        return 'no predict outcome'
+    if record['predict'] == ['ok'] and record.get('result') is None:
+        return 'no result'
+    return None
+
+
+def crashed(record: dict[str, Any]) -> str | None:
+    r"""The first stage ``record`` crashed at, ``INTERNAL_ERROR`` or an
+    exception with no code, or None."""
+    for stage in ('from_source', 'materialize', 'predict'):
+        found = record.get(stage)
+        if not isinstance(found, list) or not found or found == ['ok']:
+            continue
+        if len(found) < 2 or found[1] in (None, 'INTERNAL_ERROR'):
+            return stage
+    return None
+
+
 def classify_corrected(
     old: dict[str, Any],
     core: dict[str, Any],
@@ -1350,7 +1402,17 @@ def classify_corrected(
     r""":func:`classify`, then, for a source it leaves UNCLASSIFIED, the
     corrected reference's record (``corrected``) read for P1B-13: the
     corrected request exactly the core's and the plain one another, what
-    follows classified between the corrected reference and the core."""
+    follows classified between the corrected reference and the core.
+
+    Fails closed (T1.33's review): a record of the reference, the core or
+    the corrected reference without the evidence of each stage it reached
+    (:func:`malformed`) classifies nothing, and P1B-13 explains nothing
+    where the core or the corrected reference crashed (:func:`crashed`):
+    two crashes are no request and no answer."""
+    for route, record in (('the reference', old), ('the core', core)):
+        problem = malformed(record)
+        if problem is not None:
+            return 'UNCLASSIFIED', f"{route}'s record: {problem}"
     kind, why = classify(
         old, core, indices, register, edits, query, time_of_day=time_of_day
     )
@@ -1360,6 +1422,16 @@ def classify_corrected(
         return kind, f'{why}; no corrected-reference record'
     if any(key not in corrected for key in ('from_source', 'materialize')):
         return kind, f'{why}; the corrected-reference record is incomplete'
+    problem = malformed(corrected)
+    if problem is not None:
+        return kind, f"{why}; the corrected reference's record: {problem}"
+    for route, record in (
+        ('the core', core),
+        ('the corrected reference', corrected),
+    ):
+        stage = crashed(record)
+        if stage is not None:
+            return kind, f'{why}; {route} crashed at {stage}'
     if all(corrected.get(k) == old.get(k) for k in REQUEST):
         return (
             kind,
