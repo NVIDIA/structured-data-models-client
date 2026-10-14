@@ -98,11 +98,6 @@ const RENDERED: &[OptionalRequest] = &[
     OptionalRequest::Lookup,
 ];
 
-/// The vendor DuckDB names in the metadata of its opaque Arrow extension
-/// types (`arrow.opaque`'s `vendor_name`), which the host layer reads by
-/// DuckDB's layouts only for a column naming it (register P1B-43).
-pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
-
 /// The name a statement reads its seeds by: the key set the provider binds
 /// for it (registered as a relation, on the statement's own cursor), unless
 /// the table it joins has that name ([`seeds_for`]).
@@ -225,7 +220,6 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 table,
                 key,
                 columns,
-                &seed_key(seeds),
                 window.as_ref(),
                 *per_seed,
                 order.as_ref(),
@@ -241,7 +235,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 keys: seeds.clone(),
                 relation: seeds_for(table),
             });
-            lookup(request, table, key, columns, &seed_key(seeds))?
+            lookup(request, table, key, columns)?
         }
         DataRequest::Scan {
             table,
@@ -571,41 +565,16 @@ fn order_term(term: &TieTerm) -> String {
     )
 }
 
-/// The seeds' key as a join compares it with a table's key: as it is, but
-/// a `decimal128(38, 0)` key as a HUGEINT, which every key that arrives in
-/// that type compares with exactly (a DECIMAL(38, 0), HUGEINT, UHUGEINT or
-/// VARINT column), where DuckDB has no cast from DECIMAL(38, 0) to a
-/// VARINT (BIGNUM) column's type (register P1B-43: a VARINT key whose
-/// values pass int64, read in the decimal tier).
-fn seed_key(seeds: &KeySet) -> String {
-    let column = format!("s.{}", identifier(SEED_KEY));
-    let wide = seeds.columns.iter().any(|c| {
-        c.name == SEED_KEY
-            && c.column_type
-                == ColumnType::Decimal128 {
-                    precision: 38,
-                    scale: 0,
-                }
-    });
-    if wide {
-        format!("CAST({column} AS HUGEINT)")
-    } else {
-        column
-    }
-}
-
 /// The reference's neighbor reads (`_by_time` and `_by_fkey` on DuckDB):
 /// the rows of `table` whose `key` is a seed's key, within the seed's
 /// window in the source's own `CAST(column AS TIMESTAMP)` wall clock, and,
 /// with a limit per seed, the first rows of each seed in `order`, the
 /// result in `(batch, order)`.
-#[allow(clippy::too_many_arguments)]
 fn neighbors(
     request: &DataRequest,
     table: &str,
     key: &str,
     columns: &[String],
-    seed_key: &str,
     window: Option<&Window>,
     per_seed: Option<u64>,
     order: Option<&TieBreak>,
@@ -618,6 +587,7 @@ fn neighbors(
         seeds = identifier(&seeds_for(table)),
         table = identifier(table),
         key = identifier(key),
+        seed_key = seed_key(request),
     );
     if let Some(window) = window {
         let time = format!("CAST(t.{} AS TIMESTAMP)", identifier(&window.column));
@@ -653,7 +623,6 @@ fn lookup(
     table: &str,
     key: &str,
     columns: &[String],
-    seed_key: &str,
 ) -> Result<String, CoreError> {
     let projected = joined_columns(request, columns)?;
     let batch = identifier(SEED_BATCH);
@@ -664,6 +633,7 @@ fn lookup(
         seeds = identifier(&seeds_for(table)),
         table = identifier(table),
         key = identifier(key),
+        seed_key = seed_key(request),
     ))
 }
 
@@ -878,4 +848,36 @@ fn identifiers(names: &[String]) -> String {
 /// `name` as text: in single quotes, each one in it doubled.
 fn text(name: &str) -> String {
     format!("'{}'", name.replace('\'', "''"))
+}
+
+/// The vendor DuckDB names in the metadata of its opaque Arrow extension
+/// types (`arrow.opaque`'s `vendor_name`), which the host layer reads by
+/// DuckDB's layouts only for a column naming it (register P1B-43).
+pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
+
+/// The seeds' key as a join compares it with a table's key: as it is, but
+/// a `decimal128(38, 0)` key as a HUGEINT, which every key that arrives in
+/// that type compares with exactly (a DECIMAL(38, 0), HUGEINT, UHUGEINT or
+/// VARINT column), where DuckDB has no cast from DECIMAL(38, 0) to a
+/// VARINT (BIGNUM) column's type (register P1B-43: a VARINT key whose
+/// values pass int64, read in the decimal tier).
+fn seed_key(request: &DataRequest) -> String {
+    let column = format!("s.{}", identifier(SEED_KEY));
+    let seeds: Option<&KeySet> = match request {
+        DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => Some(seeds),
+        _ => None,
+    };
+    let wide = seeds.into_iter().flat_map(|k| &k.columns).any(|c| {
+        c.name == SEED_KEY
+            && c.column_type
+                == ColumnType::Decimal128 {
+                    precision: 38,
+                    scale: 0,
+                }
+    });
+    if wide {
+        format!("CAST({column} AS HUGEINT)")
+    } else {
+        column
+    }
 }
