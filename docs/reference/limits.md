@@ -23,7 +23,7 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
 | rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
-| entities one `materialize()` gathers | relational | 100,000 | at `materialize()` |
+| entities one `materialize()` gathers | relational | 100,000, in at most 100 calls | at `materialize()` |
 | request body | relational | 30 MiB per call | at `materialize()` |
 | request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
 | calls one question is gathered as | relational | 10 | at `materialize()` |
@@ -59,11 +59,20 @@ call. Two reasons to reach for it: a graph wide enough that a full batch
 outruns the 30 MiB body, and a deployment whose cap is lower than the one
 above.
 
+It is not the answer to every 30 MiB refusal. A batch carries its context as
+well as its rows, so where the context is itself over the limit, no batch is
+small enough: a wide graph at 10,000 context rows was refused at every batch
+size tried, and the same graph at the default context was gathered as 15
+calls of 200. `num_context_samples`, `num_neighbors` and the columns the graph
+carries are what come down in the first case.
+
 Every batch is built before the first is sent, each with its own context, so
 the whole population is held in memory at once. More than 100,000 entities in
-one `materialize()` is refused for that reason rather than by the endpoint;
-ask about fewer at a time, or raise
-`sdm_client.materializers.relational.MOST_ENTITIES`.
+one `materialize()` is refused for that reason rather than by the endpoint,
+and so is more than 100 calls, which is the same ceiling reached from the
+other side when `rows_per_call` is set very low. Ask about fewer entities at a
+time, or raise `sdm_client.materializers.relational.MOST_ENTITIES` or
+`MOST_CALLS`.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as

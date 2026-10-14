@@ -128,7 +128,11 @@ def test_a_smaller_batch_lowers_what_a_part_may_ask_for(monkeypatch):
 
 def test_a_step_that_fails_keeps_the_steps_already_paid_for():
     """A question asked in parts pays per part, and the steps answered before
-    a failure are as bought as the batches of one are."""
+    a failure are as bought as the batches of one are.
+
+    Two steps of two entities, told apart by the step rather than by a row
+    number, which each step counts from its own zero.
+    """
     pytest.importorskip('sdm_relational_engine')
     from sdm_client import KumoRelational, SDMClient
     from sdm_client.errors import StructuredDataError as Refused
@@ -161,8 +165,6 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
             client.predict(request, model=KumoRelational())
     assert failed.value.details['parts_answered'] == 2
     kept = failed.value.details['answered'].to_pandas()
-    # Two steps of two entities, told apart by the step rather than by a row
-    # number, which each step counts from its own zero.
     assert len(kept) == 4
     assert sorted(kept['forecast_step'].unique()) == [1, 2]
 

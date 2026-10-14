@@ -80,12 +80,14 @@ def _warn_of_a_context_the_default_mode_capped(
 
 #: More entities than this in one `materialize()` and the request is gathered
 #: in pieces that no longer fit in memory together. Every batch is built
-#: before any is sent, each carrying its own context, and a batch may be as
-#: large as the endpoint's 30 MiB body. Counted in entities rather than in
-#: batches, because that is what the caller asked for and what the memory
-#: follows; a smaller `rows_per_call` spends it on more, smaller batches, each
-#: still carrying a context. A caller with the memory for it can raise this.
+#: before any is sent, each carrying its own context.
 MOST_ENTITIES = 100_000
+
+#: And more calls than this, which is the other way to hold too much: a
+#: context is gathered for every call, so a `rows_per_call` of 1 would hold
+#: one per entity. Loose enough that lowering the batch size for a wide graph
+#: is unaffected, and only a caller who set it very low meets it.
+MOST_CALLS = 100
 
 
 def _rows_per_call(
@@ -116,7 +118,7 @@ def rows_one_call_scores(
     return min(int(asked), cap)
 
 
-def _rows_per_call_asked_for(options: Mapping[str, Any]) -> int | None:
+def rows_per_call_asked_for(options: Mapping[str, Any]) -> int | None:
     r"""The batch size the caller chose, refused if it is not a size."""
     if 'rows_per_call' not in options:
         return None
@@ -148,20 +150,27 @@ def _refuse_more_entities_than_fit_in_memory(
     if not isinstance(asked, Integral) or per_call <= 0:
         return
     asked = int(asked)
-    if asked <= MOST_ENTITIES:
+    calls = math.ceil(asked / per_call)
+    too_many = (
+        f'{MOST_ENTITIES:,} entities'
+        if asked > MOST_ENTITIES
+        else f'{MOST_CALLS:,} calls'
+        if calls > MOST_CALLS
+        else ''
+    )
+    if not too_many:
         return
     raise StructuredDataError(
-        f'{asked:,} entities are gathered as '
-        f'{math.ceil(asked / per_call):,} calls of {per_call:,}, and every '
-        f'one is built, with its own context, before any is sent. That is '
-        f'past the {MOST_ENTITIES:,} this will hold at once; ask about fewer '
-        f'entities at a time, or raise '
-        f'sdm_client.materializers.relational.MOST_ENTITIES if the memory is '
-        f'yours to spend',
+        f'{asked:,} entities are gathered as {calls:,} calls of '
+        f'{per_call:,}, and every one is built, with its own context, before '
+        f'any is sent. That is past the {too_many} this will hold at once; '
+        f'ask about fewer entities at a time, or raise '
+        f'sdm_client.materializers.relational.MOST_ENTITIES or MOST_CALLS if '
+        f'the memory is yours to spend',
         code='UNSUPPORTED_REQUEST',
         details={
             'entities': asked,
-            'calls': math.ceil(asked / per_call),
+            'calls': calls,
             'rows_per_call': per_call,
         },
     )
@@ -229,7 +238,7 @@ class RelationalMaterializer:
             )
 
         statistic = _statistic_asked_for(options)
-        _rows_per_call_asked_for(options)
+        rows_per_call_asked_for(options)
         self._refuse_a_name_the_wire_reserves()
         self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
         _warn_the_filter_chose_only_the_examples(query, indices)
@@ -313,7 +322,7 @@ class RelationalMaterializer:
         task = self._narrow_context(task, num_context_samples)
 
         per_call = rows_one_call_scores(
-            _rows_per_call_asked_for(options), task.task_type
+            rows_per_call_asked_for(options), task.task_type
         )
         _refuse_more_entities_than_fit_in_memory(task, per_call)
         with (
@@ -593,10 +602,14 @@ class RelationalMaterializer:
                 if isinstance(error, TypeError)
                 else self._sanitization_detail(model)
             )
+            refused = _what_the_engine_refused(str(error))
+            said = str(error)
+            if refused.get('batch_too_large_to_send'):
+                said = _said_in_this_client_s_terms(said)
             raise StructuredDataError(
-                f'{error}{detail}',
+                f'{said}{detail}',
                 code='INVALID_REQUEST',
-                details=_what_the_engine_refused(str(error)),
+                details=refused,
             ) from error
 
     @staticmethod
@@ -861,11 +874,48 @@ def _holds_text(values: pd.Series) -> bool:
     return pd.api.types.infer_dtype(values, skipna=True) == 'string'
 
 
+#: How the engine says a gathered batch is too large for the endpoint's body.
+_A_BATCH_TOO_LARGE_TO_SEND = ('size exceeds the 30mb limit',)
+
+#: Where the engine's own remedy for that begins. It ends by offering the run
+#: mode, which this client derives rather than takes, so a caller following it
+#: lands on a refusal. Replaced rather than appended to, because advice that
+#: cannot be taken is worse than none.
+_THE_ENGINE_S_REMEDY = 'Please reduce either'
+
+#: What to do about it here. Both halves are real and which one binds was
+#: measured: a wide graph at the default context is gathered by asking in
+#: smaller calls, and the same graph at 10,000 context rows is over the body
+#: on the context alone, where only a narrower context helps.
+_ASK_IN_SMALLER_CALLS = (
+    'Ask in smaller calls, with materialize(rows_per_call=N) below the '
+    '{per_call:,} one call holds by default: the same entities, in more and '
+    'smaller calls. Where the context is itself over the limit, no call is '
+    'small enough and it is num_context_samples, num_neighbors or the '
+    'columns the graph carries that have to come down.'
+)
+
+
 _A_WINDOW_THAT_OUTRAN_THE_DATA = (
     'aggregation time range',
     'we would need data back to',
     'anchor timestamp is too early',
 )
+
+
+def _said_in_this_client_s_terms(said: str) -> str:
+    r"""The engine's size complaint, keeping its figures and its own remedy.
+
+    What it measured is the useful half and is kept whole. What to do about it
+    is written for a caller who can set a run mode and a batch size directly,
+    and through this client one of those is derived and the other is named
+    differently, so that half is replaced.
+    """
+    at = said.find(_THE_ENGINE_S_REMEDY)
+    measured = said if at < 0 else said[:at].rstrip()
+    return f'{measured} ' + _ASK_IN_SMALLER_CALLS.format(
+        per_call=RELATIONAL_LIMITS['predict_rows_max']
+    )
 
 
 def _what_the_engine_refused(said: str) -> dict[str, Any]:
@@ -879,6 +929,8 @@ def _what_the_engine_refused(said: str) -> dict[str, Any]:
     lowered = said.lower()
     if any(mark in lowered for mark in _A_WINDOW_THAT_OUTRAN_THE_DATA):
         return {'window_outran_the_data': True}
+    if any(mark in lowered for mark in _A_BATCH_TOO_LARGE_TO_SEND):
+        return {'batch_too_large_to_send': True}
     return {}
 
 

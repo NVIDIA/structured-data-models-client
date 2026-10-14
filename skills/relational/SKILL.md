@@ -168,8 +168,9 @@ returns one result, numbered and ordered as the indices were given. The
 protocol; pass `rows_per_call=` to ask in smaller batches, which is what a
 graph too wide for a full one needs. It only goes down.
 
-Every batch is built before the first is sent, so more than 100,000 entities
-in one `materialize()` is refused rather than held at once. A question asked
+Every batch is built before the first is sent, so more than 100,000 entities,
+or more than 100 calls, in one `materialize()` is refused rather than held at
+once. A question asked
 in parts is not batched at all: a ranking is already a call per candidate and
 a forecast one per step, and batching a part would send that many times as
 many calls.
@@ -261,7 +262,7 @@ change. The ones worth knowing:
 |---|---|
 | every candidate's context holds one class | each gathered entity reached it, or none did, so there is nothing to tell apart and nothing is sent; widen with `num_context_samples` or ask over a table of pairs. One such candidate among several is dropped with a warning instead, and named on `result.unscored_candidates` |
 | no entity existed at the anchor | the entity table's time column starts after the anchor, so nothing existed to ask about |
-| more than 100,000 entities at once | every batch is built before any is sent; ask about fewer at a time |
+| more than 100,000 entities, or more than 100 calls, at once | every batch is built before any is sent; ask about fewer at a time, or raise `rows_per_call` |
 | more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a ranking or on more than one row |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |

@@ -258,11 +258,62 @@ def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
 
 
 @pytest.mark.parametrize('given', [0, -1, 2.5, True, 'two'])
-def test_a_rows_per_call_that_is_not_a_size_is_refused(given):
+@pytest.mark.parametrize(
+    'text',
+    [
+        'PREDICT users.churn FOR EACH users.user_id',
+        'PREDICT COUNT(orders.*, 0, 30, days) FORECAST 2 TIMEFRAMES '
+        'FOR EACH users.user_id',
+    ],
+    ids=['plain', 'decomposed'],
+)
+def test_a_rows_per_call_that_is_not_a_size_is_refused(given, text):
+    """The decomposed route reads the size before the gathering that
+    validates it, and read it with a bare int(), which is a ValueError out of
+    a package the caller never imported."""
     with pytest.raises(StructuredDataError) as refused:
-        query().materialize(indices=[5], rows_per_call=given)
+        PredictiveQuery(text, schema()).materialize(
+            indices=[5], rows_per_call=given
+        )
     assert refused.value.code == 'INVALID_REQUEST'
     assert 'rows_per_call' in str(refused.value)
+
+
+def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
+    monkeypatch,
+):
+    """A context is gathered per call, so a small enough batch holds one per
+    entity however few entities there are."""
+    from sdm_client.materializers import relational as materializer
+
+    monkeypatch.setattr(materializer, 'MOST_CALLS', 3)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        with pytest.raises(StructuredDataError) as refused:
+            query().materialize(
+                indices=[5, 6, 7, 8, 9],
+                num_context_samples=20,
+                rows_per_call=1,
+            )
+    assert refused.value.details['calls'] == 5
+    assert '3 calls' in str(refused.value)
+
+
+def test_a_size_refusal_is_answered_in_options_this_client_takes():
+    """The engine offers the run mode, which this client derives rather than
+    takes, so a caller following its advice lands on another refusal."""
+    from sdm_client.materializers.relational import (
+        _said_in_this_client_s_terms,
+    )
+
+    said = _said_in_this_client_s_terms(
+        'Context size exceeds the 30MB limit. 9 nodes.\nPlease reduce '
+        'either the number of entities predicted at once or the run mode.'
+    )
+    assert '9 nodes' in said
+    assert 'run mode' not in said
+    assert 'rows_per_call' in said
+    assert 'num_context_samples' in said
 
 
 def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
@@ -335,7 +386,12 @@ def test_an_ordinary_call_is_unaffected():
 
 
 def test_the_two_ceilings_are_the_engine_s_own():
-    """A drift between these and the engine refuses work the engine allows."""
+    """A drift between these and the engine refuses work the engine allows.
+
+    The client reads the lower ceiling off the task kind's name, and only
+    `temporal_link_prediction` carries it. Were the engine to hold a second
+    task to a size of its own, the client would batch that task too large.
+    """
     from sdm_client.models import RELATIONAL_LIMITS
 
     engine = pytest.importorskip('sdm_relational_engine.rfm.rfm')
@@ -349,9 +405,6 @@ def test_the_two_ceilings_are_the_engine_s_own():
         RELATIONAL_LIMITS['predict_rows_max']
         == engine._MAX_PRED_SIZE[TaskType.BINARY_CLASSIFICATION]
     )
-    # The client reads the lower ceiling off the task kind's name, and only
-    # `temporal_link_prediction` carries it. Were the engine to hold a second
-    # task to a size of its own, the client would batch that task too large.
     assert {
         kind
         for kind in TaskType

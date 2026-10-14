@@ -20,11 +20,13 @@ these packages. All five distributions share one version and one entry.
   `materialize()` takes `rows_per_call` to ask in smaller batches than the
   endpoint's cap, which is what a graph wide enough to outrun the 30 MiB body
   needs, and what a deployment holding to less than 10,000 needs. It only goes
-  down: a larger call buys a refusal rather than a bigger call.
+  down: a larger call buys a refusal rather than a bigger call. Where the
+  context is itself over the body, no batch is small enough and the refusal
+  says which options do come down instead.
 
   Two things are still refused. Every batch is built before the first is sent,
-  so more than 100,000 entities in one `materialize()` is refused rather than
-  held in memory at once; and a question asked in parts, a ranking or a
+  so more than 100,000 entities, or more than 100 calls, in one
+  `materialize()` is refused rather than held in memory at once; and a question asked in parts, a ranking or a
   forecast, is not batched, because each part is already a call and the
   fan-out budget counts those.
 

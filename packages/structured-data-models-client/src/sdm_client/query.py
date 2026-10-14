@@ -40,7 +40,10 @@ from sdm_client.decompose import (
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
-from sdm_client.materializers.relational import rows_one_call_scores
+from sdm_client.materializers.relational import (
+    rows_one_call_scores,
+    rows_per_call_asked_for,
+)
 from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
@@ -113,10 +116,8 @@ class PredictiveQuery:
                 exclusive with ``predict``. On the relational route, more than
                 the endpoint scores in one call are gathered as several calls,
                 and :meth:`~sdm_client.SDMClient.predict` answers them as one.
-                A ranking is refused rather than batched, because a
-                candidate is scored or not for the whole ranking. A forecast's
-                steps are batched, and what is counted against the fan-out
-                budget is the calls they come to.
+                A question asked in parts, a ranking or a forecast, is one
+                call per part and is refused rather than batched.
             predict: Rows supplied directly for scoring. Supported for
                 single-table schemas and mutually exclusive with ``indices``.
             num_context_samples: For ``indices`` requests, the maximum number
@@ -138,10 +139,11 @@ class PredictiveQuery:
                 regression's prediction reports of its predicted distribution,
                 ``'median'`` (the default) or ``'mean'``; and
                 ``rows_per_call``: how many entities one call scores, which
-                defaults to the 10,000 the endpoint takes and may only be
-                lowered. Lower it for a graph wide enough that a full batch
-                outruns the 30 MiB body, or for a deployment holding to less
-                than this client knows of.
+                defaults to what the endpoint takes, 10,000 or 200 for a
+                temporal link prediction, and may only be lowered. Lower it
+                for a graph wide enough that a full batch outruns the 30 MiB
+                body, or for a deployment holding to less than this client
+                knows of.
 
         Returns:
             A :class:`~sdm_client.Request` carrying the data.
@@ -406,7 +408,7 @@ class PredictiveQuery:
         refuse_a_part_that_would_take_several_calls(
             rewritten,
             len(how.get('indices') or ()),
-            rows_one_call_scores(how.get('rows_per_call')),
+            rows_one_call_scores(rows_per_call_asked_for(how)),
         )
         # How many candidates to keep belongs to the whole ranking. Each part
         # is one yes-or-no question, and a task that ranks nothing is refused
