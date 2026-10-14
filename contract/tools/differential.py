@@ -18,12 +18,17 @@ integer and decimal columns with nulls, conditions, static targets);
 their probe of the public calls; and their comparison, which now ends in
 a classification.
 
-    python -I contract/tools/differential.py generate SEED N OUT.json
+    python -I contract/tools/differential.py generate SEED N OUT.json \
+        [--corpus generated|selfref]
     REF/bin/python -I contract/tools/differential.py probe SPEC OUT --route old
+    REF/bin/python -I contract/tools/differential.py probe SPEC OUT \
+        --route corrected
     CAND/bin/python -I contract/tools/differential.py probe SPEC OUT --route core
-    python -I contract/tools/differential.py compare OLD CORE [--register FILE]
+    python -I contract/tools/differential.py compare OLD CORE \
+        [--corrected CORRECTED] [--register FILE]
     python -I contract/tools/differential.py run --reference-python REF \
-        --candidate-python CAND [--seed 27] [--n 50] [--out DIR]
+        --candidate-python CAND [--seed 27] [--n 50] [--out DIR] \
+        [--corpus generated|selfref] [--corrected]
 
 ``REF`` is the reference checkout's environment (``rust-core-reference``,
 pandas 3); ``CAND`` an environment holding the candidate's client with a
@@ -59,12 +64,36 @@ text must name the rule; its status decides the class):
   context exactly, and for a refusal after the labels its ``_by_time``
   seeds the reference's (a static target's context leaves out the entities
   predicted for, T1.28a's rule);
+- the core refuses ``Schema.from_source`` by a rule (``UNSUPPORTED_REQUEST``
+  naming it) where the reference describes: the entry ``DESCRIBED_RULES``
+  names for the rule (T1.32f's real data), nothing after it compared;
 - both refuse with the same code: agree; the reference with an internal
   error (``INTERNAL_ERROR``, or an exception with no code) and the core by
   name: the owner's class E66(b), under the entry ``RULES`` names;
 - anything else: UNCLASSIFIED, and the command exits 1; so do probes
   naming a source twice, and, given the spec, probes not of exactly the
   sources it names.
+
+From T1.32f, a third route: ``corrected``, the reference with register
+P1B-13's two corrections (T1.26b's oracle, :func:`correct_p1b13`): a null
+foreign key looks up no row, and a row read by foreign key whose key is
+null is its own. Given its probe (``compare --corrected``), a source the
+rules above leave UNCLASSIFIED is P1B-13's only when the corrected
+reference asks exactly the core's request (``from_source``, the edits, the
+schema, ``materialize``'s outcome, payload, seeds and warnings) and the
+plain reference asks another; what follows (``predict``) is then classified
+between the corrected reference and the core by the rules above, and named
+beside P1B-13 (``approved:P1B-13+proposed:P1B-4``). A corrected record
+missing, empty, of another request than the core's, or of the plain
+reference's own, leaves the source UNCLASSIFIED; probes of other sources
+than the old one's end the command with 1.
+
+``--corpus selfref`` (T1.32f) is a fixed corpus of self-references in
+place of the generated sources (:func:`selfref`): a nullable parent, a
+row its own parent, two-row cycles, two self-links with and without nulls,
+the entity table's self-link with and without nulls, text keys and a
+static target; the generated corpus, and so each seed's sources, are
+unchanged.
 
 An entry approved (by the owner or as E66(b)'s class) is an approved
 class; a proposed one, a proposed entry the review sees. The tool approves
@@ -126,6 +155,13 @@ PREDICT_RULES = {'problem_type': 'P1B-4', 'outputs': 'P1B-4'}
 #: The core's refusals at ``Schema.from_source`` where the reference fails
 #: unnamed, by the entry naming each.
 FROM_SOURCE_RULES = {'empty_table': 'P1B-11'}
+#: From T1.32f: the core's refusals at ``Schema.from_source`` of a source
+#: the reference describes, by the entry naming each (describe_source's
+#: not-yet rules, measured on real data: text the core's list of formats
+#: does not read). ``multicategorical`` and ``time_whole_table`` were here
+#: until T1.32e ported the one and fixed the other (E92: neither is a
+#: Phase 2 refusal), so a core refusing either again is UNCLASSIFIED.
+DESCRIBED_RULES = {'text_time': 'P1B-2'}
 #: The entry a static target's refusal by a rule is under, where it is not
 #: the rule's own.
 STATIC_RULES = {'target_type': 'P1B-18'}
@@ -466,6 +502,142 @@ def generate(seed: int, n: int) -> dict[str, Any]:
     return {'seed': seed, 'sources': [source(rng, i) for i in range(n)]}
 
 
+#: The corpora ``--corpus`` names.
+CORPORA = ('generated', 'selfref')
+
+
+def _selfref_source(
+    sid: str,
+    setup: list[str],
+    links: list[tuple[str, str, str, str]],
+    pql: str = 'PREDICT COUNT(a.*, 0, 30, days) FOR EACH e.id',
+    indices: tuple[Any, ...] = (0, 1, 2),
+) -> dict[str, Any]:
+    return {
+        'id': sid,
+        'setup': setup,
+        'edits': [],
+        'pql': pql,
+        'indices': list(indices),
+        'anchor_time': '2024-02-01',
+        'from_source': {
+            'primary_keys': {'e': 'id', 'a': 'aid'},
+            'time_columns': {'a': 'ts'},
+            'relationships': [
+                {
+                    'source_table': a,
+                    'source_column': b,
+                    'target_table': c,
+                    'target_column': d,
+                }
+                for a, b, c, d in links
+            ],
+        },
+    }
+
+
+def selfref() -> dict[str, Any]:
+    r"""The self-reference corpus (T1.32f): an entity ``e`` and a fact ``a``
+    linking to it, with a self-link of ``a`` (or of ``e``) in each shape
+    rel-stack's ``posts.ParentId`` raised."""
+    ts = _ts('i * 36000')
+    entity = (
+        'CREATE TABLE e AS SELECT i::BIGINT AS id, (i % 5)::INTEGER AS size '
+        'FROM range(30) t(i)'
+    )
+
+    def fact(parent: str, other: str | None = None) -> str:
+        more = f', {other}::BIGINT AS other' if other else ''
+        return (
+            'CREATE TABLE a AS SELECT i::BIGINT AS aid, (i % 30)::BIGINT AS '
+            f'e_ref, {parent}::BIGINT AS parent{more}, (i * 0.5)::DOUBLE AS '
+            f'v, {ts} AS ts FROM range(300) t(i)'
+        )
+
+    base = [('a', 'e_ref', 'e', 'id')]
+    parent = [*base, ('a', 'parent', 'a', 'aid')]
+    both = [*parent, ('a', 'other', 'a', 'aid')]
+    nullable = 'CASE WHEN i % 2 = 0 THEN NULL ELSE i - 1 END'
+    sources = [
+        _selfref_source('sr-nullable', [entity, fact(nullable)], parent),
+        _selfref_source(
+            'sr-loop',
+            [entity, fact('CASE WHEN i % 3 = 0 THEN i ELSE i - 1 END')],
+            parent,
+        ),
+        _selfref_source(
+            'sr-cycle',
+            [entity, fact('CASE WHEN i % 2 = 0 THEN i + 1 ELSE i - 1 END')],
+            parent,
+        ),
+        _selfref_source(
+            'sr-two-links', [entity, fact('i // 2', '(i * 7) % 300')], both
+        ),
+        _selfref_source(
+            'sr-two-links-nulls',
+            [
+                entity,
+                fact(
+                    'i // 2',
+                    'CASE WHEN i % 4 = 0 THEN NULL ELSE (i * 7) % 300 END',
+                ),
+            ],
+            both,
+        ),
+    ]
+    for nulls in (False, True):
+        referrer = (
+            'CASE WHEN i % 3 = 0 THEN NULL ELSE i // 2 END'
+            if nulls
+            else 'i // 2'
+        )
+        sources.append(
+            _selfref_source(
+                'sr-entity' + ('-nulls' if nulls else ''),
+                [
+                    'CREATE TABLE e AS SELECT i::BIGINT AS id, (i % 5)::INTEGER '
+                    f'AS size, ({referrer})::BIGINT AS referrer FROM range(30) t(i)',
+                    'CREATE TABLE a AS SELECT i::BIGINT AS aid, (i % 30)::BIGINT '
+                    f'AS e_ref, (i * 0.5)::DOUBLE AS v, {ts} AS ts '
+                    'FROM range(300) t(i)',
+                ],
+                [*base, ('e', 'referrer', 'e', 'id')],
+            )
+        )
+    sources.append(
+        _selfref_source(
+            'sr-text-nullable',
+            [
+                "CREATE TABLE e AS SELECT 'e' || i AS id, (i % 5)::INTEGER AS "
+                'size FROM range(30) t(i)',
+                "CREATE TABLE a AS SELECT 'a' || i AS aid, 'e' || (i % 30) AS "
+                "e_ref, CASE WHEN i % 2 = 0 THEN NULL ELSE 'a' || (i - 1) END "
+                f'AS parent, (i * 0.5)::DOUBLE AS v, {ts} AS ts '
+                'FROM range(300) t(i)',
+            ],
+            parent,
+            indices=('e0', 'e1', 'e2'),
+        )
+    )
+    sources.append(
+        _selfref_source(
+            'sr-nullable-static',
+            [entity, fact(nullable)],
+            parent,
+            pql='PREDICT e.size FOR EACH e.id',
+        )
+    )
+    return {'corpus': 'selfref', 'sources': sources}
+
+
+def corpus(name: str, seed: int, n: int) -> dict[str, Any]:
+    r"""The sources ``--corpus`` names: the generated ones of ``seed`` and
+    ``n``, or the fixed self-reference corpus, which takes neither."""
+    if name == 'selfref':
+        return selfref()
+    return generate(seed, n)
+
+
 # --- probe --------------------------------------------------------------------
 
 
@@ -568,6 +740,69 @@ def _projection(schema: Any) -> dict[str, Any]:
     }
 
 
+def correct_p1b13() -> None:
+    r"""The reference with register P1B-13's two corrections, T1.26b's
+    oracle for its reading (``null`` is no link), applied at run time and
+    to nothing else:
+
+    1. ``SQLSampler._sample_subgraph``'s forward-key branch looks up only
+       the non-null keys: ``unique_key_df = key_df.drop_duplicates()``
+       becomes ``key_df[key_df['fkey'].notna()].drop_duplicates()``;
+    2. ``DuckDBSampler._by_fkey``'s rows whose own key is null each get a
+       key of their own no row holds (``-(2**62) - n``, or ``'\x00null<n>'``
+       for text), so each is its own row and matches nothing; the key is
+       never sent (not a feature).
+
+    The line the first rewrites must appear exactly once, and the DuckDB
+    sampler must take the corrected walk, or the probe stops: a reference
+    other than the one the corrections read is not corrected silently."""
+    import inspect
+    import itertools
+    import textwrap
+
+    import pandas as pd
+    from sdm_relational_engine.rfm.backend.duckdb import sampler
+    from sdm_relational_engine.rfm.base import sql_sampler
+
+    text = textwrap.dedent(
+        inspect.getsource(sql_sampler.SQLSampler._sample_subgraph)
+    )
+    line = 'unique_key_df = key_df.drop_duplicates()'
+    if text.count(line) != 1:
+        raise SystemExit(
+            "the reference's _sample_subgraph is not the one P1B-13's "
+            'correction reads'
+        )
+    text = text.replace(
+        line, "unique_key_df = key_df[key_df['fkey'].notna()].drop_duplicates()"
+    )
+    found: dict[str, Any] = {}
+    exec(  # noqa: S102
+        compile(text, sql_sampler.__file__, 'exec'), vars(sql_sampler), found
+    )
+    sql_sampler.SQLSampler._sample_subgraph = found['_sample_subgraph']
+    if sampler.DuckDBSampler._sample_subgraph is not found['_sample_subgraph']:
+        raise SystemExit('the DuckDB sampler does not take the corrected walk')
+
+    counter = itertools.count()
+    real_by_fkey = sampler.DuckDBSampler._by_fkey
+
+    def by_fkey(self: Any, table_name: str, *args: Any, **kw: Any) -> Any:
+        df, batch = real_by_fkey(self, table_name, *args, **kw)
+        key = self.primary_key_dict.get(table_name)
+        if key is not None and key in df and df[key].isna().any():
+            integer = pd.api.types.is_integer_dtype(df[key].dtype)
+            column = df[key].astype(object)
+            for i in range(len(column)):
+                if pd.isna(column.iloc[i]):
+                    n = next(counter)
+                    column.iloc[i] = -(2**62) - n if integer else f'\x00null{n}'
+            df[key] = column.astype(df[key].dtype)
+        return df, batch
+
+    sampler.DuckDBSampler._by_fkey = by_fkey
+
+
 def probe(spec_path: Path, out: Path, route: str) -> None:
     import duckdb
     import pandas as pd
@@ -665,6 +900,8 @@ def probe(spec_path: Path, out: Path, route: str) -> None:
 
         bridge.run = run_also_labels
     else:
+        if route == 'corrected':
+            correct_p1b13()
         from sdm_relational_engine.rfm.backend.duckdb import sampler
 
         real_by_time = sampler.DuckDBSampler._by_time
@@ -932,9 +1169,22 @@ def classify(
             return 'UNCLASSIFIED', f'{why}; {entry} is not in the register'
         if rule is not None and rule not in json.dumps(found):
             return 'UNCLASSIFIED', f'{why}; {entry} does not name {rule}'
+        # A rejected entry classifies nothing: the owner or the reviewers
+        # turned the difference down, so it is a difference again.
+        if found.get('status') == 'rejected':
+            return 'UNCLASSIFIED', f'{why}; {entry} is rejected'
         status = 'approved' if found.get('status') == 'approved' else 'proposed'
         return f'{status}:{entry}', why
 
+    # Each route's from_source outcome, a non-empty list, is the evidence
+    # everything after reads: without it, or retyped, nothing is classified
+    # (T1.32f; before, a record without one raised KeyError).
+    for route, record in (('the reference', old), ('the core', core)):
+        outcome = (
+            record.get('from_source') if isinstance(record, dict) else None
+        )
+        if not isinstance(outcome, list) or not outcome:
+            return 'UNCLASSIFIED', f'{route} records no from_source outcome'
     if old.get('from_source') != core.get('from_source'):
         if (
             old['from_source'][0] != 'ok'
@@ -956,6 +1206,18 @@ def classify(
                 FROM_SOURCE_RULES[fc[2]],
                 fc[2],
                 f'E66(b): the reference {fo}, the core {fc}',
+            )
+        if (
+            fo == ['ok']
+            and len(fc) == 3
+            and fc[1] == 'UNSUPPORTED_REQUEST'
+            and isinstance(fc[2], str)
+            and fc[2] in DESCRIBED_RULES
+        ):
+            return under(
+                DESCRIBED_RULES[fc[2]],
+                fc[2],
+                f'the reference describes, the core refuses {fc[2]}',
             )
         return (
             'UNCLASSIFIED',
@@ -1062,8 +1324,83 @@ def classify(
     return 'UNCLASSIFIED', f'the reference refuses {om}, the core {cm}'
 
 
+#: What a request is, read off a record: the corrected reference must ask
+#: exactly the core's, and the plain reference another, for P1B-13.
+REQUEST = (
+    'from_source',
+    'edits',
+    'schema',
+    'materialize',
+    'payload',
+    'seeds',
+    'warnings',
+)
+
+
+def classify_corrected(
+    old: dict[str, Any],
+    core: dict[str, Any],
+    corrected: Any,
+    indices: list[Any],
+    register: dict[str, dict[str, Any]],
+    edits: int | None = None,
+    query: str | None = None,
+    time_of_day: bool = False,
+) -> tuple[str, str]:
+    r""":func:`classify`, then, for a source it leaves UNCLASSIFIED, the
+    corrected reference's record (``corrected``) read for P1B-13: the
+    corrected request exactly the core's and the plain one another, what
+    follows classified between the corrected reference and the core."""
+    kind, why = classify(
+        old, core, indices, register, edits, query, time_of_day=time_of_day
+    )
+    if kind != 'UNCLASSIFIED':
+        return kind, why
+    if not isinstance(corrected, dict) or not corrected:
+        return kind, f'{why}; no corrected-reference record'
+    if any(key not in corrected for key in ('from_source', 'materialize')):
+        return kind, f'{why}; the corrected-reference record is incomplete'
+    if all(corrected.get(k) == old.get(k) for k in REQUEST):
+        return (
+            kind,
+            f"{why}; the corrected reference asks the reference's request",
+        )
+    differs = [k for k in REQUEST if corrected.get(k) != core.get(k)]
+    if differs:
+        return (
+            kind,
+            f"{why}; the corrected reference's {differs[0]} is not the core's",
+        )
+    entry = register.get('P1B-13')
+    if entry is None:
+        return kind, f'{why}; P1B-13 is not in the register'
+    if entry.get('status') == 'rejected':
+        return kind, f'{why}; P1B-13 is rejected'
+    status = 'approved' if entry.get('status') == 'approved' else 'proposed'
+    rest, rest_why = classify(
+        corrected,
+        core,
+        indices,
+        register,
+        edits,
+        query,
+        time_of_day=time_of_day,
+    )
+    if rest == 'UNCLASSIFIED':
+        return kind, f'{why}; against the corrected reference: {rest_why}'
+    named = f'{status}:P1B-13' + ('' if rest == 'agree' else f'+{rest}')
+    return (
+        named,
+        f"the corrected reference's request is the core's; then {rest_why}",
+    )
+
+
 def compare(
-    old_path: Path, core_path: Path, spec_path: Path | None, register_path: Path
+    old_path: Path,
+    core_path: Path,
+    spec_path: Path | None,
+    register_path: Path,
+    corrected_path: Path | None = None,
 ) -> int:
     def by_id(
         records: list[dict[str, Any]], what: str
@@ -1083,7 +1420,17 @@ def compare(
         if spec_path is not None
         else {}
     )
+    corrected = (
+        by_id(json.loads(corrected_path.read_text()), 'the corrected probe')
+        if corrected_path is not None
+        else None
+    )
     if old is None or core is None or spec is None:
+        return 1
+    if corrected_path is not None and (
+        corrected is None or set(corrected) != set(old)
+    ):
+        print('the corrected probe is not of the same sources')
         return 1
     register = _register(register_path)
     if set(old) != set(core) or not old:
@@ -1100,16 +1447,28 @@ def compare(
         indices = spec.get(name, {}).get('indices', [0, 1, 'e0', 'e1'])
         edits = len(spec[name].get('edits', [])) if name in spec else None
         query = spec[name].get('pql') if name in spec else None
-        kind, why = classify(
-            old[name],
-            core[name],
-            indices,
-            register,
-            edits,
-            query,
-            time_of_day=name in spec
-            and time_of_day_is_a_time_column(spec[name]),
-        )
+        time_of_day = name in spec and time_of_day_is_a_time_column(spec[name])
+        if corrected is None:
+            kind, why = classify(
+                old[name],
+                core[name],
+                indices,
+                register,
+                edits,
+                query,
+                time_of_day=time_of_day,
+            )
+        else:
+            kind, why = classify_corrected(
+                old[name],
+                core[name],
+                corrected.get(name),
+                indices,
+                register,
+                edits,
+                query,
+                time_of_day=time_of_day,
+            )
         counts[kind] = counts.get(kind, 0) + 1
         if kind != 'agree':
             print(f'{name}: {kind}: {why}')
@@ -1125,14 +1484,18 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument('seed', type=int)
     g.add_argument('n', type=int)
     g.add_argument('out', type=Path)
+    g.add_argument('--corpus', choices=CORPORA, default='generated')
     p = sub.add_parser('probe')
     p.add_argument('spec', type=Path)
     p.add_argument('out', type=Path)
-    p.add_argument('--route', choices=('old', 'core'), required=True)
+    p.add_argument(
+        '--route', choices=('old', 'core', 'corrected'), required=True
+    )
     c = sub.add_parser('compare')
     c.add_argument('old', type=Path)
     c.add_argument('core', type=Path)
     c.add_argument('--spec', type=Path)
+    c.add_argument('--corrected', type=Path)
     c.add_argument('--register', type=Path, default=REGISTER)
     r = sub.add_parser('run')
     r.add_argument('--reference-python', required=True)
@@ -1141,25 +1504,34 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument('--n', type=int, default=50)
     r.add_argument('--out', type=Path, required=True)
     r.add_argument('--register', type=Path, default=REGISTER)
+    r.add_argument('--corpus', choices=CORPORA, default='generated')
+    r.add_argument('--corrected', action='store_true')
     args = parser.parse_args(argv)
     if args.command == 'generate':
         args.out.write_text(
-            json.dumps(generate(args.seed, args.n), indent=1) + '\n'
+            json.dumps(corpus(args.corpus, args.seed, args.n), indent=1) + '\n'
         )
         return 0
     if args.command == 'probe':
         probe(args.spec, args.out, args.route)
         return 0
     if args.command == 'compare':
-        return compare(args.old, args.core, args.spec, args.register)
+        return compare(
+            args.old, args.core, args.spec, args.register, args.corrected
+        )
     args.out.mkdir(parents=True, exist_ok=True)
     spec = args.out / 'spec.json'
-    spec.write_text(json.dumps(generate(args.seed, args.n), indent=1) + '\n')
+    spec.write_text(
+        json.dumps(corpus(args.corpus, args.seed, args.n), indent=1) + '\n'
+    )
     me = str(Path(__file__).resolve())
-    for python, route in (
+    routes = [
         (args.reference_python, 'old'),
         (args.candidate_python, 'core'),
-    ):
+    ]
+    if args.corrected:
+        routes.append((args.reference_python, 'corrected'))
+    for python, route in routes:
         subprocess.run(
             [
                 python,
@@ -1174,7 +1546,11 @@ def main(argv: list[str] | None = None) -> int:
             check=True,
         )
     return compare(
-        args.out / 'old.json', args.out / 'core.json', spec, args.register
+        args.out / 'old.json',
+        args.out / 'core.json',
+        spec,
+        args.register,
+        args.out / 'corrected.json' if args.corrected else None,
     )
 
 
