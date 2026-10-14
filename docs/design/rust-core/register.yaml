@@ -2182,8 +2182,9 @@ entries:
     (3) a table named by a non-str is written by JSON's coercion of an
     object key (3 is the table "3", None "null"), refused as a table the
     schema lacks with that name, or taken if the source holds such a
-    table; a tuple is the codec's refusal (P1B-74 proposes the host's
-    refusal instead); (4) in several tables, the core takes the tables in
+    table; a tuple is the codec's refusal; from T1.32h's part 2 the host
+    refuses any such table name before the run instead (P1B-74,
+    approved); (4) in several tables, the core takes the tables in
     the order of their names, the reference in the caller's mapping order
     (the multi-fault class, E41(k)). The default route is unchanged.
   affected_inputs: >-
@@ -2217,7 +2218,7 @@ entries:
     mapping was read as its members or keys and taken, and a nested list
     or a time column that is not a name reached the decoder,
     INVALID_MESSAGE. A key naming one column twice is the reference's
-    success and the core's composite_key (E92) unless P1B-73 is approved.
+    success; the core refuses it key_column_twice (P1B-73, approved).
     A 0-d NumPy array as a key (np.array('order_id')) is an iterable whose
     reading raises: TypeError (iteration over a 0-d array) on both routes,
     the caller's exception let out unchanged, as the iteration policy
@@ -2258,19 +2259,22 @@ entries:
   refs:
   - 'contract/given-vectors.json#key.twice success -> refusal INVALID_REQUEST'
   - 'contract/given-vectors.json#key.twice-before-composite success -> refusal INVALID_REQUEST'
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E101}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E102}
   notes: >-
     D3 of the P1B-12 design of 2026-10-13, the owner's: it refuses input
-    the reference accepts, so it waits for the owner's own decision
-    (E66(b), E73(b)), never self-approved. Its implementation is one
-    commit of T1.32h on top of the main fix, beside the test author's D3
-    commit, so either can be dropped: dropping both restores the default,
-    composite_key (E92), until composite keys arrive in Phase 2. Codex
-    asked the owner to say whether edit_schema should refuse it too; the
-    design leaves it describe-only. Held by contract/given-vectors.json's
-    key.twice, key.twice-before-composite, key.twice-missing-first and
+    the reference accepts, so it waited for the owner's own decision
+    (E66(b), E73(b)), never self-approved. Approved by the owner on
+    2026-10-14 (the owner's answers of that morning, item 19: a key
+    naming one column twice is refused), relayed by the orchestrator,
+    recorded at T1.32h's fix 2 (E102); never the implementer's approval.
+    It landed
+    after the main fix, as T1.32h's part 2, from the commits both
+    reviewers approved. Codex asked the owner to say whether edit_schema
+    should refuse it too; the design leaves it describe-only, as
+    approved. Held by contract/given-vectors.json's key.twice,
+    key.twice-before-composite, key.twice-missing-first and
     edit.key-twice, and the client's k.twice rows.
 
 - id: P1B-13
@@ -4602,16 +4606,18 @@ entries:
     with primary_keys or time_columns naming a table by anything but a
     str.
   cases: [T1.32h]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E101}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E102}
   notes: >-
     D4 of the P1B-12 design of 2026-10-13, the owner's: a host-side
     refusal of the host's own argument's type, where JSON's coercion
     would otherwise name another table; it changes which error wins over
-    a source failure, so it waits for the owner, never self-approved. Its
-    implementation is one commit of T1.32h on top of the main fix and D3,
-    beside the test author's D4 commit, so either can be dropped: dropping
-    both restores the coercion P1B-12 records. Held by the client's
-    tests/test_t132h_keys_and_times.py (the m.*-table rows and
+    a source failure, so it waited for the owner, never self-approved.
+    Approved by the owner on 2026-10-14 (the owner's answers of that
+    morning, item 25: a table name that isn't text is refused), relayed
+    by the orchestrator, recorded at T1.32h's fix 2 (E102); never the
+    implementer's approval. It landed after the main fix and D3, as
+    T1.32h's part 2, from the commit both reviewers approved. Held by the
+    client's tests/test_t132h_keys_and_times.py (the m.*-table rows and
     test_d4_the_table_name_is_refused_before_the_source_is_read).
