@@ -158,12 +158,28 @@ jobs:
     defaults:
       run:
         working-directory: rust
+    # Line tables only for the workspace's own crates (dependencies build
+    # with none, rust/Cargo.toml): a panic and its backtrace still name each
+    # file and line, and the test binaries take far less of the runner's
+    # disk. The test profile inherits dev's; stated for both all the same.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     steps:
       # Every branch, for the gate's checkpoint (the merge base with the
       # phase branch) and its worktree.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # This job builds the bundled DuckDB; on a cold cache (any Cargo.lock
+      # change misses rust-cache's key) the build ran the runner out of disk
+      # (T1.35). The preinstalled toolchains it never uses are removed first,
+      # the free space printed before and after.
+      - name: Free runner disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
