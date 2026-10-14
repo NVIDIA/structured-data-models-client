@@ -720,21 +720,23 @@
           "INTERVAL",
           "INTERVAL"
         ],
-        "ordered": "e3d9e8ce4514368d1ff50d5337742bacc9314ab27296e0159648b47a8ef51a72",
-        "unordered": "e3d9e8ce4514368d1ff50d5337742bacc9314ab27296e0159648b47a8ef51a72",
-        "unencodable": [
-          "arrow:month_day_nano_interval"
-        ]
+        "ordered": "450398dae7552df88a791a97ee0ab408ffd358789989033b83700606f1fd32a4",
+        "unordered": "450398dae7552df88a791a97ee0ab408ffd358789989033b83700606f1fd32a4",
+        "unencodable": []
       },
       "rows": [
         [
           [
-            "?",
-            "arrow:month_day_nano_interval"
+            "interval",
+            1,
+            0,
+            "0"
           ],
           [
-            "?",
-            "arrow:month_day_nano_interval"
+            "interval",
+            0,
+            30,
+            "0"
           ]
         ]
       ]
@@ -879,11 +881,9 @@
           "TIMESTAMP_NS[]",
           "STRUCT(i INTERVAL)"
         ],
-        "ordered": "683cd5fc4ab358110731b8d2fa31e8bc1822a50ebb5cdaceec422f6b94ba58c1",
-        "unordered": "683cd5fc4ab358110731b8d2fa31e8bc1822a50ebb5cdaceec422f6b94ba58c1",
-        "unencodable": [
-          "arrow:month_day_nano_interval"
-        ]
+        "ordered": "ddfd0b518e34b1e5680831c6f6df9362aa8c9c18bd480f9baf46f201a19a8613",
+        "unordered": "ddfd0b518e34b1e5680831c6f6df9362aa8c9c18bd480f9baf46f201a19a8613",
+        "unencodable": []
       },
       "rows": [
         [
@@ -914,8 +914,10 @@
               [
                 "i",
                 [
-                  "?",
-                  "arrow:month_day_nano_interval"
+                  "interval",
+                  0,
+                  1,
+                  "0"
                 ]
               ]
             ]

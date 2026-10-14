@@ -58,7 +58,8 @@ def _vectors() -> list[dict[str, Any]]:
 def test_the_vector_file() -> None:
     vectors = _vectors()
     # Not vacuous: every kind of cell the form names but a duration (which
-    # DuckDB's SQL cannot make) appears, an interval stands as unencodable,
+    # DuckDB's SQL cannot make) appears, an interval in its form (T1.32g
+    # part 2e; what stays unencodable is held by t132g-p2e-vectors.json),
     # nanosecond times differ from each other, and one vector has no rows.
     kinds = set()
 
@@ -81,7 +82,7 @@ def test_the_vector_file() -> None:
                 walk(cell)
     assert kinds >= {
         'i', 'f', 's', 'b', 'd', 'date', 'ts', 'tstz', 'time', 'list',
-        'struct', '?', 'bool', 'NoneType',
+        'struct', 'interval', 'bool', 'NoneType',
     }  # fmt: skip
     assert any(vector['rows'] == [] for vector in vectors)
     assert len({vector['name'] for vector in vectors}) == len(vectors)

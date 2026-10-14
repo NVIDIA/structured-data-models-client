@@ -993,8 +993,10 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     epoch]``, ``["time", nanoseconds since midnight]``, ``["dur",
     nanoseconds]``, ``["list", cells]`` and ``["struct", [[name, cell],
     ...]]``; read from Arrow (:func:`_arrow_cells`), a map is ``["map",
-    [[key, value], ...]]`` in Arrow's entry order and a union ``["union",
-    type code, member name, cell]``. A value of any other kind is ``["?",
+    [[key, value], ...]]`` in Arrow's entry order, a union ``["union",
+    type code, member name, cell]`` and a month-day-nano interval
+    ``["interval", months, days, nanoseconds as digits]``. A value of any
+    other kind is ``["?",
     its type's name]`` and is listed as unencodable, which the comparator
     never takes as equal. This
     reads Python values, which hold a time only to the microsecond: an
@@ -1077,7 +1079,7 @@ def _canonical_text(value: Any) -> str:
 #: ``INTERVAL`` to a ``timedelta`` that folds its months into days, a
 #: ``UNION`` to its member's value without its tag, and a ``MAP`` to a
 #: dictionary the canonical form would take for a struct (Arrow's reading
-#: of either keeps what these lose). A value of a column of
+#: of each keeps what these lose). A value of a column of
 #: such a type, or of one holding such a type at any depth, read as rows
 #: (``fetchall``) is unencodable, never compared as if exact.
 _LOSSY_AS_ROWS = frozenset(
@@ -1272,8 +1274,10 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     nanoseconds), lists, structs and maps element by element (a map's
     entries in Arrow's order, duplicate keys kept), a union as its chosen
     member's cell under its type code and name (:func:`_union_cells`), a
-    dictionary as its values; a type outside that set (an interval) is
-    unencodable, its non-null values ``["?", "arrow:<type>"]``."""
+    month-day-nano interval as ``["interval", months, days, nanoseconds
+    as digits]``, a dictionary as its values; a type outside that set (a
+    ``date64``, Arrow's year-month and day-time intervals) is unencodable,
+    its non-null values ``["?", "arrow:<type>"]``."""
     import pyarrow as pa
     import pyarrow.types as is_
 
@@ -1334,6 +1338,13 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
         return cells
     if is_.is_union(kind):
         return _union_cells(array, odd)
+    if is_.is_interval(kind) and str(kind) == 'month_day_nano_interval':
+        return [
+            ['interval', value.months, value.days, str(value.nanoseconds)]
+            if value is not None
+            else None
+            for value in array.to_pylist()
+        ]
     if is_.is_float16(kind):
         array = array.cast(pa.float32())
         kind = array.type

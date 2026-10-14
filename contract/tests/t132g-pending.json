@@ -2,31 +2,10 @@
  "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it; tests/test_t132g_python_old_as_run.py, at f504a9e9, for part 2a's fix after its review: python-old's lines as run (tests/golden/t132g-python-old-*.jsonl), host warnings and origins left out of exactly, the checkpoint's reference line, an entry's case of another type). Part 2c (T1.32g part 2c, at f504a9e9): contract/tests/test_t132g_map_union_values.py ('exits') and rust/crates/sdm-testkit/tests/t132g_map_union_values.rs ('rust-host', vector names of contract/t132g-p2c-vectors.json): a map's and a union's canonical cells. Part 2d (T1.32g part 2d, at bc4b2d0c): tests/test_t132g_later_stage.py, on the real lines of tests/golden/t132g-later-stage: an approved entry moving a runner past the reference's stop compares only the evidence the reference produced, and large Arrow buffers predicted from the case's setup; tests/test_t132g_later_stage_moves.py, at d03f0f65, for part 2d's fix after its review: which approved entries are a move past the checkpoint reference's stop, the move held since in a baseline, and the large buffers' setting as DuckDB applies it (a later RESET or false, a base's setting); contract/tests/test_t132g_large_buffer_settings.py, at 1723e8e9, for part 2d's fix 2 after Codex's round 2: the setting's ordinary spellings held to what real DuckDB does, and an unsupported one failing by name; the same file, at c1e9b099, for part 2d's fix 4 after Codex's round 3: the strict rule, an element naming the setting exactly one canonical statement or refused by name, a SESSION or GLOBAL scope refused too. Part 2e (T1.32g part 2e, at c1c1dd21): contract/tests/test_t132g_interval_values.py ('exits') and rust/crates/sdm-testkit/tests/t132g_interval_values.rs ('rust-host', vector names of contract/t132g-p2e-vectors.json): an interval's canonical cells; part 2c's interval vector, renamed, taking the form ('exits' and 'rust-host'), its old id and name dropped from authored as no longer tests. Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
-  "rust-host": [
-   "intervals: zero, negative, mixed and null",
-   "a nanosecond count past JSON's safe integers",
-   "intervals in a list and a struct",
-   "an interval as a chosen union member and in a map",
-   "intervals at their fields' limits",
-   "an interval inside a map and as a chosen union member"
-  ],
+  "rust-host": [],
   "exits": [
-   "py:test_arrow_reads_intervals_as_the_vector_says[a nanosecond count past JSON's safe integers]",
-   "py:test_arrow_reads_intervals_as_the_vector_says[an interval as a chosen union member and in a map]",
-   "py:test_arrow_reads_intervals_as_the_vector_says[intervals at their fields' limits]",
-   "py:test_arrow_reads_intervals_as_the_vector_says[intervals in a list and a struct]",
-   "py:test_arrow_reads_intervals_as_the_vector_says[intervals: zero, negative, mixed and null]",
-   "py:test_arrow_reads_maps_and_unions_as_the_vector_says[an interval inside a map and as a chosen union member]",
-   "py:test_the_comparator_takes_a_different_interval_as_different[a zero for a null]",
-   "py:test_the_comparator_takes_a_different_interval_as_different[another sign]",
-   "py:test_the_comparator_takes_a_different_interval_as_different[other days]",
-   "py:test_the_comparator_takes_a_different_interval_as_different[other months]",
-   "py:test_the_comparator_takes_a_different_interval_as_different[other nanoseconds]",
-   "py:test_the_comparator_takes_a_different_interval_as_different[thirty days for a month]",
-   "py:test_the_comparator_takes_an_interval_result_as_equal_to_itself",
    "py:test_the_interval_reference_sample_compares_equal_to_itself",
-   "py:test_the_interval_reference_sample_is_the_new_encoder_s_reading",
-   "py:test_the_older_interval_vectors_take_the_form"
+   "py:test_the_interval_reference_sample_is_the_new_encoder_s_reading"
   ]
  },
  "authored": {

@@ -20,10 +20,12 @@
 //! nanoseconds]`, each temporal count read from the array's integer storage
 //! at its unit, `["list", cells]`, `["struct", [[name, cell], ...]]`,
 //! `["map", [[key, value], ...]]` (Arrow's entry order, duplicate keys
-//! kept) and `["union", type code, member name, cell]` (never null itself:
-//! a null member, or a union DuckDB writes as null, keeps its tag); a
-//! dictionary is read as its values. A value of any other type (an
-//! interval) is `["?", its type's name]` and is listed as unencodable,
+//! kept), `["union", type code, member name, cell]` (never null itself:
+//! a null member, or a union DuckDB writes as null, keeps its tag) and
+//! `["interval", months, days, nanoseconds as digits]` (a month-day-nano
+//! interval); a dictionary is read as its values. A value of any other
+//! type (a `date64`, a year-month or day-time interval) is `["?", its
+//! type's name]` and is listed as unencodable,
 //! inside a map or a chosen union member too, which the comparator never
 //! takes as equal; a member no row chooses names nothing. A row is the compact JSON of its cells, ASCII only
 //! (Python's `json.dumps` with `ensure_ascii`), so its order as text is its
@@ -42,10 +44,11 @@ use duckdb::arrow::array::{
 use duckdb::arrow::compute::cast;
 use duckdb::arrow::datatypes::{
     DataType, DurationMicrosecondType, DurationMillisecondType, DurationNanosecondType,
-    DurationSecondType, Field, Int8Type, Int16Type, Int32Type, Int64Type, IntervalUnit,
-    Time32MillisecondType, Time32SecondType, Time64MicrosecondType, Time64NanosecondType, TimeUnit,
-    TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
-    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type, UnionMode,
+    DurationSecondType, Field, Int8Type, Int16Type, Int32Type, Int64Type, IntervalMonthDayNanoType,
+    IntervalUnit, Time32MillisecondType, Time32SecondType, Time64MicrosecondType,
+    Time64NanosecondType, TimeUnit, TimestampMicrosecondType, TimestampMillisecondType,
+    TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
+    UnionMode,
 };
 use duckdb::arrow::record_batch::RecordBatch;
 use serde_json::{Value, json};
@@ -307,6 +310,15 @@ fn cell(array: &ArrayRef, row: usize, odd: &mut BTreeSet<String>) -> Value {
             }
             None => unencodable(array.data_type(), odd),
         },
+        DataType::Interval(IntervalUnit::MonthDayNano) => {
+            let value = array.as_primitive::<IntervalMonthDayNanoType>().value(row);
+            json!([
+                "interval",
+                value.months,
+                value.days,
+                value.nanoseconds.to_string()
+            ])
+        }
         DataType::Map(_, _) => match any.downcast_ref::<MapArray>() {
             Some(a) => {
                 let entries = a.value(row);
