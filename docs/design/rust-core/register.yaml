@@ -2230,6 +2230,49 @@ entries:
   - {case: base.adventureworks, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'case file only: the core spec written as contract 23 Given; the outcome unchanged'}
   - {case: time.text-declared, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'case file only: the core spec written as contract 23 Given; the outcome unchanged'}
 
+- id: P1B-73
+  title: A key naming one column twice is refused by name on the core route, where the reference takes it
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source takes a key naming one column twice
+    (primary_keys={'orders': ['order_id', 'order_id']}): _as_key_tuple
+    keeps the repeat, each column exists, and the table is keyed by the
+    tuple. Without this entry the core refuses such a key as any key of
+    more than one column, UNSUPPORTED_REQUEST composite_key (E92's Phase 2
+    class).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    describe_source refuses it by name after the key's columns are found
+    and before a key of more than one column is refused:
+    StructuredDataError, INVALID_REQUEST {field: primary_keys, table,
+    column (the first named again), rule: key_column_twice}, the fixed
+    message "a primary key names a column more than once"
+    (sdm-schema apply_keys_and_times). A column missing is still refused
+    first (['nope', 'nope'] names the missing column). edit_schema takes
+    such a key as it does today; describe_source only. The default route
+    is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source under a forced core route,
+    with a key in primary_keys naming one column more than once.
+  cases: [T1.32h]
+  refs:
+  - 'contract/given-vectors.json#key.twice success -> refusal INVALID_REQUEST'
+  - 'contract/given-vectors.json#key.twice-before-composite success -> refusal INVALID_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E101}
+  notes: >-
+    D3 of the P1B-12 design of 2026-10-13, the owner's: it refuses input
+    the reference accepts, so it waits for the owner's own decision
+    (E66(b), E73(b)), never self-approved. Its implementation is one
+    commit of T1.32h on top of the main fix, beside the test author's D3
+    commit, so either can be dropped: dropping both restores the default,
+    composite_key (E92), until composite keys arrive in Phase 2. Codex
+    asked the owner to say whether edit_schema should refuse it too; the
+    design leaves it describe-only. Held by contract/given-vectors.json's
+    key.twice, key.twice-before-composite, key.twice-missing-first and
+    edit.key-twice, and the client's k.twice rows.
+
 - id: P1B-13
   title: A null where the sampler's walk tells rows apart is no link on the core route
   kind: change

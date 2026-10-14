@@ -352,7 +352,7 @@ fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
 /// table's time column; each time column's table and column the schema's,
 /// not part of its key, and of a type that can hold a time. A key of more
 /// than one column is refused by name (`composite_key`), as composite keys
-/// are elsewhere. Naming a key marks its column an identifier, what it
+/// are elsewhere, after a column named twice (`key_column_twice`, P1B-73). Naming a key marks its column an identifier, what it
 /// meant kept, and gives the table's other columns back what they meant;
 /// naming a time column makes it a timestamp; a time column cleared
 /// (`None`) leaves the table none, its columns meaning what they meant, as
@@ -386,6 +386,18 @@ pub fn apply_keys_and_times(
             if table.column(column).is_none() {
                 return Err(no_column(name, column, "primary_keys"));
             }
+        }
+        // A column named twice is refused by name, before a key of more
+        // than one column is (P1B-73, the owner's; `describe_source` only).
+        let mut named = BTreeSet::new();
+        if let Some(twice) = key.iter().find(|column| !named.insert(column.as_str())) {
+            return Err(invalid(
+                "a primary key names a column more than once",
+                "primary_keys",
+            )
+            .with_field("table", Detail::text(name))
+            .with_field("column", Detail::text(twice))
+            .with_field("rule", Detail::text("key_column_twice")));
         }
         let [column] = key.as_slice() else {
             if key.is_empty() {
