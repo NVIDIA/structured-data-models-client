@@ -37,12 +37,13 @@ Raises (from each edit):
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
-from collections.abc import Set as AbstractSet
 from typing import Any
 
-#: A value no contract type holds, as the contract writes it.
-UNREADABLE = 'unreadable'
+from sdm_client._rust.codec import UNREADABLE
+from sdm_client._rust.codec import given as _given
+from sdm_client._rust.codec import given_key as _key
+from sdm_client._rust.codec import given_name_or_none as _name_or_none
+from sdm_client._rust.codec import given_text as _text
 
 
 def _schema_holding(table: Any) -> tuple[Any, str] | None:
@@ -55,40 +56,6 @@ def _schema_holding(table: Any) -> tuple[Any, str] | None:
         if held is table:
             return schema, name
     return None
-
-
-def _given(value: Any) -> Any:
-    return {'value': value}
-
-
-def _text(value: Any) -> Any:
-    r"""Text as the contract writes it, or :data:`UNREADABLE`."""
-    if isinstance(value, str):
-        return _given(str.__str__(value))
-    return UNREADABLE
-
-
-def _name_or_none(value: Any) -> Any:
-    if value is None:
-        return _given(None)
-    return _text(value)
-
-
-def _key(value: Any) -> tuple[Any, Any]:
-    r"""A key as the contract writes it, and the form the reference keeps
-    it in (``_as_key_tuple``: a name, or a tuple of the names, read once)."""
-    if value is None:
-        return _given(None), None
-    if isinstance(value, str):
-        return _given([str.__str__(value)]), value
-    if isinstance(value, (bytes, Mapping, AbstractSet)) or not isinstance(
-        value, Iterable
-    ):
-        return UNREADABLE, None
-    names = tuple(value)
-    if not all(isinstance(name, str) for name in names):
-        return UNREADABLE, None
-    return _given([str.__str__(name) for name in names]), names
 
 
 def _link(link: Any) -> Any:

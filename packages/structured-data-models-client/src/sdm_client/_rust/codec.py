@@ -30,7 +30,8 @@ import math
 import numbers
 import re
 import struct
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -340,6 +341,60 @@ def attachment(value: Any) -> bytes:
             'this request carries a value that cannot be sent as JSON',
             code='INVALID_REQUEST',
         ) from None
+
+
+# --- a caller's value as the contract's Given ----------------------------------
+#
+# The conformance rule of the contract's ``Given`` (``sdm-contract``'s ops.rs):
+# a value the host can write faithfully as the contract's type is written
+# ``{"value": ...}``; any other is written ``"unreadable"``, and the core
+# refuses it. The host asks nothing else of the value: what a null, an empty
+# key or a name the table lacks means is the core's. In Python, text is a
+# ``str`` (a subclass written as the plain ``str``); a collection is any
+# other iterable but ``bytes``, a mapping and a set (no order), read once
+# with ``tuple``. Nothing is caught: an exception raised while reading the
+# caller's iterable, ``KeyboardInterrupt`` included, is the caller's, as the
+# reference's ``list(key)`` lets it out.
+
+#: A value no contract type holds, as the contract writes it.
+UNREADABLE = 'unreadable'
+
+
+def given(value: Any) -> Any:
+    r"""``value``, of the contract's type, as ``Given`` writes it."""
+    return {'value': value}
+
+
+def given_text(value: Any) -> Any:
+    r"""Text as the contract writes it, or :data:`UNREADABLE`."""
+    if isinstance(value, str):
+        return given(str.__str__(value))
+    return UNREADABLE
+
+
+def given_name_or_none(value: Any) -> Any:
+    r"""A name or ``None`` (a time column), as the contract writes it, or
+    :data:`UNREADABLE`."""
+    if value is None:
+        return given(None)
+    return given_text(value)
+
+
+def given_key(value: Any) -> tuple[Any, Any]:
+    r"""A key as the contract writes it, and the form the reference keeps
+    it in (``_as_key_tuple``: a name, or a tuple of the names, read once)."""
+    if value is None:
+        return given(None), None
+    if isinstance(value, str):
+        return given([str.__str__(value)]), value
+    if isinstance(value, (bytes, Mapping, AbstractSet)) or not isinstance(
+        value, Iterable
+    ):
+        return UNREADABLE, None
+    names = tuple(value)
+    if not all(isinstance(name, str) for name in names):
+        return UNREADABLE, None
+    return given([str.__str__(name) for name in names]), names
 
 
 def _json(data: bytes) -> dict[str, Any]:
