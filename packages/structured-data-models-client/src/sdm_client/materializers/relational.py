@@ -151,22 +151,29 @@ def _refuse_more_entities_than_fit_in_memory(
         return
     asked = int(asked)
     calls = math.ceil(asked / per_call)
-    too_many = (
-        f'{MOST_ENTITIES:,} entities'
-        if asked > MOST_ENTITIES
-        else f'{MOST_CALLS:,} calls'
-        if calls > MOST_CALLS
-        else ''
-    )
-    if not too_many:
+    met = [
+        (said, name)
+        for said, name, over in (
+            (
+                f'{MOST_ENTITIES:,} entities',
+                'MOST_ENTITIES',
+                asked > MOST_ENTITIES,
+            ),
+            (f'{MOST_CALLS:,} calls', 'MOST_CALLS', calls > MOST_CALLS),
+        )
+        if over
+    ]
+    if not met:
         return
+    too_many = ' and '.join(said for said, _ in met)
+    raisable = ' and '.join(name for _, name in met)
     raise StructuredDataError(
         f'{asked:,} entities are gathered as {calls:,} calls of '
         f'{per_call:,}, and every one is built, with its own context, before '
         f'any is sent. That is past the {too_many} this will hold at once; '
         f'ask about fewer entities at a time, or raise '
-        f'sdm_client.materializers.relational.MOST_ENTITIES or MOST_CALLS if '
-        f'the memory is yours to spend',
+        f'sdm_client.materializers.relational.{raisable} if the memory is '
+        f'yours to spend',
         code='UNSUPPORTED_REQUEST',
         details={
             'entities': asked,
@@ -890,11 +897,13 @@ _THE_ENGINE_S_REMEDY = 'Please reduce either'
 #: smaller calls, and the same graph at 10,000 context rows is over the body
 #: on the context alone, where only a narrower context helps.
 _ASK_IN_SMALLER_CALLS = (
-    'Ask in smaller calls, with materialize(rows_per_call=N) below the '
-    '{per_call} this question holds: the same entities, in more and smaller '
-    'calls. Where the context is itself over the limit, no call is small '
-    'enough and it is num_context_samples, num_neighbors or the columns the '
-    'graph carries that have to come down.'
+    'What comes down is one of three. For an ordinary question it is the '
+    'call: materialize(rows_per_call=N) below the {per_call} this one holds '
+    'asks for the same entities in more and smaller calls. Where the context '
+    'is itself over the limit, no call is small enough, and it is '
+    'num_context_samples, num_neighbors or the columns the graph carries. '
+    'For a ranking or a forecast, which is one call per candidate or step '
+    'and is never batched, it is the entities.'
 )
 
 

@@ -239,18 +239,29 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
 
 @pytest.mark.parametrize(
     ('asked', 'sizes'),
-    [(None, [5]), (2, [2, 2, 1]), (10, [5])],
-    ids=['default', 'smaller', 'larger_than_asked_for'],
+    [(None, [2, 2, 1]), (1, [1, 1, 1, 1, 1]), (10, [2, 2, 1])],
+    ids=['default', 'smaller', 'larger_than_the_endpoint_takes'],
 )
 def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
     """It only ever goes down: the endpoint refuses a call past its own cap,
-    so a larger number would buy a 422 rather than a bigger call."""
+    so a larger number would buy a 422 rather than a bigger call.
+
+    The cap is held low here so that a number above it is a number the engine
+    would have batched at. Against the real 10,000, every value a test could
+    pass is below it, and the clamp could be dropped without a failure.
+    """
+    from sdm_client.materializers import relational as materializer
+    from sdm_client.models import RELATIONAL_LIMITS
+
     how = {} if asked is None else {'rows_per_call': asked}
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        request = query().materialize(
-            indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
-        )
+        with pytest.MonkeyPatch.context() as held:
+            held.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+            held.setattr(materializer, 'MOST_CALLS', 10)
+            request = query().materialize(
+                indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
+            )
     assert [
         len(payload['predict']['instance_table']['rows'])
         for payload in request.payloads
