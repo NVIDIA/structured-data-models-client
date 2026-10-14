@@ -15,7 +15,9 @@
 
 use anyhow::{Result, anyhow};
 use duckdb::Connection;
-use duckdb::arrow::datatypes::SchemaRef;
+use duckdb::arrow::array::{Array, StringArray};
+use duckdb::arrow::compute::cast;
+use duckdb::arrow::datatypes::{DataType, SchemaRef};
 use duckdb::arrow::record_batch::RecordBatch;
 use serde_json::{Value, json};
 
@@ -162,19 +164,31 @@ pub fn enable_query_log(connection: &Connection) -> Result<()> {
         .map_err(|e| anyhow!("turning DuckDB's query log on: {e}"))
 }
 
-/// Each query DuckDB logged since [`enable_query_log`], in order.
+/// Each query DuckDB logged since [`enable_query_log`], in order. Read as
+/// Arrow and cast to text, never through `duckdb-rs`'s row API, which
+/// panics on a `utf8_view` column: a case's setup may have set
+/// `produce_arrow_string_view` on this session, and DuckDB then hands the
+/// log's own text over as views.
 pub fn query_log(connection: &Connection) -> Result<Vec<String>> {
-    let mut statement = connection
-        .prepare("SELECT message FROM duckdb_logs WHERE type = 'QueryLog' ORDER BY context_id")
-        .map_err(|e| anyhow!("{e}"))?;
-    let rows = statement
-        .query_map([], |row| row.get::<_, Option<String>>(0))
-        .map_err(|e| anyhow!("{e}"))?;
-    let messages = rows
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| anyhow!("{e}"))?;
-    Ok(messages
-        .into_iter()
-        .map(Option::unwrap_or_default)
-        .collect())
+    let fetched = crate::duck::run(
+        connection,
+        "SELECT message FROM duckdb_logs WHERE type = 'QueryLog' ORDER BY context_id",
+    )?;
+    let mut messages = Vec::new();
+    for batch in &fetched.batches {
+        let text = cast(batch.column(0), &DataType::Utf8)
+            .map_err(|e| anyhow!("reading DuckDB's query log as text: {e}"))?;
+        let text = text
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .ok_or_else(|| anyhow!("DuckDB's query log is not text"))?;
+        messages.extend((0..text.len()).map(|row| {
+            if text.is_null(row) {
+                String::new()
+            } else {
+                text.value(row).to_owned()
+            }
+        }));
+    }
+    Ok(messages)
 }

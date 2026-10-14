@@ -18,8 +18,10 @@ sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
 # vtab-arrow: the Arrow table function a key set is bound through, as the
 # provider binds a key set (a relation of the attachment's rows); it adds
-# the num crates to the test host only.
-duckdb = { workspace = true, features = ["vtab-arrow"] }
+# the num crates to the test host only. json: DuckDB's JSON extension,
+# compiled in by the bundled build (no new crate), as the Python wheel the
+# reference runs links it, so a JSON column can be set up here (T1.33).
+duckdb = { workspace = true, features = ["vtab-arrow", "json"] }
 serde.workspace = true
 # raw_value, to read an entity key's integer literal of any size as its
 # digits; it only adds `RawValue`, changing no other reading.

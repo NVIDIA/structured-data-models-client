@@ -8,6 +8,7 @@
 //!
 //! | Received | Admitted as |
 //! |---|---|
+//! | `int8` carrying the canonical extension `arrow.bool8` | `boolean`, 0 false and any other value true |
 //! | `large_utf8`, `utf8_view` | `utf8` |
 //! | `large_binary`, `binary_view`, `fixed_size_binary` | `binary` |
 //! | `float16` | `float32` |
@@ -32,7 +33,12 @@
 //! is the run's, in `sdm-core`.
 //!
 //! Nested types are admitted child by child, keeping each field's name,
-//! nullability and metadata, and every value and null. The received schema
+//! nullability and metadata, and every value and null. The one exception
+//! to keeping metadata: a field read as what its extension type means
+//! (`arrow.bool8` as `boolean`) drops the extension's two keys, which would
+//! name a storage the admitted field no longer has. DuckDB hands its
+//! booleans over as `arrow.bool8` under `arrow_lossless_conversion`, its
+//! catalog's included (T1.33). The received schema
 //! is kept beside the admitted one ([`ArrowData::received`]). Anything the
 //! table does not take into the set is refused with `UNSUPPORTED_TYPE`,
 //! naming the column (with its path through nested types) and the Arrow
@@ -50,13 +56,13 @@ use std::sync::Arc;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
     Date64Type, Decimal32Type, Decimal64Type, DurationMillisecondType, DurationSecondType,
-    Float16Type, Int16Type, Int32Type, Int64Type, RunEndIndexType, Time32MillisecondType,
+    Float16Type, Int8Type, Int16Type, Int32Type, Int64Type, RunEndIndexType, Time32MillisecondType,
     Time32SecondType, TimestampMillisecondType, TimestampSecondType,
 };
 use arrow_array::{
-    Array, ArrayRef, BinaryArray, Decimal128Array, DurationMicrosecondArray, Float32Array,
-    ListArray, MapArray, RecordBatch, RunArray, StringArray, StructArray, Time64MicrosecondArray,
-    TimestampMicrosecondArray, UInt64Array,
+    Array, ArrayRef, BinaryArray, BooleanArray, Decimal128Array, DurationMicrosecondArray,
+    Float32Array, ListArray, MapArray, RecordBatch, RunArray, StringArray, StructArray,
+    Time64MicrosecondArray, TimestampMicrosecondArray, UInt64Array,
 };
 use arrow_buffer::{ArrowNativeType, NullBuffer, OffsetBuffer, ScalarBuffer};
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
@@ -89,9 +95,41 @@ pub fn admitted_type(column: &str, received: &DataType) -> Result<DataType, Core
 
 fn convert_field(parent: &str, field: &Field) -> Result<Field, CoreError> {
     let path = format!("{parent}.{}", field.name());
+    admitted_field(&path, field, convert_type)
+}
+
+/// The canonical extension type naming an `int8` that holds booleans.
+const BOOL8: &str = "arrow.bool8";
+
+/// The keys an extension type sets on its field.
+const EXTENSION_KEYS: [&str; 2] = ["ARROW:extension:name", "ARROW:extension:metadata"];
+
+/// Whether `field` is an `int8` carrying `arrow.bool8`, read as booleans.
+fn is_bool8(field: &Field) -> bool {
+    field.data_type() == &DataType::Int8 && field.extension_type_name() == Some(BOOL8)
+}
+
+/// `field` as admitted at `path`: its type through `convert`, its name,
+/// nullability and metadata kept, but an `arrow.bool8` field's, which is
+/// `boolean` without the extension's keys.
+fn admitted_field(
+    path: &str,
+    field: &Field,
+    convert: fn(&str, &DataType) -> Result<DataType, CoreError>,
+) -> Result<Field, CoreError> {
+    if is_bool8(field) {
+        let mut metadata = field.metadata().clone();
+        for key in EXTENSION_KEYS {
+            metadata.remove(key);
+        }
+        return Ok(
+            Field::new(field.name(), DataType::Boolean, field.is_nullable())
+                .with_metadata(metadata),
+        );
+    }
     Ok(Field::new(
         field.name(),
-        convert_type(&path, field.data_type())?,
+        convert(path, field.data_type())?,
         field.is_nullable(),
     )
     .with_metadata(field.metadata().clone()))
@@ -180,14 +218,7 @@ pub fn admit_with_capacity(data: &ArrowData, capacity: usize) -> Result<ArrowDat
         .schema
         .fields()
         .iter()
-        .map(|f| {
-            Ok(Field::new(
-                f.name(),
-                admitted_type(f.name(), f.data_type())?,
-                f.is_nullable(),
-            )
-            .with_metadata(f.metadata().clone()))
-        })
+        .map(|f| admitted_field(f.name(), f, admitted_type))
         .collect::<Result<_, CoreError>>()?;
     let schema: SchemaRef = Arc::new(Schema::new_with_metadata(
         fields,
@@ -476,6 +507,16 @@ impl Admit {
         let rebuilt = |e: arrow_schema::ArrowError| Fail::Refused(internal(column, &e));
         let nulls = array.nulls().cloned();
         Ok(match (received, admitted) {
+            // An `arrow.bool8` field's values (admitted_field).
+            (DataType::Int8, DataType::Boolean) => Arc::new(BooleanArray::new(
+                array
+                    .as_primitive::<Int8Type>()
+                    .values()
+                    .iter()
+                    .map(|v| *v != 0)
+                    .collect(),
+                nulls,
+            )),
             (DataType::LargeUtf8, DataType::Utf8) => {
                 let large = array.as_string::<i64>();
                 let (start, offsets) = rebase(large.offsets(), self.capacity).ok_or_else(past)?;

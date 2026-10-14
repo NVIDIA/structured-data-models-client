@@ -33,22 +33,7 @@
    "py:test_a_difference_from_the_reference_is_registered[view.union]",
    "py:test_a_difference_from_the_reference_is_registered[map.utf8-int64]"
   ],
-  "rust-host-duckdb": [
-   "fixed-size-binary.16",
-   "binary-view",
-   "utf8-view",
-   "lossless.integer",
-   "lossless.boolean",
-   "lossless.hugeint",
-   "lossless.uhugeint",
-   "lossless.bit",
-   "lossless.json",
-   "lossless.timetz",
-   "view.list-utf8",
-   "view.struct",
-   "view.map",
-   "view.union"
-  ]
+  "rust-host-duckdb": []
  },
  "authored": {
   "rust-host": [],
