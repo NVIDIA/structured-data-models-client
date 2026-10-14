@@ -3,17 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_a_label_flip_with_no_value_near_the_constant_is_unexplained",
-   "py:test_a_request_change_without_a_label_change_is_unexplained",
-   "py:test_a_warnings_change_is_unexplained",
-   "py:test_an_emptied_schema_is_unexplained",
-   "py:test_an_unrelated_payload_or_result_change_is_unexplained[feature-cells]",
-   "py:test_an_unrelated_payload_or_result_change_is_unexplained[payload-rows]",
-   "py:test_an_unrelated_payload_or_result_change_is_unexplained[result]",
-   "py:test_each_static_vector_names_its_values",
-   "py:test_more_labels_flipped_than_values_near_the_constant_is_unexplained"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [

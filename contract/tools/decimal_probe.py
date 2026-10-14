@@ -44,13 +44,16 @@ the register entries the package proposes, named in ``EXPLAINED``.
 from __future__ import annotations
 
 import argparse
+import copy
 import importlib.util
 import json
+import math
 import random
+import re
 import subprocess
 import sys
 import tempfile
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -63,23 +66,105 @@ OPS = ('>', '>=', '<', '<=', '=', '!=')
 #: constant by its approximation (Arrow's ``Decimal128::FromReal``) where the
 #: core reads it exactly (measured: exact through scale 27).
 APPROXIMATE_FROM = 28
+#: The labelled target, whose cells P1B-71's exact reading may change.
+TARGET = 'instance_table.TARGET'
+_CONDITION = re.compile(r'PREDICT\s+\S+\s+(\S+)\s+(\S+)\s+FOR\s+EACH\s')
+
+
+def _masked(answer: dict[str, Any]) -> dict[str, Any]:
+    r"""``answer`` without what a label decides: the target's cells in each
+    request and each request's digest."""
+    answer = copy.deepcopy(answer)
+    for request in answer.get('payload') or []:
+        request.pop('digest', None)
+    target = (answer.get('columns') or {}).get(TARGET) or {}
+    for each in target.get('request') or []:
+        for side in ('context', 'predict'):
+            if isinstance(each.get(side), dict):
+                each[side].pop('cells', None)
+    return answer
+
+
+def _flipped(ref: dict[str, Any], core: dict[str, Any]) -> int | None:
+    r"""How many labels the two answers' target cells differ by (half the
+    cells' moves, a label leaving one cell for another), or None when their
+    requests do not line up."""
+
+    def cells(answer: dict[str, Any]) -> list[dict[str, int]]:
+        target = (answer.get('columns') or {}).get(TARGET) or {}
+        return [
+            dict((each.get(side) or {}).get('cells') or {})
+            for each in target.get('request') or []
+            for side in ('context', 'predict')
+        ]
+
+    mine, theirs = cells(core), cells(ref)
+    if len(mine) != len(theirs):
+        return None
+    moved = 0
+    for a, b in zip(mine, theirs, strict=True):
+        if sum(a.values()) != sum(b.values()):
+            return None
+        moved += sum(abs(a.get(k, 0) - b.get(k, 0)) for k in set(a) | set(b))
+    return moved // 2
+
+
+def _near(vector: dict[str, Any]) -> int | None:
+    r"""How many of the column's values lie within one double ulp of the
+    float constant's exact value at the column's scale, rounded half to
+    even (the core's reading): the only rows the reference's approximation
+    of it may label otherwise. None when the vector does not say."""
+    found = _CONDITION.match(vector.get('pql') or '')
+    values = vector.get('values')
+    if found is None or not isinstance(values, list):
+        return None
+    try:
+        constant = float(found.group(2))
+    except ValueError:
+        return None
+    if not math.isfinite(constant):
+        return None
+    # Exact arithmetic: a double's value has at most 1,074 digits past the
+    # point, a DECIMAL(38) at most 38.
+    with localcontext(Context(prec=1200, rounding=ROUND_HALF_EVEN)):
+        unit = Decimal(1).scaleb(-int(vector.get('scale', 0)))
+        exact = Decimal(constant).quantize(unit)
+        reach = Decimal(math.ulp(constant))
+        return sum(
+            1
+            for v in values
+            if v is not None and abs(Decimal(v) - exact) <= reach
+        )
+
+
+def _exact_reading(
+    vector: dict[str, Any], ref: dict[str, Any], core: dict[str, Any]
+) -> bool:
+    r"""P1B-71's consequence and nothing else: a float compared with a static
+    decimal of a scale of 28 or more, both answers successes alike in every
+    part but the target's labels and the request's digest, and no more
+    labels flipped than the column holds values within the reference's
+    approximation of the exact constant (one double ulp); at least one."""
+    if not (
+        vector.get('static_condition')
+        and vector.get('float_constant')
+        and vector.get('scale', 0) >= APPROXIMATE_FROM
+        and ref['outcome'] == core['outcome']
+        and ref['outcome']['result'] == 'success'
+        and _masked(ref) == _masked(core)
+    ):
+        return False
+    flipped, near = _flipped(ref, core), _near(vector)
+    return flipped is not None and near is not None and 0 < flipped <= near
+
+
 #: The differences a register entry of the package explains: a predicate
 #: on the source and on both answers, and the entry. P1B-71 (the owner's
 #: decision of 2026-10-13): a float compared with a static decimal of a
-#: scale of 28 or more, which both answer, the core from the float's exact
-#: value and the reference by its approximation, so the labels may differ.
-EXPLAINED: list[tuple[str, Any]] = [
-    (
-        'P1B-71',
-        lambda vector, ref, core: (
-            vector.get('static_condition')
-            and vector.get('float_constant')
-            and vector.get('scale', 0) >= APPROXIMATE_FROM
-            and ref['outcome'] == core['outcome']
-            and ref['outcome']['result'] == 'success'
-        ),
-    ),
-]
+#: scale of 28 or more, the core reading the float's exact value and the
+#: reference its approximation, so only rows holding a value within that
+#: approximation may be labelled otherwise (:func:`_exact_reading`).
+EXPLAINED: list[tuple[str, Any]] = [('P1B-71', _exact_reading)]
 
 
 def _is_float(constant: str) -> bool:
@@ -188,6 +273,7 @@ def generated(seed: int, n: int) -> list[dict[str, Any]]:
                     'static_condition': True,
                     'scale': s,
                     'float_constant': _is_float(constant),
+                    'values': [None if v is None else str(v) for v in values],
                 }
             )
     return out
@@ -217,6 +303,7 @@ def targeted() -> list[dict[str, Any]]:
                 'static_condition': True,
                 'scale': s,
                 'float_constant': _is_float(condition.split()[-1]),
+                'values': [None if v is None else str(v) for v in values],
             }
         )
 
