@@ -25,11 +25,12 @@ runners' real observations.
   checkpoint, stubs for ``wheel_smoke.py``, the seeded-fault suite,
   ``selftest.py`` and the L0 scripts (the temporary copy has no Cargo
   workspace). 1b's checks 4 and 5 hold the ``inventory`` step, which no
-  stub can pass while any of the inventory's cases is diagnostic: they are
-  shown failing on it, naming exactly the cases still diagnostic, with
-  every other step of theirs passing (H26: the owner's). Since T1.29
-  admitted the baseline cases, ``base.adventureworks`` among them, it is
-  not named; made diagnostic again, it is.
+  stub can pass while any of the inventory's cases is diagnostic (H26: the
+  owner's). From T1.32g every case of the inventory and
+  ``base.adventureworks`` is an acceptance case, so 1b passes on the stubs;
+  a case made diagnostic at the checkpoint fails it on the ``inventory``
+  step alone, naming exactly that case, every other step passing; and
+  ``base.adventureworks`` made diagnostic again by the candidate is named.
 - Evidence inside the candidate's worktree is refused; a run of the other
   half adds its half and keeps the first; the default directory is under
   the repository's common git directory.
@@ -994,27 +995,72 @@ def inventory_line(short: list[str]) -> str:
     return f'{len(short)} of 41 not acceptance cases: {", ".join(short)}'
 
 
-def test_locked_1b_fails_on_the_diagnostic_inventory_and_writes_the_evidence(
+def test_locked_1b_passes_on_the_admitted_inventory_and_writes_the_evidence(
     stubbed: Path,
     tmp_path: Path,
     observed: dict[str, list[dict[str, Any]]],
     stubs: dict[str, Any],
 ) -> None:
-    r"""Today most of the inventory's cases are diagnostic, so 1b's checks
-    4 and 5 fail on the ``inventory`` step, and on it alone: their other
-    steps pass on the stubs. The step names exactly the cases still
-    diagnostic; the baseline cases T1.29 admitted (``base.adventureworks``
-    and the inventory's ``base.*`` cases) are not among them."""
+    r"""Every case of the inventory and ``base.adventureworks`` is an
+    acceptance case (from T1.32g), so 1b's checks 4, 5 and 6 pass on the
+    stubs, the ``inventory`` step among their steps, and the evidence
+    records the half passed."""
+    landed = git(stubbed, 'rev-parse', 'HEAD')
+    commit(stubbed)
+    assert short_of_acceptance(stubbed) == []
+    done = locked(
+        stubbed, stubs, '1b', '--run', 'rust-host', *files(observed, tmp_path)
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert table(done, '1b') == {'4': 'ok', '5': 'ok', '6': 'ok'}
+    assert set(summary(done).values()) == {'ok'}, done.stdout
+    half = evidence_of(stubbed, stubs)['halves']['1b']
+    assert half['checkpoint'] == landed
+    assert half['passed'] is True
+    assert set(half['checks']) == {'4', '5', '6'}
+    for number, steps in LOCKED['1b'].items():
+        assert half['checks'][number]['result'] == 'ok'
+        assert set(half['checks'][number]['steps']) == steps, number
+    assert half['checks']['6']['result'] == 'ok'
+    assert half['steps']['inventory'] == 'ok'
+    assert set(half['steps'].values()) == {'ok'}, half['steps']
+
+
+def _diagnostic(case_id: str) -> Callable[[Path], None]:
+    def edit(r: Path) -> None:
+        [path] = [
+            each
+            for each in (r / 'contract/cases').rglob('*.json')
+            if json.loads(each.read_text(encoding='utf-8'))['id'] == case_id
+        ]
+        case = json.loads(path.read_text(encoding='utf-8'))
+        assert case['status'] == 'acceptance', case_id
+        case['status'] = 'diagnostic'
+        path.write_text(json.dumps(case, indent=1), encoding='utf-8')
+
+    return edit
+
+
+def test_locked_1b_fails_on_a_case_diagnostic_at_the_checkpoint_alone(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: dict[str, list[dict[str, Any]]],
+    stubs: dict[str, Any],
+) -> None:
+    r"""Seeded: one inventory case diagnostic at the checkpoint (a landing
+    that made it so, so the candidate changes no case and the ratchet has
+    nothing to judge), and 1b's checks 4 and 5 fail on the ``inventory``
+    step and on it alone, naming exactly that case."""
+    listed = yaml.safe_load(
+        (
+            stubbed / 'docs/design/rust-core/phase-0/phase-1b-inventory.yaml'
+        ).read_text(encoding='utf-8')
+    )
+    seeded = str(listed['cases'][0]['id'])
+    land(stubbed, 'T1.32g', _diagnostic(seeded), protected='contract/cases/**')
     commit(stubbed)
     short = short_of_acceptance(stubbed)
-    assert short, 'every case is an acceptance case: 1b can pass; rewrite this'
-    for admitted in (
-        'base.adventureworks',
-        'base.regression',
-        'base.binary',
-        'base.multiclass',
-    ):
-        assert admitted not in short, admitted
+    assert short == [seeded], short
     done = locked(
         stubbed, stubs, '1b', '--run', 'rust-host', *files(observed, tmp_path)
     )
@@ -1027,7 +1073,6 @@ def test_locked_1b_fails_on_the_diagnostic_inventory_and_writes_the_evidence(
     for number, steps in LOCKED['1b'].items():
         assert half['checks'][number]['result'] == 'FAIL'
         assert set(half['checks'][number]['steps']) == steps, number
-    assert half['steps']['inventory'] == 'FAIL'
     assert {
         step: result
         for step, result in half['steps'].items()
@@ -1076,11 +1121,12 @@ def test_a_second_half_adds_to_the_evidence_and_keeps_the_first(
     assert done.returncode == 0, done.stdout + done.stderr
     first = evidence_of(stubbed, stubs)
     done = locked(stubbed, stubs, '1b', *given)
-    assert done.returncode != 0
+    # From T1.32g the whole inventory is admitted, and 1b passes.
+    assert done.returncode == 0, done.stdout + done.stderr
     both = evidence_of(stubbed, stubs)
     assert set(both['halves']) == {'1a', '1b'}
     assert both['halves']['1a'] == first['halves']['1a']
-    assert both['halves']['1b']['passed'] is False
+    assert both['halves']['1b']['passed'] is True
 
 
 def test_the_evidence_defaults_to_the_common_git_directory(
