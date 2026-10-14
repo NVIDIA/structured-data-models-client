@@ -52,7 +52,7 @@ from sdm_client.errors import StructuredDataError, UnknownModelError
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'context_rows_max': 10_000,
-    'predict_rows_max': 1_000,
+    'predict_rows_max': 10_000,
     'predict_rows_temporal_link_prediction': 200,
     'explanation_predict_rows': 1,
     'hops_max': 6,

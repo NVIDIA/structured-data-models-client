@@ -154,7 +154,7 @@ would break rather than letting the endpoint return a 500.
 |---|---|
 | context rows, by default | `1,000` |
 | context rows, with `num_context_samples` | `10,000` |
-| rows scored at once | `1,000` |
+| rows scored at once | `10,000` |
 | rows scored for a link prediction | `200` |
 | rows scored with an explanation | `1` |
 | tables in the gathered graph | `15` |

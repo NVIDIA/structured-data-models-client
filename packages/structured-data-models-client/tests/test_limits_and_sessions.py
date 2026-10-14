@@ -55,7 +55,7 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     """
     assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_max'] == 1_000
+    assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
     assert RELATIONAL_LIMITS['explanation_predict_rows'] == 1
     assert RELATIONAL_LIMITS['hops_max'] == 6

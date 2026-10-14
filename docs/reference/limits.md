@@ -22,7 +22,8 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 |---|---|---|---|
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
-| rows scored per call | relational | 1,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
+| rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
+| request body | relational | 30 MiB per call | at `materialize()` |
 | an explanation | relational | exactly one entity | before sending |
 | an explanation | relational | only within the 1,000-row context budget | before sending |
 | hops | relational | 6 | at `materialize()` |
