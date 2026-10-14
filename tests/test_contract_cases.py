@@ -307,9 +307,20 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
             continue
         held = {key: value for key, value in case.items() if key != 'core'}
         assert run_python.inventory_entry(held, defaults) == entry, entry['id']
+
     # Seeded: a case changed alone departs from the inventory, and a core
-    # changed alone from its input.
-    case = copy.deepcopy(committed['time.text-declared'])
+    # changed alone from its input. The fixture is time.text-declared's
+    # file in the inventory's own form (diagnostic, no routes, no paths),
+    # whether or not it is admitted: an admitted case is no inventory
+    # entry, and may carry less than its call.
+    def fixture() -> dict[str, Any]:
+        found = copy.deepcopy(committed['time.text-declared'])
+        found.update(status='diagnostic', routes=[], paths=[])
+        assert set(found['core']) == set(_ORDER), 'not the whole call'
+        assert _held_to_its_input(found) == [], 'the fixture holds'
+        return found
+
+    case = fixture()
     case['input']['setup'].pop()
     held = {key: value for key, value in case.items() if key != 'core'}
     assert run_python.inventory_entry(held, defaults) != next(
@@ -322,7 +333,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         lambda core: core.pop('predict'),
         lambda core: core.pop('materialize'),
     ):
-        case = copy.deepcopy(committed['time.text-declared'])
+        case = fixture()
         change(case['core'])
         assert _held_to_its_input(case) != [], change
     # An acceptance case carries its call up to where the core stops and
