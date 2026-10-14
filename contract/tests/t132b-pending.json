@@ -4,10 +4,6 @@
   "python-core": [],
   "rust-host": [],
   "exits": [
-   "rust:a_float_constant_half_way_past_scale_22_rounds_to_even",
-   "rust:a_float_constant_its_decimal_cannot_hold_past_scale_22_is_the_caller_s_error",
-   "rust:a_float_constant_reads_exactly_at_scales_23_to_38",
-   "rust:a_static_decimal_past_scale_22_is_compared_with_a_float_exactly",
    "py:test_each_case_is_admitted[decimal.class-target-38-18]"
   ]
  },

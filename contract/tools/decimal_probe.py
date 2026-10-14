@@ -59,23 +59,24 @@ ROOT = Path(__file__).resolve().parents[2]
 REFERENCE = Path.home() / 'code/sdmc-reference'
 AGGREGATIONS = ('SUM', 'AVG', 'MIN', 'MAX', 'COUNT')
 OPS = ('>', '>=', '<', '<=', '=', '!=')
-#: The largest scale the core reads a float constant at
-#: (``sdm_engine::labels::EXACT_SCALE``).
-EXACT_SCALE = 22
+#: The smallest scale at which the reference's pyarrow reads a float
+#: constant by its approximation (Arrow's ``Decimal128::FromReal``) where the
+#: core reads it exactly (measured: exact through scale 27).
+APPROXIMATE_FROM = 28
 #: The differences a register entry of the package explains: a predicate
-#: on the source and on both answers, and the entry. P1B-71: a float
-#: compared with a static decimal of a scale past ``EXACT_SCALE``, which
-#: the reference takes and the core refuses by ``condition_value``.
+#: on the source and on both answers, and the entry. P1B-71 (the owner's
+#: decision of 2026-10-13): a float compared with a static decimal of a
+#: scale of 28 or more, which both answer, the core from the float's exact
+#: value and the reference by its approximation, so the labels may differ.
 EXPLAINED: list[tuple[str, Any]] = [
     (
         'P1B-71',
         lambda vector, ref, core: (
             vector.get('static_condition')
             and vector.get('float_constant')
-            and vector.get('scale', 0) > EXACT_SCALE
+            and vector.get('scale', 0) >= APPROXIMATE_FROM
+            and ref['outcome'] == core['outcome']
             and ref['outcome']['result'] == 'success'
-            and core['outcome']['code'] == 'UNSUPPORTED_REQUEST'
-            and core.get('core_rule') == 'condition_value'
         ),
     ),
 ]

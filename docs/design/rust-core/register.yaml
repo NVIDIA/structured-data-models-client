@@ -4494,44 +4494,51 @@ entries:
 # --- lane 1c entries (P1B-70..89) ---
 
 - id: P1B-71
-  title: A float compared with a static decimal column of a scale past 22 is refused by name, where the reference compares it
+  title: A float compared with a static decimal column of a scale of 28 or more is read exactly, where the reference's pyarrow approximates it
   kind: change
   old_behavior: >-
     The reference's executor reads a condition's constant at the static
     column's decimal128(p, s) (pd.Series([value], dtype=left.dtype)) and
     compares exactly; pyarrow reads a float at the scale exactly, rounded
     half to even, through scale 22 (Arrow's Decimal128::FromReal multiplies
-    at once there), and past it by an iterative approximation, and the
-    call reaches predict's result.
+    at once there) and, measured, through scale 27; from scale 28 its
+    iterative approximation can differ from the exact value in the last
+    digits, and the call reaches predict's result.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, a
-    float constant is read at the column's scale rounded half to even from
-    its exact value where the scale is 22 or less, as pyarrow reads it
-    there, and refused by name at scales 23 to 38:
-    UnsupportedRequestError, UNSUPPORTED_REQUEST, rule condition_value, at
-    materialize (sdm_engine::labels::decimal_constant, EXACT_SCALE). A
-    constant the type does not hold is INVALID_REQUEST at materialize, as
-    the reference refuses it. The default route is unchanged.
+    float constant is read at the column's scale from its exact binary
+    value, rounded half to even, at every scale from 0 to 38
+    (sdm_engine::labels::decimal_constant and float_at_scale, the product
+    held in 256 bits), never refused for its scale: through scale 27 that
+    is the reference's value; from scale 28 the core is exact where the
+    reference approximates, so a constant whose exact and approximate
+    digits differ can label an example otherwise. Both answer success, the
+    same outcome class. A constant the type does not hold is
+    INVALID_REQUEST at materialize, as the reference refuses it. The
+    default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize over a DuckDB source under a forced core
-    route, a static target held in a DECIMAL column of a scale of 23 to 38
-    compared with a float constant (PREDICT users.f > 0.1).
-  cases: [T1.32b]
+    route, a static target held in a DECIMAL column of a scale of 28 to 38
+    compared with a float constant (PREDICT users.f > 0.7 at DECIMAL(38,
+    30)).
+  cases: [T1.32b, T1.32g]
   status: proposed
   approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E100}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E99}
   notes: >-
-    Measured at T1.32b's fix round 1 by contract/tools/decimal_probe.py
-    run --targeted: users.f > 0.1 at DECIMAL(38, 23), users.f > 0.25 at
-    (38, 23) and users.f > 0.7 at (38, 30), the reference's success at
-    predict, the core's condition_value; at (4, 2), (18, 18), (38, 20) and
-    (38, 22) both agree. The subagent of round 1 measured pyarrow 25
-    reading floats exactly through scale 22 and first differing at 28; the
-    cutoff is Arrow's exact range. Held by sdm-engine's labels.rs unit
-    tests (a float at scale 22 read, at 23 refused: the diagnostic test).
-    This refuses input the reference accepts and requires individual owner
-    approval under E66(b) and E73(b); never self-approved. The alternative
-    is porting Arrow's FromReal approximation for scales past 22.
+    Rewritten by the owner's decision of 2026-10-13 (E99(c)): the refusal
+    at scales 23 to 38 that T1.32b proposed is withdrawn for the exact
+    conversion the core already made through scale 22. Measured at T1.32b's
+    fix round 1 by contract/tools/decimal_probe.py: pyarrow 25 reads floats
+    exactly through scale 27 and first differs at 28. Held by sdm-engine's
+    labels.rs unit tests (a float read exactly at scales 23, 28, 30 and 38,
+    half-way values to even, a constant past the column's digits
+    INVALID_REQUEST, a labelled comparison), written by T1.32g's test
+    author; the probe's EXPLAINED names this entry for a float at a scale
+    of 28 or more where both succeed. Success to success in the same
+    outcome class, so the reviewers may approve it; named to the owner as
+    the core differing from the reference by being exact. Never
+    self-approved.
     Approver: owner (T1.33: as written here it refuses an input the reference
     accepts; the owner withdrew the refusal on 2026-10-13, evening, E99(c),
     and the T1.32g bundle rewrites the entry as the narrow difference from

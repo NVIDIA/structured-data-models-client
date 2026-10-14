@@ -443,7 +443,9 @@ fn apply<T: PartialOrd>(a: T, op: RelOp, b: T) -> bool {
 /// (Arrow's `Decimal128::FromReal`, exact while the scale is small enough
 /// for the float's digits and the power of ten to fit together; measured on
 /// the reference's pyarrow: 0.5, 2.5 and 0.25 round to even, 0.15 and
-/// 2.675, whose doubles are under the half, down).
+/// 2.675, whose doubles are under the half, down). The product of the
+/// float's 53-bit mantissa and a power of ten up to 10**38 is held in 256
+/// bits ([`Wide`]), so every scale of a `decimal128` is exact.
 fn float_at_scale(value: f64, scale: u32) -> Option<i128> {
     if !value.is_finite() {
         return None;
@@ -451,51 +453,107 @@ fn float_at_scale(value: f64, scale: u32) -> Option<i128> {
     // value = mantissa * 2**exponent, exactly.
     let bits = value.abs().to_bits();
     let biased = ((bits >> 52) & 0x7ff) as i32;
-    let fraction = u128::from(bits & ((1_u64 << 52) - 1));
+    let fraction = bits & ((1_u64 << 52) - 1);
     let (mantissa, exponent) = if biased == 0 {
         (fraction, -1074)
     } else {
         (fraction | (1 << 52), biased - 1075)
     };
-    let scaled = mantissa.checked_mul(10_u128.checked_pow(scale)?)?;
+    let scaled = Wide::product(10_u128.checked_pow(scale)?, mantissa);
     let magnitude = if exponent >= 0 {
-        scaled.checked_mul(1_u128.checked_shl(exponent as u32)?)?
+        if scaled.high != 0 {
+            return None;
+        }
+        scaled
+            .low
+            .checked_mul(1_u128.checked_shl(exponent as u32)?)?
     } else {
         let shift = exponent.unsigned_abs();
-        if shift >= 128 {
-            // Under a quarter of the last place: nearer zero than one.
+        if shift >= 256 {
+            // Under 2**180 shifted past 256 bits: nearer zero than one.
             0
         } else {
-            let quotient = scaled >> shift;
-            let remainder = scaled & ((1_u128 << shift) - 1);
-            let half = 1_u128 << (shift - 1);
-            if remainder > half || (remainder == half && quotient % 2 == 1) {
-                quotient + 1
-            } else {
-                quotient
+            let quotient = scaled.shifted(shift);
+            let half = scaled.bit(shift - 1);
+            let past_half = half && scaled.any_below(shift - 1);
+            let up = past_half || (half && quotient.low % 2 == 1);
+            if quotient.high != 0 {
+                return None;
             }
+            quotient.low.checked_add(u128::from(up))?
         }
     };
     let magnitude = i128::try_from(magnitude).ok()?;
     Some(if value < 0.0 { -magnitude } else { magnitude })
 }
 
-/// The largest scale a float constant is read at exactly
-/// ([`decimal_constant`]).
-const EXACT_SCALE: u32 = 22;
+/// An unsigned 256-bit integer, `high * 2**128 + low`: just what
+/// [`float_at_scale`] needs to hold a mantissa times a power of ten.
+#[derive(Clone, Copy)]
+struct Wide {
+    high: u128,
+    low: u128,
+}
+
+impl Wide {
+    /// `a * b`, exactly.
+    fn product(a: u128, b: u64) -> Self {
+        let b = u128::from(b);
+        let lower = (a & u128::from(u64::MAX)) * b;
+        let upper = (a >> 64) * b;
+        let (low, carry) = lower.overflowing_add(upper << 64);
+        Self {
+            high: (upper >> 64) + u128::from(carry),
+            low,
+        }
+    }
+
+    /// `self >> shift`, for a shift under 256.
+    fn shifted(self, shift: u32) -> Self {
+        match shift {
+            0 => self,
+            1..=127 => Self {
+                high: self.high >> shift,
+                low: (self.low >> shift) | (self.high << (128 - shift)),
+            },
+            _ => Self {
+                high: 0,
+                low: self.high >> (shift - 128),
+            },
+        }
+    }
+
+    /// Whether bit `at` (under 256) is set.
+    fn bit(self, at: u32) -> bool {
+        if at < 128 {
+            (self.low >> at) & 1 == 1
+        } else {
+            (self.high >> (at - 128)) & 1 == 1
+        }
+    }
+
+    /// Whether any bit under `at` (under 256) is set.
+    fn any_below(self, at: u32) -> bool {
+        if at <= 128 {
+            at > 0 && self.low & (u128::MAX >> (128 - at)) != 0
+        } else {
+            self.low != 0 || self.high & (u128::MAX >> (256 - at)) != 0
+        }
+    }
+}
 
 /// A condition's constant read at a decimal column's `decimal128(precision,
 /// scale)`, as `execute_rel_op` reads it (`pd.Series([value],
 /// dtype=left.dtype)`), as an unscaled value at the scale: an integer of
-/// int64 exactly; a float rounded half to even at a scale of up to 22
-/// ([`float_at_scale`]), the scales Arrow's `Decimal128::FromReal` reads a
-/// double at exactly (its 38 digits less a double's 16, multiplied at
-/// once; measured on pyarrow 25: no difference through scale 25). A constant the type does not hold is the caller's
-/// error, `INVALID_REQUEST`, as pyarrow refuses it (`ArrowInvalid`) and the
+/// int64 exactly; a float from its exact binary value, rounded half to
+/// even, at any scale ([`float_at_scale`]; the owner's decision on register
+/// P1B-71, 2026-10-13). Arrow's `Decimal128::FromReal` reads a double so
+/// through scale 22 and, measured, through scale 27; from scale 28 its
+/// approximation can differ in the last digits, where this stays exact
+/// (P1B-71). A constant the type does not hold is the caller's error,
+/// `INVALID_REQUEST`, as pyarrow refuses it (`ArrowInvalid`) and the
 /// reference's client reports it. Refused by name (`condition_value`): an
-/// integer past int64; a float that is not finite; a float at a scale past
-/// 22, which pyarrow rounds by an approximation this does not port
-/// (register P1B-71); a negative scale.
+/// integer past int64; a float that is not finite; a negative scale.
 fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128, CoreError> {
     let refused = || not_yet("condition_value");
     let not_held = || {
@@ -517,9 +575,7 @@ fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128
                 .and_then(|unit| i128::from(value).checked_mul(unit))
                 .ok_or_else(not_held)?
         }
-        Constant::Float(value) if !value.is_finite() || scale > EXACT_SCALE => {
-            return Err(refused());
-        }
+        Constant::Float(value) if !value.is_finite() => return Err(refused()),
         Constant::Float(value) => float_at_scale(value, scale).ok_or_else(not_held)?,
     };
     let largest = 10_u128.pow(u32::from(precision.clamp(1, 38))) - 1;
