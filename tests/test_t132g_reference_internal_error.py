@@ -83,7 +83,7 @@ helpers = _module('ratchet_tests', ROOT / 'tests/test_contract_ratchet.py')
 register = _module('sdm_register', ROOT / 'scripts/rust_core/register.py')
 ratchet = helpers.ratchet
 
-origin, repo = helpers.origin, helpers.repo
+origin = helpers.origin
 git, commit, land = helpers.git, helpers.commit, helpers.land
 check, observe = helpers.check, helpers.observe
 append_entry, outcome = helpers.append_entry, helpers.outcome
@@ -91,8 +91,17 @@ CELL = helpers.CELL
 #: An acceptance case the reference answers with success at materialize.
 SUCCEEDS = helpers.ACCEPTED
 
+#: The tests' own cases (``tests/golden/t132g-fixture-cases``): frozen
+#: copies, under ids of their own, of the inventory cases the reference
+#: answers with its own INTERNAL_ERROR and of a diagnostic case it answers
+#: with success, as they were at bc4b2d0c (diagnostic, held by no runner),
+#: with the committed reference's lines for them. A landing adds them to
+#: the temporary repository (:func:`repo`), so no admission in the corpus
+#: changes what these tests judge.
+FIXTURES = ROOT / 'tests/golden/t132g-fixture-cases'
+OWN = 't132g.own.'
 #: The inventory cases the reference answers with its own INTERNAL_ERROR.
-SEVEN = (
+REAL_SEVEN = (
     'decimal.class-target-38-18',
     'key.decimal-18-0',
     'key.decimal-38-10',
@@ -101,7 +110,36 @@ SEVEN = (
     'time.text-one-bad-value',
     'time.text-us-date',
 )
-CASE = 'key.hugeint'
+SEVEN = tuple(OWN + case for case in REAL_SEVEN)
+CASE = OWN + 'key.hugeint'
+#: A corpus case for the register's own check, which reads this checkout.
+REAL_CASE = 'key.hugeint'
+
+
+def with_fixtures(r: Path) -> None:
+    r"""The fixture cases, each in its slice's directory, and their
+    reference lines appended to the committed reference."""
+    for path in sorted((FIXTURES / 'cases').glob('*.json')):
+        spec = json.loads(path.read_text())
+        target = r / 'contract/cases' / spec['slice'].lower() / path.name
+        target.write_text(path.read_text())
+    reference = next((r / 'contract/reference').glob('*.jsonl'))
+    reference.write_text(
+        reference.read_text() + (FIXTURES / 'python-ref.jsonl').read_text()
+    )
+
+
+@pytest.fixture
+def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
+    r"""A worktree at a landing (not judged) on the checkpoint adding the
+    fixture cases: the checkpoint each test's candidate is judged against."""
+    source, landed = origin
+    tree = tmp_path / 'tree'
+    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
+    land(tree, 'T1.32e', with_fixtures)
+    return tree
+
+
 PANIC_TEXT = 'refusal INTERNAL_ERROR at materialize (StructuredDataError)'
 
 
@@ -220,7 +258,8 @@ def test_the_seven_are_the_reference_s_internal_errors_and_diagnostic(
     assert sorted(
         case
         for case, line in reference.items()
-        if line['outcome'].get('code') == 'INTERNAL_ERROR'
+        if case.startswith(OWN)
+        and line['outcome'].get('code') == 'INTERNAL_ERROR'
     ) == list(SEVEN)
     for case in SEVEN:
         assert reference[case]['outcome'] == {
@@ -474,7 +513,7 @@ def test_an_acceptance_case_python_old_observes_with_no_baseline_fails(
 # passes it.
 
 #: A diagnostic case the reference answers with success, held by no runner.
-UNHELD_SUCCESS = 's0.boundary.date-long-field'
+UNHELD_SUCCESS = OWN + 's0.boundary.date-long-field'
 
 
 def admission(
@@ -621,14 +660,14 @@ def test_the_register_still_refuses_an_entry_accepting_internal_error(
             'old_behavior': 'Diagnostic.',
             'new_behavior': 'Held at the reference outcome.',
             'affected_inputs': 'One case.',
-            'cases': [CASE],
+            'cases': [REAL_CASE],
             'status': 'approved',
             'approved_by': 'owner',
             'decision_ref': None,
             'notes': 'Seeded: the reference outcome itself, owner-approved.',
             'case_outcomes': [
                 {
-                    'case': CASE,
+                    'case': REAL_CASE,
                     'cell': CELL,
                     'runner': runner,
                     'old': 'none',
@@ -640,5 +679,5 @@ def test_the_register_still_refuses_an_entry_accepting_internal_error(
     )
     found = register.problems(document, ROOT, checkpoint)
     assert found == [
-        f'SEED-99: {CASE} on {runner}: no entry accepts INTERNAL_ERROR, a panic'
+        f'SEED-99: {REAL_CASE} on {runner}: no entry accepts INTERNAL_ERROR, a panic'
     ], found

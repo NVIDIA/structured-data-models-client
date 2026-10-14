@@ -79,14 +79,21 @@ compare = _module('compare_for_ratchet', ROOT / 'scripts/rust_core/compare.py')
 run_python = _module('run_python', ROOT / 'contract/runners/run_python.py')
 ratchet = helpers.ratchet
 
-origin, repo = helpers.origin, helpers.repo
+crash = _module(
+    't132g_internal_error_tests',
+    ROOT / 'tests/test_t132g_reference_internal_error.py',
+)
+#: The checkpoint holds the tests' own fixture cases (their own ids, as
+#: diagnostic as they were at bc4b2d0c): no admission in the corpus
+#: changes what is judged here.
+origin, repo = helpers.origin, crash.repo
 commit, check, observe = helpers.commit, helpers.check, helpers.observe
 append_entry, outcome = helpers.append_entry, helpers.outcome
 CELL = helpers.CELL
 
 #: A diagnostic case the reference answers with its own INTERNAL_ERROR at
 #: materialize, held by no runner.
-CASE = 'key.hugeint'
+CASE = crash.CASE
 RUNNERS = ('python-core', 'python-old', 'rust-host')
 #: The core's answer the seeded entry approves, as each runner records it.
 CORE_NEW = 'refusal INVALID_REQUEST at materialize (ValueError)'
@@ -168,6 +175,15 @@ def observed(r: Path, tmp: Path, **changes: dict[str, Any]) -> dict[str, Path]:
         )
         for runner in RUNNERS
     }
+
+
+def mine(problems: list[str]) -> list[str]:
+    r"""The problems naming the fixture case. The observations of every
+    other case are the reference's, relabelled (``tests/
+    test_contract_ratchet.py``'s ``observe``), which an admitted corpus
+    case whose core answers otherwise does not meet; that is the corpus's,
+    not what these tests judge."""
+    return [p for p in problems if f' {CASE}:' in p or f'{CASE} ' in p]
 
 
 def expectations(r: Path, checkpoint: str, tmp: Path) -> dict[str, Any]:
@@ -260,7 +276,7 @@ def test_accept_writes_every_runner_s_baseline_and_the_admission_passes(
             'T1.32g: the baselines',
             lambda r: helpers.accepted(r, before, tuple(files.values())),
         )
-        problems = check(repo, before, tuple(files.values()))
+        problems = mine(check(repo, before, tuple(files.values())))
         assert problems == [], problems
 
     G.held('exits', f'py:{request.node.name}', admitted)
@@ -418,7 +434,7 @@ def test_a_runner_answering_other_than_the_entry_gets_no_baseline(
             'T1.32g: the baselines',
             lambda r: helpers.accepted(r, before, tuple(files.values())),
         )
-        problems = check(repo, before, tuple(files.values()))
+        problems = mine(check(repo, before, tuple(files.values())))
         assert problems == [
             f'baselines: {CASE}: python-core: an acceptance case with no '
             'proposed baseline'

@@ -78,7 +78,7 @@ crash = _module(
 )
 ratchet = helpers.ratchet
 
-origin, repo = helpers.origin, helpers.repo
+origin, repo = helpers.origin, crash.repo
 git, commit, land = helpers.git, helpers.commit, helpers.land
 check, observe = helpers.check, helpers.observe
 append_entry, outcome = helpers.append_entry, helpers.outcome
@@ -96,7 +96,13 @@ Edit = Callable[[dict[str, Any]], None]
 
 
 def as_run(cell: str) -> dict[str, dict[str, Any]]:
-    return lines_of(AS_RUN[cell])
+    r"""python-old's lines as run in ``cell``, each under its fixture
+    case's id (``crash.OWN`` before the corpus id it was run as)."""
+    found = {}
+    for case, line in lines_of(AS_RUN[cell]).items():
+        line['case'] = crash.OWN + case
+        found[line['case']] = line
+    return found
 
 
 def observed(
@@ -131,15 +137,7 @@ def holding(r: Path, files: Path, cases: tuple[str, ...] = SEVEN) -> str:
 
 
 def test_the_lines_are_python_old_s_as_run() -> None:
-    reference = {
-        line['case']: line
-        for line in map(
-            json.loads,
-            next((ROOT / 'contract/reference').glob('*.jsonl'))
-            .read_text()
-            .splitlines(),
-        )
-    }
+    reference = lines_of(crash.FIXTURES / 'python-ref.jsonl')
     for cell in AS_RUN:
         lines = as_run(cell)
         assert sorted(lines) == list(SEVEN)
