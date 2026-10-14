@@ -1,5 +1,5 @@
 {
- "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "about": "T1.32g's acceptance tests that failed when the independent test author wrote them, before the implementation, at 43f6bfa3 (tests/test_t132g_cell_claims.py: coverage rule 6's own seeds; tests/test_t132g_rule6_type_depth.py, at 1079af49: a nested type text read with a bound; tests/test_t132g_reference_internal_error.py, at 469c1924, for T1.32g part 2a: python-old holds the reference's own INTERNAL_ERROR, the old client's crash, recorded as such; tests/test_t132g_first_admission.py, at 469c1924, for part 2a: a first admission held to the reference as approved entries change it). Each listed test must still fail (strict); the implementer takes an id out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
   "python-core": [],
   "rust-host": [],
@@ -18,7 +18,11 @@
    "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another error]",
    "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another stage]",
    "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[outside the baseline fields]",
-   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[the reference succeeded]"
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[the reference succeeded]",
+   "py:test_the_approved_difference_is_each_runner_s_effective_expectation",
+   "py:test_accept_writes_every_runner_s_baseline_and_the_admission_passes",
+   "py:test_the_comparator_passes_an_approved_first_admission_difference",
+   "py:test_a_runner_answering_other_than_the_entry_gets_no_baseline"
   ]
  },
  "authored": {
@@ -44,7 +48,11 @@
    "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another error]",
    "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[another stage]",
    "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[outside the baseline fields]",
-   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[the reference succeeded]"
+   "py:test_a_proposed_python_old_internal_error_unequal_to_the_reference_fails_at_once[the reference succeeded]",
+   "py:test_the_approved_difference_is_each_runner_s_effective_expectation",
+   "py:test_accept_writes_every_runner_s_baseline_and_the_admission_passes",
+   "py:test_the_comparator_passes_an_approved_first_admission_difference",
+   "py:test_a_runner_answering_other_than_the_entry_gets_no_baseline"
   ]
  }
 }
