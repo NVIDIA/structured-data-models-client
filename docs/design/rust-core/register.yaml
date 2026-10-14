@@ -1130,7 +1130,7 @@ entries:
     moved to DT-16's b.order_open). No baselined case changes (the gate
     passes with no transition). Narrowed at T1.33 part 3 by the owner's
     item 24 of 2026-10-14 ("a column whose values aren't times is TEXT
-    regardless of its name"; confirmed in item 27), recorded in E89(f):
+    regardless of its name"; confirmed in item 27), recorded in E120:
     inference no longer refuses text_time, and the changed answers that
     follows (the +01:99 and +0160 offsets, text where the reference reads
     a time) are the owner's rule.
@@ -1248,7 +1248,7 @@ entries:
     every text column of the AdventureWorks journey (codes, names, UUIDs),
     which reaches predict on both hosts with this rule. Extended at T1.33
     part 3 to every name by the owner's item 24 of 2026-10-14 (confirmed in
-    item 27), recorded in E89(f): the old code was right, the core reads the
+    item 27), recorded in E120: the old code was right, the core reads the
     values and does not refuse for the name.
 
 - id: DT-18
@@ -4204,13 +4204,13 @@ entries:
   - 'contract/type-set-vectors.json#varint.view refusal UNNAMED -> success'
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E120}
   notes: >-
     Approved by the owner on 2026-10-14 (items 21 and 26: support rather
     than skip; UUID and BIT as text, TIMETZ as a time, HUGEINT, UHUGEINT and
     VARINT as a number, text only where a value cannot be held), with the
     big-integer rule's tiers the orchestrator's (2026-10-14), recorded in
-    E89(f). Rewritten at T1.33 part 3 from "read by its storage" (binary,
+    E120. Rewritten at T1.33 part 3 from "read by its storage" (binary,
     left out), which the owner turned down. The reference fails each unnamed
     and the core reads it: a new success, E66(b)'s class for the owner's
     individual decision. lossless.timetz no longer differs (both describe
