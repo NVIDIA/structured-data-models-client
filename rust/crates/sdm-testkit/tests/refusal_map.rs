@@ -107,7 +107,10 @@ fn success(until: &Value) -> Value {
 }
 
 /// What this host observes of one run: its first refusal's code and the
-/// fields `operation` and `rule`, or the stage whose result it reached.
+/// fields `operation` and `rule`, or the stage whose result it reached. A
+/// query `validate_query` refuses is that refusal, `INVALID_REQUEST` with
+/// neither field, as the client reports it (refuse.unknown-column: the
+/// public materialize's refusal); one it accepts reached no stage's result.
 fn observation(answer: &Answer) -> Value {
     match answer {
         Answer::Error { code, fields, .. } => json!({
@@ -118,7 +121,12 @@ fn observation(answer: &Answer) -> Value {
         Answer::Described(_) => success(&json!("from_source")),
         Answer::Materialized(_) => success(&json!("materialize")),
         Answer::Predicted(_) => success(&json!("predict")),
-        Answer::Validated(_) => json!({"result": "validated"}),
+        Answer::Validated(false) => json!({
+            "code": "INVALID_REQUEST",
+            "operation": null,
+            "rule": null,
+        }),
+        Answer::Validated(true) => json!({"result": "validated"}),
     }
 }
 
@@ -550,6 +558,29 @@ fn seeded() -> (Value, BTreeMap<String, Value>) {
     observed.insert("no-inference-config".into(), seeded_refusal());
     assert_eq!(check(&map, &observed), Vec::<String>::new());
     (map, observed)
+}
+
+#[test]
+fn a_refused_validation_is_observed_as_its_refusal() {
+    // As an error answer without the two fields is: what the map lists for
+    // python-core's public refusal (refuse.unknown-column).
+    let refused = observation(&Answer::Validated(false));
+    assert_eq!(
+        refused,
+        json!({"code": "INVALID_REQUEST", "operation": null, "rule": null})
+    );
+    assert_eq!(
+        refused,
+        observation(&Answer::Error {
+            kind: "InvalidRequest".into(),
+            code: "INVALID_REQUEST".into(),
+            fields: Default::default(),
+        })
+    );
+    assert_eq!(
+        observation(&Answer::Validated(true)),
+        json!({"result": "validated"})
+    );
 }
 
 #[test]
