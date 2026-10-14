@@ -669,6 +669,67 @@ def _reference_outcomes() -> dict[str, dict[str, Any]]:
     }
 
 
+def _approved_as_the_schema_allows(
+    document: dict[str, Any],
+    entry: dict[str, Any],
+    registered: dict[str, Any],
+    reference: dict[str, dict[str, Any]],
+) -> bool:
+    r"""Whether a family map's entry is under a register entry approved as
+    ``register.schema.json`` allows: one waiting for the owner or the
+    owner's (:func:`_awaits_or_the_owner_s`), or a reviewer's where the
+    reference refuses too ("an entry that refuses an input the reference
+    accepts needs owner"): some python-core probe hits the map's entry, and
+    the reference refused every case whose probe does (T1.32b, P1B-18)."""
+    if _awaits_or_the_owner_s(registered):
+        return True
+    if registered['status'] != 'approved' or registered['approved_by'] != (
+        'reviewer'
+    ):
+        return False
+    hitting = [
+        probe['case']
+        for probe in document['probes']
+        if probe.get('python-core', {}).get('expect') == entry['id']
+    ]
+    return bool(hitting) and all(
+        (reference.get(case_id) or {}).get('result') == 'refusal'
+        for case_id in hitting
+    )
+
+
+def test_a_reviewer_s_approval_holds_a_map_entry_only_where_the_reference_refuses() -> (
+    None
+):
+    # On the decimal map's own evidence: P1B-18 approved by a reviewer holds
+    # its entry, the reference refusing the case its probe hits; the same
+    # approval fails when the reference's answer is a success, when no
+    # probe hits the entry, and when someone else approved it.
+    document = _family_maps()['decimal']
+    [entry] = document['entries']
+    reference = _reference_outcomes()
+    approved = {'status': 'approved', 'approved_by': 'reviewer'}
+    assert _approved_as_the_schema_allows(document, entry, approved, reference)
+    succeeded = dict(reference)
+    for probe in document['probes']:
+        if probe.get('python-core', {}).get('expect') == entry['id']:
+            succeeded[probe['case']] = {'result': 'success'}
+    assert not _approved_as_the_schema_allows(
+        document, entry, approved, succeeded
+    )
+    unhit = dict(entry, id='materialize/nothing')
+    assert not _approved_as_the_schema_allows(
+        document, unhit, approved, reference
+    )
+    for who in (None, 'implementer'):
+        assert not _approved_as_the_schema_allows(
+            document,
+            entry,
+            {'status': 'approved', 'approved_by': who},
+            reference,
+        )
+
+
 def _not_the_reference_s(
     document: dict[str, Any],
     entry: dict[str, Any],
@@ -768,10 +829,11 @@ def test_every_family_entry_is_owned_cited_and_registered_or_the_reference_s() -
                 )
             else:
                 # Never self-approved: the entry the refusal is under
-                # waits for the owner, or the owner approved it.
-                assert _awaits_or_the_owner_s(register[entry['register']]), (
-                    where
-                )
+                # waits for the owner, or the owner approved it, or a
+                # reviewer did where the reference refuses too.
+                assert _approved_as_the_schema_allows(
+                    document, entry, register[entry['register']], reference
+                ), where
         for gap in document['gaps']:
             assert refusal_map.OWNER.fullmatch(gap['owner']), name
         for probe in document['probes']:
