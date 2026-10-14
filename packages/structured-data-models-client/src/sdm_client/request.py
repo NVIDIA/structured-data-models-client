@@ -731,6 +731,20 @@ class Request:
             )
         return len(getattr(self, half).instance_table)
 
+    def _context_rows_per_call(self) -> int:
+        r"""The most context rows any one call of this request sends.
+
+        The endpoint caps the context of each call, and a request gathered in
+        several calls sends a context with each, so ``context_rows``, their
+        sum, is not what any call carries.
+        """
+        if self.payloads:
+            return max(
+                _envelope_rows(payload, 'context') or 0
+                for payload in self.payloads
+            )
+        return len(self.context.instance_table)
+
     @property
     def nothing_to_score(self) -> bool:
         r"""Whether this request is known to ask about no rows at all.

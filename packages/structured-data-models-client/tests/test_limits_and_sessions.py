@@ -252,6 +252,25 @@ def test_the_preflight_runs_through_a_real_materialized_request():
         )
 
 
+def test_the_context_cap_is_held_to_each_call_and_not_their_sum():
+    import pandas as pd
+
+    from sdm_client import Request
+    from sdm_client.base import check_request_against_model
+
+    each = RELATIONAL_LIMITS['context_rows_max'] // 2 + 1
+    request = Request.materialized(
+        payloads=tuple(
+            payload(predict_rows=2, context_rows=each) for _ in range(2)
+        ),
+        schema=Schema.from_data({'users': pd.DataFrame({'user_id': [1]})}),
+        query='PREDICT ... FOR EACH users.user_id',
+        indices=[1, 2, 3, 4],
+        entity_table='users',
+    )
+    check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
+
+
 def correlated_payload(*, rows: int, kind: str = 'regression') -> dict:
     """A batch shaped the way the engine gathers one, with both id columns."""
     return {
