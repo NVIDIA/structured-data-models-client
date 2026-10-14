@@ -37,7 +37,9 @@
 #
 # Status: proposed entries wait for the independent reviewer, or for the owner
 # when they refuse an input Python accepted or the owner has to choose; the
-# recommendation is in notes. approved_by is null while proposed.
+# recommendation is in notes. approved_by is null while proposed. From T1.33 a
+# proposed entry's notes name who must approve it, "Approver: owner" or
+# "Approver: reviewer", exactly one (Phase 1 decision E89(d)).
 # "The reference" is rust-core-reference; "main" is unpatched main at fa0637d.
 
 format: sdm-register/2
@@ -506,7 +508,9 @@ entries:
   status: proposed
   approved_by: null
   decision_ref: null
-  notes: "Recommendation: approve."
+  notes: >-
+    Recommendation: approve.
+    Approver: reviewer (T1.33: a keep; no outcome changes).
 
 - id: RS-6
   title: Warehouse sampling SQL text
@@ -536,6 +540,8 @@ entries:
     nondeterministic fields. This is a Phase 1a comparator requirement.
     Recommendation: approve, formatting p as Python does rather than
     registering a SQL text change.
+    Approver: reviewer (T1.33: a keep of the reference's SQL text and bound
+    values).
 
 - id: RS-7
   title: The seed range per backend
@@ -687,6 +693,10 @@ entries:
   notes: >-
     Recorded so the difference is not rediscovered; all 121 column cases agree.
     Recommendation: approve; the reviewer can approve it.
+    Approver: owner (T1.33: it changes an answer pandas 3 gives, a year-first
+    value read day-first under dayfirst, which E66(b) keeps for individual
+    decision; the note above reads it as the reviewer's since no inventory
+    case reaches it, a reading the orchestrator may take instead).
 
 - id: DT-5
   title: PQL date literals with a run of five digits or more (rule D8), refused by name
@@ -794,8 +804,11 @@ entries:
     reads as no time and the list reads as none (a blank one) is still
     dropped and warned of. time.text-us-date and time.text-one-bad-value
     meet the source's own CAST failure, under another code (DT-12), as at
-    T1.25. Still for the owner: whether to keep the capability's name for a
-    reading that is now the core's own.
+    T1.25. Whether to keep the capability's name for a reading that is now the
+    core's own was asked of the owner; the answer (2026-10-13, night, item 15,
+    E88): text_times is an internal name with no user-visible effect, so not
+    an owner item, and the orchestrator keeps it. Approver: reviewer (a keep,
+    its behavior settled by E62 and E68).
 
 - id: DT-8
   title: Zone names in any case, known by their IANA spelling
@@ -903,6 +916,12 @@ entries:
     records pandas' own answer beside each expected one). It refuses nothing
     the reference answers, so it is for the independent reviewer.
     Recommendation: approve.
+    Approver: owner (T1.33: at 0001-01-01T00:00Z in 11 zones the reference
+    answers, the instant's UTC wall clock with the zone's offset beside it,
+    and the core answers otherwise, a changed answer, which E66(b) keeps for
+    individual decision; elsewhere the reference raises. E66's row records the
+    orchestrator's reading that the range ends are the reviewer's, which the
+    orchestrator may keep instead).
 
 - id: DT-11
   title: Text time values with mixed offsets refused by name
@@ -1018,15 +1037,19 @@ entries:
     differed the same way before).
   cases: [T1.25]
   refs: [DT-12, P1B-1]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     Found by T1.25's review (subagent P3-2). Pinned on both routes by the
     client's tests/test_the_materialize_route.py
     (test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code,
     diagnostic). A refusal for a refusal under another code, so for the
     owner, beside DT-12.
+    Approved by the owner on 2026-10-13 (night; the owner's answers, item 11,
+    E88: times past the nanosecond range get VALUE_OUT_OF_RANGE), relayed by
+    the orchestrator, recorded at T1.33 part 2; never the implementer's
+    approval.
 
 # --- Orderings ----------------------------------------------------------------
 
@@ -1223,6 +1246,8 @@ entries:
     to TIME in its setup) a table's time column, as Schema.from_source is
     told it and the edits leave it; any other such pair stays UNCLASSIFIED
     (T1.28a fix round 1).
+    Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to a clearer
+    code, E66(b)'s class).
 
 - id: ORD-1
   title: Tie order of the shared train set by entity time
@@ -1250,9 +1275,9 @@ entries:
     more qualify than it holds. No case of the Phase 1b inventory or of
     contract/cases.
   cases: [T0.6, T1.21]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     Measured at T1.21 by contract/tests/test_register_probes.py, which
     passes against the reference checkout (b413e9a) and on the candidate's
@@ -1276,6 +1301,10 @@ entries:
     for datetime64, and the order is the host's: only the reference host was
     measured. A change, so the owner decides; until then the comparator does
     not normalize tie order (Q3).
+    Approved by the owner on 2026-10-13 (night; the owner's answers, item 17,
+    E88), after the orchestrator answered the owner's questions on it (item
+    14), relayed by the orchestrator, recorded at T1.33 part 2; never the
+    implementer's approval.
 
 - id: ORD-2
   title: NULL times and emit order of the latest-neighbor fetch
@@ -1319,6 +1348,7 @@ entries:
     (_by_time) is unordered and feeds order-sensitive float32 group sums; the
     inventory's values are exact in float32, so no case shows it, and it
     becomes its own entry (ORD-3) if one ever does.
+    Approver: reviewer (T1.33: a keep; no outcome changes).
 
 - id: ORD-3
   title: Float32 label sums over an unordered window fetch vary from run to run on large real data, on both routes
@@ -1387,9 +1417,9 @@ entries:
   - time.text-us-date
   - time.text-one-bad-value
   - time.feature-interval
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     A placeholder, not 13 speculative entries. PD-5 already drops silent nulls
     and internal errors; per-case entries name the new answer. A new success
@@ -1400,6 +1430,18 @@ entries:
     time.text-one-bad-value, the source's CAST failure as PROVIDER_ERROR);
     from T1.27 P1B-18 (decimal.class-target-38-18, refused by name when
     its labels are read).
+    Closed as superseded by the owner on 2026-10-13 (night; the owner's
+    answers, item 12, E88), recorded as approved by the owner since the
+    register has no superseded status; it approves no outcome of its own.
+    Replaced case by case: key.hugeint, key.decimal-18-0 and key.decimal-38-10
+    are P1B-31's and P1B-33's; key.varchar-large-buffers P1B-6's (approved by
+    the owner the same night, recorded at the T1.32g bundle, E99(d), which
+    also adds the case to P1B-33's); decimal.class-target-38-18 P1B-18's;
+    nested.fixed-array P1B-9's; nested.struct and nested.map P1B-10's;
+    nested.union P1B-7's; empty.fact-table P1B-11's; time.text-us-date and
+    time.text-one-bad-value DT-12's; time.feature-interval P1B-8's. Relayed by
+    the orchestrator, recorded at T1.33 part 2; never the implementer's
+    approval.
 
 - id: P1B-2
   title: Schema.from_source on the core route refuses what T1.11b's thin describe_source does not infer yet
@@ -1483,9 +1525,9 @@ entries:
     inputs above; base.regression is none of them, and its schema is the
     reference's.
   cases: [base.regression, base.adventureworks, T1.11b, T1.21b, T1.21d, T1.21e, T1.23, T1.24, T1.25, T1.25b, T1.26a, T1.32c, T1.32d, T1.32e]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     Proposed by the implementer of T1.11b (Phase 1 decisions row E38), for
     the owner: each is a refusal of an input the reference accepts, or, for
@@ -1503,6 +1545,18 @@ entries:
     records which of these E27's AdventureWorks journey reaches and which
     task removes each, and T1.21e's family maps which the inventory's cases
     reach; they approve nothing. Approved by the owner on 2026-10-13, relayed by the orchestrator (E92), for the Phase 2 class only: composite_key, float_nan, float_signed_zero, key_name_order, key_tie stay refused by name until Phase 2 (docs/design/rust-core/phase-1/not-yet-refusals.md); key_missing and key_repeats left the class, moved by the owner into T1.32e part 1 the same day and ported there (E84). The entry's other rules stay proposed: time_whole_table, a bug fixed at T1.32e (E83), and multicategorical, to be ported, are T1.32e's by the owner's decisions of 2026-10-13; column_type, key_type and empty_table are their families' (P1B-10, P1B-11, P1B-51); text_time is DT-15's.
+    Closed as superseded by the owner on 2026-10-13 (night; the owner's
+    answers, item 12, E88), recorded as approved by the owner since the
+    register has no superseded status; it approves no outcome of its own. Its
+    rules are E92's Phase 2 class (approved above), lifted at T1.32e
+    (time_whole_table, multicategorical, key_missing, key_repeats: E83, E84,
+    E86), or their families' entries (column_type, key_type, empty_table:
+    P1B-10, P1B-11, P1B-51) and text_time DT-15's. One question stays with the
+    owner, on T1.33's list (as-built, T1.33): free text under a time-like name
+    (rel-trial's outcomes.time_frame and designs.time_perspective), refused
+    text_time by the core and described by the reference, as a Phase 2 refusal
+    or as DT-17's permanent reading. Relayed by the orchestrator, recorded at
+    T1.33 part 2; never the implementer's approval.
 
 - id: P1B-3
   title: materialize on the core route refuses what T1.11c's thin route does not port yet
@@ -1614,9 +1668,9 @@ entries:
     under a forced core route, with any of the inputs above; base.regression
     is none of them, and its payload is the reference's.
   cases: [base.regression, base.adventureworks, base.binary, base.multiclass, decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27, T1.28, T1.28a, T1.29]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     Proposed by the implementer of T1.11c (Phase 1 decisions row E41), for
     the owner: each is a refusal of an input the reference accepts, so it
@@ -1669,6 +1723,16 @@ entries:
     core now reads: the classification and static tasks' payloads equal to
     the reference's, and of this entry only keyless_neighbors, key_type
     and target_type reached. Approved by the owner on 2026-10-13, relayed by the orchestrator (E92), for the Phase 2 class only: composite_key, aggregation, anchor_entity, assuming, condition, context_anchor_time, entity_filter, entity_ids, evaluate, exclude_cols_dict, explain, lag_timesteps, logical_target, max_pq_iterations, num_hops, num_neighbors, open_window, parent_table, problem_type, return_embeddings, static_target, target_filter, target_transform_null, inference_config_text, text_time_rules, top_k, unseeded, use_prediction_time stay refused by name until Phase 2 (docs/design/rust-core/phase-1/not-yet-refusals.md; static_target only beyond the in-table case E72(c) lifted); keyless_neighbors left the class with the key rules the owner moved into T1.32e part 1 (E84), a keyless table being sampled as the reference samples it. The entry's other rules stay proposed, each its family's or T1.33's.
+    Closed as superseded by the owner on 2026-10-13 (night; the owner's
+    answers, item 12, E88), recorded as approved by the owner since the
+    register has no superseded status; it approves no outcome of its own. Its
+    rules are E92's Phase 2 class (approved above), lifted by the packages
+    named above, their families' entries, or among the rules
+    not-yet-refusals.md gives T1.33 (its T1.33 row), which T1.33 reconciles
+    under entries of their own. The note above that time_type was lifted at
+    T1.25 is out of date: sdm-core's materialize.rs still refuses it
+    (not-yet-refusals.md, rule 50), one of those T1.33 rules. Relayed by the
+    orchestrator, recorded at T1.33 part 2; never the implementer's approval.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1721,9 +1785,9 @@ entries:
     above; base.regression is none of them, and its request and result are
     the reference's.
   cases: [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28, T1.28a, T1.28b, T1.29]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     Rewritten at T1.28b, which lifted outputs, the classification's
     layout, the prediction types a regression's number and a class take,
@@ -1746,6 +1810,12 @@ entries:
     response and the result layout) and the task kinds T1.29 brings remove
     each rule's refusal, and this entry is set to rejected when the last
     one goes. Approved by the owner on 2026-10-13, relayed by the orchestrator (E92), for the Phase 2 class only: problem_type, instance_id_type, model, prediction_statistic, prediction_type, response_field stay refused by name until Phase 2 (docs/design/rust-core/phase-1/not-yet-refusals.md). The entry's other rules stay proposed, each its family's or T1.33's.
+    Closed as superseded by the owner on 2026-10-13 (night; the owner's
+    answers, item 12, E88), recorded as approved by the owner since the
+    register has no superseded status; it approves no outcome of its own. Its
+    rules are E92's Phase 2 class (approved above), lifted at T1.28b and
+    T1.29, or their families' entries and T1.33's. Relayed by the
+    orchestrator, recorded at T1.33 part 2; never the implementer's approval.
 
 - id: P1B-5
   title: A DuckDB table named with a double quote is described on the core route where the reference refuses it
@@ -1789,9 +1859,9 @@ entries:
     T1.23, a table named in the schema over a source name holding a dot or
     a double quote, or qualified by its schema.
   cases: [T1.21d, T1.22]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E88}
   notes: >-
     Found at T1.21d's review (Codex P2 of round 2, subagent P3-2) as the
     PROVIDER_ERROR divergence; at T1.22 no quoting of the pragma's argument
@@ -1802,6 +1872,9 @@ entries:
     routes' outcomes for a double quote and for a dot, and by sdm-testkit's
     duckdb_provider.rs, which holds the by-name read to the pragma's answer
     for an ordinary twin. Recommendation: approve. Never self-approved.
+    Approved by the owner on 2026-10-13 (night; the owner's answers, item 9,
+    E88: a table name holding a double quote is read), relayed by the
+    orchestrator, recorded at T1.33 part 2; never the implementer's approval.
 
 - id: P1B-6
   title: key.varchar-large-buffers succeeds on the core route where the reference refuses it
@@ -1830,6 +1903,9 @@ entries:
     contract/refusal-maps/keys.json, which expects success on both runners.
     A new success, which a reviewer may approve (P1B-1's process); T1.32a
     resolves it when it admits the keys family. Never self-approved.
+    Approver: owner (T1.33: a new success, kept by E66(b) for individual
+    decision; the owner approved it on 2026-10-13, night, item 10, recorded at
+    the T1.32g bundle, E99(d), not here).
 
 - id: P1B-7
   title: nested.union is refused by name on the core route where the reference raises an unnamed RuntimeError
@@ -2306,6 +2382,8 @@ entries:
     implementer reads it as fitting E66(b)'s class (the reference gives an
     unnamed error, the core a named refusal); whether it does is the
     owner's or the reviewer's to say. Never self-approved.
+    Approver: reviewer (T1.33: the reference's unnamed TypeError to a named
+    refusal, E66(b)'s class).
 
 - id: P1B-17
   title: An edit to a schema changed past its description is refused by name at the edit on the core route
@@ -2517,6 +2595,8 @@ entries:
     where the reference crashes or gives an internal error, a named
     refusal is approved): for the reviewer to approve under the class,
     never self-approved.
+    Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to a named
+    refusal, E66(b)'s class).
 
 - id: P1B-22
   title: A model's answer nested past 128 levels is refused INVALID_RESPONSE where the reference reads it
@@ -3050,6 +3130,8 @@ entries:
     the reviewers, never self-approved. The client test
     test_entities_that_do_not_cast_are_the_caller_s_error_on_the_core holds
     it beside the old route.
+    Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to the caller's
+    error, E66(b)'s class).
 
 - id: P1B-33
   title: Decimal keys and keys handed over as large text are sampled, where the reference fails on every entity
@@ -3216,13 +3298,17 @@ entries:
   - 'contract/key-cast-vectors.json#float32-large.* success -> success'
   - 'contract/key-cast-vectors.json#float32-near-one.* success -> success'
   - 'contract/key-cast-vectors.json#float64-past-2pow53.* success -> success'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
   notes: >-
     Found by T1.32a's review of part 1 (Codex P1); the test author's
     midpoint vectors derive each expected float exactly. It changes an
     accepted answer's value, so it is for the owner; never self-approved.
+    Approved by the owner on 2026-10-13 (night; the owner's answers, item 8,
+    E88: a decimal value against a float key rounded once, not twice), relayed
+    by the orchestrator, recorded at T1.33 part 2; never the implementer's
+    approval.
 
 - id: P1B-37
   title: For a decimal or large-text key, an entity the reference fails on is refused as the caller's error, INVALID_REQUEST
@@ -3344,6 +3430,7 @@ entries:
     behavior the core keeps deliberately (checkpoint 7), with no entry
     before. Proposed for the reviewer: a keep of the reference, no
     outcome changes.
+    Approver: reviewer (T1.33: a keep; no outcome changes).
 
 - id: SMP-2
   title: An integer key column holding a null is sent as float64
@@ -3370,6 +3457,7 @@ entries:
     differential; registered at T1.27 as a behavior the core keeps
     deliberately (checkpoint 7). Proposed for the reviewer; no outcome
     changes.
+    Approver: reviewer (T1.33: a keep; no outcome changes).
 
 - id: SMP-3
   title: A text feature is sent as the reference's lowered words
@@ -3394,6 +3482,7 @@ entries:
     Ported at T1.26b; registered at T1.27 as a behavior the core keeps
     deliberately (checkpoint 7), with no entry before. Proposed for the
     reviewer; no outcome changes.
+    Approver: reviewer (T1.33: a keep; no outcome changes).
 
 # --- The host layer -------------------------------------------------------------
 
@@ -3431,7 +3520,7 @@ entries:
     bump, and keep the cap for control JSON proper.
 
 - id: HOST-2
-  title: Arrow types admission still refuses that the reference accepts
+  title: Arrow types admission still refuses, which the reference fails unnamed
   kind: change
   old_behavior: >-
     The reference reads any Arrow type DuckDB returns into pandas
@@ -3447,12 +3536,23 @@ entries:
     Proposed: what still cannot convert is refused by name. Generated at
     T1.7d from the admission tests' family table (sdm-host
     tests/admission.rs, which fails if this list and the code disagree),
-    the type families still refused are `interval` and `union`. The
-    reference refuses both where it infers a column's type (inventory cases
-    time.feature-interval and nested.union), but a column given an
-    explicit dtype skips that inference (table.py), so the reference may
-    read both there; they stay proposed until T1.33 shows whether it does,
-    and each needs the owner. The values still
+    the type families still refused, StructuredDataError with code
+    UNSUPPORTED_TYPE naming the column and its Arrow type, are `interval`,
+    not reference-accepted (marked at T1.33: through DuckDB 1.5.6 the
+    reference's Schema.from_source fails an INTERVAL column, Arrow's
+    month_day_nano interval, with an unnamed RuntimeError, alone, in a
+    list or in a struct: contract/nested-type-vectors.json's
+    scalar.interval*, orders.interval and list.interval,
+    contract/type-set-vectors.json's interval.month-day-nano and
+    struct.interval, case time.feature-interval; DuckDB hands over no
+    year-month or day-time interval), and `union`, not reference-accepted
+    (marked at T1.33: the reference fails a UNION column unnamed at
+    from_source, contract/nested-type-vectors.json's union.integer-varchar
+    and case nested.union; DuckDB hands over no dense union). No public
+    call reaches the reference's explicit-dtype path that would skip its
+    inference (rfm/base/table.py:262-296): Schema.from_source takes no column
+    dtype (sdm_client/schema.py:1070-1079), and the call fails before any
+    Schema exists whose column could be given one. The values still
     refused are a timestamp, duration or date64 at s or ms whose value
     passes int64 microseconds, and a single string, binary or list value
     past int32 offsets; any type T1.33 finds no lossless row for joins
@@ -3467,6 +3567,14 @@ entries:
     reference accepts needs the owner (P1B-1 process); T1.7c writes the
     generated list here and T1.33 marks each type reference-accepted or not,
     with a case where the inventory reaches one.
+    Marked at T1.33 (contract/type-set-vectors.json, the test author's, and
+    the reference's code): neither family is reference-accepted, so what
+    remains is a named refusal where the reference fails unnamed, E66(b)'s
+    class, P1B-7 and P1B-8 the inventory's cases of it. The values still
+    refused (a timestamp, duration or date64 at s or ms past int64
+    microseconds; a single value past int32 offsets) are not measured against
+    the reference here: the reviewer checks them, and one the reference reads
+    goes to the owner. Approver: reviewer.
 
 - id: HOST-3
   title: The floor cell's to_pandas raises pandas' BlockManager DeprecationWarning
@@ -3741,6 +3849,8 @@ entries:
     it. Whether a public Schema can hold such a link, so that a client
     caller reaches it, is not established here; the differential calls
     the adapter directly. No case holds it.
+    Approver: reviewer (T1.33: the reference's KeyError to a PQL code,
+    E66(b)'s class).
 
 # --- lane 1a entries (P1B-41..49) ---
 
@@ -3775,6 +3885,8 @@ entries:
     test author's vector question.static-target marks it register-required
     (the recorder's register.required); pending on both hosts until
     approved.
+    Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to a named
+    refusal, E66(b)'s class; its approval is recorded at the T1.32g bundle).
 
 - id: P1B-42
   title: Times of day and ratios written as text, under a name that does not say time, are read as categories, where the reference reads them as times of the day it runs
@@ -3823,6 +3935,222 @@ entries:
     and reversing DT-17 for this shape. The other choice, refusing such
     text by name, would refuse fact.time-of-day, which the reference
     answers.
+    Approver: owner (T1.33: a refusal to success, kept by E66(b) for
+    individual decision; the owner approved it on 2026-10-13, evening,
+    recorded at the T1.32g bundle, E99(b), not here).
+
+- id: P1B-43
+  title: A UUID DuckDB hands over as fixed_size_binary(16) is left out as binary where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    Under SET arrow_lossless_conversion = true DuckDB hands a UUID column over
+    as fixed_size_binary(16) (the arrow.uuid extension); the reference's
+    Schema.from_source fails such a column with an unnamed RuntimeError (its
+    catalog type UUID reads as no dtype, and inference from the sample fails).
+    By default DuckDB hands a UUID over as text.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer admits fixed_size_binary as binary without loss (sdm-host's
+    admission table; H16 and H27), and the column is left out of its table
+    with the warning the reference gives a BLOB column (COLUMNS_LEFT_OUT), the
+    table described. The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB connection with arrow_lossless_conversion
+    set, holding a UUID column, under a forced core route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#fixed-size-binary.16 refusal UNNAMED -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    The reference fails it unnamed and the core reads it: a new success, which
+    E66(b) keeps for individual decision (the core accepting what the
+    reference refuses), as P1B-9's fixed-size lists and P1B-50's list views
+    were; so the owner's. Approver: owner. Recommendation: approve, the column
+    read as the type it is admitted as. Measured by T1.33's test author
+    (contract/type-set-vectors.json, the reference's answers recorded through
+    DuckDB 1.5.6 in the reference environment, the core's held on the
+    pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
+    to its transition by contract/tests/test_t133_type_set.py, pending until
+    an approved entry names it. Never self-approved.
+
+- id: P1B-44
+  title: Text and binary DuckDB hands over as view types are read as text and binary where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    Under SET arrow_output_version = '1.4' with produce_arrow_string_view
+    DuckDB hands VARCHAR over as utf8_view and BLOB as binary_view; the
+    reference's Schema.from_source fails either column with an unnamed
+    RuntimeError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer admits utf8_view as utf8 and binary_view as binary without loss
+    (H16 and H27): a utf8_view column is described as text (dtype string), as
+    VARCHAR is, and a binary_view column left out with the warning the
+    reference gives a BLOB column (COLUMNS_LEFT_OUT). The default route is
+    unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB connection producing Arrow string views,
+    holding a VARCHAR or BLOB column, under a forced core route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#utf8-view refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#binary-view refusal UNNAMED -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    The reference fails it unnamed and the core reads it: a new success, which
+    E66(b) keeps for individual decision (the core accepting what the
+    reference refuses), as P1B-9's fixed-size lists and P1B-50's list views
+    were; so the owner's. Approver: owner. Recommendation: approve, the column
+    read as the type it is admitted as. Measured by T1.33's test author
+    (contract/type-set-vectors.json, the reference's answers recorded through
+    DuckDB 1.5.6 in the reference environment, the core's held on the
+    pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
+    to its transition by contract/tests/test_t133_type_set.py, pending until
+    an approved entry names it. Never self-approved.
+
+- id: P1B-45
+  title: A list DuckDB hands over as a large list view is left out as a list where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    Under arrow_output_list_view with arrow_output_version = '1.4' and
+    arrow_large_buffer_size, DuckDB hands an INTEGER[] column over as
+    large_list_view; the reference's Schema.from_source fails it with an
+    unnamed RuntimeError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer admits large_list_view as a list (H16 and H27), and the column
+    is left out of its table with the reference's warning for a list (intlist,
+    COLUMNS_LEFT_OUT), as P1B-50 leaves out a list view. The default route is
+    unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB connection producing large list views,
+    holding a list column, under a forced core route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#large-list-view.int32 refusal UNNAMED -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    The reference fails it unnamed and the core reads it: a new success, which
+    E66(b) keeps for individual decision (the core accepting what the
+    reference refuses), as P1B-9's fixed-size lists and P1B-50's list views
+    were; so the owner's. Approver: owner. Recommendation: approve, the column
+    read as the type it is admitted as. Measured by T1.33's test author
+    (contract/type-set-vectors.json, the reference's answers recorded through
+    DuckDB 1.5.6 in the reference environment, the core's held on the
+    pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
+    to its transition by contract/tests/test_t133_type_set.py, pending until
+    an approved entry names it. Never self-approved.
+
+- id: P1B-46
+  title: Decimals DuckDB hands over as decimal32 or decimal64 are read as decimal128 where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    Under SET arrow_output_version = '1.5' DuckDB hands DECIMAL(9, 2) over as
+    decimal32 and DECIMAL(18, s) as decimal64; the reference's
+    Schema.from_source fails such a column with an unnamed RuntimeError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer admits decimal32 and decimal64 as decimal128 of the same
+    precision and scale without loss (H16 and H27), and the column is
+    described as a DECIMAL column handed over as decimal128 is: a float with a
+    scale, an int at scale 0 (sdm-schema's dtype_of). The default route is
+    unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB connection with arrow_output_version 1.5,
+    holding a DECIMAL column of precision 18 or less, under a forced core
+    route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#decimal32.9-2 refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#decimal64.18-2 refusal UNNAMED -> success'
+  - 'contract/type-set-vectors.json#decimal64.18-0 refusal UNNAMED -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    The reference fails it unnamed and the core reads it: a new success, which
+    E66(b) keeps for individual decision (the core accepting what the
+    reference refuses), as P1B-9's fixed-size lists and P1B-50's list views
+    were; so the owner's. Approver: owner. Recommendation: approve, the column
+    read as the type it is admitted as. Measured by T1.33's test author
+    (contract/type-set-vectors.json, the reference's answers recorded through
+    DuckDB 1.5.6 in the reference environment, the core's held on the
+    pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
+    to its transition by contract/tests/test_t133_type_set.py, pending until
+    an approved entry names it. Never self-approved.
+
+- id: P1B-47
+  title: A struct holding an interval is refused UNSUPPORTED_TYPE where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source fails a STRUCT(a INTERVAL) column with
+    an unnamed RuntimeError, as it fails any struct (P1B-10).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer's admission refuses the column before inference, as it checks a
+    struct child by child: StructuredDataError, code UNSUPPORTED_TYPE, naming
+    the child (f.a in the vector) and its Arrow type, month_day_nano interval,
+    as P1B-8 refuses an interval and P1B-51 a list of intervals. A struct of
+    other children is refused later, UNSUPPORTED_REQUEST column_type
+    (P1B-10). The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source holding a struct column with an
+    interval child, under a forced core route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#struct.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    A named refusal where the reference fails unnamed, E66(b)'s class, for the
+    reviewer to check it fits. Approver: reviewer. Measured by T1.33's test
+    author (contract/type-set-vectors.json, the reference's answers recorded
+    through DuckDB 1.5.6 in the reference environment, the core's held on the
+    pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
+    to its transition by contract/tests/test_t133_type_set.py, pending until
+    an approved entry names it. Never self-approved.
+
+- id: P1B-48
+  title: An ENUM column is refused by name where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    DuckDB hands an ENUM('a', 'b', 'c') column over as dictionary<uint8,
+    utf8>; the reference's Schema.from_source fails it with an unnamed
+    RuntimeError (its catalog type reads as no dtype, and inference from the
+    sample fails).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer admits the dictionary of text as it is (the closed set's
+    DictionaryUtf8; H16 and H27), and sdm-schema describes no such column:
+    UnsupportedRequestError, code UNSUPPORTED_REQUEST, fields operation
+    describe_source and rule column_type, as P1B-10 refuses a struct or a map.
+    The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source holding an ENUM column, or any
+    source handing over a dictionary of text, under a forced core route.
+  cases: [T1.33]
+  refs:
+  - 'contract/type-set-vectors.json#dictionary.uint8-utf8 refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  notes: >-
+    A named refusal where the reference fails unnamed, E66(b)'s class, for the
+    reviewer to check it fits. Approver: reviewer. The alternative, describing
+    it as text (better than the reference, a product change behind a failing
+    case first), would be a new success and the owner's. Measured by T1.33's
+    test author (contract/type-set-vectors.json, the reference's answers
+    recorded through DuckDB 1.5.6 in the reference environment, the core's
+    held on the pure-Rust host by sdm-host's tests/t133_type_set.rs, which
+    passes); held to its transition by contract/tests/test_t133_type_set.py,
+    pending until an approved entry names it. Never self-approved.
 
 # --- lane 1b entries (P1B-52..69) ---
 
@@ -3999,6 +4327,10 @@ entries:
     This refuses input the reference accepts and requires individual owner
     approval under E66(b) and E73(b); never self-approved. The alternative
     is porting Arrow's FromReal approximation for scales past 22.
+    Approver: owner (T1.33: as written here it refuses an input the reference
+    accepts; the owner withdrew the refusal on 2026-10-13, evening, E99(c),
+    and the T1.32g bundle rewrites the entry as the narrow difference from
+    scale 28).
 
 - id: P1B-72
   title: Two of the decimal family's cases admitted to acceptance as the reference answers them

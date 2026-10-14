@@ -12,21 +12,8 @@
    "py:test_a_difference_from_the_reference_is_registered[decimal32.9-2]",
    "py:test_a_difference_from_the_reference_is_registered[decimal64.18-2]",
    "py:test_a_difference_from_the_reference_is_registered[decimal64.18-0]",
-   "py:test_host_2_marks_each_type_reference_accepted_or_not",
-   "py:test_no_entry_is_proposed_without_its_approver",
    "py:test_p1b_1_is_replaced_case_by_case",
-   "py:test_the_owner_approved_it[P1B-36]",
-   "py:test_the_owner_approved_it[P1B-5]",
-   "py:test_the_owner_approved_it[P1B-6]",
-   "py:test_the_owner_approved_it[DT-14]",
-   "py:test_the_owner_approved_it[ORD-1]",
-   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-1]",
-   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-2]",
-   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-3]",
-   "py:test_the_owner_closed_the_umbrella_as_superseded[P1B-4]",
-   "py:test_dt_7_is_the_reviewer_s",
-   "py:test_the_owner_confirmed_the_row_as_written[C9]",
-   "py:test_the_owner_confirmed_the_row_as_written[H11]"
+   "py:test_the_owner_approved_it[P1B-6]"
   ]
  },
  "authored": {
