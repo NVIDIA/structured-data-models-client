@@ -3277,7 +3277,9 @@ entries:
     This entry changes a refusal into success and requires individual owner
     approval under E66(b) and E73(b); never self-approved. Its refusal-to-refusal
     vectors are P1B-37's. key.varchar-large-buffers is
-    P1B-6's case. No question sums a key, so the declared precision a
+    admitted under this entry's first-admission rows (T1.32g, its
+    large-text refs naming the transition); P1B-6 states the same success
+    for that case. No question sums a key, so the declared precision a
     decimal sum is held to (T1.32b) does not arise for one. T1.32b's 13
     decimal-key vectors (contract/decimal-vectors.json's key.both.*,
     key.primary-only.*, key.negative.*, key.at-precision.* and
@@ -3354,8 +3356,10 @@ entries:
     (design, "The entities' cast to the key's type"), and the core casts
     the text to the key's type: [1, '2'] is entities 1 and 2 of an integer
     key and '1' and '2' of a text key, [1.0, '2'] the floats 1 and 2 of a
-    float key; a NumPy int64 is an integer like any other. The default
-    route is unchanged.
+    float key; a NumPy int64 is an integer like any other. A float in such
+    a mix is written as the core writes a float entity (from T1.32g): Rust's
+    shortest round-trip text, with no exponent (1e16 is 10000000000000000).
+    The default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route, the entities mixing numbers and text, or NumPy
@@ -4484,7 +4488,12 @@ entries:
     agrees, and where it differs the approved entry that states it
     (P1B-9 nested.fixed-array, P1B-10 nested.map and nested.struct, P1B-7
     nested.union, P1B-11 empty.fact-table; python-old keeps the
-    reference's unnamed refusals). No outcome changes by this entry.
+    reference's unnamed refusals). Five cases python-ref answers
+    INTERNAL_ERROR (key.decimal-18-0, key.decimal-38-10, key.hugeint,
+    key.varchar-large-buffers, decimal.class-target-38-18) are held so on
+    python-core and rust-host, P1B-33 and P1B-18 stating the core's answer,
+    and on python-old as the old client's crash, its baseline the
+    reference's result (E110). No outcome changes by this entry.
   affected_inputs: >-
     The case files of the 23 cases named, which the ratchet's cases rule
     passes only under an approved entry naming each, and their baselines.
