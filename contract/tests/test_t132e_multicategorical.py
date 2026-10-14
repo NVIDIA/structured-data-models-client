@@ -102,7 +102,7 @@ R = _module(
 G = _module('t132e_gate', ROOT / 'contract/tests/t132e_gate.py')
 RECORDED: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
 BY_ID = {vector['id']: vector for vector in RECORDED['vectors']}
-INPUTS = ('table', 'setup', 'pql', 'indices')
+INPUTS = ('table', 'setup', 'pql', 'indices', 'run_day')
 #: The parts of an answer, as the recorder projects it.
 PARTS = ('outcome', 'schema', 'warnings', 'payload', 'result', 'wire')
 
@@ -558,6 +558,70 @@ def test_the_wire_reading_is_the_payload_rule_s() -> None:
     }
     assert tables['context.related_tables.users']['cells'] == ['a;b']
     assert R.wire([]) is None
+
+
+def test_the_run_day_placeholder_holds_the_vector_on_any_day() -> None:
+    # The times of day the reference reads as times on the day it runs are
+    # recorded under the placeholder, never a calendar day; the reading
+    # writes one day's cells of f as the placeholder, and leaves alone
+    # another column, cells of two days, and a body with none.
+    marked = [v['id'] for v in RECORDED['vectors'] if v.get('run_day')]
+    assert marked == ['fact.time-of-day']
+    wire = BY_ID['fact.time-of-day']['reference']['wire'][0]
+    cells = wire['predict.related_tables.orders']['cells']
+    assert cells and all(c.startswith(R.RUN_DAY + 'T') for c in cells)
+    assert R.RUN_DAY not in json.dumps(
+        [v for v in RECORDED['vectors'] if not v.get('run_day')]
+    )
+
+    def body(f: list[Any], ts: str = '2023-01-01T00:00:00.000000Z') -> Any:
+        return {
+            'context': {
+                'related_tables': {
+                    'orders': {
+                        'columns': ['ts', 'f'],
+                        'rows': [[ts, cell] for cell in f],
+                    }
+                }
+            }
+        }
+
+    def f_of(parsed: Any) -> list[Any]:
+        rows = parsed['context']['related_tables']['orders']['rows']
+        return [row[1] for row in rows]
+
+    one_day = body(['2031-02-03T09:45:00.000000Z', None, 'x'])
+    read = R.at_run_day(one_day)
+    assert f_of(read) == [R.RUN_DAY + 'T09:45:00.000000Z', None, 'x']
+    assert read['context']['related_tables']['orders']['rows'][0][0] == (
+        '2023-01-01T00:00:00.000000Z'
+    )
+    assert f_of(one_day)[0].startswith('2031')
+    two_days = body(
+        ['2031-02-03T09:45:00.000000Z', '2031-02-04T09:45:00.000000Z']
+    )
+    assert R.at_run_day(two_days) == two_days
+    assert R.at_run_day(body(['a;b'])) == body(['a;b'])
+    assert R.at_run_day(None) is None
+    # The digest and the wire are taken after the reading, so two days'
+    # runs of the marked vector agree, and an unmarked vector is held to
+    # its days.
+    observation = {
+        'outcome': {'result': 'success', 'stage': 'predict'},
+        'public': {
+            'payloads': [{'method': 'POST', 'path': '/', 'parsed': one_day}]
+        },
+    }
+    other_day = copy.deepcopy(observation)
+    other_day['public']['payloads'][0]['parsed'] = body(
+        ['2031-02-09T09:45:00.000000Z', None, 'x']
+    )
+    marked_vector = BY_ID['fact.time-of-day']
+    assert R.project(observation, marked_vector) == R.project(
+        other_day, marked_vector
+    )
+    plain = BY_ID['fact.semicolon']
+    assert R.project(observation, plain) != R.project(other_day, plain)
 
 
 def test_the_vectors_are_not_vacuous() -> None:

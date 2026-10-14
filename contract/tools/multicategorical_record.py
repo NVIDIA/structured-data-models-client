@@ -66,6 +66,13 @@ the tables' row counts, ``f``'s type, and how many times each separator
 occurs in ``f``'s first 500 rows, the 1,000-row preview and the whole
 table.
 
+A vector marked ``run_day`` (``fact.time-of-day``) holds text times of
+day, which the reference reads as times on the day it runs: in its
+requests, the day of each timestamp cell of ``f`` is written as
+:data:`RUN_DAY` (``at_run_day``) before the digest and the wire are taken,
+by the recorder and by both hosts' tests alike, so the vector holds on any
+day.
+
 ``register`` marks the vectors where the core is expected to differ. It is
 derived from the reference's answer, never chosen: the reference fails
 with an unnamed exception or with ``INTERNAL_ERROR`` (E66(b)). The mark
@@ -88,6 +95,7 @@ import hashlib
 import importlib.util
 import json
 import platform
+import re
 import subprocess
 import sys
 import tempfile
@@ -576,10 +584,13 @@ def _fact() -> list[dict[str, Any]]:
             generated(None, ROWS, cycle(combos('|'))),
             table='orders',
         ),
+        # Times of day as text, which the reference reads as times on the
+        # day it runs: compared under the run-day placeholder.
         _vector(
             'fact.time-of-day',
             generated(None, ROWS, "lpad((i % 24)::VARCHAR, 2, '0') || ':45'"),
             table='orders',
+            run_day=True,
         ),
         _vector(
             'fact.semicolon-8-rows',
@@ -845,11 +856,60 @@ def wire(payloads: Any, column: str = 'f') -> Any:
     return out
 
 
+#: What stands for the run's day in a vector marked ``run_day``.
+RUN_DAY = '<run-day>'
+_TIMESTAMP = re.compile(r'(?P<day>[0-9]{4}-[0-9]{2}-[0-9]{2})(?P<rest>T.*)')
+
+
+def at_run_day(parsed: Any, column: str = 'f') -> Any:
+    r"""A request body with the day of each timestamp cell of ``column``
+    written as :data:`RUN_DAY`, where every such cell of the body names the
+    same day: the day the run happened, for text holding times of day,
+    which the reference (pandas) reads as times on the day it runs. Cells of
+    two days, or of another column, are left as they are, so a body that
+    is not the run-day case still differs."""
+    days = {
+        found['day']
+        for _, table in _sections(parsed)
+        if isinstance(table.get('columns'), list) and column in table['columns']
+        for row in table.get('rows') or []
+        if isinstance(row, list)
+        and table['columns'].index(column) < len(row)
+        and isinstance(cell := row[table['columns'].index(column)], str)
+        and (found := _TIMESTAMP.fullmatch(cell)) is not None
+    }
+    if len(days) != 1:
+        return parsed
+    out = copy.deepcopy(parsed)
+    for _, table in _sections(out):
+        columns = table.get('columns')
+        if not isinstance(columns, list) or column not in columns:
+            continue
+        at = columns.index(column)
+        for row in table.get('rows') or []:
+            if not isinstance(row, list) or at >= len(row):
+                continue
+            found = (
+                _TIMESTAMP.fullmatch(row[at])
+                if isinstance(row[at], str)
+                else None
+            )
+            if found is not None:
+                row[at] = RUN_DAY + found['rest']
+    return out
+
+
 def project(
     observation: dict[str, Any], vector: dict[str, Any]
 ) -> dict[str, Any]:
     r"""The public answer of one run of ``vector``, as both Python runners
-    record it: ``empty_null_record.project``'s, and the column's ``wire``."""
+    record it: ``empty_null_record.project``'s, and the column's ``wire``;
+    for a vector marked ``run_day``, each request read through
+    :func:`at_run_day` first (its digest and wire included)."""
+    if vector.get('run_day'):
+        observation = copy.deepcopy(observation)
+        for each in (observation.get('public') or {}).get('payloads') or []:
+            each['parsed'] = at_run_day(each.get('parsed'))
     answer: dict[str, Any] = EN.project(observation, vector)
     answer['wire'] = wire((observation.get('public') or {}).get('payloads'))
     return answer

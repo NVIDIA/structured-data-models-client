@@ -580,7 +580,84 @@ fn wire(body: &Value) -> Value {
 }
 
 /// What this host made of the vector, in the vectors' terms.
-fn project(observed: &Observed, exclusions: &[Vec<String>]) -> Value {
+/// What stands for the run's day in a vector marked `run_day` (the
+/// recorder's `RUN_DAY`).
+const RUN_DAY: &str = "<run-day>";
+
+/// The day of a timestamp cell, `YYYY-MM-DD` before a `T`, and the rest.
+fn timestamp_day(cell: &str) -> Option<(&str, &str)> {
+    let (day, rest) = (cell.get(..10)?, cell.get(10..)?);
+    let b = day.as_bytes();
+    let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+    (digits(0..4)
+        && b[4] == b'-'
+        && digits(5..7)
+        && b[7] == b'-'
+        && digits(8..10)
+        && rest.starts_with('T'))
+    .then_some((day, rest))
+}
+
+/// A body with the day of each timestamp cell of `f` written as
+/// `RUN_DAY`, where every such cell names the same day (the recorder's
+/// `at_run_day`): text times of day, which the reference reads as times on
+/// the day it runs. Cells of two days, or of another column, are left.
+fn at_run_day(body: &Value) -> Value {
+    let mut days = BTreeSet::new();
+    for (_, table) in sections(body) {
+        let Some(at) = table["columns"]
+            .as_array()
+            .and_then(|c| c.iter().position(|n| n == "f"))
+        else {
+            continue;
+        };
+        for row in table["rows"].as_array().into_iter().flatten() {
+            if let Some((day, _)) = row.get(at).and_then(Value::as_str).and_then(timestamp_day) {
+                days.insert(day.to_owned());
+            }
+        }
+    }
+    if days.len() != 1 {
+        return body.clone();
+    }
+    let mut out = body.clone();
+    for section in ["context", "predict"] {
+        let Some(part) = out.get_mut(section).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        let mut tables: Vec<&mut Value> = Vec::new();
+        for (key, value) in part.iter_mut() {
+            match key.as_str() {
+                "instance_table" => tables.push(value),
+                "related_tables" => {
+                    if let Some(related) = value.as_object_mut() {
+                        tables.extend(related.values_mut());
+                    }
+                }
+                _ => {}
+            }
+        }
+        for table in tables {
+            let Some(at) = table["columns"]
+                .as_array()
+                .and_then(|c| c.iter().position(|n| n == "f"))
+            else {
+                continue;
+            };
+            for row in table["rows"].as_array_mut().into_iter().flatten() {
+                let Some(cell) = row.get_mut(at) else {
+                    continue;
+                };
+                if let Some((_, rest)) = cell.as_str().and_then(timestamp_day) {
+                    *cell = Value::from(format!("{RUN_DAY}{rest}"));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn project(observed: &Observed, exclusions: &[Vec<String>], run_day: bool) -> Value {
     let (result, code) = match &observed.answer {
         Answer::Error { code, .. } => ("refusal", Value::from(code.clone())),
         Answer::Predicted(_) => ("success", Value::Null),
@@ -594,7 +671,12 @@ fn project(observed: &Observed, exclusions: &[Vec<String>]) -> Value {
     let Answer::Predicted(predicted) = &observed.answer else {
         unreachable!()
     };
-    let body = &predicted["body"];
+    let body = if run_day {
+        at_run_day(&predicted["body"])
+    } else {
+        predicted["body"].clone()
+    };
+    let body = &body;
     json!({
         "outcome": "success",
         "code": null,
@@ -752,7 +834,11 @@ fn kind_of(prefix: &str) {
         let want = wanted(&vector["reference"]);
         let case = the_case(&template, vector, question, &all["indices"]);
         let got = match host::run(&case, &bases) {
-            Ok(observed) => project(&observed, &exclusions),
+            Ok(observed) => project(
+                &observed,
+                &exclusions,
+                vector["run_day"].as_bool().unwrap_or(false),
+            ),
             Err(failure) => json!({"outcome": "host failure", "why": failure.to_string()}),
         };
         let ok = passes(id, &got, &want, &entries);
@@ -983,4 +1069,59 @@ fn every_vector_ref_names_its_transition() {
         malformed.is_empty(),
         "vector refs naming no transition `<glob> <from> -> <to>`: {malformed:?}"
     );
+}
+
+#[test]
+fn the_run_day_placeholder_holds_the_vector_on_any_day() {
+    // The recorder's reading, on its own evidence and on seeds: the marked
+    // vector holds no calendar day in `f`; one day's cells of `f` are
+    // written as the placeholder, another column's and two days' are not.
+    let all = vectors();
+    let marked: Vec<&str> = all["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v["run_day"] == true)
+        .map(|v| v["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(marked, ["fact.time-of-day"]);
+    let body = |f: Vec<Value>| {
+        let rows: Vec<Value> = f
+            .into_iter()
+            .map(|cell| json!(["2023-01-01T00:00:00.000000Z", cell]))
+            .collect();
+        json!({"context": {"related_tables": {"orders": {"columns": ["ts", "f"], "rows": rows}}}})
+    };
+    let one = body(vec![
+        json!("2031-02-03T09:45:00.000000Z"),
+        Value::Null,
+        json!("x"),
+    ]);
+    let read = at_run_day(&one);
+    let rows = &read["context"]["related_tables"]["orders"]["rows"];
+    assert_eq!(rows[0][1], json!("<run-day>T09:45:00.000000Z"));
+    assert_eq!(rows[0][0], json!("2023-01-01T00:00:00.000000Z"));
+    assert_eq!(rows[1][1], Value::Null);
+    assert_eq!(rows[2][1], json!("x"));
+    let two = body(vec![
+        json!("2031-02-03T09:45:00.000000Z"),
+        json!("2031-02-04T09:45:00.000000Z"),
+    ]);
+    assert_eq!(at_run_day(&two), two);
+    let none = body(vec![json!("a;b")]);
+    assert_eq!(at_run_day(&none), none);
+    // Read before the digest and the wire: two days agree.
+    let other = body(vec![
+        json!("2031-02-09T09:45:00.000000Z"),
+        Value::Null,
+        json!("x"),
+    ]);
+    assert_eq!(wire(&at_run_day(&one)), wire(&at_run_day(&other)));
+    assert_ne!(wire(&one), wire(&other));
+    assert_eq!(
+        timestamp_day("2031-02-03T09:45"),
+        Some(("2031-02-03", "T09:45"))
+    );
+    assert_eq!(timestamp_day("09:45"), None);
+    assert_eq!(timestamp_day("2031-02-03 09:45"), None);
 }
