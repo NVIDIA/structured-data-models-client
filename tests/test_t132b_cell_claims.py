@@ -19,7 +19,10 @@ check must fail with a ``rule 6:`` problem naming the case. The controls,
 HEAD itself and a seed of the case's own cells, pass.
 
 - ``decimal.feature-38-0-wide`` (a DECIMAL(38, 0) feature, received as
-  ``decimal128``) claiming ``float64/feature``: the type contradicted;
+  ``decimal128``) claiming ``binary/feature``: the type contradicted, a
+  type no column of its source has (the shop base's ``price`` is a DOUBLE
+  feature, so under E96(a) a ``float64/feature`` claim is true and could
+  never fail; reviewer's P3);
 - ``decimal.feature-38-0-wide`` claiming ``decimal128/target``: the role
   contradicted (its question's target is ``orders.price``, a DOUBLE sum);
 - ``decimal.target-38-18`` (a summed DECIMAL(38, 18) target) claiming
@@ -165,7 +168,7 @@ def test_a_seed_with_the_case_s_own_claims_passes(tmp_path: Path) -> None:
 
 
 SEEDS = {
-    'type': ('decimal.feature-38-0-wide', ['float64/feature']),
+    'type': ('decimal.feature-38-0-wide', ['binary/feature']),
     'role': ('decimal.feature-38-0-wide', ['decimal128/target']),
     'decimal-as-key': ('decimal.target-38-18', ['decimal128/primary-key']),
 }
