@@ -48,8 +48,8 @@ use sdm_contract::catalog::{CatalogAnswer, CatalogIndex, IndexColumns, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
     Filter, IndexAdvice, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
-    SEED_BATCH, SEED_KEY, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak,
-    TieTerm, Window, field,
+    SEED_BATCH, SEED_KEY, SEED_KEY_TYPE, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes,
+    TieBreak, TieTerm, Window, field,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -855,22 +855,20 @@ fn text(name: &str) -> String {
 /// DuckDB's layouts only for a column naming it (register P1B-43).
 pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 
-/// The condition joining the seeds to `table`'s `key`: `t.key = s.key`,
-/// but for a seed key of `decimal128(38, 0)`, which every key read in that
-/// tier is (a DECIMAL(38, 0), a HUGEINT, or a HUGEINT, UHUGEINT or VARINT
-/// read in the big-integer rule's decimal tier, register P1B-43), the two
-/// compared as their decimal text, the key's with a fraction of zeros
-/// dropped. No one SQL type compares such a seed exactly with every key it
-/// may meet: DuckDB has no DECIMAL(38, 0) to VARINT cast, and compares a
-/// UHUGEINT with a HUGEINT through DOUBLE (2^64 + 1 equal to 2^64 + 2), and
-/// the plan cannot read the key's declared type. An integer's decimal text
-/// is its value, one text a value, so the comparison is exact for every
-/// integer type (BIGINT past whose range a seed simply matches nothing,
-/// never fails a cast), a DECIMAL of any scale and a float whose value is
-/// a whole number match the seed they equal, a fraction matches none, and
-/// a float DuckDB writes with an exponent (from 10^16) or as -0.0 matches
-/// none. It stays an equality of two expressions, each of one side, so
-/// DuckDB still joins by hash.
+/// The condition joining the seeds to `table`'s `key`: `t.key = s.key`, as
+/// before part 3, but for a `decimal128(38, 0)` seed key whose column names
+/// the key's declared type ([`SEED_KEY_TYPE`], which the core reads from
+/// the catalog for this layer) and that type is an integer one: then the
+/// seed is cast to the key's own type, `t.key = TRY_CAST(s.key AS type)`,
+/// so the two compare as one type, exactly, by the key's native equality,
+/// and a seed the type cannot hold is null and matches nothing (register
+/// P1B-43). Without it a VARINT key cannot be compared with a DECIMAL(38,
+/// 0) at all (DuckDB has no such cast), and a HUGEINT seed would meet a
+/// UHUGEINT key through DOUBLE. A VARINT (BIGNUM) key takes its seed
+/// through HUGEINT, which holds every 38-digit value exactly, since
+/// DuckDB's DECIMAL to BIGNUM cast is not implemented (its TRY_CAST gives
+/// null). Any other key type, a float or a decimal with a scale, or no
+/// declared type, keeps `t.key = s.key`.
 fn seed_join(request: &DataRequest, key: &str) -> String {
     let seed = format!("s.{}", identifier(SEED_KEY));
     let key = format!("t.{}", identifier(key));
@@ -878,17 +876,94 @@ fn seed_join(request: &DataRequest, key: &str) -> String {
         DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => Some(seeds),
         _ => None,
     };
-    let wide = seeds.into_iter().flat_map(|k| &k.columns).any(|c| {
-        c.name == SEED_KEY
-            && c.column_type
-                == ColumnType::Decimal128 {
-                    precision: 38,
-                    scale: 0,
-                }
-    });
-    if wide {
-        format!(r"regexp_replace(CAST({key} AS VARCHAR), '\.0*$', '') = CAST({seed} AS VARCHAR)")
-    } else {
-        format!("{key} = {seed}")
+    let declared = seeds
+        .into_iter()
+        .flat_map(|k| &k.columns)
+        .find(|c| {
+            c.name == SEED_KEY
+                && c.column_type
+                    == ColumnType::Decimal128 {
+                        precision: 38,
+                        scale: 0,
+                    }
+        })
+        .and_then(|c| c.metadata.get(SEED_KEY_TYPE))
+        .and_then(|declared| integer_type(declared));
+    match declared {
+        Some(Integer::Bignum) => {
+            format!("{key} = TRY_CAST(CAST({seed} AS HUGEINT) AS BIGNUM)")
+        }
+        Some(Integer::Native(name)) => format!("{key} = TRY_CAST({seed} AS {name})"),
+        None => format!("{key} = {seed}"),
+    }
+}
+
+/// An integer key type as `seed_join` casts a seed to it.
+enum Integer {
+    /// VARINT, which DuckDB's catalog spells BIGNUM.
+    Bignum,
+    /// Any other, as the SQL spells it: rendered here, never the catalog's
+    /// text, so nothing of the catalog reaches the statement.
+    Native(String),
+}
+
+/// The integer type DuckDB's catalog `declared` spells, if it is one: the
+/// signed and unsigned integers, HUGEINT, UHUGEINT, BIGNUM (VARINT) and a
+/// DECIMAL of scale 0.
+fn integer_type(declared: &str) -> Option<Integer> {
+    const NATIVE: [&str; 10] = [
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+        "HUGEINT",
+        "UHUGEINT",
+    ];
+    let declared = declared.trim().to_ascii_uppercase();
+    if declared == "BIGNUM" || declared == "VARINT" {
+        return Some(Integer::Bignum);
+    }
+    if let Some(name) = NATIVE.iter().find(|n| **n == declared) {
+        return Some(Integer::Native((*name).to_owned()));
+    }
+    let digits = declared.strip_prefix("DECIMAL(")?.strip_suffix(",0)")?;
+    let precision: u8 = digits.parse().ok()?;
+    (1..=38)
+        .contains(&precision)
+        .then(|| Integer::Native(format!("DECIMAL({precision},0)")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_integer_key_type_is_read_and_anything_else_is_not() {
+        let native = |declared: &str| match integer_type(declared) {
+            Some(Integer::Native(name)) => Some(name),
+            _ => None,
+        };
+        assert_eq!(native("UHUGEINT").as_deref(), Some("UHUGEINT"));
+        assert_eq!(native(" bigint ").as_deref(), Some("BIGINT"));
+        assert_eq!(native("DECIMAL(38,0)").as_deref(), Some("DECIMAL(38,0)"));
+        assert_eq!(native("DECIMAL(20,0)").as_deref(), Some("DECIMAL(20,0)"));
+        assert!(matches!(integer_type("BIGNUM"), Some(Integer::Bignum)));
+        assert!(matches!(integer_type("VARINT"), Some(Integer::Bignum)));
+        for other in [
+            "DOUBLE",
+            "FLOAT",
+            "DECIMAL(10,2)",
+            "DECIMAL(39,0)",
+            "DECIMAL(0,0)",
+            "VARCHAR",
+            "BIGINT); DROP TABLE t; --",
+            "",
+        ] {
+            assert!(integer_type(other).is_none(), "{other}");
+        }
     }
 }
