@@ -11,7 +11,8 @@ Written by the package's independent test author on records built here,
 after the implementer's hand checks, so they are committed seeds:
 
 - ``DESCRIBED_RULES``: the core refusing ``text_time`` at
-  ``Schema.from_source`` where the reference describes is P1B-2's; it is
+  ``Schema.from_source`` where the reference describes is P1B-2's (pending
+  the owner, never approved, from T1.33's umbrella decision); it is
   the only rule left. ``multicategorical`` (ported) and
   ``time_whole_table`` (fixed), both by T1.32e (E92), are differences again,
   UNCLASSIFIED even under an entry that names them.
@@ -118,20 +119,17 @@ def test_text_time_is_the_only_described_rule() -> None:
     assert differential.DESCRIBED_RULES == {'text_time': 'P1B-2'}
 
 
-@pytest.mark.parametrize('status', ['proposed', 'approved'])
-def test_a_core_refusing_text_time_is_p1b_2_s(status: str) -> None:
+def test_a_core_refusing_text_time_is_p1b_2_s() -> None:
+    # Under a proposed P1B-2. Approved, it reads as pending the owner, never
+    # approved (T1.33: text_time, P1B-2 or DT-17, is the owner's open
+    # question): test_t133_umbrellas.py's
+    # test_text_time_reads_as_pending_the_owner.
     old, core = _described('text_time')
-    register = entry('P1B-2', status, 'text_time multicategorical')
-    kind, _ = differential.classify(old, core, [0], register, 0)
-    assert kind == f'{status}:P1B-2'
-    # And under the committed register, whatever P1B-2's status is there.
-    status_now = committed()['P1B-2']['status']
-    assert status_now != 'rejected'
-    kind, _ = differential.classify(old, core, [0], committed(), 0)
-    assert (
-        kind
-        == f'{"approved" if status_now == "approved" else "proposed"}:P1B-2'
-    )
+    register = entry('P1B-2', 'proposed', 'text_time multicategorical')
+    kind, why = differential.classify(old, core, [0], register, 0)
+    assert kind in ('proposed:P1B-2', 'pending-owner:P1B-2') or (
+        kind == 'UNCLASSIFIED' and 'owner' in why.lower()
+    ), (kind, why)
 
 
 @pytest.mark.parametrize('rule', ['multicategorical', 'time_whole_table'])

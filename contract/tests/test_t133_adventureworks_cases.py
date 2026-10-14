@@ -96,6 +96,9 @@ TASK = {
 }
 #: The register's placeholder for the inventory's cases, which excuses none.
 PLACEHOLDER = 'P1B-1'
+#: The umbrellas, the placeholder among them: approved by the owner as E92's
+#: Phase 2 class, they excuse no case, even one they list (T1.33).
+UMBRELLAS = ('P1B-1', 'P1B-2', 'P1B-3', 'P1B-4')
 #: The core operations that answer at each stage of a public call.
 OPERATIONS = {
     'from_source': ('describe_source',),
@@ -154,7 +157,7 @@ def registered_case(case: str) -> str | None:
     in its ``cases``."""
     path = ROOT / 'docs/design/rust-core/register.yaml'
     for entry in yaml.safe_load(path.read_text(encoding='utf-8'))['entries']:
-        if entry['id'] == PLACEHOLDER:
+        if entry['id'] in UMBRELLAS:
             continue
         if entry.get('status') == 'approved' and case in (
             entry.get('cases') or []

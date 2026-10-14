@@ -182,13 +182,19 @@ fn register_lists(field: &str) -> Vec<(String, Vec<String>)> {
     out
 }
 
+/// The umbrellas, the placeholder P1B-1 among them: approved by the owner as
+/// E92's Phase 2 class, they excuse no case, even one they list (T1.33).
+const UMBRELLAS: [&str; 4] = ["P1B-1", "P1B-2", "P1B-3", "P1B-4"];
+
 /// The approved entry that lists the case in its `cases`.
 /// P1B-1 does not count: it is the inventory's placeholder, whose own notes
 /// say each case whose outcome changes gets an entry of its own.
 fn registered_case(id: &str) -> Option<String> {
     register_lists("cases")
         .into_iter()
-        .find(|(entry, cases)| entry != "P1B-1" && cases.iter().any(|c| c == id))
+        .find(|(entry, cases)| {
+            !UMBRELLAS.contains(&entry.as_str()) && cases.iter().any(|c| c == id)
+        })
         .map(|(entry, _)| entry)
 }
 
