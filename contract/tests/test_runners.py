@@ -137,6 +137,10 @@ def _observations(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines()]
 
 
+#: The core operations a public call starts, in the order it starts them.
+_CALL_ORDER = ('describe_source', 'validate_query', 'materialize', 'predict')
+
+
 def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
     tmp_path: Path,
 ) -> None:
@@ -167,7 +171,19 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
         # had no core route at T1.21b, E51(c); from T1.24 its refusal map's
         # probes force it and the case is unchanged, so its reference line
         # stands) runs on the old route throughout.
-        wanted = operations[case['slice']] if case['routes'] else []
+        # A routed case starts the operations it carries, in call order:
+        # from T1.32g an admitted case carries only those its call reaches
+        # on the core (tests/test_contract_cases.py's inventory check holds
+        # which), within its slice's, and a query refused first validates
+        # it in place of materialize (refuse.unknown-column).
+        carried = [op for op in _CALL_ORDER if op in case.get('core', {})]
+        if case['slice'] == 'S1' and 'validate_query' in carried:
+            assert carried == ['describe_source', 'validate_query'], case['id']
+        else:
+            assert carried == operations[case['slice']][: len(carried)], case[
+                'id'
+            ]
+        wanted = carried if case['routes'] else []
         edits = case['input'].get('edits', [])
         if case['routes'] and edits:
             # From T1.24b each edit is the core's edit_schema, after the
