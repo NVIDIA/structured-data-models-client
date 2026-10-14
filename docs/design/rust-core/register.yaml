@@ -3351,6 +3351,48 @@ entries:
     approval under E66(b) and E73(b); never self-approved. The alternative
     is porting Arrow's FromReal approximation for scales past 22.
 
+- id: P1B-72
+  title: Two of the decimal family's cases admitted to acceptance as the reference answers them
+  kind: keep
+  old_behavior: >-
+    decimal.feature-38-0-wide and decimal.target-38-18 were diagnostic
+    cases, run and reported, gating nothing, with no routes, so python-core
+    ran them on the default route.
+  new_behavior: >-
+    Acceptance cases (T1.32b part 2): python-core runs each on the core
+    route (base.binary's routes, every DuckDB route of from_source,
+    materialize and predict), both naming the regression paths they cover;
+    they already name describe_source, materialize and predict for
+    rust-host. On every runner each meets its reference observation, so no
+    outcome changes: success at predict on the Python runners, success on
+    rust-host. decimal.class-target-38-18 stays diagnostic: python-old
+    answers it with the reference's INTERNAL_ERROR, which the ratchet's
+    baselines rule refuses in any held baseline.
+  affected_inputs: >-
+    The case files of decimal.feature-38-0-wide and decimal.target-38-18,
+    which the ratchet's cases rule passes only under an approved entry
+    naming each.
+  cases: [T1.32b, decimal.feature-38-0-wide, decimal.target-38-18]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E100}
+  notes: >-
+    The admission record H19 asks for, with no deviation of its own, as
+    P1B-26 is T1.29's: the change that admits a case approves its
+    deviations, and these cases have none against the reference. For the
+    reviewers to approve, never the implementer. The outcomes below are
+    each runner's baseline at the checkpoint (none) and the projection the
+    package's observations give.
+  case_outcomes:
+  - {case: decimal.feature-38-0-wide, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: decimal.feature-38-0-wide, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: decimal.feature-38-0-wide, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: decimal.target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: decimal.target-38-18, cell: ref-pandas3, runner: python-old, old: 'none', new: 'success at predict', summary: 'admitted to acceptance as the reference answers it'}
+  - {case: decimal.target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance as the reference answers it'}
+
+# --- The sampler's kept behaviors (T1.27) ------------------------------------
+
 - id: SMP-1
   title: A table repeating a key past 1.05 times its distinct keys is read through its distinct rows
   kind: keep

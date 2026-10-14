@@ -722,6 +722,14 @@ def test_a_reviewer_s_approval_holds_a_map_entry_only_where_the_reference_refuse
     assert not _approved_as_the_schema_allows(
         document, entry, approved, succeeded
     )
+    # A case hitting the entry with no reference evidence fails closed.
+    missing = dict(reference)
+    for probe in document['probes']:
+        if probe.get('python-core', {}).get('expect') == entry['id']:
+            missing.pop(probe['case'], None)
+    assert not _approved_as_the_schema_allows(
+        document, entry, approved, missing
+    )
     unhit = dict(entry, id='materialize/nothing')
     assert not _approved_as_the_schema_allows(
         document, unhit, approved, reference

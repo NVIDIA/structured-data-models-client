@@ -172,8 +172,17 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         'base.adventureworks'
     }
     # From T1.29 the inventory's three baseline cases are acceptance cases
-    # with their routes and paths, keeping its input and expectation.
-    admitted = {'base.regression', 'base.binary', 'base.multiclass'}
+    # with their routes and paths, keeping its input and expectation; from
+    # T1.32b the decimal family's two the reference answers (its static
+    # decimal target stays diagnostic: python-old answers it with the
+    # reference's INTERNAL_ERROR, which no baseline holds).
+    admitted = {
+        'base.regression',
+        'base.binary',
+        'base.multiclass',
+        'decimal.feature-38-0-wide',
+        'decimal.target-38-18',
+    }
     for entry in inventory['cases']:
         case = committed[entry['id']]
         assert case['status'] == (
