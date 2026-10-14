@@ -735,14 +735,11 @@ def between_problem(tools: Tools, sha: str, subject: str) -> str | None:
     return None
 
 
-def check_moved(
+def check_moved_from(
     tools: Tools, moved: str, candidate: str, base: str, phase: str
-) -> tuple[int, int]:
-    """Refuses unless the candidate is ``moved`` (X) moved over landing
-    commits only (decision E130): the same tree, the same patches in the
-    same order since the phase head, and only landing commits between X
-    and the phase head. Returns the number of patches and of landing
-    commits between. X's reviews and CI are checked by the caller."""
+) -> None:
+    """Refuses a ``--moved-from`` that cannot name a move: the candidate
+    itself, or a commit already in the phase branch."""
     label = f'--moved-from {moved[:12]}'
     if moved == candidate:
         raise Refusal(
@@ -753,6 +750,18 @@ def check_moved(
             f'{label} is already in {phase} (an ancestor of its head '
             f'{base[:12]}); there is nothing of it to land'
         )
+
+
+def check_moved(
+    tools: Tools, moved: str, candidate: str, base: str, phase: str
+) -> tuple[int, int]:
+    """Refuses unless the candidate is ``moved`` (X) moved over landing
+    commits only (decision E130), in the decision's order: the same tree,
+    the same patches in the same order since the phase head, and only
+    landing commits between X and the phase head. Returns the number of
+    patches and of landing commits between. X's reviews and CI are checked
+    by the caller, first."""
+    label = f'--moved-from {moved[:12]}'
     # 2. Same code.
     tree_x = tools.git('rev-parse', f'{moved}^{{tree}}').strip()
     tree_c = tools.git('rev-parse', f'{candidate}^{{tree}}').strip()
@@ -761,29 +770,6 @@ def check_moved(
             f"{label}: not the same code: the candidate's tree "
             f"{tree_c[:12]} is not the moved-from commit's {tree_x[:12]}; "
             'a candidate whose code differs needs its own reviews and CI'
-        )
-    # 4. Only landing commits between X and the phase head.
-    between = range_commits(tools, f'{moved}..{base}')
-    if not between:
-        raise Refusal(
-            f'{label}: not moved over landing commits: the head of {phase} '
-            f"{base[:12]} is already in the moved-from commit's history, so "
-            'the candidate was moved over nothing; land the moved-from '
-            'commit itself'
-        )
-    stray = [
-        (sha, subject, why)
-        for sha, subject in between
-        if (why := between_problem(tools, sha, subject))
-    ]
-    if stray:
-        raise Refusal(
-            f'{label}: not only landing commits between the moved-from commit '
-            f'and the head of {phase} (a landing commit has one parent, its '
-            "parent's tree, and a subject starting 'Land '):\n- "
-            + '\n- '.join(
-                f'{sha[:12]} {subject} ({why})' for sha, subject, why in stray
-            )
         )
     # 3. Same patches, in order, with no extra or empty commit.
     sides = {
@@ -830,6 +816,29 @@ def check_moved(
         raise Refusal(
             f"{label}: not the same patches: in order, these commits' "
             '`git patch-id --stable` differ:\n- ' + '\n- '.join(differ)
+        )
+    # 4. Only landing commits between X and the phase head.
+    between = range_commits(tools, f'{moved}..{base}')
+    if not between:
+        raise Refusal(
+            f'{label}: not moved over landing commits: the head of {phase} '
+            f"{base[:12]} is already in the moved-from commit's history, so "
+            'the candidate was moved over nothing; land the moved-from '
+            'commit itself'
+        )
+    stray = [
+        (sha, subject, why)
+        for sha, subject in between
+        if (why := between_problem(tools, sha, subject))
+    ]
+    if stray:
+        raise Refusal(
+            f'{label}: not only landing commits between the moved-from commit '
+            f'and the head of {phase} (a landing commit has one parent, its '
+            "parent's tree, and a subject starting 'Land '):\n- "
+            + '\n- '.join(
+                f'{sha[:12]} {subject} ({why})' for sha, subject, why in stray
+            )
         )
     return len(ours), len(between)
 
@@ -993,13 +1002,18 @@ def land(
     moved: str | None = None
     if args.moved_from is not None:
         moved = resolve(tools, args.moved_from, 'the moved-from commit')
-        patches, between = check_moved(
-            tools, moved, candidate, base, args.phase_branch
-        )
+        check_moved_from(tools, moved, candidate, base, args.phase_branch)
     # The evidence: the candidate's own, or, moved, the moved-from commit's.
     evidenced = moved or candidate
     what = 'the moved-from commit' if moved else 'the candidate'
     check_reviews(tools, args.review, evidenced, what)
+    if moved:
+        # E130's order: X's evidence (its reviews, then its run), then the
+        # same tree, the same patches and only landing commits in X..H.
+        green = check_candidate_ci(tools, moved, what)
+        patches, between = check_moved(
+            tools, moved, candidate, base, args.phase_branch
+        )
     out(f'ok   worktree clean, HEAD is the candidate {candidate}')
     out(f'ok   the candidate descends from {args.phase_branch} at {base}')
     out(f'ok   the checkpoint is their merge base, {checkpoint}')
@@ -1032,7 +1046,6 @@ def land(
             'green (E43 (b), --wait-for-landing-run).'
         )
     elif moved:
-        green = check_candidate_ci(tools, moved, what)
         out(f'ok   {describe(green)}, on {moved[:12]} itself')
         evidence = (
             f'Moved from {moved}: its run {green.get("databaseId")} is green '

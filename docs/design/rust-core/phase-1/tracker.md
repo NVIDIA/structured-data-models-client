@@ -182,7 +182,7 @@ Owner-requested packages outside the T-sequence: they change how packages are ch
 |---|---|---|---|
 | CI1 CI speedups and process tooling | done | Landed at c97ce0d; candidate run 38025304582 green at b6cd517; landing runs 38026327226 (topic) and 38026327217 (phase) green; both approve at b6cd517 (1 fix round) | E43: `native-wheel` split, caches saved only by the long-lived branches, `prepush.sh`, `land.py`; notes in [Fix-round histories](#fix-round-histories) |
 | CI2 Lane-branch tooling | done | Landed at 7ecb730; candidate run 38031807301 green at f15a8f1; landing runs 38033162310 (topic) and 38033162308 (phase) green; `BASE_SHA` c97ce0d; both approve at f15a8f1 (2 fix rounds) | E43's lane branches: `lane.py start`, `status` and `check`, commit ownership by subject, `land.py` on a lane; notes in [Fix-round histories](#fix-round-histories) |
-| CI3 Landing a candidate moved over landing commits | in review | Implemented on branch `ci3` from 367d1368, on the test author's `CI3 tests:` commit; not yet landed | E130 (the owner, 2026-10-14): `land.py --moved-from X` lands a candidate moved over landing commits only on X's reviews and X's green run, with no reviewer re-run and no new CI; as built in [as-built.md](as-built.md#ci3) |
+| CI3 Landing a candidate moved over landing commits | in review | Implemented on branch `ci3` from 367d1368; the test author's `CI3 tests:` commit (6a48b833, cherry-picked as e97b6115), 31 cases, all passing, none pending; not yet landed | E130 (the owner, 2026-10-14): `land.py --moved-from X` lands a candidate moved over landing commits only on X's reviews and X's green run, with no reviewer re-run and no new CI; as built in [as-built.md](as-built.md#ci3) |
 
 ## Checkpoint trailers
 

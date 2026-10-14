@@ -1,36 +1,7 @@
 {
  "about": "CI3's acceptance tests (land.py --moved-from: a candidate C moved over landing commits only lands on its source X's two reviews and X's green CI run; owner's decision, 2026-10-14) that failed when the independent test author wrote them, before the implementation, at 367d1368 (scripts/rust_core/land_selftest.py, the 'moved:' cases; their interface in the comment above them). 'cases' holds self-test names. land_selftest.py's main holds each listed case to failing (strict): once one passes it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
-  "cases": [
-   "moved: lands C on X's reviews and green run over a landing commit",
-   "moved: lands over several landing commits",
-   "moved: lands a package of several commits, moved in order",
-   "moved: the landing message names X, its green run, and the move",
-   "moved: --dry-run checks and changes nothing",
-   "moved: refused, the reviews name C instead of X",
-   "moved: refused, the reviews name neither C nor X",
-   "moved: refused, one review names X and the other C",
-   "moved: refused, X's newest run failed after a green one",
-   "moved: refused, X's run was cancelled",
-   "moved: refused, X's run is unfinished",
-   "moved: refused, X has no CI run, though C has a green one",
-   "moved: refused, X's only green run is a pull request's",
-   "moved: refused, C changes a file X does not",
-   "moved: refused, C adds a commit that changes a file",
-   "moved: refused, C squashes X's two commits into one",
-   "moved: refused, C splits X's one commit into two",
-   "moved: refused, C has X's commits in another order",
-   "moved: refused, C adds an empty commit",
-   "moved: refused, X has an empty commit C dropped",
-   "moved: refused, X..H has a commit that is not a landing commit",
-   "moved: refused, X..H has a commit titled 'Land' that changes files",
-   "moved: refused, X..H has an empty commit not titled 'Land '",
-   "moved: refused, X..H has an empty commit titled 'Landed'",
-   "moved: refused, X..H has a merge commit",
-   "moved: refused, C is X itself, not moved onto the phase head",
-   "moved: refused, a dirty worktree",
-   "moved: refused, --moved-from is not a commit"
-  ]
+  "cases": []
  },
  "authored": {
   "cases": [
