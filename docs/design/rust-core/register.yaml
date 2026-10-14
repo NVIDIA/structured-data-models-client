@@ -3911,6 +3911,48 @@ entries:
   - {case: nested.map, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the map cells in canonical form, its outcome unchanged'}
   - {case: nested.union, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the union cells in canonical form, its outcome unchanged'}
 
+- id: P1B-56
+  title: time.feature-interval's reference line holds its interval values in canonical form
+  kind: keep
+  old_behavior: >-
+    The observation's canonical form (decision H9) held no interval:
+    run_python's arrow_values and sdm-testkit's values wrote each
+    month_day_nano_interval read as Arrow as ["?", "arrow:<type>"] and
+    listed it unencodable (E111(b) left it so), and compare.py's sql.result
+    rule fails every result holding one, even against itself. The
+    committed python-ref line of time.feature-interval (python-ref at
+    b413e9a) holds one in from_source statement 6, the reference's Arrow
+    read of users, so the case could compare equal on no pairing of
+    runners.
+  new_behavior: >-
+    An interval is ["interval", months, days, nanoseconds as a decimal
+    string], a null interval null (contract/t132g-p2e-vectors.json, E113).
+    The line is recorded again under T1.13's rules with the new encoder.
+    Only the encoding of the interval cells changes, not the reference's
+    behavior: its semantic projection (ratchet.semantic) differs from the
+    committed one only in statement 6's values.unencodable (now empty) and
+    values.unordered (the raw line also in values.ordered, and
+    identity.commit); the same rows, encoded by both encoders, differ only
+    in column f, the interval, every other column identical, and
+    python-ref's outcome is unchanged.
+  affected_inputs: >-
+    No input: the committed python-ref line of time.feature-interval,
+    which the ratchet's reference rule passes changed only under an
+    approved entry naming the case on python-ref.
+  cases: [time.feature-interval]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E113}
+  notes: >-
+    T1.32g part 2e, an encoding-only re-record with no outcome of its own,
+    as part 2c's P1B-54, for the reviewers (H19), never self-approved; the
+    orchestrator put the re-record in scope. A control recorded at the
+    tests' tree (bb281abe, the old encoder) equals the committed line in
+    semantic projection, so the re-recorded line differs by the encoder
+    alone. The outcome below is python-ref's, unchanged.
+  case_outcomes:
+  - {case: time.feature-interval, cell: ref-pandas3, runner: python-ref, old: 'refusal - at from_source (RuntimeError)', new: 'refusal - at from_source (RuntimeError)', summary: 'encoding-only re-record: the interval cells in canonical form, its outcome unchanged'}
+
 # --- lane 1c entries (P1B-70..89) ---
 
 - id: P1B-71

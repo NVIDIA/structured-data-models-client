@@ -3,10 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_the_interval_reference_sample_compares_equal_to_itself",
-   "py:test_the_interval_reference_sample_is_the_new_encoder_s_reading"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],
