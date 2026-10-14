@@ -294,6 +294,14 @@ TIME_NOT_A_NAME = {
 }
 EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
 COMPOSITE = {'operation': 'describe_source', 'rule': 'composite_key'}
+
+
+def table_not_a_name(field: str) -> dict[str, Any]:
+    r"""D4's refusal of a table named by anything but a ``str``: the
+    field and rule only, no table (it is not text)."""
+    return {'field': field, 'rule': 'table_not_a_name'}
+
+
 INFERRED = {'primary_key': ['order_id'], 'time_column': 'ts'}
 SDE = 'StructuredDataError'
 
@@ -581,36 +589,66 @@ ROWS = [
         ('TypeError', None),
     ),
     # Both mappings: rows 23 and 24.
+    # D4 (P1B-74, the owner's): a table named by anything but a str is
+    # refused by the host, before the source is read, with a fixed message
+    # and the field and rule only. Without D4, JSON's coercion stands (3
+    # is the table "3", None the table "null"), and a tuple is the codec's
+    # refusal.
     row(
         'm.key-table-int',
         lambda: {'primary_keys': {3: 'order_id'}},
-        {'primary_keys': {'3': V(['order_id'])}, 'time_columns': {}},
-        refused({'field': 'primary_keys', 'table': '3'}),
+        None,
+        refused(table_not_a_name('primary_keys'), where='host'),
         REF_REFUSED,
+        owner='D4',
     ),
     row(
         'm.time-table-int',
         lambda: {'time_columns': {3: 'ts'}},
-        {'primary_keys': {}, 'time_columns': {'3': V('ts')}},
-        refused({'field': 'time_columns', 'table': '3'}),
+        None,
+        refused(table_not_a_name('time_columns'), where='host'),
         REF_REFUSED,
+        owner='D4',
     ),
-    # JSON's own coercion of an object's keys (row 23, without D4): None
-    # is the table "null"; a tuple is no key JSON writes, the codec's
-    # refusal before the run.
     row(
         'm.key-table-none',
         lambda: {'primary_keys': {None: 'order_id'}},
-        {'primary_keys': {'null': V(['order_id'])}, 'time_columns': {}},
-        refused({'field': 'primary_keys', 'table': 'null'}),
+        None,
+        refused(table_not_a_name('primary_keys'), where='host'),
         REF_REFUSED,
+        owner='D4',
     ),
     row(
         'm.key-table-tuple',
         lambda: {'primary_keys': {('orders',): 'order_id'}},
         None,
-        refused({}, where='host'),
+        refused(table_not_a_name('primary_keys'), where='host'),
         REF_REFUSED,
+        owner='D4',
+    ),
+    row(
+        'm.key-table-bytes',
+        lambda: {'primary_keys': {b'orders': 'order_id'}},
+        None,
+        refused(table_not_a_name('primary_keys'), where='host'),
+        REF_REFUSED,
+        owner='D4',
+    ),
+    row(
+        'm.time-table-none',
+        lambda: {'time_columns': {None: 'ts'}},
+        None,
+        refused(table_not_a_name('time_columns'), where='host'),
+        REF_REFUSED,
+        owner='D4',
+    ),
+    row(
+        'm.key-table-str-subclass',
+        lambda: {'primary_keys': {Name('orders'): 'order_id'}},
+        {'primary_keys': {'orders': V(['order_id'])}, 'time_columns': {}},
+        ('success', INFERRED),
+        REF_OK,
+        owner='D4',
     ),
     key(
         'm.key-surrogate',
@@ -1278,3 +1316,54 @@ def test_a_generator_read_twice_or_an_iteration_error_caught_fails() -> None:
             )
             != []
         )
+
+
+# --- D4: a table named by anything but a str (P1B-74, the owner's) --------------
+
+#: D4's fixed message (H17: no input value in it).
+D4_MESSAGE = 'a table is named by a string'
+
+
+@pytest.mark.parametrize(
+    'arguments',
+    [
+        pytest.param(
+            {'tables': {'orders': 'missing'}, 'primary_keys': {3: 'order_id'}},
+            id='key-beside-a-missing-table',
+        ),
+        pytest.param(
+            {'tables': {'orders': 'missing'}, 'time_columns': {None: 'ts'}},
+            id='time-beside-a-missing-table',
+        ),
+    ],
+)
+def test_d4_the_table_name_is_refused_before_the_source_is_read(
+    arguments: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    spy: Spy,
+    request: pytest.FixtureRequest,
+) -> None:
+    # P1B-74: the host's refusal comes before the source is read, so it
+    # wins over the source's own failure (a table named that the source
+    # does not hold), and its message is the fixed sentence.
+    field = next(f for f in ('primary_keys', 'time_columns') if f in arguments)
+
+    def check() -> None:
+        monkeypatch.setenv(_routing.ENVIRONMENT, CORE_ANY)
+        spy.events.clear()
+        with pytest.raises(StructuredDataError) as refused_by:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                Schema.from_source(DuckDBSource(_connection()), **arguments)
+        error = refused_by.value
+        details = {
+            k: v
+            for k, v in dict(error.details).items()
+            if k not in ('kind', 'retryable')
+        }
+        assert error.code == 'INVALID_REQUEST', error
+        assert details == table_not_a_name(field), details
+        assert D4_MESSAGE in str(error), str(error)
+        assert spy.starts == 0, spy.events
+
+    G.held('D4', f'exits:py:{request.node.name}', check)

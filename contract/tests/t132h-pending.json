@@ -220,10 +220,18 @@
    "rs-edit:edit.time-not-a-name",
    "rs-edit:edit.time-null",
    "rs:contract-22",
-   "rs:old-shape-preflight",
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-int]",
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-none]",
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-int]"
+   "rs:old-shape-preflight"
+  ],
+  "D4": [
+   "exits:py:test_d4_the_table_name_is_refused_before_the_source_is_read[key-beside-a-missing-table]",
+   "exits:py:test_d4_the_table_name_is_refused_before_the_source_is_read[time-beside-a-missing-table]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-bytes]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-int]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-none]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-str-subclass]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-tuple]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-int]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-none]"
   ]
  },
  "authored": {
@@ -445,10 +453,19 @@
    "rs-edit:edit.time-not-a-name",
    "rs-edit:edit.time-null",
    "rs:contract-22",
-   "rs:old-shape-preflight",
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-int]",
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-none]",
-   "py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-int]"
+   "rs:old-shape-preflight"
+  ],
+  "D4": [
+   "exits:py:test_d4_the_table_name_is_refused_before_the_source_is_read[key-beside-a-missing-table]",
+   "exits:py:test_d4_the_table_name_is_refused_before_the_source_is_read[time-beside-a-missing-table]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-bytes]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-int]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-none]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-str-subclass]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.key-table-tuple]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-int]",
+   "exits:py:test_the_core_route_writes_and_answers_each_value_as_the_table_says[m.time-table-none]"
   ]
- }
+ },
+ "D4": "D4 (added by the D4 commit, P1B-74, owner-pending): a table named by anything but a str refused by the Python host before the source is read, INVALID_REQUEST {field, rule: table_not_a_name}, its fixed message, winning over a source failure; the client's m.*-table rows. Dropping the D4 commit restores JSON's coercion (3 is the table \"3\", None \"null\") and the codec's refusal of a tuple."
 }
