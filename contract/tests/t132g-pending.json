@@ -3,12 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_the_approved_difference_is_each_runner_s_effective_expectation",
-   "py:test_accept_writes_every_runner_s_baseline_and_the_admission_passes",
-   "py:test_the_comparator_passes_an_approved_first_admission_difference",
-   "py:test_a_runner_answering_other_than_the_entry_gets_no_baseline"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],

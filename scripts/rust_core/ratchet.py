@@ -79,16 +79,20 @@ projection, so an identity-only change passes.
 
 ``check --effective-out`` also writes each baselined case's effective
 expected outcome by runner (:func:`effective`: the checkpoint's baseline, or
-an approved entry's exact transition from it), which ``gate.sh`` hands the
-comparator as ``--expect``, so an approved change passes its outcome rule
-while every other field is still compared with the reference.
+an approved entry's exact transition from it; on a first admission, an
+approved entry's transition from ``none``, from the reference's outcome),
+which ``gate.sh`` hands the comparator as ``--expect``, so an approved
+change passes its outcome rule while every other field is still compared
+with the reference.
 
 ``accept`` writes the proposed baselines from the observations of every
-runner given: each case every runner meets, its effective expectation where
-``--checkpoint``'s baselines hold it, and the committed reference's
-projection otherwise (the first baselines, T1.14, had only the latter),
-none where a runner's line is an ``INTERNAL_ERROR`` the baselines rule
-refuses; it is the package's to commit and the reviewer's to review (H3).
+runner given, each runner judged alone: each case it meets, its effective
+expectation where there is one (``--checkpoint``'s baseline, or on a first
+admission the reference's outcome, either moved by an approved entry), and
+the committed reference's projection otherwise (the first baselines, T1.14,
+had only the latter), none where its line is an ``INTERNAL_ERROR`` the
+baselines rule refuses; it is the package's to commit and the reviewer's to
+review (H3).
 
 ``effective`` writes the effective expectations ``check --effective-out``
 writes, for the checkpoint ``checkpoint`` resolves, with no other rule run:
@@ -157,6 +161,13 @@ WITHDRAWN = re.compile(
     re.IGNORECASE,
 )
 PANIC = 'INTERNAL_ERROR'
+#: An outcome's fields, as a projection and an entry's text name them.
+OUTCOME_FIELDS = (
+    'outcome.result',
+    'outcome.stage',
+    'outcome.error',
+    'outcome.code',
+)
 
 
 def owner_approved(status: str) -> bool:
@@ -673,46 +684,79 @@ def outcome_projection(
     return {name: found.get(name, like[name]) for name in like}
 
 
+def moved(
+    entries: list[dict[str, Any]],
+    case: str,
+    runner: str,
+    old: str,
+    want: dict[str, Any],
+) -> dict[str, Any] | None:
+    r"""The new outcome of the first approved entry stating the exact
+    transition of ``case`` on ``runner`` from ``old`` (``none`` where no
+    baseline holds it), shaped as ``want``, the outcome it moves from: an
+    owner's entry for a new refusal, never ``INTERNAL_ERROR``; or None."""
+    for entry in entries:
+        for item in entry.get('case_outcomes') or []:
+            if not (
+                isinstance(item, dict)
+                and item.get('case') == case
+                and item.get('cell') == CELL
+                and item.get('runner') == runner
+                and item.get('old') == old
+            ):
+                continue
+            new = outcome_projection(item.get('new'), want)
+            refusal = (
+                new is not None
+                and new.get('outcome.result') == 'refusal'
+                and want.get('outcome.result') == 'success'
+            )
+            if new is not None and (
+                not refusal or entry.get('approved_by') == 'owner'
+            ):
+                return new
+    return None
+
+
 def effective(
-    held: dict[str, dict[str, dict[str, Any]]], entries: list[dict[str, Any]]
+    held: dict[str, dict[str, dict[str, Any]]],
+    entries: list[dict[str, Any]],
+    reference: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, dict[str, Any]]]:
     r"""Each baselined case's effective expected projection, by case and
     runner: the checkpoint's baseline, or, where an approved entry states
     the exact transition from it (case, cell, runner and old outcome), its
     new outcome, an owner's entry for a new refusal and never
-    ``INTERNAL_ERROR``. The reference plus approved deviations (design,
-    "Reference observations and the gate"), for the comparator's outcome
-    rule and for :func:`accept`."""
+    ``INTERNAL_ERROR``; and on a first admission, a runner no baseline holds
+    the case for, the reference's outcome (``reference``, the committed
+    python-ref lines) moved the same way by an entry from ``none`` (E110),
+    with no expectation where none does, so the reference holds it. The
+    reference plus approved deviations (design, "Reference observations
+    and the gate"), for the comparator's outcome rule and for
+    :func:`accept`."""
     found: dict[str, dict[str, dict[str, Any]]] = {}
     for runner, by_case in held.items():
         for case, line in by_case.items():
             want = dict(line['projection'])
-            old = outcome_text(want)
-            for entry in entries:
-                for item in entry.get('case_outcomes') or []:
-                    if not (
-                        isinstance(item, dict)
-                        and item.get('case') == case
-                        and item.get('cell') == CELL
-                        and item.get('runner') == runner
-                        and item.get('old') == old
-                    ):
-                        continue
-                    new = outcome_projection(item.get('new'), want)
-                    refusal = (
-                        new is not None
-                        and new.get('outcome.result') == 'refusal'
-                        and want.get('outcome.result') == 'success'
-                    )
-                    if new is not None and (
-                        not refusal or entry.get('approved_by') == 'owner'
-                    ):
-                        want = new
-                        break
-                else:
-                    continue
-                break
-            found.setdefault(case, {})[runner] = want
+            found.setdefault(case, {})[runner] = (
+                moved(entries, case, runner, outcome_text(want), want) or want
+            )
+    for entry in entries:
+        for item in entry.get('case_outcomes') or []:
+            if not isinstance(item, dict) or item.get('old') != 'none':
+                continue
+            case, runner = item.get('case'), item.get('runner')
+            ref = reference.get(case)
+            if (
+                ref is None
+                or runner not in RUNNERS[1:]
+                or case in held.get(runner, {})
+            ):
+                continue
+            want = projection(ref, list(OUTCOME_FIELDS))
+            new = moved(entries, case, runner, 'none', want)
+            if new is not None:
+                found.setdefault(case, {})[runner] = new
     return found
 
 
@@ -1195,7 +1239,9 @@ def check_baselines(
         crashes = {
             case
             for case, observation in by_case.items()
-            if old_client_crash(runner, observation, reference.get(case), ordered)
+            if old_client_crash(
+                runner, observation, reference.get(case), ordered
+            )
         }
         for case, line in sorted(held.get(runner, {}).items()):
             if case in gone:
@@ -1314,9 +1360,13 @@ def check(
         mine = check_register(report, checkpoint, candidate, repo)
         entries = approved(mine)
         held = baselines(checkpoint)
+        reference = reference_lines(candidate)
         if effective_out is not None:
             effective_out.write_text(
-                json.dumps(outcomes(effective(held, entries)), sort_keys=True),
+                json.dumps(
+                    outcomes(effective(held, entries, reference)),
+                    sort_keys=True,
+                ),
                 encoding='utf-8',
             )
         # A case file or base changes only under an entry of this change
@@ -1397,7 +1447,7 @@ def check(
                 corpus,
                 entries,
                 gone,
-                reference_lines(candidate),
+                reference,
                 (new_policy or {}).get('ordered')
                 if isinstance(new_policy, dict)
                 else None,
@@ -1419,20 +1469,25 @@ def check(
 def accept(
     repo: Path, observation_files: list[Path], checkpoint: str | None = None
 ) -> dict[str, list[dict[str, Any]]]:
-    r"""The proposed baselines: per runner given, a line for each case every
-    runner given meets: its effective expectation where ``checkpoint``'s
-    baselines hold the case for that runner (:func:`effective`, with the
-    candidate's approved entries), otherwise the committed reference's
-    projection, fields a runner cannot observe left out of that comparison.
+    r"""The proposed baselines: per runner given, a line for each case the
+    runner observes and meets: its effective expectation where
+    :func:`effective` gives one (``checkpoint``'s baseline or, on a first
+    admission, the reference's outcome, either moved by the candidate's
+    approved entries), otherwise the committed reference's projection,
+    fields a runner cannot observe left out of that comparison. Each runner
+    is judged alone, so one off its expectation gets no line and the
+    others keep theirs; ``check`` then names the acceptance case it lacks.
     Without a checkpoint (the first baselines) only reference equality
-    admits a case. A case is left out where a runner's line would be an
-    ``INTERNAL_ERROR`` other than the old client's crash
-    (:func:`old_client_crash`), which ``check`` refuses."""
+    admits a case. A line that would be an ``INTERNAL_ERROR`` other than
+    the old client's crash (:func:`old_client_crash`), which ``check``
+    refuses, is left out."""
     tree = Tree(repo, git(repo, 'rev-parse', 'HEAD^{commit}').strip())
+    reference = reference_lines(tree)
     expected = (
         effective(
             baselines(Tree(repo, checkpoint)),
             approved(_yaml(tree.read(REGISTER), REGISTER)),
+            reference,
         )
         if checkpoint
         else {}
@@ -1440,37 +1495,33 @@ def accept(
     policy = _yaml(tree.read(POLICY), POLICY)
     fields = [str(f) for f in policy['baseline']]
     marks = (_yaml(tree.read(AVAILABILITY), AVAILABILITY) or {})['runners']
-    reference = reference_lines(tree)
     observed = observations(observation_files)
     found: dict[str, list[dict[str, Any]]] = {runner: [] for runner in observed}
     for case in sorted(cases(tree)):
         ref = reference.get(case)
-        if any(case not in by_case for by_case in observed.values()):
-            continue
-
-        meets = [
-            (
-                projection(by_case[case], list(want)) == want
-                if (want := expected.get(case, {}).get(runner)) is not None
+        for runner, by_case in observed.items():
+            observation = by_case.get(case)
+            if observation is None:
+                continue
+            want = expected.get(case, {}).get(runner)
+            meets = (
+                projection(observation, list(want)) == want
+                if want is not None
                 else ref is not None
                 and all(
-                    at(by_case[case], name) == at(ref, name)
+                    at(observation, name) == at(ref, name)
                     for name in fields
                     if (marks.get(runner) or {}).get(name) != 'unavailable'
                 )
             )
-            for runner, by_case in observed.items()
-        ]
-        if not all(meets) or any(
-            at(by_case[case], 'outcome.code') == PANIC
-            and not old_client_crash(
-                runner, by_case[case], ref, policy.get('ordered')
-            )
-            for runner, by_case in observed.items()
-        ):
-            continue
-        for runner, by_case in observed.items():
-            projected = projection(by_case[case], fields)
+            if not meets or (
+                at(observation, 'outcome.code') == PANIC
+                and not old_client_crash(
+                    runner, observation, ref, policy.get('ordered')
+                )
+            ):
+                continue
+            projected = projection(observation, fields)
             found[runner].append(
                 {
                     'case': case,
@@ -1501,7 +1552,13 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
         return problems
     out.write_text(
         json.dumps(
-            outcomes(effective(baselines(before), approved(mine))),
+            outcomes(
+                effective(
+                    baselines(before),
+                    approved(mine),
+                    reference_lines(candidate),
+                )
+            ),
             sort_keys=True,
         ),
         encoding='utf-8',
