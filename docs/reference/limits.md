@@ -34,8 +34,9 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a
 context of its own, sampled around that batch's rows rather than copied from
-the first, and `predict()` sends one call per batch and returns one result. Its `row_index` counts across the whole request, in the order the
-indices were given. A session scores those batches against the context it
+the first, and `predict()` sends one call per batch and returns one result.
+Its `row_index` counts across the whole request, in the order the indices were
+given. A session scores those batches against the context it
 pinned, so the context is uploaded once rather than once per call.
 
 Every batch is built before the first is sent, each with its own context, so
@@ -43,8 +44,8 @@ the whole population is held in memory at once. More than ten batches of one
 question is refused at `materialize()` for that reason rather than by the
 endpoint; ask about fewer entities at a time, or raise
 `sdm_client.materializers.relational.MOST_CALLS`. A question asked in parts is
-counted by its parts instead, against `sdm_client.decompose.MOST_PARTS`, since
-no part of one is batched.
+held to `sdm_client.decompose.MOST_PARTS` instead, counting the calls its
+parts come to rather than the parts.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as
@@ -53,17 +54,19 @@ the whole population twice.
 
 **Batch size is chosen from the row count, not from the bytes.** The 30 MiB
 body is checked per batch at `materialize()`, before anything is sent.
-Databricks model serving weighs its own wrapped envelope
-against a smaller 16 MB, and only at send time, so a wide graph can pass
-`materialize()` and be refused on the first call. Ask about fewer entities at
-a time there.
+Databricks model serving weighs its own wrapped envelope against a smaller
+16 MB, and only at send time, so a wide graph can pass `materialize()` and be
+refused on the first call. Ask about fewer entities at a time there.
 
-**A decomposed question is not batched.** A ranking is asked as one call per
-candidate, and a forecast as one per step, and both are counted as that many
-calls. Batching a part would multiply them by the batches, so more entities
-than one call scores is refused for both. A ranking has a second reason: a
+**A ranking is never batched.** It is asked as one call per candidate, and a
 candidate is reported unscored for the whole ranking rather than per batch, so
 one batch whose context held a single class would drop it from every row.
+More entities than one call scores is refused for a ranking.
+
+**A forecast is batched, and counted.** Its steps are ordinary regressions,
+merged per step, so a step may be asked in several calls. What is held to
+`MOST_PARTS` is the steps times the batches, because that is what is sent: a
+four-step forecast over three batches is twelve calls, not four.
 
 The tabular cap was measured at the boundary rather than read from a document:
 10,000 context rows are answered and 10,001 come back as

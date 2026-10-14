@@ -88,27 +88,37 @@ def test_a_ranking_is_one_question_per_candidate():
     )
 
 
-@pytest.mark.parametrize(
-    ('query', 'how'),
-    [
-        (RANK, {'candidates': [0, 1]}),
-        (FORECAST, {}),
-    ],
-    ids=['ranking', 'forecast'],
-)
-def test_a_part_is_one_call_and_more_entities_than_one_holds_is_refused(
-    monkeypatch, query, how
+def test_a_ranking_over_more_entities_than_one_call_scores_is_refused(
+    monkeypatch,
 ):
-    """Batching a part would multiply the fan-out the guard counts, and would
-    report a candidate unscored for the whole ranking on one batch's context."""
+    """A candidate is reported unscored for the whole ranking, so a batch
+    whose context taught it nothing would drop it from every row."""
     pytest.importorskip('sdm_relational_engine')
     from sdm_client.models import RELATIONAL_LIMITS
 
     monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
     with pytest.raises(StructuredDataError) as refused:
-        built(query, indices=[1, 2, 3, 4, 5], **how)
+        built(RANK, indices=[1, 2, 3, 4, 5], candidates=[0, 1])
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
     assert 'fewer entities' in str(refused.value)
+
+
+def test_a_batched_forecast_is_held_to_the_calls_it_comes_to(monkeypatch):
+    """Steps are merged per step, so batching one is only a question of how
+    many calls it makes: counted, not refused on sight."""
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client import decompose
+    from sdm_client.models import RELATIONAL_LIMITS
+
+    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
+    request = built(FORECAST, indices=[1, 2, 3, 4, 5])
+    assert len(request.parts) == 4
+    assert len(request.parts[0].payloads) == 3
+
+    monkeypatch.setattr(decompose, 'MOST_PARTS', 4)
+    with pytest.raises(StructuredDataError) as refused:
+        built(FORECAST, indices=[1, 2, 3, 4, 5])
+    assert refused.value.details['calls'] == 12
 
 
 @pytest.fixture(scope='module')

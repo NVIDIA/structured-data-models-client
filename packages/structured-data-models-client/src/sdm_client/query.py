@@ -36,7 +36,7 @@ from sdm_client.decompose import (
     Decomposition,
     about_the_part,
     parts_of,
-    refuse_a_part_asked_in_several_calls,
+    refuse_the_calls_a_batched_part_would_make,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
@@ -405,7 +405,7 @@ class PredictiveQuery:
                 raise
             except StructuredDataError as error:
                 raise about_the_part(error, rewritten, step) from error
-            refuse_a_part_asked_in_several_calls(gathered[-1], rewritten)
+            refuse_the_calls_a_batched_part_would_make(gathered[-1], rewritten)
         # A copy, because the carrier cannot be one of the things it carries:
         # asking it would ask the first part, which would ask the first part.
         whole = copy.copy(gathered[0])

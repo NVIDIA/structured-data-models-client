@@ -18,10 +18,11 @@ these packages. All five distributions share one version and one entry.
   time on a wide graph.
 
   Two things are still refused. Every batch is built before the first is sent,
-  so more than ten of them is refused rather than held in memory at once; and
-  a ranking or a forecast is still asked as one call per candidate or step,
-  because a candidate is reported unscored for the whole ranking rather than
-  per batch.
+  so more than ten batches of one question is refused rather than held in
+  memory at once; and a ranking is not batched at all, because a candidate is
+  reported unscored for the whole ranking rather than per batch. A forecast's
+  steps are batched, and the fan-out budget counts the calls they come to
+  rather than the steps.
 
 - A call that fails part way through a batched `predict()` carries the answers
   already paid for on the error, as `details['answered']` and
