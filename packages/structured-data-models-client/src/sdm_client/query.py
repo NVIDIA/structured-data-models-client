@@ -407,7 +407,7 @@ class PredictiveQuery:
         how = {name: value for name, value in how.items() if value is not None}
         refuse_a_part_that_would_take_several_calls(
             rewritten,
-            len(how.get('indices') or ()),
+            0 if how.get('indices') is None else len(how['indices']),
             rows_one_call_scores(rows_per_call_asked_for(how)),
         )
         # How many candidates to keep belongs to the whole ranking. Each part
