@@ -359,7 +359,15 @@ def resolve(
     # it runs, rather than one recorded in a commit (E131).
     live = phase_push is None
     if phase_push is not None:
-        before = git(repo, 'rev-parse', f'{phase_push}^{{commit}}').strip()
+        try:
+            before = git(repo, 'rev-parse', f'{phase_push}^{{commit}}').strip()
+        except Unreadable:
+            # A previous tip the push's history does not hold, as after a
+            # forced push: named, not git's unknown revision.
+            return None, [
+                'the push is not a fast-forward of the previous tip: '
+                f'{phase_push[:12]} is not in the history pushed'
+            ]
         landings = [
             sha
             for sha in git(repo, 'rev-list', f'{before}..{candidate}').split()
