@@ -52,16 +52,11 @@ duckdb = [
     "duckdb>=1.5.0",
 ]
 snowflake = [
-    # Held below 5. The 5.0 driver empties `DEFAULT_CONFIGURATION`, takes
-    # `**kwargs` in the constructor, and rewrites keyword names through
-    # several maps, so the set of connection keywords it accepts is no longer
-    # enumerable: `network_timeout` is accepted but appears in none of the
-    # dataclass fields or alias maps it exposes. This package checks a
-    # caller's keywords against that set to catch a typo, which it cannot do
-    # against a surface it cannot read. 5.0 also deprecates the
-    # `_paramstyle` the server-side binding depends on. Both are tractable,
-    # neither is work to do against a driver released the morning of a
-    # release.
+    # 5.0 empties `DEFAULT_CONFIGURATION` and rewrites keyword names through
+    # several maps, leaving the set it accepts unreadable: `network_timeout`
+    # is accepted but named nowhere. This package checks a caller's keywords
+    # against that set to catch a typo. 5.0 also deprecates the `_paramstyle`
+    # the server-side binding sets. Lifting this wants a live Snowflake.
     "snowflake-connector-python>=4,<5",
 ]
 databricks = [
@@ -73,10 +68,9 @@ databricks = [
     # parser. Databricks Runtime 14.3 LTS ships none, so the client's
     # `databricks` extra, which points here, has to bring it.
     #
-    # 6.0.1 is the first release with a CPython 3.12 wheel. Below it there is
-    # only the 6.0 sdist, whose build fails against a current Cython, so a
-    # resolver that backtracks this far stops at a compile error rather than
-    # at an unsatisfiable requirement.
+    # 6.0.1 is the first release with a 3.12 wheel. Below it only the 6.0
+    # sdist remains, and it does not build against a current Cython, so a
+    # resolver backtracking this far stops at a compile error.
     "pyyaml>=6.0.1",
     # For `sdm_connectors.databricks.warehouse`, which looks the warehouse up as
     # the caller's workspace client.
