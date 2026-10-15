@@ -462,10 +462,17 @@ class _Capture:
         if operation['op'] == 'predict':
             state = operation['state']
             self._request_id = operation['request_id']
-            # A forecast's later steps each carry their own id, in step
-            # order (T1.36 fix 24).
-            self._request_ids = [operation['request_id']] + [
-                step['request_id'] for step in state.get('forecast') or ()
+            # The id each call carries: one call per step with rows to
+            # score, in step order, each with its own step's id (T1.36 fixes
+            # 24 and 27); a step with none makes no call, as in the core.
+            steps = [(operation['request_id'], state['payload'])] + [
+                (step['request_id'], step['payload'])
+                for step in state.get('forecast') or ()
+            ]
+            self._request_ids = [
+                request_id
+                for request_id, payload in steps
+                if not _nothing_to_score(json.loads(attachments[payload]))
             ]
             self.inputs.append(
                 {
@@ -561,6 +568,11 @@ class _Capture:
             self._state = result['state']
             self.materialized = {'version': result['state']['version']}
         if result.get('op') == 'predict':
+            if self._request_ids:
+                raise RunnerFailure(
+                    'predict answered without calling the model for a step '
+                    'with rows to score'
+                )
             self._answer = result
             self.predicted = {
                 'body': self._body,
@@ -575,13 +587,9 @@ class _Capture:
             self._body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
-            # The calls come in step order, and a step with no row to score
-            # makes no call (T1.36 fix 25): the call's id is the next of the
-            # steps' ids it carries, any step skipped before it dropped.
+            # The next step with rows to score's id, and no call past them.
             carried = self._body.get('metadata', {}).get('request_id')
-            if carried in self._request_ids:
-                del self._request_ids[: self._request_ids.index(carried) + 1]
-            elif self._request_ids or carried != self._request_id:
+            if not self._request_ids or carried != self._request_ids.pop(0):
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
                     'was started with'
@@ -691,6 +699,23 @@ _INTEGER_TAGS = {
     'uint32': 'u32',
     'uint64': 'u64',
 }
+
+
+def _nothing_to_score(payload: Any) -> bool:
+    r"""Whether a payload has no row to score, so ``predict`` makes no call
+    for it: the core's rule (``sdm_request::predict::nothing_to_score``),
+    its ``predict`` half's ``instance_table`` with a list of text columns
+    and an empty list of rows; any other shape has rows to score."""
+    half = payload.get('predict') if isinstance(payload, dict) else None
+    table = half.get('instance_table') if isinstance(half, dict) else None
+    if not isinstance(table, dict):
+        return False
+    columns, rows = table.get('columns'), table.get('rows')
+    return (
+        isinstance(columns, list)
+        and all(isinstance(column, str) for column in columns)
+        and rows == []
+    )
 
 
 def _scalars(table: Any) -> list[dict[str, Any]]:
