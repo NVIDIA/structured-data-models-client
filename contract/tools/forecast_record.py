@@ -245,10 +245,15 @@ def _shop() -> list[str]:
     return EN.shop()
 
 
-def drive(vector: dict[str, Any], *, core: bool = False) -> dict[str, Any]:
+def drive(
+    vector: dict[str, Any],
+    *,
+    core: bool = False,
+    routes: list[str] | None = None,
+) -> dict[str, Any]:
     r"""``vector`` through the public calls of the ``sdm_client`` this
     interpreter imports, against the scripted endpoint; forced onto the
-    core's DuckDB routes with ``core``. Its outcome (with the message),
+    core's DuckDB routes with ``core``, or onto ``routes`` when given. Its outcome (with the message),
     each request received and the result."""
     import duckdb
     import pandas as pd
@@ -260,7 +265,9 @@ def drive(vector: dict[str, Any], *, core: bool = False) -> dict[str, Any]:
     ).serve
     runner = _module('run_python', ROOT / 'contract/runners/run_python.py')
     previous = os.environ.pop('SDM_CORE_ROUTES', None)
-    if core:
+    if routes is not None:
+        os.environ['SDM_CORE_ROUTES'] = ','.join(routes)
+    elif core:
         os.environ['SDM_CORE_ROUTES'] = ','.join(EN.core_routes({}))
     connection = duckdb.connect()
     stage = 'from_source'
@@ -348,6 +355,81 @@ def public(answer: dict[str, Any]) -> dict[str, Any]:
 # --- recording ------------------------------------------------------------------
 
 
+def observed_predicted(observation: dict[str, Any]) -> dict[str, Any]:
+    r"""An observation's ``core.predicted`` as the hosts are compared on
+    it: the body by its ``payload``-rule digest and tables (the request id
+    masked), its JSON type, the model, metadata and result; and the
+    outcome's result and code."""
+    core = observation.get('core') or {}
+    predicted = core.get('predicted') or {}
+    body = predicted.get('body')
+    return {
+        'outcome': {
+            'result': observation['outcome']['result'],
+            'code': observation['outcome']['code'],
+        },
+        'body_type': type(body).__name__,
+        'body': (
+            {'digest': EN.digest(body), 'tables': EN.tables_with_rows(body)}
+            if isinstance(body, dict)
+            else None
+        ),
+        'model': predicted.get('model'),
+        'metadata': predicted.get('metadata'),
+        'result': predicted.get('result'),
+    }
+
+
+def observe(vectors: list[dict[str, Any]], mode: str) -> dict[str, Any]:
+    r"""The vectors the reference answers and the core is held to, as
+    cases through ``run_python.py --mode mode`` in this interpreter: each
+    observation's :func:`observed_predicted`, by vector id."""
+    import tempfile
+
+    document = json.loads(OUT.read_text(encoding='utf-8'))
+    held = {
+        v['id']
+        for v in document['vectors']
+        if v['rust_host'] == 'reference'
+        and v['reference']['outcome']['result'] == 'success'
+    }
+    with tempfile.TemporaryDirectory(prefix='t136fc-') as tmp:
+        cases = Path(tmp) / 'cases'
+        cases.mkdir()
+        for vector in vectors:
+            if vector['id'] in held:
+                case = case_for(vector)
+                (cases / f'{case["id"]}.json').write_text(
+                    json.dumps(case), encoding='utf-8'
+                )
+        out = Path(tmp) / 'out.jsonl'
+        done = subprocess.run(
+            [
+                sys.executable,
+                '-I',
+                str(ROOT / 'contract/runners/run_python.py'),
+                '--mode',
+                mode,
+                '--out',
+                str(out),
+                str(cases),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+        if done.returncode != 0:
+            raise RuntimeError(f'{mode}: {done.stdout}\n{done.stderr}')
+        return {
+            json.loads(line)['case'][len(CASE_PREFIX) :]: observed_predicted(
+                json.loads(line)
+            )
+            for line in out.read_text(encoding='utf-8').splitlines()
+        }
+
+
 def _environment() -> dict[str, str]:
     import duckdb
     import numpy as np
@@ -412,8 +494,24 @@ def main(argv: list[str]) -> int:
                 entry['python_core']['outcome']['code'],
                 file=sys.stderr,
             )
+    elif part == 'observation':
+        # python-core's observation (run_python.py --mode python-core) of
+        # each forecast the reference answers, recorded after fix 21: the
+        # shape rust-host's observation is held to.
+        document['observation_candidate'] = _git(ROOT)
+        observed = observe(
+            [v for v in VECTORS if v['id'] in by_id], 'python-core'
+        )
+        for vector in VECTORS:
+            if vector['id'] in observed:
+                by_id[vector['id']]['python_core_observation'] = observed[
+                    vector['id']
+                ]
     else:
-        print('usage: forecast_record.py reference|candidate', file=sys.stderr)
+        print(
+            'usage: forecast_record.py reference|candidate|observation',
+            file=sys.stderr,
+        )
         return 2
     document['format'] = FORMAT
     document['recorded_by'] = 'contract/tools/forecast_record.py'

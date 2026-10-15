@@ -20,9 +20,12 @@
 //! each number by kind, sign and exact value, sorted keys) and the tables
 //! it carries, and whose result holds the reference's `to_pandas()`
 //! columns (`row_index`, `id`, `forecast_step`, `prediction`) by name with
-//! the reference's rows, cell for cell. The calls are read from the
-//! `predict` answer's `body`: one object for one call, or the list of every
-//! call's body in the order sent. Where it is `python-core` (a target or
+//! the reference's rows, cell for cell. The calls are read from this
+//! host's in-process answer (`host::run`'s `Answer::Predicted`): its
+//! `calls`, every call's body in the order sent, when it carries them;
+//! otherwise its `body`, a list of every call's or one call's object. The
+//! observation the case runner writes is held apart, to python-core's
+//! shape (`rust_host_s_observation_of_a_forecast_is_python_core_s`). Where it is `python-core` (a target or
 //! entity filter, which the core does not port), the answer must be
 //! python-core's refusal code as recorded. Fails today on every vector the
 //! reference answers: the core refuses a forecast `UNSUPPORTED_REQUEST`
@@ -31,6 +34,8 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use sdm_testkit::bases;
 use sdm_testkit::case::Case;
@@ -193,8 +198,12 @@ fn payload(body: &Value, exclusions: &[Vec<String>]) -> Value {
     json!({"digest": digest(body, exclusions), "tables": tables})
 }
 
-/// The calls the core made, from `predict`'s answer: one body, or a list.
+/// The calls the core made, from `predict`'s in-process answer: its
+/// `calls` when it carries them, else its `body`, a list or one object.
 fn calls(predicted: &Value) -> Vec<Value> {
+    if let Value::Array(bodies) = &predicted["calls"] {
+        return bodies.clone();
+    }
     match &predicted["body"] {
         Value::Array(bodies) => bodies.clone(),
         Value::Null => vec![],
@@ -408,4 +417,278 @@ fn the_vectors_hold_several_steps_and_refusals() {
     assert_eq!(steps["count-days-4"], 4);
     assert_eq!(steps["sum-days-1"], 1);
     assert!(refusals >= 5);
+}
+
+// --- the observation the case runner writes -------------------------------------
+
+/// The JSON Schema type names `value` satisfies.
+fn is_type(value: &Value, name: &str) -> bool {
+    match name {
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        "string" => value.is_string(),
+        "integer" => value.is_i64() || value.is_u64(),
+        "number" => value.is_number(),
+        "boolean" => value.is_boolean(),
+        "null" => value.is_null(),
+        _ => false,
+    }
+}
+
+/// `value` against `schema`'s `type`, `required`, `properties`,
+/// `additionalProperties: false` and `items`: the keywords
+/// `contract/observation.schema.json` gives `core.predicted`.
+fn conforms(value: &Value, schema: &Value, at: &str, problems: &mut Vec<String>) {
+    let types: Vec<&str> = match &schema["type"] {
+        Value::String(one) => vec![one.as_str()],
+        Value::Array(many) => many.iter().filter_map(Value::as_str).collect(),
+        _ => vec![],
+    };
+    if !types.is_empty() && !types.iter().any(|t| is_type(value, t)) {
+        problems.push(format!("{at} fails 'type' {types:?}"));
+        return;
+    }
+    if let Value::Object(object) = value {
+        for key in schema["required"].as_array().into_iter().flatten() {
+            let key = key.as_str().unwrap();
+            if !object.contains_key(key) {
+                problems.push(format!("{at} lacks {key}"));
+            }
+        }
+        for (key, item) in object {
+            match schema["properties"].get(key) {
+                Some(inner) => conforms(item, inner, &format!("{at}/{key}"), problems),
+                None if schema["additionalProperties"] == false => {
+                    problems.push(format!("{at}/{key} is not allowed"));
+                }
+                None => {}
+            }
+        }
+    }
+    if let (Value::Array(items), Some(inner)) = (value, schema.get("items")) {
+        for (i, item) in items.iter().enumerate() {
+            conforms(item, inner, &format!("{at}/{i}"), problems);
+        }
+    }
+}
+
+/// An observation's `core.predicted` as the vectors record python-core's
+/// (`forecast_record.observed_predicted`).
+fn observed_predicted(observation: &Value, exclusions: &[Vec<String>]) -> Value {
+    let predicted = &observation["core"]["predicted"];
+    let body = &predicted["body"];
+    let kind = match body {
+        Value::Object(_) => "dict",
+        Value::Array(_) => "list",
+        Value::Null => "NoneType",
+        _ => "other",
+    };
+    json!({
+        "outcome": {
+            "result": observation["outcome"]["result"],
+            "code": observation["outcome"]["code"],
+        },
+        "body_type": kind,
+        "body": if body.is_object() { payload(body, exclusions) } else { Value::Null },
+        "model": predicted["model"],
+        "metadata": predicted["metadata"],
+        "result": predicted["result"],
+    })
+}
+
+/// `cases` through `sdm-contract-run`, as CI runs it: each observation by
+/// case id.
+fn contract_run(name: &str, cases: &[Value]) -> BTreeMap<String, Value> {
+    let dir = std::env::temp_dir().join(format!("t136fc-{name}-{}", std::process::id()));
+    let into = dir.join("cases");
+    std::fs::create_dir_all(&into).unwrap();
+    for case in cases {
+        let id = case["id"].as_str().unwrap();
+        std::fs::write(into.join(format!("{id}.json")), case.to_string()).unwrap();
+    }
+    let out = dir.join("rust-host.jsonl");
+    let done = Command::new(env!("CARGO_BIN_EXE_sdm-contract-run"))
+        .current_dir(root())
+        .stdin(Stdio::null())
+        .arg("--out")
+        .arg(&out)
+        .arg(&into)
+        .output()
+        .unwrap();
+    assert!(
+        done.status.success(),
+        "sdm-contract-run failed: {}",
+        String::from_utf8_lossy(&done.stderr)
+    );
+    std::fs::read_to_string(&out)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            let observation: Value = serde_json::from_str(line).unwrap();
+            (
+                observation["case"].as_str().unwrap().to_owned(),
+                observation,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn rust_host_s_observation_of_a_forecast_is_python_core_s() {
+    // What sdm-contract-run writes of each forecast the reference answers:
+    // its core.predicted conforms to contract/observation.schema.json, and
+    // is python-core's observation of the same case (recorded by
+    // forecast_record.py's `observation` part): the body an object, the
+    // same request (its digest and tables, the request id masked), model,
+    // metadata and result. Fails at f744de6b: the body is a list.
+    let all = vectors();
+    let exclusions = exclusions(&all);
+    let schema: Value = serde_json::from_str(
+        &std::fs::read_to_string(root().join("contract/observation.schema.json")).unwrap(),
+    )
+    .unwrap();
+    let subschema = &schema["properties"]["core"]["properties"]["predicted"];
+    assert_eq!(subschema["properties"]["body"]["type"], "object");
+    let held: Vec<&Value> = all["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v.get("python_core_observation").is_some())
+        .collect();
+    assert_eq!(held.len(), 9);
+    let observed = contract_run(
+        "observation",
+        &held.iter().map(|v| v["case"].clone()).collect::<Vec<_>>(),
+    );
+    let mut failures = Vec::new();
+    for vector in held {
+        let id = vector["case"]["id"].as_str().unwrap();
+        let observation = &observed[id];
+        let mut problems = Vec::new();
+        conforms(
+            &observation["core"]["predicted"],
+            subschema,
+            "core/predicted",
+            &mut problems,
+        );
+        let got = observed_predicted(observation, &exclusions);
+        let want = &vector["python_core_observation"];
+        for part in [
+            "outcome",
+            "body_type",
+            "body",
+            "model",
+            "metadata",
+            "result",
+        ] {
+            if got[part] != want[part] {
+                problems.push(format!("{part} is not python-core's"));
+            }
+        }
+        if !problems.is_empty() {
+            failures.push(format!("{id}: {}", problems.join("; ")));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "rust-host's observations differ from python-core's:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn python_core_s_recorded_observation_is_of_the_last_step_s_call() {
+    // The recorded shape, read against the reference: python-core's
+    // observation keeps the last call's body, which is the reference's last
+    // request, and the merged result, one row per entity and step.
+    for vector in vectors()["vectors"].as_array().unwrap() {
+        let Some(observed) = vector.get("python_core_observation") else {
+            continue;
+        };
+        let payloads = vector["reference"]["payloads"].as_array().unwrap();
+        let last = payloads.last().unwrap();
+        assert_eq!(
+            observed["body"]["digest"], last["digest"],
+            "{}",
+            vector["id"]
+        );
+        assert_eq!(
+            observed["body"]["tables"], last["tables"],
+            "{}",
+            vector["id"]
+        );
+        assert_eq!(
+            observed["result"]["rows"].as_array().unwrap().len(),
+            2 * payloads.len()
+        );
+    }
+}
+
+// --- a forecast of many steps is refused at once -------------------------------
+
+const QUICK: Duration = Duration::from_secs(2);
+
+/// The forecast `sum-days-3` asked over `n` steps, and the S0 case
+/// `s0.refuse.task-forecast-zero` asked the same: each case as JSON.
+fn many_steps(n: &str) -> (Value, Value) {
+    let all = vectors();
+    let mut materialize = all["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == "sum-days-3")
+        .unwrap()["case"]
+        .clone();
+    let pql = format!(
+        "PREDICT SUM(orders.price, 0, 1, days) FORECAST {n} TIMEFRAMES FOR EACH users.user_id"
+    );
+    materialize["id"] = json!(format!("t136fc.steps-{n}"));
+    materialize["input"]["pql"] = json!(pql);
+    let text =
+        std::fs::read_to_string(root().join("contract/cases/s0/s0.refuse.task-forecast-zero.json"))
+            .unwrap();
+    let mut validate: Value = serde_json::from_str(&text).unwrap();
+    validate["id"] = json!(format!("t136fc.validate-{n}"));
+    validate["input"]["pql"] = json!(pql);
+    (materialize, validate)
+}
+
+/// The case run on this host, timed: its outcome and code.
+fn timed(case: &Value) -> (Value, Duration) {
+    let case: Case = serde_json::from_value(case.clone()).unwrap();
+    let bases = bases::load(&root().join("contract/bases.yaml")).unwrap();
+    let start = Instant::now();
+    let observed = host::run(&case, &bases).unwrap();
+    let took = start.elapsed();
+    let (outcome, code) = observed.answer.outcome();
+    (json!([outcome, code]), took)
+}
+
+#[test]
+fn a_forecast_of_many_steps_is_refused_at_once() {
+    // Past the grammar's most (10,000) the query itself is refused, at
+    // validation and at materialize; at 10,000 and at 201, past the default
+    // most_parts (200), materialize refuses it. Each INVALID_REQUEST within
+    // two seconds: no step is built for a refused forecast's count.
+    for n in ["1000000000", "4294967297", "10001", "10000", "201"] {
+        let (materialize, validate) = many_steps(n);
+        let (got, took) = timed(&materialize);
+        assert_eq!(
+            got,
+            json!(["refusal", "INVALID_REQUEST"]),
+            "materialize, {n} steps"
+        );
+        assert!(took < QUICK, "materialize, {n} steps: {took:?}");
+        let (got, took) = timed(&validate);
+        let accepted = matches!(n, "10000" | "201");
+        let want = if accepted {
+            json!(["success", null])
+        } else {
+            json!(["refusal", "INVALID_REQUEST"])
+        };
+        // most_parts is materialize's: validation accepts what the grammar
+        // allows, whatever the caller's limit.
+        assert_eq!(got, want, "validate_query, {n} steps");
+        assert!(took < QUICK, "validate_query, {n} steps: {took:?}");
+    }
 }

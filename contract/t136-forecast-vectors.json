@@ -764,6 +764,172 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "cfbb68874c35c9f3f1b14e4af31f67b2d7aa52d81abca6c17a9a361b16451aa6",
+     "tables": {
+      "context.instance_table": {
+       "rows": 464,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 1711,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 464,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "4"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "5"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -1147,6 +1313,104 @@
     "warnings": [
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "b68d37e6853070f478152323df8d1d7c75a7abb7b8fb30c1e6107eedcd082a4a",
+     "tables": {
+      "context.instance_table": {
+       "rows": 112,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 408,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 112,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -1711,6 +1975,138 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "cfbb68874c35c9f3f1b14e4af31f67b2d7aa52d81abca6c17a9a361b16451aa6",
+     "tables": {
+      "context.instance_table": {
+       "rows": 464,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 1711,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 464,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -2637,6 +3033,206 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "32ecd9da62f3e20e50012326387262e065e74a211cc00d0d83076e107980c7f0",
+     "tables": {
+      "context.instance_table": {
+       "rows": 216,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 729,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 216,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "4"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "4"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "6"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "5"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "4"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "7"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -3201,6 +3797,138 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "84bd33678597ff950fc667d169bfda5dcf9eec64c4c33b15913b2034ddd0ec04",
+     "tables": {
+      "context.instance_table": {
+       "rows": 58,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 203,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 58,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -3765,6 +4493,138 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "1711ea777d1b7a9a998e12df0a83c3f4d9c630cf43473325cf2ffd4bb14198f0",
+     "tables": {
+      "context.instance_table": {
+       "rows": 58,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 212,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 58,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -4329,6 +5189,138 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "1fff6e36ea8ac0ae6d04b2799969a70f49156fbad69bf539837dd77734578b1d",
+     "tables": {
+      "context.instance_table": {
+       "rows": 60,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 203,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 60,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -5078,6 +6070,172 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "49e65fd109dacfd9ed9bbb2040374c5c9aeddecbd4bf35296abca49ab3e7721b",
+     "tables": {
+      "context.instance_table": {
+       "rows": 8,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 1,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 8,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "4"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "5"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -5823,6 +6981,172 @@
      "UserWarning",
      "UserWarning"
     ]
+   },
+   "python_core_observation": {
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "body_type": "dict",
+    "body": {
+     "digest": "cfbb68874c35c9f3f1b14e4af31f67b2d7aa52d81abca6c17a9a361b16451aa6",
+     "tables": {
+      "context.instance_table": {
+       "rows": 464,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 1711,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 464,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    },
+    "model": "kumo-relational",
+    "metadata": {},
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "type": "int64"
+      },
+      {
+       "name": "id",
+       "type": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "type": "int64"
+      },
+      {
+       "name": "prediction",
+       "type": "float64"
+      },
+      {
+       "name": "answer_index",
+       "type": "int64"
+      }
+     ],
+     "rows": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "0"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "2"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "4"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "1"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "3"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       },
+       {
+        "i64": "5"
+       }
+      ]
+     ]
+    }
    }
   },
   {
@@ -7692,5 +9016,6 @@
   "pyarrow": "25.0.1",
   "numpy": "2.5.3",
   "duckdb": "1.5.6"
- }
+ },
+ "observation_candidate": "f744de6b98fe19edc3eb29346365ecda377a9e48"
 }

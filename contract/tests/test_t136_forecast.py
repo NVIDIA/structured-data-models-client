@@ -30,6 +30,19 @@ client hands it over whole. These tests hold the Python side to
   session (``_refuse_to_pin_a_rewritten_question``); and a step that fails
   said of the step (``about_the_part``).
 
+From the review of fix 21:
+
+- ``test_a_forecast_of_many_steps_is_refused_at_once``: 10**9, 10,001 (past
+  the grammar's 10,000), 10,000 and 201 (past the default ``MOST_PARTS``)
+  steps are refused ``INVALID_REQUEST`` within two seconds and 64 MiB of
+  peak memory, on the old route, with validation alone on the core, and
+  with every DuckDB route on the core.
+- ``test_raised_most_parts_lets_steps_through_with_validation_on_the_core``:
+  ``MOST_PARTS`` raised to 250 lets 201 steps through, validation included.
+- ``test_each_step_of_a_forecast_is_sent_with_its_own_request_id``: N calls,
+  N distinct request ids, each ``sdm-`` and twelve hex digits, as the
+  reference draws them.
+
 ``sdm-testkit``'s ``tests/t136_forecast.rs`` holds ``rust-host`` to the same
 vectors. The implementer changes nothing of this file, the vectors or the
 recorder.
@@ -303,3 +316,174 @@ def test_a_forecast_cannot_pin_a_session(
         'context. Ask it with predict(), which sends each and puts the '
         'answers back together.'
     )
+
+
+# --- many steps, refused at once (T1.36 fix 21 review) --------------------------
+
+#: Measures one materialize of a forecast of ``n`` steps in a fresh
+#: interpreter: the outcome, the seconds it took and the growth of the
+#: process's peak resident memory (bytes on macOS, KiB on Linux) across it.
+_MANY_STEPS = r"""
+import json, os, resource, sys, time, warnings
+sys.path.insert(0, sys.argv[1])
+import duckdb, pandas as pd
+warnings.simplefilter('ignore')
+from sdm_client import PredictiveQuery, Schema
+from sdm_connectors import DuckDBSource
+import empty_null_record as EN
+routes, n = json.loads(sys.argv[2]), sys.argv[3]
+if routes:
+    os.environ['SDM_CORE_ROUTES'] = ','.join(routes)
+connection = duckdb.connect()
+for statement in EN.shop():
+    connection.execute(statement)
+schema = Schema.from_source(DuckDBSource(connection))
+text = ('PREDICT SUM(orders.price, 0, 1, days) FORECAST ' + n
+        + ' TIMEFRAMES FOR EACH users.user_id')
+before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+start = time.monotonic()
+try:
+    PredictiveQuery(text, schema).materialize(
+        indices=[0, 1], anchor_time=pd.Timestamp('2024-03-01'))
+    code = None
+except Exception as error:
+    code = getattr(error, 'code', type(error).__name__)
+took = time.monotonic() - start
+grew = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before
+scale = 1 if sys.platform == 'darwin' else 1024
+print(json.dumps({'code': code, 'seconds': took, 'grew': grew * scale}))
+"""
+
+
+def _routes(which: str) -> list[str]:
+    from sdm_client import _routing
+
+    return {
+        'python-old': [],
+        'python-core-s0': list(_routing.S0),
+        'python-core': list(_routing.S0) + R.EN.core_routes({}),
+    }[which]
+
+
+@pytest.mark.parametrize('n', ['1000000000', '10001', '10000', '201'])
+@pytest.mark.parametrize(
+    'route', ['python-old', 'python-core-s0', 'python-core']
+)
+def test_a_forecast_of_many_steps_is_refused_at_once(
+    route: str, n: str
+) -> None:
+    r"""Past the grammar's most (10,000) or the default ``MOST_PARTS`` (200),
+    a forecast is refused ``INVALID_REQUEST`` within two seconds, its peak
+    memory growing by less than 64 MiB: no step is built for a count that
+    is refused. Run in a fresh interpreter, bounded by a timeout."""
+    import subprocess
+
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            _MANY_STEPS,
+            str(ROOT / 'contract/tools'),
+            json.dumps(_routes(route)),
+            n,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        stdin=subprocess.DEVNULL,
+        cwd=ROOT,
+    )
+    assert done.returncode == 0, done.stderr
+    measured = json.loads(done.stdout.strip().splitlines()[-1])
+    assert measured['code'] == 'INVALID_REQUEST'
+    assert measured['seconds'] < 2.0, measured
+    assert measured['grew'] < 64 * 2**20, measured
+
+
+def test_raised_most_parts_lets_steps_through_with_validation_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""``MOST_PARTS`` is the caller's: raised above a forecast's steps, with
+    validation (S0) and every DuckDB route on the core, the forecast is
+    validated and answered, one request per step; the default is no
+    validation-time refusal of its own."""
+    from sdm_client import decompose
+
+    monkeypatch.setattr(decompose, 'MOST_PARTS', 250)
+    vector = {
+        'id': 'raised',
+        'pql': 'PREDICT SUM(orders.price, 0, 1, days) FORECAST 201 TIMEFRAMES '
+        'FOR EACH users.user_id',
+        'anchor_time': R.ANCHOR,
+        'options': {},
+    }
+    got = R.drive(vector, routes=_routes('python-core'))
+    assert got['outcome']['result'] == 'success', got['outcome']
+    assert len(got['payloads']) == 201
+    assert got['result']['rows'] == 402
+
+
+# --- one request id per call (T1.36 fix 21 review) ------------------------------
+
+#: The reference's request id: ``sdm-`` and twelve hex digits, drawn fresh
+#: for every call (``adapters/relational.py``, ``uuid.uuid4().hex[:12]``).
+REQUEST_ID = r'sdm-[0-9a-f]{12}'
+
+
+def _request_ids(routes: list[str], steps: int) -> list[Any]:
+    r"""The ``metadata.request_id`` of each call a forecast of ``steps``
+    steps sends to the scripted endpoint over ``routes``, in order."""
+    import os
+
+    import duckdb
+    import pandas as pd
+    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+    from sdm_connectors import DuckDBSource
+
+    serve = R._module(
+        'scripted_endpoint', ROOT / 'contract/runners/scripted_endpoint.py'
+    ).serve
+    previous = os.environ.pop('SDM_CORE_ROUTES', None)
+    if routes:
+        os.environ['SDM_CORE_ROUTES'] = ','.join(routes)
+    connection = duckdb.connect()
+    try:
+        for statement in R.EN.shop():
+            connection.execute(statement)
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(
+            f'PREDICT SUM(orders.price, 0, 7, days) FORECAST {steps} '
+            'TIMEFRAMES FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[0, 1], anchor_time=pd.Timestamp(R.ANCHOR))
+        with serve() as (url, received), SDMClient(url) as client:
+            client.predict(request, model=KumoRelational())
+        return [
+            json.loads(body).get('metadata', {}).get('request_id')
+            for _, _, body in received.requests
+        ]
+    finally:
+        connection.close()
+        os.environ.pop('SDM_CORE_ROUTES', None)
+        if previous is not None:
+            os.environ['SDM_CORE_ROUTES'] = previous
+
+
+@pytest.mark.parametrize(
+    'route', ['python-old', 'python-core-s0', 'python-core']
+)
+def test_each_step_of_a_forecast_is_sent_with_its_own_request_id(
+    route: str,
+) -> None:
+    r"""A forecast of N steps is N calls, each with its own request id, well
+    formed as the reference's are: the reference and python-core before the
+    move draw one per call. ``python-old`` is the control."""
+    import re
+
+    ids = _request_ids(_routes(route), 3)
+    assert len(ids) == 3
+    assert all(
+        isinstance(i, str) and re.fullmatch(REQUEST_ID, i) for i in ids
+    ), ids
+    assert len(set(ids)) == 3, f'one request id for several calls: {ids}'
