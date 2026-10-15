@@ -68,7 +68,6 @@ VECTORS = ROOT / 'contract/t132g-p2c-vectors.json'
 OLD_VECTORS = ROOT / 'contract/result-vectors.json'
 REFERENCE = next((ROOT / 'contract/reference').glob('*.jsonl'))
 REGRESSION = ROOT / 'contract/cases/s1/base.regression.json'
-INTERVAL = 'arrow:month_day_nano_interval'
 
 
 def _module(name: str, path: Path) -> ModuleType:
