@@ -68,6 +68,27 @@ sent.
   dropped (the response contract's ``INVALID_RESPONSE``), and, with the
   column kept, each malformed answer above (``INVALID_RESPONSE``).
 
+Added after fix 8, at the coordinator's request: the two differences fix 8
+registered for the owner, held as their entries in
+``docs/design/rust-core/register.yaml`` state them, so each is reported
+rather than hidden (a test asserts the reference's outcome, the core's, and
+that they differ; if the core comes to match, it fails and the entry goes
+with it):
+
+- ``test_p1b_86_*``: with the column renamed or dropped, an answer whose
+  ``row_index`` or ``forecast_step`` is ``2**63``, ``2**130`` or
+  ``-2**63 - 1`` is passed through by the reference (in its item and in
+  ``to_pandas()``) and refused on the core, ``INVALID_RESPONSE`` with field
+  ``prediction.row_index`` or ``prediction.forecast_step`` and reason
+  ``out_of_range``. Controls: ``-2**63`` and ``2**63 - 1`` the same on both
+  routes, and with the column kept both routes refuse.
+- ``test_p1b_87_*``: an entity cell of an integer or a float key edited to
+  text holding Tangsa or Kawi five (Unicode 14.0 and 15.0) is the number
+  this interpreter's ``int``/``float`` reads on the reference and the text
+  on the core; where the interpreter reads none (Python 3.10), both give
+  the text. Controls: ASCII and Arabic-Indic five read alike on both
+  routes, and a text key keeps every digit as text on both.
+
 Not here: a request holding more than one payload has no core route
 (``RouteError`` before any call, register ``P1B-4``'s text), whatever its
 entity column.
@@ -149,8 +170,20 @@ def _shop() -> list[str]:
     return statements
 
 
+#: A users table keyed by a double, for an entity read as ``float64``.
+FLOAT_KEYED = [
+    'CREATE TABLE users AS SELECT i::DOUBLE AS user_id,'
+    ' (20 + i)::INTEGER AS age FROM range(8) t(i)',
+    'CREATE TABLE orders AS SELECT i::BIGINT AS order_id,'
+    ' (i % 8)::DOUBLE AS user_id, (10 + i * 1.5)::DOUBLE AS price,'
+    " TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts"
+    ' FROM range(80) t(i)',
+]
+
+
 #: name: (base, query, indices). A regression and a binary classification
-#: over ``int64`` users, and a regression over text-keyed users.
+#: over ``int64`` users, and a regression over text-keyed and over
+#: double-keyed users.
 QUERIES: dict[str, tuple[Callable[[], list[str]], str, list[Any]]] = {
     'regression': (
         _shop,
@@ -166,6 +199,11 @@ QUERIES: dict[str, tuple[Callable[[], list[str]], str, list[Any]]] = {
         lambda: TEXT_KEYED,
         'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
         ['u2', 'u7'],
+    ),
+    'float_key': (
+        lambda: FLOAT_KEYED,
+        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+        [0.0, 1.0],
     ),
 }
 
@@ -371,7 +409,11 @@ def _observed(
                     type(error).__name__,
                     getattr(error, 'code', None),
                     details.get('rule') if isinstance(details, dict) else None,
-                )
+                ),
+                # Where the refusal names them; not compared between routes.
+                'named': {key: details.get(key) for key in ('field', 'reason')}
+                if isinstance(details, dict)
+                else {},
             }
         else:
             outcome = {
@@ -595,3 +637,193 @@ def test_the_edits_are_what_they_say(monkeypatch: pytest.MonkeyPatch) -> None:
             assert not any(str(n).startswith(PREFIX) for n in columns), name
         else:
             assert any(str(n).startswith(PREFIX) for n in columns), name
+
+
+# The registered differences, held as their entries state them (added after
+# fix 8, at the coordinator's request). Each test asserts the reference's
+# outcome, the core's, and that they differ; where the core comes to match
+# the reference, the test fails, and the entry is to be retired with it.
+
+REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
+
+
+def _registered(entry: str) -> None:
+    assert f'- id: {entry}\n' in REGISTER.read_text(encoding='utf-8'), entry
+
+
+def _answer_with(field: str, value: int) -> list[dict[str, Any]]:
+    first = (
+        _p(value, '112')
+        if field == 'row_index'
+        else _p(0, '112', **{field: value})
+    )
+    return [first, _p(1, '113')]
+
+
+for _field in ('row_index', 'forecast_step'):
+    for _name, _value in {
+        '2**63': 2**63,
+        '2**130': 2**130,
+        '-2**63-1': -(2**63) - 1,
+        '-2**63': -(2**63),
+        '2**63-1': 2**63 - 1,
+    }.items():
+        ANSWERS[f'{_field}={_name}'] = _answer_with(_field, _value)
+
+#: P1B-86: answers whose row_index or forecast_step does not fit int64,
+#: below -2**63 or at or past 2**63 (the entry measured 2**63, 2**130 and,
+#: for forecast_step, 2**63).
+P1B_86 = [
+    f'{field}={name}'
+    for field in ('row_index', 'forecast_step')
+    for name in ('2**63', '2**130', '-2**63-1')
+]
+#: P1B-86's controls: int64's own ends, the same on both routes.
+P1B_86_FITS = [
+    f'{field}={name}'
+    for field in ('row_index', 'forecast_step')
+    for name in ('-2**63', '2**63-1')
+]
+
+
+@pytest.mark.parametrize('answer', P1B_86)
+@pytest.mark.parametrize('edit', ['dropped', 'renamed'])
+def test_p1b_86_a_row_past_int64_is_refused_where_the_reference_passes_it(
+    monkeypatch: pytest.MonkeyPatch, edit: str, answer: str
+) -> None:
+    r"""Register P1B-86 (proposed, the owner's): with the entity-reference
+    column renamed or dropped, the reference gives the answer back as
+    written, the number in its item and in ``to_pandas()``; the core refuses
+    it, ``INVALID_RESPONSE`` naming the field, reason ``out_of_range``."""
+    _registered('P1B-86')
+    field = answer.split('=')[0]
+    value = ANSWERS[answer][0][field]
+    reference = _observed(
+        monkeypatch, 'regression', MISSING[edit], None, answer
+    )
+    core = _observed(monkeypatch, 'regression', MISSING[edit], CORE, answer)
+    assert core['sent'] == reference['sent']
+    assert len(reference['sent']) == 1
+    assert 'refused' not in reference, reference['refused']
+    assert reference['items'][0][field] == value
+    assert value in reference['frame'][field].tolist()
+    assert core.get('refused') == (
+        'StructuredDataError',
+        'INVALID_RESPONSE',
+        None,
+    ), core.get('items')
+    assert core['named'] == {
+        'field': f'prediction.{field}',
+        'reason': 'out_of_range',
+    }
+
+
+@pytest.mark.parametrize('answer', P1B_86_FITS)
+@pytest.mark.parametrize('edit', ['dropped', 'renamed'])
+def test_p1b_86_a_row_at_int64_s_ends_is_the_reference_s(
+    monkeypatch: pytest.MonkeyPatch, edit: str, answer: str
+) -> None:
+    reference, _ = _held_to_the_reference(
+        monkeypatch, 'regression', MISSING[edit], answer
+    )
+    field = answer.split('=')[0]
+    assert 'refused' not in reference, reference['refused']
+    assert reference['items'][0][field] == ANSWERS[answer][0][field]
+
+
+@pytest.mark.parametrize('answer', P1B_86)
+def test_p1b_86_with_the_column_kept_both_refuse(
+    monkeypatch: pytest.MonkeyPatch, answer: str
+) -> None:
+    reference, _ = _held_to_the_reference(
+        monkeypatch, 'regression', _unchanged, answer
+    )
+    assert reference['refused'][1] == 'INVALID_RESPONSE'
+
+
+def _cells(text: str) -> Callable[[Request], None]:
+    def edit(request: Request) -> None:
+        table = _table(request)
+        at = _at(table)
+        for row in table['rows']:
+            row[at] = text
+
+    return edit
+
+
+#: P1B-87: entity text holding a decimal digit Unicode added after 13.0:
+#: Tangsa five (Unicode 14.0) and Kawi five (15.0), alone, after an ASCII
+#: digit, and before a fraction.
+LATER_DIGITS = {
+    'tangsa_five': '\U00016ac5',
+    'kawi_five': '\U00011f55',
+    'one_kawi_five': '1\U00011f55',
+    'tangsa_five_point_five': '\U00016ac5.5',
+}
+#: Its controls: Unicode 13.0's own digits (ASCII, Arabic-Indic five).
+EARLIER_DIGITS = {'ascii_five': '5', 'arabic_indic_five': '\u0665'}
+#: The key each is read back as, and the reading of the reference's
+#: ``as_declared`` there (Python's ``int`` or ``float`` on text).
+KEYS: dict[str, Callable[[str], Any]] = {'regression': int, 'float_key': float}
+
+
+def _python_reads(read: Callable[[str], Any], text: str) -> Any:
+    r"""The number this interpreter's ``int`` or ``float`` reads ``text``
+    as, or ``None`` where it reads none."""
+    try:
+        return read(text)
+    except ValueError:
+        return None
+
+
+@pytest.mark.parametrize('digit', list(LATER_DIGITS))
+@pytest.mark.parametrize('query', list(KEYS))
+def test_p1b_87_a_later_digit_stays_text_where_python_reads_a_number(
+    monkeypatch: pytest.MonkeyPatch, query: str, digit: str
+) -> None:
+    r"""Register P1B-87 (proposed, the owner's): an entity cell edited to
+    text with a digit Unicode added after 13.0 is read back by the
+    reference as the number this interpreter's ``int``/``float`` reads (on
+    Python 3.12, the reference's), and given back as the text on the core,
+    as Python 3.10 gives it. Where this interpreter reads no number, both
+    give the text and there is no difference to report."""
+    _registered('P1B-87')
+    text = LATER_DIGITS[digit]
+    number = _python_reads(KEYS[query], text)
+    reference = _observed(monkeypatch, query, _cells(text), None, None)
+    core = _observed(monkeypatch, query, _cells(text), CORE, None)
+    assert core['sent'] == reference['sent']
+    assert 'refused' not in reference, reference['refused']
+    assert 'refused' not in core, core['refused']
+    as_text = [('str', text)] * len(core['items'])
+    assert [i['id'] for i in core['items']] == as_text
+    if number is None:
+        assert [i['id'] for i in reference['items']] == as_text
+        return
+    assert [i['id'] for i in reference['items']] == [
+        (type(number).__name__, number)
+    ] * len(reference['items'])
+    assert str(reference['frame']['id'].dtype) != 'str'
+    assert str(core['frame']['id'].dtype) == 'str'
+
+
+@pytest.mark.parametrize(
+    ('query', 'digit'),
+    [
+        *((query, digit) for query in KEYS for digit in EARLIER_DIGITS),
+        *(('text_key', digit) for digit in [*EARLIER_DIGITS, *LATER_DIGITS]),
+    ],
+)
+def test_p1b_87_s_controls_are_the_reference_s(
+    monkeypatch: pytest.MonkeyPatch, query: str, digit: str
+) -> None:
+    r"""Unicode 13.0's digits read as the reference reads them, for an
+    integer or a float key; a text key keeps every digit as text."""
+    text = {**EARLIER_DIGITS, **LATER_DIGITS}[digit]
+    reference, _ = _held_to_the_reference(monkeypatch, query, _cells(text))
+    assert 'refused' not in reference, reference['refused']
+    if query in KEYS:
+        number = KEYS[query](text)
+        assert [i['id'] for i in reference['items']] == [
+            (type(number).__name__, number)
+        ] * len(reference['items'])
