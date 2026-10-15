@@ -5438,41 +5438,52 @@ entries:
     both). Never self-approved.
 
 - id: P1B-89
-  title: A zoned time column candidate held past the preview only at a value whose wall clock leaves the years is passed over as constant where the reference with pytz takes it unchecked
+  title: A zoned time column candidate holding a value whose wall clock leaves the years is chosen from its whole table where the reference with pytz falls back to its preview
   kind: change
   old_behavior: >-
     With pytz installed (as under pandas 2, dbr17-pandas2) and a DuckDB
     TimeZone other than UTC, the reference's time column choice fetches a
     TIMESTAMP WITH TIME ZONE candidate's whole-table MIN and MAX as Python
-    datetimes in that zone. Where the candidate is null in the 1,000 rows
-    the preview reads and holds after them only a value whose wall clock in
-    the zone lies before the year 1 or after 9999 (TIMESTAMPTZ '0001-01-01
-    00:00+00' under America/New_York, in the year 0 at its wall clock;
-    '9999-12-31 23:00+00' under Asia/Tokyo, in the year 10000), that fetch
-    fails even with pytz (OverflowError, "date value out of range"), so the reference falls back to its preview,
-    as it does whenever the whole-table query fails (E85(a)), and takes the
-    column as the time column unchecked, with its warning that the query
-    over the whole table failed. Without pytz the query fails for any zoned
-    candidate, which is P1B-39's case.
+    datetimes in that zone. Where that MIN or MAX has a wall clock in the
+    zone before the year 1 or after 9999, and the candidate's first
+    previewed value does not (that case is P1B-81(b)'s), the fetch fails
+    even with pytz (OverflowError, "date value out of range"), so the
+    reference chooses from its preview, as it does whenever the whole-table
+    query fails (E85(a)), with its "taken unchecked" warning where the
+    preview would pass the column over. Measured shapes, each in
+    America/New_York unless named: a candidate null in the 1,000 rows the
+    preview reads and holding after them only TIMESTAMPTZ '0001-01-01
+    00:00+00' (the year 0 at its wall clock), or only '9999-12-31 23:00+00'
+    under Asia/Tokyo (the year 10000), taken as the time column unchecked;
+    (i) a candidate null in the preview, holding varying 2020 values after
+    it and one '0001-01-01 00:00+00' row, taken with the warning that none
+    of the 1,000 rows read holds a value and the query over the whole table
+    failed; (ii) a candidate whose preview holds one value (2020-01-01) and
+    which holds one '0001-01-01 00:00+00' row later, taken with the warning
+    that every row read holds that value and the query failed. Without pytz
+    the query fails for any zoned candidate, which is P1B-39's case.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     whole-table statement's answer travels as Arrow and is read whatever the
-    wall clock (P1B-39): the candidate's MIN and MAX are its one value, so
-    it is passed over as constant, no time column taken, with the
-    constant-column warning ("every row that holds a value holds
-    0001-01-01 00:00:00+00"). Both
-    routes succeed; the time column chosen and the warning differ. A
-    candidate whose first previewed value leaves the years is refused by
-    name under P1B-81(b), and a realistic sentinel (one such value late in a
-    column whose other values vary) is chosen alike on both routes, with
-    and without pytz. The default route is unchanged.
+    wall clock (P1B-39), so the column is chosen from the whole table and
+    the time column chosen, or the warning, can differ from the reference's
+    with pytz: in the first two shapes the candidate's MIN and MAX are its
+    one value, so it is passed over as constant, no time column taken, with
+    the constant-column warning ("every row that holds a value holds
+    0001-01-01 00:00:00+00"); in (i) and (ii) the column is taken, as the
+    reference takes it, with no warning. Both routes succeed. A candidate
+    whose first previewed value leaves the years is refused by name under
+    P1B-81(b), and a column whose preview already varies (a realistic
+    sentinel, one such value late among varying ones) is chosen alike on
+    both routes, with and without pytz; the same shapes with '0001-01-02
+    00:00+00', whose wall clock stays in the years, agree with no warning.
+    The default route is unchanged.
   affected_inputs: >-
     Schema.from_source under a forced core route over a DuckDB table of
     1,000 rows or more, its TimeZone not UTC, holding a TIMESTAMP WITH TIME
-    ZONE time column candidate that is null in its first 1,000 rows and
-    holds after them only a value whose wall clock in that zone lies outside
-    the years 1 to 9999, compared with the reference run with pytz
-    (dbr17-pandas2).
+    ZONE time column candidate any of whose values past its first previewed
+    one has a wall clock in that zone outside the years 1 to 9999, compared
+    with the reference run with pytz (dbr17-pandas2).
   cases: [T1.36]
   refs:
   - contract/t136-host2-zone-vectors.json#p1b89.held-past-the-preview.new-york.year-1
@@ -5498,9 +5509,11 @@ entries:
     column_ranges answer), plus the test author's vectors and tests, a few
     hours; (b) costs nothing. Recommendation: (b) for Phase 1, with (a) as
     Phase 2 row FX-5 (migration-plan.md section 8) if the owner prefers
-    exact matching: both routes succeed, the input is a column holding only
-    instants Python cannot hold in that zone, the core's "constant" is the
-    more accurate answer, and realistic sentinels agree. Measured by the
+    exact matching: both routes succeed; where the time column chosen
+    differs the input is a column holding only instants Python cannot hold
+    in that zone, and the core's "constant" is the more accurate answer;
+    in (i) and (ii) only the warning differs, the core's whole-table reading
+    being the truer one; and realistic sentinels agree. Measured by the
     test author's "T1.36 tests: P1B-89's zoned whole table that pytz cannot
     read held as measured": contract/t136-host2-zone-vectors.json's p1b89
     section (2,500 events rows beside shop, f null in the 1,000 the preview
@@ -5508,7 +5521,11 @@ entries:
     tests: in New York and Tokyo the reference takes f with and without
     pytz, the core none; the UTC control agrees with the reference with
     pytz (without it, P1B-39's case); the sentinel control agrees on every
-    route; DuckDB's fetchall of the edge values fails with pytz. Never
+    route; DuckDB's fetchall of the edge values fails with pytz. Widened at
+    T1.36 fix 15 from that first shape to the class, after the independent
+    subagent's review of the final bookkeeping (e2fc16f4) measured shapes
+    (i) and (ii) in New York with pytz, each a warning difference only, and
+    their '0001-01-02' controls; option (a) covers every shape. Never
     self-approved.
 
 - id: P1B-79
