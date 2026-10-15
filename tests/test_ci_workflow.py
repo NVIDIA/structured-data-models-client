@@ -203,10 +203,24 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
         assert progressed, f'a cycle or an unknown job in {pending}'
 
 
+#: The longest a job may run, in minutes: rust-test took 80.7 at most
+#: (fix round 1, P2-5); the landing job, which every other job waits on,
+#: does no more than read a few commits.
+TIMEOUT_CEILINGS = {'landing': 10, 'rust-test': 120}
+TIMEOUT_CEILING = 60
+
+
 def test_every_job_has_a_timeout() -> None:
-    for name, job in _workflow()['jobs'].items():
+    jobs = _workflow()['jobs']
+    assert set(TIMEOUT_CEILINGS) <= set(jobs)
+    for name, job in jobs.items():
         minutes = job.get('timeout-minutes')
-        assert isinstance(minutes, int) and 0 < minutes <= 120, (name, minutes)
+        ceiling = TIMEOUT_CEILINGS.get(name, TIMEOUT_CEILING)
+        assert isinstance(minutes, int) and 0 < minutes <= ceiling, (
+            name,
+            minutes,
+            ceiling,
+        )
 
 
 # --- the images -----------------------------------------------------------------
@@ -724,5 +738,391 @@ def test_ci4_a_registry_that_only_looks_like_ghcr_io_gets_no_token(
         )
         assert done.returncode == 0, done.stderr
         assert calls == [f'pull --quiet {image}']
+
+    _held(request, check)
+
+
+# --- CI4: the landing job's phase-push check ----------------------------------
+#
+# Fix round 1 (P2-3): on every push to the phase branch the landing job
+# runs ``ratchet.py checkpoint --phase-push <previous tip>``, so a push that
+# does not land exactly one package as a fast-forward, its landing commit's
+# Base-SHA the previous tip, turns the run red even when every other job is
+# left out. The step's text runs here as CI runs it (``bash -eo pipefail``),
+# in a clone of depth 2 of a real temporary origin, with the event file a
+# push writes; its condition is evaluated for each event and branch.
+
+
+def _phase_check_step() -> tuple[int, dict[str, Any]]:
+    steps = _workflow()['jobs']['landing']['steps']
+    found = [
+        (i, s)
+        for i, s in enumerate(steps)
+        if 'ratchet.py checkpoint' in str(s.get('run', ''))
+    ]
+    assert len(found) == 1, found
+    return found[0]
+
+
+_TOKEN = re.compile(
+    r"\s*(?:(?P<str>'(?:[^']|'')*')|(?P<op>==|!=|&&|\|\||!|\(|\)|,)"
+    r'|(?P<name>[A-Za-z_][\w.-]*))'
+)
+
+
+def _evaluate(condition: str, context: dict[str, str]) -> bool:
+    r"""A GitHub Actions ``if:`` of the forms CI uses: contexts, strings,
+    ``==``, ``!=``, ``!``, ``&&``, ``||``, parentheses, ``startsWith``,
+    ``endsWith``, ``contains`` and the status functions, every earlier
+    step having succeeded. With no status function, ``success()`` is
+    implied, as GitHub implies it."""
+    text = _expression(condition)
+    tokens: list[tuple[str, str]] = []
+    at = 0
+    while at < len(text):
+        match = _TOKEN.match(text, at)
+        assert match and match.end() > at, f'cannot read {text[at:]!r}'
+        kind = match.lastgroup
+        assert kind is not None
+        tokens.append((kind, match.group(kind)))
+        at = match.end()
+        while at < len(text) and text[at] == ' ':
+            at += 1
+    status = {
+        'success': True,
+        'always': True,
+        'failure': False,
+        'cancelled': False,
+    }
+    functions = {
+        'startsWith': lambda a, b: str(a).lower().startswith(str(b).lower()),
+        'endsWith': lambda a, b: str(a).lower().endswith(str(b).lower()),
+        'contains': lambda a, b: str(b).lower() in str(a).lower(),
+    }
+    pos = 0
+
+    def peek() -> tuple[str, str] | None:
+        return tokens[pos] if pos < len(tokens) else None
+
+    def take(value: str | None = None) -> tuple[str, str]:
+        nonlocal pos
+        token = tokens[pos]
+        assert value is None or token[1] == value, (token, value)
+        pos += 1
+        return token
+
+    def primary() -> Any:
+        kind, value = take()
+        if value == '(':
+            found = disjunction()
+            take(')')
+            return found
+        if value == '!':
+            return not truthy(primary())
+        if kind == 'str':
+            return value[1:-1].replace("''", "'")
+        assert kind == 'name', value
+        if peek() == ('op', '('):
+            take('(')
+            args = []
+            while peek() != ('op', ')'):
+                args.append(disjunction())
+                if peek() == ('op', ','):
+                    take(',')
+            take(')')
+            if value in status:
+                return status[value]
+            return functions[value](*args)
+        if value in ('true', 'false'):
+            return value == 'true'
+        assert value in context, f'unknown context {value}'
+        return context[value]
+
+    def comparison() -> Any:
+        left = primary()
+        while peek() in (('op', '=='), ('op', '!=')):
+            op = take()[1]
+            right = primary()
+            same = str(left).lower() == str(right).lower()
+            left = same if op == '==' else not same
+        return left
+
+    def truthy(value: Any) -> bool:
+        return bool(value) and value != 'false'
+
+    def conjunction() -> Any:
+        left = comparison()
+        while peek() == ('op', '&&'):
+            take()
+            right = comparison()
+            left = truthy(left) and truthy(right)
+        return left
+
+    def disjunction() -> Any:
+        left = conjunction()
+        while peek() == ('op', '||'):
+            take()
+            right = conjunction()
+            left = truthy(left) or truthy(right)
+        return left
+
+    found = truthy(disjunction())
+    assert pos == len(tokens), tokens[pos:]
+    return found
+
+
+@pytest.mark.parametrize(
+    ('event', 'ref', 'runs'),
+    [
+        ('push', PHASE, True),
+        ('push', LANE, False),
+        ('push', f'{PHASE}-t1.99', False),
+        ('push', f'{PHASE}-archive-lane-a-t1.99', False),
+        ('push', 'rust-core-phase-10', False),
+        ('push', 'main', False),
+        ('push', 'rust-core', False),
+        ('pull_request', PHASE, False),
+        ('pull_request', '7/merge', False),
+        ('pull_request_target', PHASE, False),
+        ('workflow_dispatch', PHASE, False),
+        ('merge_group', PHASE, False),
+    ],
+)
+def test_ci4_the_phase_check_runs_on_every_phase_push_and_nowhere_else(
+    request: pytest.FixtureRequest, event: str, ref: str, runs: bool
+) -> None:
+    def check() -> None:
+        _, step = _phase_check_step()
+        condition = str(step.get('if', ''))
+        # Whatever the skip step said: a landing commit's push is checked.
+        assert 'skip' not in condition and 'steps.' not in condition
+        context = {
+            'github.event_name': event,
+            'github.ref_name': ref,
+            'github.ref': f'refs/heads/{ref}',
+            'github.base_ref': PHASE if event.startswith('pull') else '',
+            'github.head_ref': LANE if event.startswith('pull') else '',
+        }
+        assert _evaluate(condition, context) is runs, condition
+
+    _held(request, check)
+
+
+def test_ci4_a_failing_phase_check_turns_the_run_red(
+    request: pytest.FixtureRequest,
+) -> None:
+    r"""The step's failure is the landing job's, which nothing runs past:
+    the job always runs (no condition), nothing in it may fail quietly,
+    and the check comes after a checkout of the pushed commit."""
+
+    def check() -> None:
+        landing = _workflow()['jobs']['landing']
+        assert 'if' not in landing and not _needs(landing)
+        assert not landing.get('continue-on-error'), landing
+        at, step = _phase_check_step()
+        assert not step.get('continue-on-error'), step
+        assert 'shell' not in step or step['shell'] == 'bash', step
+        steps = landing['steps']
+        assert str(steps[0].get('uses', '')).startswith('actions/checkout@')
+        assert 'ref' not in (steps[0].get('with') or {})
+        assert at > 0
+        for earlier in steps[:at]:
+            assert not earlier.get('continue-on-error'), earlier
+        # The step runs the checkout's own ratchet.py and its phase-push
+        # check, never with a status or exit code swallowed.
+        run = str(step['run'])
+        assert 'scripts/rust_core/ratchet.py checkpoint' in run
+        assert 'scripts/rust_core/ratchet.py where' in run
+        assert '|| true' not in run and 'set +e' not in run
+        assert not re.search(r'\|\|\s*(true|:|exit 0)', run), run
+
+    _held(request, check)
+
+
+#: A landing commit's trailers, as land.py writes them.
+def _landing_message(subject: str, base: str, moved: str | None = None) -> str:
+    lines = [
+        subject,
+        '',
+        'Reviewed-by: independent reviewer and Codex',
+        'Protected-paths: none',
+        f'Base-SHA: {base}',
+        f'Checkpoint-SHA: {base}',
+    ]
+    if moved:
+        lines.append(f'Moved-from: {moved}')
+    return '\n'.join(lines)
+
+
+class _Phase:
+    r"""A bare origin whose phase branch starts at a landing carrying
+    ratchet.py, and a clone to push from."""
+
+    def __init__(self, tmp_path: Path) -> None:
+        self.tmp = tmp_path
+        self.origin = tmp_path / 'origin.git'
+        self.work = tmp_path / 'work'
+        _git(tmp_path, 'init', '-q', '--bare', str(self.origin))
+        _git(tmp_path, 'clone', '-q', str(self.origin), str(self.work))
+        _git(self.work, 'checkout', '-q', '-b', PHASE)
+        script = self.work / 'scripts/rust_core/ratchet.py'
+        script.parent.mkdir(parents=True)
+        script.write_bytes((ROOT / 'scripts/rust_core/ratchet.py').read_bytes())
+        _git(self.work, 'add', '-A')
+        _git(
+            self.work, 'commit', '-q', '-m',
+            _landing_message('Land T1.13: the start', 'f' * 40),
+        )  # fmt: skip
+        self.l0 = self.push()
+
+    def package(self, name: str) -> str:
+        (self.work / f'{name}.txt').write_text(f'{name}\n')
+        _git(self.work, 'add', '-A')
+        _git(self.work, 'commit', '-q', '-m', f'{name}: the package')
+        return _git(self.work, 'rev-parse', 'HEAD')
+
+    def landing(self, name: str, base: str, moved: str | None = None) -> str:
+        message = _landing_message(f'Land {name}: the package', base, moved)
+        _git(self.work, 'commit', '-q', '--allow-empty', '-m', message)
+        return _git(self.work, 'rev-parse', 'HEAD')
+
+    def push(self) -> str:
+        # The test's own temporary origin; a "+" lets it seed a push that
+        # is not a fast-forward.
+        _git(self.work, 'push', '-q', 'origin', f'+HEAD:refs/heads/{PHASE}')
+        return _git(self.work, 'rev-parse', 'HEAD')
+
+    def run(
+        self, before: str, step: str
+    ) -> tuple[subprocess.CompletedProcess[str], Path]:
+        r"""The step's text in a fresh clone of depth 2 of the pushed
+        phase branch, as actions/checkout leaves it, with the push's event."""
+        clone = self.tmp / f'clone-{len(list(self.tmp.glob("clone-*")))}'
+        _git(
+            self.tmp, 'clone', '-q', '--depth', '2', '--branch', PHASE,
+            f'file://{self.origin}', str(clone),
+        )  # fmt: skip
+        event = self.tmp / 'event.json'
+        event.write_text(f'{{"before": "{before}"}}')
+        output = self.tmp / 'output'
+        output.write_text('')
+        done = subprocess.run(
+            ['bash', '--noprofile', '--norc', '-eo', 'pipefail', '-c', step],
+            cwd=clone,
+            env={
+                'PATH': os.environ['PATH'],
+                'HOME': str(self.tmp),
+                **GIT_ENV,
+                'GITHUB_EVENT_NAME': 'push',
+                'GITHUB_REF_NAME': PHASE,
+                'GITHUB_EVENT_PATH': str(event),
+                'GITHUB_OUTPUT': str(output),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return done, clone
+
+
+def _phase_scenario(phase: _Phase, scenario: str) -> str:
+    r"""Seeds the push ``scenario`` names; returns its previous tip."""
+    before = phase.l0
+    if scenario in ('sound', 'wrong-base', 'moved'):
+        p = phase.package('T1.15')
+        base = {'sound': before, 'moved': before, 'wrong-base': p}[scenario]
+        phase.landing('T1.15', base, 'a' * 40 if scenario == 'moved' else None)
+    elif scenario == 'two-landings':
+        phase.package('T1.15')
+        first = phase.landing('T1.15', before)
+        phase.package('T1.16')
+        phase.landing('T1.16', first)
+    elif scenario == 'not-a-landing':
+        phase.package('T1.15')
+    elif scenario == 'not-a-fast-forward':
+        # The phase branch moved to another landing; this push replaces it.
+        phase.package('T1.14')
+        before = phase.landing('T1.14', phase.l0)
+        phase.push()
+        _git(phase.work, 'reset', '-q', '--hard', phase.l0)
+        phase.package('T1.15')
+        phase.landing('T1.15', before)
+    else:
+        raise AssertionError(scenario)
+    phase.push()
+    return before
+
+
+@pytest.mark.parametrize(
+    ('scenario', 'wanted'),
+    [
+        ('sound', None),
+        ('moved', None),
+        (
+            'wrong-base',
+            "the landing's Base-SHA is not the phase branch's previous tip",
+        ),
+        ('two-landings', 'it holds 2 landing commits'),
+        ('not-a-landing', 'its tip is none'),
+        ('not-a-fast-forward', 'not a fast-forward of the previous tip'),
+    ],
+)
+def test_ci4_the_phase_check_in_a_clone_of_depth_two(
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    scenario: str,
+    wanted: str | None,
+) -> None:
+    def check() -> None:
+        phase = _Phase(tmp_path)
+        before = _phase_scenario(phase, scenario)
+        _, step = _phase_check_step()
+        done, clone = phase.run(before, str(step['run']))
+        message = done.stdout + done.stderr
+        if wanted is None:
+            assert done.returncode == 0, message
+            # Every other job is left out of a sound landing's run, and
+            # the check still ran: its output names the checkpoint.
+            assert done.stdout.split()[:2] == [before, before], message
+            skip = _skip(clone, tmp_path, 'push', PHASE)
+            assert skip == ('true' if scenario == 'sound' else 'false')
+        else:
+            assert done.returncode != 0, message
+            # A previous tip the push dropped is on no branch the clone
+            # fetches, so git's refusal, naming it, may come first.
+            named = scenario == 'not-a-fast-forward' and before in message
+            assert wanted in message or named, message
+
+    _held(request, check)
+
+
+def test_ci4_the_phase_check_reaches_a_previous_tip_past_the_clone_s_depth(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    r"""A push of a package's two commits and its landing: the previous tip
+    is three commits down, past the checkout's depth of 2, and the step
+    deepens the clone to reach it."""
+
+    def check() -> None:
+        phase = _Phase(tmp_path)
+        before = phase.l0
+        phase.package('T1.15')
+        phase.package('T1.15 fix 1')
+        phase.landing('T1.15', before)
+        phase.push()
+        clone = tmp_path / 'shallow'
+        _git(
+            tmp_path, 'clone', '-q', '--depth', '2', '--branch', PHASE,
+            f'file://{phase.origin}', str(clone),
+        )  # fmt: skip
+        missing = subprocess.run(
+            ['git', '-C', str(clone), 'cat-file', '-e', f'{before}^{{commit}}'],
+            capture_output=True,
+            check=False,
+        )
+        assert missing.returncode != 0, 'the previous tip is in the clone'
+        _, step = _phase_check_step()
+        done, _ = phase.run(before, str(step['run']))
+        assert done.returncode == 0, done.stdout + done.stderr
 
     _held(request, check)
