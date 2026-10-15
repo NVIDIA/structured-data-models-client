@@ -136,9 +136,8 @@ engine:
     # The Databricks and Snowflake drivers are here for the offline tests of
     # those backends, which import the driver and skipped whole modules without
     # it: eleven of them, fakes included, ran nowhere. Taken through
-    # structured-data-models-connectors rather than the engine's `snowflake` extra, which pins
-    # numpy<2 and would move every other test here onto numpy 1. pyyaml is what
-    # the semantic-view tests read their fixtures with.
+    # structured-data-models-connectors, which is where the driver is declared.
+    # pyyaml is what the semantic-view tests read their fixtures with.
     - pip install -q -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' pyyaml
     # The test extra, not a hand-written list beside it: naming these twice
     # is how the documented install came to be missing pytest-mock while this
