@@ -2940,9 +2940,9 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'postgres'", specifier = ">=3.1" },
     { name = "pyarrow" },
     { name = "pytest", marker = "extra == 'test'" },
-    { name = "pyyaml", marker = "extra == 'databricks'", specifier = ">=5.4" },
+    { name = "pyyaml", marker = "extra == 'databricks'", specifier = ">=6.0.1" },
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2023.12.0" },
-    { name = "snowflake-connector-python", marker = "extra == 'snowflake'" },
+    { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=4,<5" },
     { name = "structured-data-models-connectors", extras = ["databricks", "duckdb", "lakebase", "postgres", "s3", "snowflake", "sqlite"], marker = "extra == 'all'", editable = "packages/structured-data-models-connectors" },
 ]
 provides-extras = ["sqlite", "duckdb", "snowflake", "databricks", "postgres", "lakebase", "s3", "all", "test"]

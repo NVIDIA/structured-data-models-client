@@ -87,11 +87,11 @@ test:
     SDM_POSTGRES_TEST_DSN: postgresql://postgres@postgres:5432/sdm_test
     SDM_REQUIRE_POSTGRES: "1"
   script:
-    # databricks is here for its driver, not for a server: those tests mock the
-    # connection. Without the drivers, importing the backend raises and every
-    # test that covers them skips, including the ones holding the partner
-    # identifier Databricks requires on every connection.
-    - pip install -q -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' -e './packages/structured-data-models-client[test]' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
+    # databricks and snowflake are here for their drivers, not for a server:
+    # those tests mock the connection. Without the drivers, importing the
+    # backend raises and every test that covers them skips, including the ones
+    # holding the partner identifier Databricks requires on every connection.
+    - pip install -q -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' -e './packages/structured-data-models-client[test]' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,test]'
     # ruff is here for tests/, not for linting: the test that checks the
     # engine's ignore-list note shells out to ruff and skips without it,
     # which made the check vacuous in the only job that runs root tests/.
@@ -371,7 +371,9 @@ audit:
   allow_failure: true
   script:
     - pip install -q pip-audit
-    - pip install -q -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' -e './packages/structured-data-models-client' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks]'
+    # snowflake is audited too: this release holds that driver below 5, so a
+    # finding against the 4 series is one the pin keeps us on.
+    - pip install -q -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' -e './packages/structured-data-models-client' -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake]'
     # `oauthlib` 4.0.0 fixes CVE-2026-49265 and `databricks-sql-connector`
     # pins `oauthlib<4.0.0`, so the fix cannot be installed. It is ignored so
     # that a red result still means a new finding. The check below fails when
