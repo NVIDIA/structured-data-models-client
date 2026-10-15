@@ -5438,51 +5438,65 @@ entries:
     both). Never self-approved.
 
 - id: P1B-89
-  title: A zoned time column candidate holding a value whose wall clock leaves the years is chosen from its whole table where the reference with pytz falls back to its preview
+  title: A table whose zoned time column candidate holds a value whose wall clock leaves the years has its time column chosen from the whole table where the reference with pytz falls back to its preview
   kind: change
   old_behavior: >-
     With pytz installed (as under pandas 2, dbr17-pandas2) and a DuckDB
-    TimeZone other than UTC, the reference's time column choice fetches a
-    TIMESTAMP WITH TIME ZONE candidate's whole-table MIN and MAX as Python
-    datetimes in that zone. Where that MIN or MAX has a wall clock in the
-    zone before the year 1 or after 9999, and the candidate's first
-    previewed value does not (that case is P1B-81(b)'s), the fetch fails
-    even with pytz (OverflowError, "date value out of range"), so the
-    reference chooses from its preview, as it does whenever the whole-table
-    query fails (E85(a)), with its "taken unchecked" warning where the
-    preview would pass the column over. Measured shapes, each in
-    America/New_York unless named: a candidate null in the 1,000 rows the
-    preview reads and holding after them only TIMESTAMPTZ '0001-01-01
-    00:00+00' (the year 0 at its wall clock), or only '9999-12-31 23:00+00'
-    under Asia/Tokyo (the year 10000), taken as the time column unchecked;
-    (i) a candidate null in the preview, holding varying 2020 values after
-    it and one '0001-01-01 00:00+00' row, taken with the warning that none
-    of the 1,000 rows read holds a value and the query over the whole table
-    failed; (ii) a candidate whose preview holds one value (2020-01-01) and
-    which holds one '0001-01-01 00:00+00' row later, taken with the warning
-    that every row read holds that value and the query failed. Without pytz
-    the query fails for any zoned candidate, which is P1B-39's case.
+    TimeZone other than UTC, the reference's time column choice asks one
+    whole-table statement for every candidate of a table at once (MIN and
+    MAX of each: predictive_query's time_columns.py, _WholeTable calling
+    full_range once with every candidate name)
+    and fetches the answer as Python datetimes in that zone. Where any
+    TIMESTAMP WITH TIME ZONE candidate's MIN or MAX has a wall clock in the
+    zone before the year 1 or after 9999, and its first previewed value does
+    not (that case is P1B-81(b)'s), the fetch fails even with pytz
+    (OverflowError, "date value out of range"), so the reference judges
+    every candidate of that table, zoned or plain TIMESTAMP, from its
+    preview, as it does whenever the whole-table query fails (E85(a)), with
+    its "taken unchecked" warning where the preview would pass a column
+    over. Measured shapes, each in America/New_York unless named: a
+    candidate null in the 1,000 rows the preview reads and holding after
+    them only TIMESTAMPTZ '0001-01-01 00:00+00' (the year 0 at its wall
+    clock), or only '9999-12-31 23:00+00' under Asia/Tokyo (the year
+    10000), taken as the time column unchecked; (i) a candidate null in the
+    preview, holding varying 2020 values after it and one '0001-01-01
+    00:00+00' row, taken with the warning that none of the 1,000 rows read
+    holds a value and the query over the whole table failed; (ii) a
+    candidate whose preview holds one value (2020-01-01) and which holds one
+    '0001-01-01 00:00+00' row later, taken with the warning that every row
+    read holds that value and the query failed; (iii) a sibling: a table
+    with a zoned h varying from 2020-06, a zoned g varying from 2020-01
+    with one late '0001-01-01 00:00+00' row, and a plain TIMESTAMP f holding
+    2019-01-01 in its 1,000 previewed rows and varying after them (so it
+    starts earliest), where the reference judges f constant from its
+    preview and takes g ("start earliest of 'h' and 'g'"). Without pytz the
+    query fails for any table with a zoned candidate, which is P1B-39's
+    case.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     whole-table statement's answer travels as Arrow and is read whatever the
-    wall clock (P1B-39), so the column is chosen from the whole table and
-    the time column chosen, or the warning, can differ from the reference's
-    with pytz: in the first two shapes the candidate's MIN and MAX are its
-    one value, so it is passed over as constant, no time column taken, with
-    the constant-column warning ("every row that holds a value holds
-    0001-01-01 00:00:00+00"); in (i) and (ii) the column is taken, as the
-    reference takes it, with no warning. Both routes succeed. A candidate
-    whose first previewed value leaves the years is refused by name under
-    P1B-81(b), and a column whose preview already varies (a realistic
-    sentinel, one such value late among varying ones) is chosen alike on
-    both routes, with and without pytz; the same shapes with '0001-01-02
-    00:00+00', whose wall clock stays in the years, agree with no warning.
-    The default route is unchanged.
+    wall clock (P1B-39), so every candidate of the table is judged by its
+    own whole-table range, and the time column chosen (any candidate, the
+    out-of-years one or a sibling, zoned or plain) or the warning can differ
+    from the reference's with pytz: in the first two shapes the candidate's
+    MIN and MAX are its one value, so it is passed over as constant, no time
+    column taken, with the constant-column warning ("every row that holds a
+    value holds 0001-01-01 00:00:00+00"); in (i) and (ii) the column is
+    taken, as the reference takes it, with no warning; in (iii) the core
+    takes f ("start earliest of 'h', 'g' and 'f'"). Both routes succeed. A
+    candidate whose first previewed value leaves the years is refused by
+    name under P1B-81(b), and a table whose candidates' previews already
+    decide the choice (a realistic sentinel, one such value late in a column
+    whose other values vary) is chosen alike on both routes, with and
+    without pytz; the same shapes with '0001-01-02 00:00+00', whose wall
+    clock stays in the years, agree with no warning ((iii)'s control: both
+    routes take f). The default route is unchanged.
   affected_inputs: >-
     Schema.from_source under a forced core route over a DuckDB table of
     1,000 rows or more, its TimeZone not UTC, holding a TIMESTAMP WITH TIME
     ZONE time column candidate any of whose values past its first previewed
-    one has a wall clock in that zone outside the years 1 to 9999, compared
+    one has a wall clock in that zone outside the years 1 to 9999 (the
+    choice among all of that table's candidates, zoned or plain), compared
     with the reference run with pytz (dbr17-pandas2).
   cases: [T1.36]
   refs:
@@ -5502,8 +5516,10 @@ entries:
     so the owner's. Approver: owner. The owner's question (P1B-89): match
     the reference's fallback (take it as the time column) or keep the
     core's choice? (a) Treat a whole-table MIN or MAX whose wall clock in
-    the zone leaves the years 1 to 9999 as the query failing and fall back
-    to the preview, which matches the reference with and without pytz; or
+    the zone leaves the years 1 to 9999, for any candidate, as the table's
+    query failing and fall back to the preview for the whole table's choice
+    (every candidate of it), which matches the reference with and without
+    pytz in every shape here, (iii) included; or
     (b) keep the whole-table reading. Cost of (a): about one condition in
     sdm-schema's time column choice (infer.rs, where it reads the
     column_ranges answer), plus the test author's vectors and tests, a few
@@ -5525,7 +5541,10 @@ entries:
     T1.36 fix 15 from that first shape to the class, after the independent
     subagent's review of the final bookkeeping (e2fc16f4) measured shapes
     (i) and (ii) in New York with pytz, each a warning difference only, and
-    their '0001-01-02' controls; option (a) covers every shape. Never
+    their '0001-01-02' controls; option (a) covers every shape. Stated per
+    table at T1.36 fix 16, after the subagent's re-check of fix 15
+    (183900a0) measured shape (iii), a plain TIMESTAMP sibling's choice
+    decided by a zoned candidate's failure, and its control. Never
     self-approved.
 
 - id: P1B-79
