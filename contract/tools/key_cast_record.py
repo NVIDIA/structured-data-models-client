@@ -380,6 +380,128 @@ FLOAT_TEXT_KEYS = (
     "CASE X WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' "
     "WHEN 3 THEN '1059438285926254.3' ELSE X::VARCHAR END"
 )
+#: ``utf8-float-pyarrow-text``'s keys besides ``0`` to ``7``: pyarrow's
+#: text (``pc.cast(..., pa.string())``) of the floats of
+#: ``_pyarrow_float_entities``, written here as the reference's cast gives
+#: them (pandas 3.0.6 with pyarrow 25.0.1, pandas 2.2.0 with 14.0.1 and
+#: pandas 2.2.3 with 19.0.1 alike). ``3.0``'s, ``3``, is ``user_id`` 3's.
+PYARROW_FLOAT_TEXTS = (
+    '1e+16',
+    '1.2e+15',
+    '1e+15',
+    '1e+21',
+    '1e+22',
+    '1.2345678901234568e+17',
+    '1000000000',
+    '1e+10',
+    '1.5e-7',
+    '0.000001',
+    '1e-7',
+    '0.00001',
+    '0.0001',
+    '0.0001234',
+    '0.1',
+    '2.5',
+    '-0',
+    '5e-324',
+    '1.7976931348623157e+308',
+    '1.0594382859262542e+15',
+    'inf',
+    '-inf',
+    '16777216',
+    '0.10000000149011612',
+    '1.0000000272564224e+16',
+)
+
+
+def _numpy() -> Any:
+    import numpy as np
+
+    return np
+
+
+def _pyarrow_float_entities() -> dict[str, list[Any]]:
+    r"""``utf8-float-pyarrow-text``'s entities: floats whose text the core
+    and the reference may write otherwise (an exponent each way, the
+    extremes, the boundaries of the plain form, a tie of the shortest
+    digits, infinities and NaN), controls written alike (``0.1``, ``2.5``,
+    ``-0.0``, ``3.0``), float32 entities, and the text itself."""
+    import numpy as np
+
+    nan = float('nan')
+    floats = {
+        '1e16': 1e16,
+        '1-2e15': 1.2e15,
+        '1e15': 1e15,
+        '1e21': 1e21,
+        '1e22': 1e22,
+        '1-2345678901234568e17': 123456789012345680.0,
+        '1e9': 1e9,
+        '1e10': 1e10,
+        '1-5e-7': 1.5e-07,
+        '1e-6': 1e-06,
+        '1e-7': 1e-07,
+        '1e-5': 1e-05,
+        '1e-4': 1e-04,
+        '1-234e-4': 0.0001234,
+        '0-1': 0.1,
+        '2-5': 2.5,
+        'minus-zero': -0.0,
+        'integral-3': 3.0,
+        'smallest-subnormal': 5e-324,
+        'largest': 1.7976931348623157e308,
+        'tie': 1059438285926254.2,
+        'inf': math.inf,
+        'minus-inf': -math.inf,
+        'nan': nan,
+        # A float32 column's values as Python floats (``tolist``).
+        'widened-float32-0-1': float(np.float32(0.1)),
+        'widened-float32-1e16': float(np.float32(1e16)),
+    }
+    out: dict[str, list[Any]] = {
+        f'float.{name}': [value] for name, value in floats.items()
+    }
+    out |= {
+        'float.several': [3.0, 1e16, 1.5e-07],
+        'float.1e16-nan': [1e16, nan],
+        'float.1e16-none': [1e16, None],
+        'mixed.int-float-1e16': [1, 1e16],
+        'numpy.float64-1e16': [np.float64(1e16)],
+        'numpy.float32-0-1': [np.float32(0.1)],
+        'numpy.float32-2pow24-plus-1': [np.float32(2**24 + 1)],
+        'numpy.float32-1e16': [np.float32(1e16)],
+        'numpy.float32-1-5e-7': [np.float32(1.5e-07)],
+        'text.1e16': ['1e+16'],
+    }
+    return out
+
+
+#: ``utf8-numeric-ids``'s keys besides ``0`` to ``7``.
+NUMERIC_IDS = ('10000000000000000', '10000000000000001', '10000000000000002')
+
+
+def _ids(texts: tuple[str, ...]) -> list[str]:
+    r"""Statements adding a user of each of these keys."""
+    return [f"INSERT INTO users VALUES ('{text}', 30, 'US')" for text in texts]
+
+
+def _numeric_id_entities() -> dict[str, list[Any]]:
+    r"""``utf8-numeric-ids``'s entities: ``1e16`` as a float, as NumPy's
+    (a float column's values, a pandas column with its NaN dropped), with
+    a NaN beside it, and as an integer and text, which reach the first ID
+    whatever a float's spelling."""
+    np = _numpy()
+    return {
+        'float.1e16': [1e16],
+        'numpy.float64-1e16': [np.float64(1e16)],
+        'numpy.float32-1e16': [np.float32(1e16)],
+        'float.1e16-nan': [1e16, float('nan')],
+        'float.1e16-and-next': [1e16, 10000000000000002.0],
+        'int.1e16': [10**16],
+        'text.1e16': ['10000000000000000'],
+    }
+
+
 ROUND_2: list[dict[str, Any]] = [
     {
         'id': 'float32-near-one',
@@ -534,12 +656,50 @@ ROUND_2: list[dict[str, Any]] = [
         # (1059438285926254.25, which Rust writes away from zero).
         'id': 'utf8-float-text',
         'setup': _alter('VARCHAR', FLOAT_TEXT_KEYS),
-        'extra': {
+        'extra': lambda: {
             'mixed.float-1e16-text': [1e16, '0'],
             'mixed.float-tiny-text': [1.5e-07, '0'],
             'mixed.float-tie-text': [1059438285926254.2, '0'],
             'text.1e16': ['10000000000000000', '0'],
+            # T1.36 (the final review's P2-2): the same floats alone. The
+            # reference writes each as pyarrow does (``1e+16``, ``1.5e-7``,
+            # ``1.0594382859262542e+15``), which no key here holds.
+            'float.1e16': [1e16],
+            'float.tiny': [1.5e-07],
+            'float.tie': [1059438285926254.2],
+            'numpy.float32-1e16': [_numpy().float32(1e16)],
         },
+    },
+    {
+        # T1.36 (the final review's P2-2): a text key holding the text the
+        # reference writes for a float entity alone, besides ``0`` to
+        # ``7``. The reference's key is an ``ArrowDtype`` of text, and
+        # pandas casts floats to it with pyarrow (``pa.array`` of the
+        # floats, then ``cast`` to text: GH50430's fallback in
+        # ``ArrowExtensionArray._box_pa_array``), so a float's text is
+        # pyarrow's: the shortest digits of its own width (a float32's as a
+        # float32's), plain from 1e-6 to below 1e10, otherwise one digit,
+        # the rest after a point, ``e``, the exponent's sign and its
+        # digits, unpadded; a whole one with no point, ``-0``, ``inf`` and
+        # ``-inf``; NaN missing. The same in the floor and dbr17 cells.
+        'id': 'utf8-float-pyarrow-text',
+        'setup': _alter('VARCHAR', 'X::VARCHAR') + _ids(PYARROW_FLOAT_TEXTS),
+        'extra': _pyarrow_float_entities,
+    },
+    {
+        # T1.36 (P2-2) end to end: a text key of 17-digit numeric IDs, and
+        # float entities, as a float column (one holding NaN, say) gives
+        # them. The reference writes ``1e16`` as ``1e+16``, no ID here.
+        'id': 'utf8-numeric-ids',
+        'setup': _alter('VARCHAR', 'X::VARCHAR') + _ids(NUMERIC_IDS),
+        'extra': _numeric_id_entities,
+    },
+    {
+        # The same with ``1e+16`` among the IDs, which the reference reaches.
+        'id': 'utf8-numeric-ids-and-exponent',
+        'setup': _alter('VARCHAR', 'X::VARCHAR')
+        + _ids((*NUMERIC_IDS, '1e+16')),
+        'extra': _numeric_id_entities,
     },
 ]
 
@@ -628,7 +788,10 @@ def inputs(key: dict[str, Any]) -> dict[str, list[Any]]:
     r"""``key``'s entities: the shared inputs (the round-2 key types have
     none), its own, and those whose expectation is derived."""
     shared = _inputs() if key not in ROUND_2 else {}
-    own = {name: list(values) for name, values in key.get('extra', {}).items()}
+    extra = key.get('extra', {})
+    if callable(extra):  # built afresh, as the shared inputs are
+        extra = extra()
+    own = {name: list(values) for name, values in extra.items()}
     return {
         **shared,
         **own,

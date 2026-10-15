@@ -186,6 +186,59 @@
     "ALTER TABLE users ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' WHEN 3 THEN '1059438285926254.3' ELSE user_id::VARCHAR END",
     "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' WHEN 3 THEN '1059438285926254.3' ELSE user_id::VARCHAR END"
    ]
+  },
+  {
+   "id": "utf8-float-pyarrow-text",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "INSERT INTO users VALUES ('1e+16', 30, 'US')",
+    "INSERT INTO users VALUES ('1.2e+15', 30, 'US')",
+    "INSERT INTO users VALUES ('1e+15', 30, 'US')",
+    "INSERT INTO users VALUES ('1e+21', 30, 'US')",
+    "INSERT INTO users VALUES ('1e+22', 30, 'US')",
+    "INSERT INTO users VALUES ('1.2345678901234568e+17', 30, 'US')",
+    "INSERT INTO users VALUES ('1000000000', 30, 'US')",
+    "INSERT INTO users VALUES ('1e+10', 30, 'US')",
+    "INSERT INTO users VALUES ('1.5e-7', 30, 'US')",
+    "INSERT INTO users VALUES ('0.000001', 30, 'US')",
+    "INSERT INTO users VALUES ('1e-7', 30, 'US')",
+    "INSERT INTO users VALUES ('0.00001', 30, 'US')",
+    "INSERT INTO users VALUES ('0.0001', 30, 'US')",
+    "INSERT INTO users VALUES ('0.0001234', 30, 'US')",
+    "INSERT INTO users VALUES ('0.1', 30, 'US')",
+    "INSERT INTO users VALUES ('2.5', 30, 'US')",
+    "INSERT INTO users VALUES ('-0', 30, 'US')",
+    "INSERT INTO users VALUES ('5e-324', 30, 'US')",
+    "INSERT INTO users VALUES ('1.7976931348623157e+308', 30, 'US')",
+    "INSERT INTO users VALUES ('1.0594382859262542e+15', 30, 'US')",
+    "INSERT INTO users VALUES ('inf', 30, 'US')",
+    "INSERT INTO users VALUES ('-inf', 30, 'US')",
+    "INSERT INTO users VALUES ('16777216', 30, 'US')",
+    "INSERT INTO users VALUES ('0.10000000149011612', 30, 'US')",
+    "INSERT INTO users VALUES ('1.0000000272564224e+16', 30, 'US')"
+   ]
+  },
+  {
+   "id": "utf8-numeric-ids",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "INSERT INTO users VALUES ('10000000000000000', 30, 'US')",
+    "INSERT INTO users VALUES ('10000000000000001', 30, 'US')",
+    "INSERT INTO users VALUES ('10000000000000002', 30, 'US')"
+   ]
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "INSERT INTO users VALUES ('10000000000000000', 30, 'US')",
+    "INSERT INTO users VALUES ('10000000000000001', 30, 'US')",
+    "INSERT INTO users VALUES ('10000000000000002', 30, 'US')",
+    "INSERT INTO users VALUES ('1e+16', 30, 'US')"
+   ]
   }
  ],
  "vectors": [
@@ -45226,6 +45279,2571 @@
     "why": [
      "the host gives the core the same column as utf8-float-text.mixed.float-1e16-text, which the reference answers differently"
     ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.float.1e16",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.float.tiny",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.5e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.float.tie",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1059438285926254.2"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1059438285926254.2"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.0594382859262542e+15"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.numpy.float32-1e16",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "1.0000000272564224e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "1.0000000272564224e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e16",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1-2e15",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1200000000000000.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1200000000000000.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.2e+15"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.2e+15"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e15",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1000000000000000.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1000000000000000.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+15"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+15"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e21",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+21"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+21"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+21"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+21"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e22",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+22"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+22"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+22"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+22"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1-2345678901234568e17",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.2345678901234568e+17"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.2345678901234568e+17"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.2345678901234568e+17"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.2345678901234568e+17"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e9",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1000000000.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1000000000.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1000000000"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1000000000"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e10",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "10000000000.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "10000000000.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+10"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+10"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1-5e-7",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.5e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e-6",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e-06"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e-06"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.000001"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.000001"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e-7",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e-7"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e-5",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e-05"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e-05"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.00001"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.00001"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e-4",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "0.0001"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "0.0001"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.0001"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.0001"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1-234e-4",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "0.0001234"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "0.0001234"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.0001234"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.0001234"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.0-1",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "0.1"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "0.1"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.1"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.1"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.2-5",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "2.5"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "2.5"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "2.5"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "2.5"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.minus-zero",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "-0.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "-0.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "-0"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "-0"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.integral-3",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "3.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "3.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "3"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "3"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.smallest-subnormal",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "5e-324"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "5e-324"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "5e-324"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "5e-324"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.largest",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.7976931348623157e+308"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.7976931348623157e+308"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.7976931348623157e+308"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.7976931348623157e+308"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.tie",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1059438285926254.2"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1059438285926254.2"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.0594382859262542e+15"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.0594382859262542e+15"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.inf",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "inf"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "inf"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "inf"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "inf"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.minus-inf",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "-inf"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "-inf"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "-inf"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "-inf"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.nan",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "nan"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "NaN"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      null
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.widened-float32-0-1",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "0.10000000149011612"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "0.10000000149011612"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.10000000149011612"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.10000000149011612"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.widened-float32-1e16",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.0000000272564224e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.0000000272564224e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.0000000272564224e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.0000000272564224e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.several",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "3.0"
+    },
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "3.0"
+     },
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "f64",
+      "v": "1.5e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "3"
+      ],
+      [
+       "s",
+       "1e+16"
+      ],
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "3"
+      ],
+      [
+       "s",
+       "1e+16"
+      ],
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e16-nan",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "float",
+     "v": "nan"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "f64",
+      "v": "NaN"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      null
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.float.1e16-none",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "None"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "null"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      null
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.mixed.int-float-1e16",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "int",
+     "v": "1"
+    },
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.0"
+     },
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1"
+      ],
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1"
+      ],
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.numpy.float64-1e16",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "numpy.float64",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.numpy.float32-0-1",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "0.10000000149011612"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "0.10000000149011612"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "0.1"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "0.1"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.numpy.float32-2pow24-plus-1",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "16777216.0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "16777216.0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "16777216"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "16777216"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.numpy.float32-1e16",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "1.0000000272564224e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "1.0000000272564224e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.numpy.float32-1-5e-7",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "1.500000053056283e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "1.500000053056283e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-pyarrow-text.text.1e16",
+   "key": "utf8-float-pyarrow-text",
+   "input": [
+    {
+     "t": "str",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.float.1e16",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.numpy.float64-1e16",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "numpy.float64",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.numpy.float32-1e16",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "1.0000000272564224e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "1.0000000272564224e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.float.1e16-nan",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "float",
+     "v": "nan"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "f64",
+      "v": "NaN"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      null
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.float.1e16-and-next",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "float",
+     "v": "1.0000000000000002e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "f64",
+      "v": "1.0000000000000002e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      [
+       "s",
+       "1.0000000000000002e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.int.1e16",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "int",
+     "v": "10000000000000000"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "int64",
+    "values": [
+     {
+      "t": "i64",
+      "v": "10000000000000000"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids.text.1e16",
+   "key": "utf8-numeric-ids",
+   "input": [
+    {
+     "t": "str",
+     "v": "10000000000000000"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "10000000000000000"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.float.1e16",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.numpy.float64-1e16",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "numpy.float64",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.numpy.float32-1e16",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "1.0000000272564224e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "1.0000000272564224e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.float.1e16-nan",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "float",
+     "v": "nan"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "f64",
+      "v": "NaN"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      null
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.float.1e16-and-next",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "float",
+     "v": "1.0000000000000002e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     },
+     {
+      "t": "f64",
+      "v": "1.0000000000000002e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      [
+       "s",
+       "1.0000000000000002e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.int.1e16",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "int",
+     "v": "10000000000000000"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "int64",
+    "values": [
+     {
+      "t": "i64",
+      "v": "10000000000000000"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-numeric-ids-and-exponent.text.1e16",
+   "key": "utf8-numeric-ids-and-exponent",
+   "input": [
+    {
+     "t": "str",
+     "v": "10000000000000000"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "10000000000000000"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "10000000000000000"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
     "disposition": null
    }
   }

@@ -47,6 +47,14 @@ same vectors, so the two hosts agree through them.
   carried P3): ``1e16`` is ``10000000000000000``, not Python's ``1e+16``.
   The ``utf8-float-text`` key holds those texts as keys, so a host writing
   a float otherwise reaches no key.
+- A float entity alone, of a text key (T1.36, the final review's P2-2):
+  the reference writes it as pyarrow casts a float to text (``1e16`` is
+  ``1e+16``, ``1.5e-07`` is ``1.5e-7``, ``1e-06`` is ``0.000001``), and the
+  owner's decision is to match it. ``utf8-float-pyarrow-text`` holds those
+  texts as keys, ``utf8-numeric-ids`` holds 17-digit IDs (``1e16`` reaches
+  none), ``utf8-numeric-ids-and-exponent`` the same and ``1e+16``; the
+  floats alone on ``utf8-float-text`` must miss the core's old text. No
+  register entry may excuse one of these vectors.
 - The vectors themselves: recorded at the reference of
   ``contract/reference-env.txt``; every key type and input of the
   recorder present; each input read back exactly; the host's column, the
@@ -69,6 +77,7 @@ import decimal
 import fnmatch
 import importlib.util
 import json
+import math
 import re
 import sys
 from decimal import Decimal
@@ -417,6 +426,129 @@ def test_the_host_text_of_a_float_is_the_core_s() -> None:
     assert R.host_text('1e16') == '1e16'
     assert R.host_text(7) == '7'
     assert R.as_text([1e16, None, '2']) == ['10000000000000000', None, '2']
+
+
+#: T1.36 (the final review's P2-2): the key types and vectors where a float
+#: entity's text decides the answer. The owner's decision is to write it as
+#: the reference does, so no register entry may excuse one.
+SPELLING_KEYS = (
+    'utf8-float-pyarrow-text',
+    'utf8-numeric-ids',
+    'utf8-numeric-ids-and-exponent',
+)
+SPELLING_ON_THE_CORE_S_TEXT = (
+    'utf8-float-text.float.*',
+    'utf8-float-text.numpy.float32-*',
+)
+
+
+def _spelling(vector_id: str) -> bool:
+    return vector_id.split('.')[0] in SPELLING_KEYS or any(
+        fnmatch.fnmatchcase(vector_id, glob)
+        for glob in SPELLING_ON_THE_CORE_S_TEXT
+    )
+
+
+def _floats_only(values: list[Any]) -> bool:
+    import numpy as np
+
+    present = [v for v in values if not R._missing(v)]
+    return bool(present) and all(
+        isinstance(v, (float, np.floating)) for v in present
+    )
+
+
+def test_the_reference_writes_a_float_entity_as_pyarrow_casts_it() -> None:
+    # The rule a float entity of a text key is held to: the reference's key
+    # is an ArrowDtype of text, and pandas casts floats to it with pyarrow
+    # (pa.array, then cast to text), so each recorded cast of float
+    # entities to a text key is pyarrow's cast of the same column, a NaN
+    # missing; and pyarrow writes these, worked by hand: the shortest
+    # digits of the float's own width, plain from 1e-6 to below 1e10,
+    # otherwise with an exponent of its sign and unpadded digits.
+    import numpy as np
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    def text(values: list[Any]) -> list[str | None]:
+        return pc.cast(
+            pa.array(values, from_pandas=True), pa.string()
+        ).to_pylist()
+
+    worked = [
+        (1e16, '1e+16'),
+        (1.2e15, '1.2e+15'),
+        (1e15, '1e+15'),
+        (1e21, '1e+21'),
+        (123456789012345680.0, '1.2345678901234568e+17'),
+        (1e10, '1e+10'),
+        (1e9, '1000000000'),
+        (1.5e-07, '1.5e-7'),
+        (1e-06, '0.000001'),
+        (1e-07, '1e-7'),
+        (1e-05, '0.00001'),
+        (0.0001234, '0.0001234'),
+        (2.5, '2.5'),
+        (3.0, '3'),
+        (-0.0, '-0'),
+        (5e-324, '5e-324'),
+        (1.7976931348623157e308, '1.7976931348623157e+308'),
+        (1059438285926254.2, '1.0594382859262542e+15'),
+        (math.inf, 'inf'),
+        (-math.inf, '-inf'),
+        (float(np.float32(0.1)), '0.10000000149011612'),
+        (np.float32(0.1), '0.1'),
+        (np.float32(1e16), '1e+16'),
+        (np.float32(2**24 + 1), '16777216'),
+        (np.float32(1.5e-07), '1.5e-7'),
+    ]
+    for value, want in worked:
+        assert text([value]) == [want], repr(value)
+    assert text([1e16, float('nan')]) == ['1e+16', None]
+    checked = 0
+    for vector in RECORDED['vectors']:
+        key = vector['key']
+        if not (key == 'utf8' or key.startswith('utf8-')):
+            continue
+        values = [R.decode(tagged) for tagged in vector['input']]
+        cast = vector['reference']['cast']
+        if not _floats_only(values) or not cast or 'values' not in cast:
+            continue
+        want_cells = [None if t is None else ['s', t] for t in text(values)]
+        assert cast['values'] == want_cells, vector['id']
+        checked += 1
+    assert checked >= 40, checked
+
+
+def test_no_entry_excuses_a_float_entity_s_text() -> None:
+    # The vectors exist, the reference both refuses and takes a float by
+    # its text among them, and no register entry, proposed or approved,
+    # names one: each is held to the reference exactly.
+    spelling = [v for v in RECORDED['vectors'] if _spelling(v['id'])]
+    assert len(spelling) >= 50, len(spelling)
+    outcomes = {v['reference']['public']['outcome'] for v in spelling}
+    assert outcomes == {'success', 'refusal'}
+    by_id = {v['id']: v for v in spelling}
+    assert (
+        by_id['utf8-numeric-ids.float.1e16']['reference']['public']['outcome']
+        == 'refusal'
+    )
+    assert by_id['utf8-numeric-ids-and-exponent.float.1e16']['reference'][
+        'public'
+    ] == {'outcome': 'success', 'entities': [['s', '1e+16']]}
+
+    def excused(found: list[tuple[str, str, str, str]]) -> list[Any]:
+        return [
+            (entry, vector['id'])
+            for entry, glob, _, _ in found
+            for vector in spelling
+            if fnmatch.fnmatchcase(vector['id'], glob)
+        ]
+
+    assert excused(transitions()[0]) == []
+    # Fails closed on a seeded entry naming them.
+    seeded = [('SEEDED-1', 'utf8-numeric-ids.*', 'refusal', 'success')]
+    assert len(excused(seeded)) == 7
 
 
 def test_the_vectors_are_not_vacuous() -> None:

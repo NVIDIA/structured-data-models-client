@@ -588,6 +588,9 @@ key_types! {
     rust_host_holds_a_38_digit_decimal_38_10_key_exactly => "decimal128-38-10-wide",
     rust_host_holds_a_decimal_38_37_key_exactly => "decimal128-38-37",
     rust_host_reaches_a_text_key_by_the_core_s_float_text => "utf8-float-text",
+    rust_host_writes_a_float_entity_of_a_text_key_as_the_reference => "utf8-float-pyarrow-text",
+    rust_host_misses_numeric_ids_by_the_reference_s_float_text => "utf8-numeric-ids",
+    rust_host_reaches_numeric_ids_by_the_reference_s_float_text => "utf8-numeric-ids-and-exponent",
 }
 
 #[test]
