@@ -107,7 +107,10 @@ ABOUT = (
     'the reference with pytz (`reference_with_pytz`, the default route of '
     'an interpreter of the same environment with pytz installed, '
     '`p1b39.environment`) and the core, each with its from_source warnings '
-    'whole.'
+    'whole. `p1b89`: register P1B-89 (owner-pending), recorded the same way: '
+    "with pytz, DuckDB's fetchall fails where a zoned value's wall clock in "
+    "the session's zone leaves the years, so the reference falls back to its "
+    'preview there too.'
 )
 
 #: The value every other row holds.
@@ -572,6 +575,48 @@ _P1B39_SPECS: dict[str, tuple[str, str, str, list[str]]] = {
     ),
 }
 
+#: Register P1B-89 (owner-pending; fix 13's re-check, P3-1): with pytz
+#: installed, DuckDB's fetchall moves a TIMESTAMPTZ to the session's zone as
+#: a Python datetime, which fails (OverflowError) where the wall clock there
+#: leaves the years though the instant does not, so the reference's
+#: whole-table statement fails all the same and it chooses from its
+#: preview; the core reads the whole table. Without pytz this is P1B-39's
+#: case.
+_P1B89_SPECS: dict[str, tuple[str, str, str, list[str]]] = {
+    'p1b89.held-past-the-preview.new-york.year-1': (
+        NY,
+        '0001-01-01 00:00:00+00',
+        PREVIEW + ' (the wall clock before the year 1)',
+        events(NY, '0001-01-01 00:00:00+00'),
+    ),
+    'p1b89.held-past-the-preview.tokyo.year-9999': (
+        TOKYO,
+        '9999-12-31 23:00:00+00',
+        PREVIEW + ' (the wall clock past the year 9999)',
+        events(TOKYO, '9999-12-31 23:00:00+00'),
+    ),
+    'p1b89.control.utc.year-1': (
+        'UTC',
+        '0001-01-01 00:00:00+00',
+        PREVIEW + ' (control: read in UTC, the wall clock within the years)',
+        events('UTC', '0001-01-01 00:00:00+00'),
+    ),
+    'p1b89.control.sentinel.new-york': (
+        NY,
+        '0001-01-01 00:00:00+00',
+        'events.f, 2,500 rows, 2020-01-01+00 plus i hours in row i but row '
+        "2,000's, which holds the instant (control: a realistic sentinel, "
+        'past the preview)',
+        [
+            f"SET GLOBAL TimeZone = '{NY}'",
+            'CREATE TABLE events AS SELECT i::BIGINT AS event_id, CASE WHEN '
+            "i = 2000 THEN TIMESTAMPTZ '0001-01-01 00:00:00+00' ELSE "
+            "TIMESTAMPTZ '2020-01-01 00:00:00+00' + to_hours(i) END AS f "
+            'FROM range(2500) t(i)',
+        ],
+    ),
+}
+
 
 def _sources(
     specs: dict[str, tuple[str, str, str, list[str] | None]],
@@ -580,7 +625,7 @@ def _sources(
     for name, (zone, instant, role, setup) in specs.items():
         column = (
             'events.f'
-            if name.startswith(('zone.preview.', 'p1b39.'))
+            if name.startswith(('zone.preview.', 'p1b39.', 'p1b89.'))
             else 'users.ts'
             if name.startswith('zone.verbatim.')
             else 'users.loaded_at'
@@ -599,6 +644,9 @@ def _sources(
 
 SOURCES = _sources(_SPECS)
 P1B39 = _sources(dict(_P1B39_SPECS))
+P1B89 = _sources(dict(_P1B89_SPECS))
+#: The sections each source of which is recorded with pytz too.
+WITH_PYTZ = {'p1b39': ('P1B-39', P1B39), 'p1b89': ('P1B-89', P1B89)}
 
 
 def wall_clock(zone: str, instant: str) -> dict[str, str]:
@@ -808,7 +856,7 @@ def main() -> int:
             sys.argv[1:] = ['--child', 'environment']
             return int(R.main())
         route, names = sys.argv[3], sys.argv[4:]
-        every = {**SOURCES, **P1B39}
+        every = {**SOURCES, **P1B39, **P1B89}
         for name in names:
             got = R.answer(every[name]['setup'], route)
             got['from_source_text'] = from_source_text(
@@ -845,7 +893,7 @@ def main() -> int:
     answers: dict[str, dict[str, Any]] = {}
     environments: dict[str, Any] = {}
     for route, python in pythons.items():
-        lines, code = _run(python, ['sources', route, *SOURCES, *P1B39])
+        lines, code = _run(python, ['sources', route, *SOURCES, *P1B39, *P1B89])
         if code != 0:
             return code
         for line in lines:
@@ -862,11 +910,14 @@ def main() -> int:
             'answer': v['reference_with_pytz'],
             'text': v['from_source_text']['reference_with_pytz'],
         }
-        for v in previous.get('p1b39', {}).get('vectors', [])
+        for section in WITH_PYTZ
+        for v in previous.get(section, {}).get('vectors', [])
     }
     pytz_environment = previous.get('p1b39', {}).get('environment')
     if args.pytz_python:
-        lines, code = _run(args.pytz_python, ['sources', 'reference', *P1B39])
+        lines, code = _run(
+            args.pytz_python, ['sources', 'reference', *P1B39, *P1B89]
+        )
         if code != 0:
             return code
         for line in lines:
@@ -904,24 +955,27 @@ def main() -> int:
             }
             for name, spec in SOURCES.items()
         ],
-        'p1b39': {
-            'entry': 'P1B-39',
-            'environment': pytz_environment,
-            'vectors': [
-                {
-                    'name': name,
-                    **spec,
-                    'reference': answers[name]['reference'],
-                    'reference_with_pytz': with_pytz[name]['answer'],
-                    'core_at_measurement': answers[name]['core'],
-                    'from_source_text': {
-                        'reference': answers[name]['reference_text'],
-                        'reference_with_pytz': with_pytz[name]['text'],
-                        'core_at_measurement': answers[name]['core_text'],
-                    },
-                }
-                for name, spec in P1B39.items()
-            ],
+        **{
+            section: {
+                'entry': entry,
+                'environment': pytz_environment,
+                'vectors': [
+                    {
+                        'name': name,
+                        **spec,
+                        'reference': answers[name]['reference'],
+                        'reference_with_pytz': with_pytz[name]['answer'],
+                        'core_at_measurement': answers[name]['core'],
+                        'from_source_text': {
+                            'reference': answers[name]['reference_text'],
+                            'reference_with_pytz': with_pytz[name]['text'],
+                            'core_at_measurement': answers[name]['core_text'],
+                        },
+                    }
+                    for name, spec in sources.items()
+                ],
+            }
+            for section, (entry, sources) in WITH_PYTZ.items()
         },
     }
     OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')

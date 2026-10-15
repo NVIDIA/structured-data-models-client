@@ -1,10 +1,10 @@
 {
  "format": "sdm-host2-zone-vectors/1",
- "about": "Register P1B-81(b)'s first value read with a zone (T1.36 fix 11, written by the independent test author before the fix): what DuckDB 1.5.6, the reference and the core do with a TIMESTAMPTZ whose instant lies within the years 1 to 9999 but whose wall clock, in the zone DuckDB hands it over in, does not. `vectors`: each a source (contract/bases.yaml's `shop`, then `setup`), the column it is about, its role, the zone the database is in (SET GLOBAL TimeZone) and the instant in user 0's row, and the public calls' answer on each route, recorded by contract/tools/host2_zones_record.py with the answers of contract/tools/host2_values_record.py: `reference` from the reference checkout's interpreter, `core_at_measurement` from the candidate on the core route, evidence of what the core did when measured, never an expectation. `zones`: the Arrow type a new connection to the database (cursor(), as both routes read) hands a TIMESTAMPTZ over as, for each zone and with the caller's connection SET otherwise; what an Arrow import's zone becomes; and per vector the zone's offset at its instant and the wall clock there, as Python's zoneinfo gives them (pyarrow's as_py: astimezone to zoneinfo.ZoneInfo, from the system tz database), the microseconds DuckDB holds, whether the UTC datetime and the wall clock each lie within the years, counted, and as_py's own answer. The reference's from_source fails unnamed (OverflowError, predictive_query/time_columns.py _refused_for_values, present.iloc[0]) exactly where the UTC datetime as_py builds first, or the wall clock it moves it to, leaves 0001-01-01T00:00:00 to 9999-12-31T23:59:59.999999, both ends held. `zone.whole.*` (fix 11's review): the same instants in every row, a constant column the reference warns of, the warning showing the value at its wall clock (\"every row holds 0001-01-01 00:00:00-04:56:02\"). Held by contract/tests/test_t136_host2_zones.py. `zone.preview.*` (fix 13's review): a value only past the 1,000 rows the preview reads, warned of with the whole table's MIN, which the reference reads through DuckDB's fetchall: outside Python's years DuckDB's own text, in UTC (`zones.fetchall_outside_the_years`). `p1b39`: register P1B-39 (approved), the reference without pytz (`reference`, its checkout), the reference with pytz (`reference_with_pytz`, the default route of an interpreter of the same environment with pytz installed, `p1b39.environment`) and the core, each with its from_source warnings whole.",
+ "about": "Register P1B-81(b)'s first value read with a zone (T1.36 fix 11, written by the independent test author before the fix): what DuckDB 1.5.6, the reference and the core do with a TIMESTAMPTZ whose instant lies within the years 1 to 9999 but whose wall clock, in the zone DuckDB hands it over in, does not. `vectors`: each a source (contract/bases.yaml's `shop`, then `setup`), the column it is about, its role, the zone the database is in (SET GLOBAL TimeZone) and the instant in user 0's row, and the public calls' answer on each route, recorded by contract/tools/host2_zones_record.py with the answers of contract/tools/host2_values_record.py: `reference` from the reference checkout's interpreter, `core_at_measurement` from the candidate on the core route, evidence of what the core did when measured, never an expectation. `zones`: the Arrow type a new connection to the database (cursor(), as both routes read) hands a TIMESTAMPTZ over as, for each zone and with the caller's connection SET otherwise; what an Arrow import's zone becomes; and per vector the zone's offset at its instant and the wall clock there, as Python's zoneinfo gives them (pyarrow's as_py: astimezone to zoneinfo.ZoneInfo, from the system tz database), the microseconds DuckDB holds, whether the UTC datetime and the wall clock each lie within the years, counted, and as_py's own answer. The reference's from_source fails unnamed (OverflowError, predictive_query/time_columns.py _refused_for_values, present.iloc[0]) exactly where the UTC datetime as_py builds first, or the wall clock it moves it to, leaves 0001-01-01T00:00:00 to 9999-12-31T23:59:59.999999, both ends held. `zone.whole.*` (fix 11's review): the same instants in every row, a constant column the reference warns of, the warning showing the value at its wall clock (\"every row holds 0001-01-01 00:00:00-04:56:02\"). Held by contract/tests/test_t136_host2_zones.py. `zone.preview.*` (fix 13's review): a value only past the 1,000 rows the preview reads, warned of with the whole table's MIN, which the reference reads through DuckDB's fetchall: outside Python's years DuckDB's own text, in UTC (`zones.fetchall_outside_the_years`). `p1b39`: register P1B-39 (approved), the reference without pytz (`reference`, its checkout), the reference with pytz (`reference_with_pytz`, the default route of an interpreter of the same environment with pytz installed, `p1b39.environment`) and the core, each with its from_source warnings whole. `p1b89`: register P1B-89 (owner-pending), recorded the same way: with pytz, DuckDB's fetchall fails where a zoned value's wall clock in the session's zone leaves the years, so the reference falls back to its preview there too.",
  "recorded": {
   "by": "contract/tools/host2_zones_record.py",
   "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
-  "candidate": "cdd265508e2292a589e0f43457291600e05966c1",
+  "candidate": "b6ac5b764c9fd30a80801f0de8194c3e6c5dd78b",
   "environments": {
    "reference": {
     "python": "3.12.13",
@@ -18,7 +18,7 @@
     "pandas": "3.0.6",
     "pyarrow": "25.0.1",
     "duckdb": "1.5.6",
-    "sdm_client": "/private/tmp/claude-501/-Users-awadaskar-code-sdm-client/b87dd10f-bd49-48f0-b283-f122bc8d1295/scratchpad/venv-g14/lib/python3.12/site-packages/sdm_client"
+    "sdm_client": "/private/tmp/claude-501/-Users-awadaskar-code-sdm-client/b87dd10f-bd49-48f0-b283-f122bc8d1295/scratchpad/venv-g15/lib/python3.12/site-packages/sdm_client"
    }
   },
   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
@@ -5727,7 +5727,7 @@
      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 10000-01-01 00:00:00+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
     ],
     "core_at_measurement": [
-     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 10000-01-01 00:00:00+00:00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 10000-01-01 00:00:00+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
     ]
    }
   },
@@ -5918,7 +5918,7 @@
      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 10000-06-01 12:34:56.5+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
     ],
     "core_at_measurement": [
-     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 10000-06-01 12:34:56.500000+00:00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 10000-06-01 12:34:56.5+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
     ]
    }
   },
@@ -6109,7 +6109,7 @@
      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 0001-12-31 (BC) 15:00:00+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
     ],
     "core_at_measurement": [
-     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 0000-12-31 15:00:00+00:00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 0001-12-31 (BC) 15:00:00+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
     ]
    }
   }
@@ -6121,7 +6121,7 @@
    "pandas": "3.0.6",
    "pyarrow": "25.0.1",
    "duckdb": "1.5.6",
-   "sdm_client": "/private/tmp/claude-501/-Users-awadaskar-code-sdm-client/b87dd10f-bd49-48f0-b283-f122bc8d1295/scratchpad/venv-g14-pytz/lib/python3.12/site-packages/sdm_client",
+   "sdm_client": "/private/tmp/claude-501/-Users-awadaskar-code-sdm-client/b87dd10f-bd49-48f0-b283-f122bc8d1295/scratchpad/venv-g15-pytz/lib/python3.12/site-packages/sdm_client",
    "pytz": true
   },
   "vectors": [
@@ -6694,6 +6694,1118 @@
     "setup": [
      "SET GLOBAL TimeZone = 'UTC'",
      "CREATE TABLE events AS SELECT i::BIGINT AS event_id, TIMESTAMPTZ '2020-01-01 00:00:00+00' + to_hours(i) AS f FROM range(2500) t(i)"
+    ],
+    "reference": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "reference_with_pytz": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "core_at_measurement": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [],
+      "materialize": [
+       [
+        "SDMWarning",
+        "[TABLES_UNLINKED] 'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: "
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "from_source_text": {
+     "reference": [],
+     "reference_with_pytz": [],
+     "core_at_measurement": []
+    }
+   }
+  ]
+ },
+ "p1b89": {
+  "entry": "P1B-89",
+  "environment": {
+   "python": "3.12.13",
+   "pandas": "3.0.6",
+   "pyarrow": "25.0.1",
+   "duckdb": "1.5.6",
+   "sdm_client": "/private/tmp/claude-501/-Users-awadaskar-code-sdm-client/b87dd10f-bd49-48f0-b283-f122bc8d1295/scratchpad/venv-g15-pytz/lib/python3.12/site-packages/sdm_client",
+   "pytz": true
+  },
+  "vectors": [
+   {
+    "name": "p1b89.held-past-the-preview.new-york.year-1",
+    "column": "events.f",
+    "role": "events.f, 2,500 rows: null in the 1,000 the preview reads, the instant in the 1,500 after (a constant column, warned of with the whole table's MIN) (the wall clock before the year 1)",
+    "zone": "America/New_York",
+    "instant": "0001-01-01 00:00:00+00",
+    "setup": [
+     "SET GLOBAL TimeZone = 'America/New_York'",
+     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMPTZ '0001-01-01 00:00:00+00' END AS f FROM range(2500) t(i)"
+    ],
+    "reference": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "reference_with_pytz": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "core_at_measurement": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": null
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "[TABLES_UNLINKED] 'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: "
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "from_source_text": {
+     "reference": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was taken as the time column although none of the 1,000 rows read holds a value, because the query over the whole table failed and the rows past them were not checked. If the whole table is like that, clear it: time_columns={'events': None}."
+     ],
+     "reference_with_pytz": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was taken as the time column although none of the 1,000 rows read holds a value, because the query over the whole table failed and the rows past them were not checked. If the whole table is like that, clear it: time_columns={'events': None}."
+     ],
+     "core_at_measurement": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 0001-01-01 00:00:00+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     ]
+    }
+   },
+   {
+    "name": "p1b89.held-past-the-preview.tokyo.year-9999",
+    "column": "events.f",
+    "role": "events.f, 2,500 rows: null in the 1,000 the preview reads, the instant in the 1,500 after (a constant column, warned of with the whole table's MIN) (the wall clock past the year 9999)",
+    "zone": "Asia/Tokyo",
+    "instant": "9999-12-31 23:00:00+00",
+    "setup": [
+     "SET GLOBAL TimeZone = 'Asia/Tokyo'",
+     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMPTZ '9999-12-31 23:00:00+00' END AS f FROM range(2500) t(i)"
+    ],
+    "reference": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "reference_with_pytz": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "core_at_measurement": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": null
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "[TABLES_UNLINKED] 'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: "
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "from_source_text": {
+     "reference": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was taken as the time column although none of the 1,000 rows read holds a value, because the query over the whole table failed and the rows past them were not checked. If the whole table is like that, clear it: time_columns={'events': None}."
+     ],
+     "reference_with_pytz": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was taken as the time column although none of the 1,000 rows read holds a value, because the query over the whole table failed and the rows past them were not checked. If the whole table is like that, clear it: time_columns={'events': None}."
+     ],
+     "core_at_measurement": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 9999-12-31 23:00:00+00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     ]
+    }
+   },
+   {
+    "name": "p1b89.control.utc.year-1",
+    "column": "events.f",
+    "role": "events.f, 2,500 rows: null in the 1,000 the preview reads, the instant in the 1,500 after (a constant column, warned of with the whole table's MIN) (control: read in UTC, the wall clock within the years)",
+    "zone": "UTC",
+    "instant": "0001-01-01 00:00:00+00",
+    "setup": [
+     "SET GLOBAL TimeZone = 'UTC'",
+     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, CASE WHEN i < 1000 THEN NULL ELSE TIMESTAMPTZ '0001-01-01 00:00:00+00' END AS f FROM range(2500) t(i)"
+    ],
+    "reference": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": "f"
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "reference_with_pytz": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": null
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: schema.relationshi"
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "core_at_measurement": {
+     "described": {
+      "events": {
+       "columns": [
+        [
+         "event_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "f",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "event_id",
+       "time_column": null
+      },
+      "orders": {
+       "columns": [
+        [
+         "order_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "price",
+         "float64",
+         "numerical"
+        ],
+        [
+         "ts",
+         "timestamp[us]",
+         "timestamp"
+        ]
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      "users": {
+       "columns": [
+        [
+         "user_id",
+         "int64",
+         "ID"
+        ],
+        [
+         "age",
+         "int64",
+         "numerical"
+        ],
+        [
+         "country",
+         "string",
+         "categorical"
+        ]
+       ],
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     },
+     "outcome": {
+      "result": "success",
+      "stage": "predict"
+     },
+     "warnings": {
+      "from_source": [
+       [
+        "SDMWarning",
+        "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+       ]
+      ],
+      "materialize": [
+       [
+        "SDMWarning",
+        "[TABLES_UNLINKED] 'events' is in the schema and not in this request: no relationship connects it to 'users', so the model answers without it. Say how it joins: "
+       ]
+      ],
+      "predict": []
+     }
+    },
+    "from_source_text": {
+     "reference": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was taken as the time column although none of the 1,000 rows read holds a value, because the query over the whole table failed and the rows past them were not checked. If the whole table is like that, clear it: time_columns={'events': None}."
+     ],
+     "reference_with_pytz": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 0001-01-01 00:00:00+00:00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     ],
+     "core_at_measurement": [
+      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- events.f was not taken as the time column because every row that holds a value holds 0001-01-01 00:00:00+00:00. If it does say when a row became true, name it: time_columns={'events': 'f'}."
+     ]
+    }
+   },
+   {
+    "name": "p1b89.control.sentinel.new-york",
+    "column": "events.f",
+    "role": "events.f, 2,500 rows, 2020-01-01+00 plus i hours in row i but row 2,000's, which holds the instant (control: a realistic sentinel, past the preview)",
+    "zone": "America/New_York",
+    "instant": "0001-01-01 00:00:00+00",
+    "setup": [
+     "SET GLOBAL TimeZone = 'America/New_York'",
+     "CREATE TABLE events AS SELECT i::BIGINT AS event_id, CASE WHEN i = 2000 THEN TIMESTAMPTZ '0001-01-01 00:00:00+00' ELSE TIMESTAMPTZ '2020-01-01 00:00:00+00' + to_hours(i) END AS f FROM range(2500) t(i)"
     ],
     "reference": {
      "described": {

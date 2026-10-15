@@ -83,6 +83,15 @@ Added after fix 13 (cdd26550), from its review:
   ("10000-01-01 00:00:00+00", "0001-12-31 (BC) 15:00:00+00"), and the
   core must show the same, word for word. No first value is read, so the
   reference does not fail.
+- ``p1b89.*`` (fix 13's re-check, P3-1): register P1B-89, owner-pending.
+  With pytz too, DuckDB's fetchall moves a zoned value to the session's
+  zone as a Python datetime, which fails where that wall clock leaves the
+  years (``0001-01-01 00:00+00`` in New York), so the reference's
+  whole-table statement fails all the same and it takes a column empty in
+  its preview unchecked; the core reads the whole table and passes it over
+  as constant. Pinned as measured, with and without pytz, beside two
+  controls: the same column read in UTC (with pytz the reference agrees)
+  and a realistic sentinel (all agree).
 - ``p1b39.*``: register P1B-39 (approved, E83/E85(c)), pinned as measured:
   without pytz (ref-pandas3), DuckDB's fetchall of a ``TIMESTAMPTZ``
   within the years fails, so the reference's whole-table statement fails
@@ -509,6 +518,12 @@ def _has_pytz() -> bool:
 
 
 def _p1b39_entry() -> dict[str, Any]:
+    (entry,) = _entries('P1B-39')
+    return entry
+
+
+def _entries(wanted: str) -> list[dict[str, Any]]:
+    r"""Every register entry whose id is ``wanted``."""
     import yaml
 
     register = yaml.safe_load(
@@ -518,7 +533,7 @@ def _p1b39_entry() -> dict[str, Any]:
 
     def walk(node: Any) -> None:
         if isinstance(node, dict):
-            if node.get('id') == 'P1B-39':
+            if node.get('id') == wanted:
                 found.append(node)
             for value in node.values():
                 walk(value)
@@ -527,8 +542,7 @@ def _p1b39_entry() -> dict[str, Any]:
                 walk(each)
 
     walk(register)
-    (entry,) = found
-    return entry
+    return found
 
 
 def test_p1b39_is_the_approved_entry_the_measurements_are_held_to() -> None:
@@ -664,3 +678,169 @@ def test_p1b39_the_core_reads_the_whole_table_as_the_reference_with_pytz(
         else:
             os.environ['SDM_CORE_ROUTES'] = saved
     assert text == vector['from_source_text']['reference_with_pytz']
+
+
+# --- register P1B-89: a wall clock past the years fails pytz's reading too ---
+
+P1B89: list[dict[str, Any]] = FILE['p1b89']['vectors']
+P1B89_BY_NAME = {v['name']: v for v in P1B89}
+#: The sources P1B-89 is about; the rest are its controls.
+P1B89_CASES = [
+    'p1b89.held-past-the-preview.new-york.year-1',
+    'p1b89.held-past-the-preview.tokyo.year-9999',
+]
+
+
+def test_p1b89_is_a_proposed_entry_for_the_owner() -> None:
+    r"""P1B-89 is in the register, proposed, its approver the owner. Fails
+    until the register commit that adds it lands."""
+    found = _entries('P1B-89')
+    assert len(found) == 1, (
+        'register P1B-89 (the reference with pytz takes a zoned column whose '
+        'wall clock leaves the years unchecked; the core passes it over) is '
+        f'not in docs/design/rust-core/register.yaml: {len(found)} found'
+    )
+    (entry,) = found
+    assert entry['status'] == 'proposed'
+    assert 'Approver: owner' in entry['notes']
+
+
+def test_p1b89_the_section_is_the_recorders() -> None:
+    assert FILE['p1b89']['entry'] == 'P1B-89'
+    assert FILE['p1b89']['environment'] == FILE['p1b39']['environment']
+    assert FILE['p1b89']['environment']['pytz'] is True
+    assert [v['name'] for v in P1B89] == list(Z.P1B89)
+    assert set(P1B89_CASES) < set(P1B89_BY_NAME)
+    for vector in P1B89:
+        spec = Z.P1B89[vector['name']]
+        for key in ('column', 'role', 'zone', 'instant', 'setup'):
+            assert vector[key] == spec[key], (vector['name'], key)
+
+
+def test_p1b89_duckdb_fetchall_fails_where_the_wall_clock_leaves_the_years() -> (
+    None
+):
+    r"""The environment fact P1B-89 rests on, in this process: a zoned
+    value whose wall clock in the session's zone leaves the years fails
+    DuckDB's fetchall with pytz (OverflowError) as without it (pytz
+    missing); read in UTC it fails only without pytz."""
+    import duckdb
+
+    def fetched(zone: str, instant: str) -> Any:
+        connection = duckdb.connect()
+        connection.execute(f"SET GLOBAL TimeZone = '{zone}'")
+        return connection.execute(f"SELECT TIMESTAMPTZ '{instant}'").fetchall()
+
+    for name in P1B89_CASES:
+        vector = P1B89_BY_NAME[name]
+        if _has_pytz():
+            with pytest.raises(OverflowError, match='date value out of range'):
+                fetched(vector['zone'], vector['instant'])
+        else:
+            with pytest.raises(duckdb.InvalidInputException, match="'pytz'"):
+                fetched(vector['zone'], vector['instant'])
+    if _has_pytz():
+        assert fetched('UTC', '0001-01-01 00:00:00+00')[0][0].year == 1
+    else:
+        with pytest.raises(duckdb.InvalidInputException, match="'pytz'"):
+            fetched('UTC', '0001-01-01 00:00:00+00')
+
+
+def test_p1b89_the_recorded_difference_is_the_entrys() -> None:
+    r"""As recorded: where a zoned column is empty in the 1,000 rows read and
+    its later rows hold one value whose wall clock in the session's zone
+    leaves the years, the reference takes it unchecked with pytz as without
+    (its whole-table statement failed either way), and the core passes it
+    over as constant. Read in UTC, the reference with pytz agrees with the
+    core (without pytz, P1B-39's difference); a realistic sentinel, one
+    such value late in a column of varying values, all three take alike."""
+    unchecked = (
+        'events.f was taken as the time column although none of the 1,000 '
+        'rows read holds a value, because the query over the whole table '
+        'failed and the rows past them were not checked.'
+    )
+    for name in P1B89_CASES:
+        vector = P1B89_BY_NAME[name]
+        text = vector['from_source_text']
+        for route in ('reference', 'reference_with_pytz'):
+            assert vector[route]['described']['events']['time_column'] == 'f'
+            (said,) = text[route]
+            assert unchecked in said, (name, route)
+        assert text['reference'] == text['reference_with_pytz']
+        assert vector['reference'] == vector['reference_with_pytz']
+        core = vector['core_at_measurement']
+        assert core['described']['events']['time_column'] is None
+        (said,) = text['core_at_measurement']
+        shown = vector['instant']
+        assert (
+            'events.f was not taken as the time column because every row '
+            f'that holds a value holds {shown}.'
+        ) in said, name
+        for route in ('reference', 'core_at_measurement'):
+            assert vector[route]['outcome'] == {
+                'result': 'success',
+                'stage': 'predict',
+            }
+    utc = P1B89_BY_NAME['p1b89.control.utc.year-1']
+    assert utc['reference']['described']['events']['time_column'] == 'f'
+    assert utc['reference_with_pytz'] == {
+        **utc['core_at_measurement'],
+        'warnings': utc['reference_with_pytz']['warnings'],
+    }
+    assert (
+        utc['from_source_text']['reference_with_pytz']
+        == utc['from_source_text']['core_at_measurement']
+    )
+    sentinel = P1B89_BY_NAME['p1b89.control.sentinel.new-york']
+    for route in ('reference', 'reference_with_pytz', 'core_at_measurement'):
+        assert sentinel[route]['described']['events']['time_column'] == 'f'
+        assert sentinel['from_source_text'][route] == []
+        assert (
+            sentinel[route]['described'] == sentinel['reference']['described']
+        )
+
+
+@pytest.mark.parametrize('name', list(P1B89_BY_NAME))
+def test_p1b89_the_reference_answers_as_recorded_for_this_environment(
+    name: str,
+) -> None:
+    r"""In-process, the default route gives the answer recorded for this
+    environment: without pytz the reference checkout's, with pytz the pytz
+    interpreter's."""
+    assert _recorded_environment()
+    vector = P1B89_BY_NAME[name]
+    which = 'reference_with_pytz' if _has_pytz() else 'reference'
+    assert _routed('reference', vector['setup']) == vector[which]
+    saved = os.environ.get('SDM_CORE_ROUTES')
+    try:
+        text = Z.from_source_text(vector['setup'], 'reference')
+    finally:
+        if saved is not None:
+            os.environ['SDM_CORE_ROUTES'] = saved
+    assert text == vector['from_source_text'][which]
+
+
+@pytest.mark.parametrize('name', list(P1B89_BY_NAME))
+def test_p1b89_the_core_answers_as_measured(name: str) -> None:
+    r"""The core's answer, in either cell, as recorded: P1B-89's cases
+    passed over as constant, the controls as the reference with pytz."""
+    vector = P1B89_BY_NAME[name]
+    wanted = vector['core_at_measurement']
+    got = _routed('core', vector['setup'])
+    assert got['described'] == wanted['described']
+    assert got['outcome'] == wanted['outcome']
+    assert _bodies(got['warnings']['from_source']) == _bodies(
+        wanted['warnings']['from_source']
+    )
+    saved = os.environ.get('SDM_CORE_ROUTES')
+    try:
+        text = Z.from_source_text(vector['setup'], 'core')
+    finally:
+        if saved is None:
+            os.environ.pop('SDM_CORE_ROUTES', None)
+        else:
+            os.environ['SDM_CORE_ROUTES'] = saved
+    assert text == vector['from_source_text']['core_at_measurement']
+    if name not in P1B89_CASES:
+        assert text == vector['from_source_text']['reference_with_pytz']
+        assert got['described'] == vector['reference_with_pytz']['described']
