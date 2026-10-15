@@ -207,6 +207,71 @@ def test_snowflake_passes_the_common_connection_arguments_to_the_driver(
     assert seen == arguments
 
 
+@pytest.mark.parametrize('argument', ['client_app_id', 'client_app_version'])
+def test_snowflake_refuses_the_driver_internal_client_app_arguments(
+    monkeypatch, argument
+):
+    r"""``client_app_id`` and ``client_app_version`` are refused up front.
+
+    On snowflake-connector-python 5.0 both are fields of ``ConnectionConfig``,
+    so reading the allow-list off that class let them through. The driver then
+    rejects them itself as reserved for its own wrappers and tells the caller
+    to use ``application``. Version 4 never listed them, so this connector
+    already refused them there. They are refused the same way on both, before
+    anything reaches the driver.
+    """
+    pytest.importorskip('snowflake.connector')
+    from sdm_connectors.backends import snowflake as backend
+
+    def _driver_must_not_be_called(**kwargs):
+        pytest.fail(f'driver connect was called with {sorted(kwargs)}')
+
+    monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: None)
+    monkeypatch.setattr(
+        backend.snowflake_connector, 'connect', _driver_must_not_be_called
+    )
+
+    with pytest.raises(ConnectorError) as excinfo:
+        backend.connect(account='a', user='u', password='p', **{argument: 'x'})
+    assert excinfo.value.code == 'INVALID_CONNECTOR_ARGS'
+    assert excinfo.value.details['arguments'] == [argument]
+
+
+@pytest.mark.parametrize(
+    ('argument', 'value'),
+    [
+        # The supported way to name the calling application, and the one the
+        # driver points to when it refuses ``client_app_id``.
+        ('application', 'sdm'),
+        # The older spelling of ``private_key_password``. Version 4 lists it in
+        # ``DEFAULT_CONFIGURATION``; version 5 drops it from ``ConnectionConfig``
+        # but still honours it as an alias, so it must keep working there too.
+        ('private_key_file_pwd', 'secret'),
+    ],
+)
+def test_snowflake_passes_application_and_legacy_key_password_to_the_driver(
+    monkeypatch, argument, value
+):
+    r"""Arguments the driver honours on both major versions reach it unchanged.
+
+    The driver's own ``connect`` is replaced, so no connection is opened.
+    """
+    pytest.importorskip('snowflake.connector')
+    from sdm_connectors.backends import snowflake as backend
+
+    arguments = {'account': 'a', 'user': 'u', 'password': 'p', argument: value}
+    opened, seen = _Conn(), {}
+    monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: None)
+    monkeypatch.setattr(
+        backend.snowflake_connector,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or opened,
+    )
+
+    assert backend.connect(**arguments) is opened
+    assert seen == arguments
+
+
 def test_snowflake_no_arguments_and_no_session_explains_requirements(
     monkeypatch,
 ):
