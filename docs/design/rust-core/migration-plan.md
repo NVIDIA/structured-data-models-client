@@ -346,6 +346,50 @@ A difference only one runtime shows is a register entry naming that runtime, nev
 | Phase 4 | S3, moving the rest of the code as its paths need it | Slice gate and switch gate |
 | Phase 5 | Delete the old engine on the epic branch (the switch to the PQL crate and deleting this client's parser are superseded by Phase 1 decision E18, approved by owner 2026-10-08); release candidate; the owner decides whether the epic merges into `main` | Epic merge gate, then release gate |
 
+
+### Carried into Phase 2 from Phase 1's minor review findings
+
+Phase 1's minor (P3) review findings that T1.36 did not fix, deferred by the owner on 2026-10-14 (the P3 backlog: the cheap set fixed in T1.36, the rest to these named rows), each with where it lives. Line numbers drift; the file is the anchor. Host error and warning wording is the one group a user can see, so it comes first.
+
+| Phase 2 row | Item | What is left |
+|---|---|---|
+| Host error and warning wording (first) | G15 | A key or time-column refusal gives a generic message where the reference gave a worded one (`_rust/errors.py`; the P1B-12 follow-up) |
+| | M4 | `materialize`'s `CONTEXT_BEFORE_DATA` and `ANCHOR_AFTER_DATA` in the reference's words (register P1B-75, Phase 1 decision E141) |
+| Harness hygiene (tests and tooling) | C1 | T1.32b's cell-claim `[type]` seed claims float64 on a base with float64 features; it must claim a type no source column has (`contract/tests/test_refusal_map.py`) |
+| | C2 | An acceptance test for a rust-host `old: none` ratchet entry stating stage and error (`tests/test_contract_ratchet.py`) |
+| | C4 | Regression tests for `capture_check`'s streaming CLI order and the conftest grouping |
+| | C5 | A test that `prepush.sh` runs the self-tests when `ci.yml` changes |
+| | C7 | `test_refusal_map.py` seeds for the map writer's two fixes (`validate_query`; the own-probe core trimming) |
+| | C8, C9(1), C9(2) | VARINT: Python writes it unencodable and Rust likely as binary, untested though both fail closed; `sdm-testkit`'s `values.rs` to fail closed on any field carrying `ARROW:extension:name`; the vacuous part-2c vector (an unchosen interval member) swapped to a `date64` member |
+| | C11 | The probe subprocesses spill DuckDB temp files into their working directory (`contract/tools/*_probe.py`) |
+| | C22 | `land.py verify`'s moved-from fallback has no self-tests and may accept an older green run; its "patches" wording (re-check against CI4 first) |
+| | C28 | CI's skip step's `jq` should also require `.event == "push"`, as `land.py` does (`ci.yml`, `tests/test_ci_workflow.py`) |
+| | U3 | `ratchet.semantic()` hard-codes the ungated parts instead of reading `compare-policy.yaml` |
+| | U4 | The ratchet's `WITHDRAWN` check is a denylist ("approved by owner … (declined)" still counts) |
+| | U13 | Contract versions collide across lanes; a renumbering script |
+| | M1 | The attachment-decode guard misses a two-line `take_json` (`sdm-core` `dispatch.rs`), and as-built's T1.22 claim overstates it |
+| | M2 | `sdm-request`'s dev-dependency enables `sdm-contract/test-ops` without `sdm-core/test-ops` (a multi-package build may fail) |
+| | M5 | The timestamptz test sets only DuckDB's session zone, and CI sets no process `TZ` (`tests/test_the_materialize_route.py`, `ci.yml`) |
+| | M9 | rust-host checks only a policy refusal's `code`, not `field`, `reason` or `prediction_as_answered` (`sdm-testkit` `t128b_predict_result.rs`) |
+| | M10 | The Kawi vector passes on any mention in the register; tighten it to P1B-25 |
+| | G2 | The nested probe counts any `]::X[2]` source as P1B-9 without checking `left_out` (`nested_schema_probe.py`) |
+| | G4 | A diagnostic S0 case may name any owner-approved entry, not only PQL-1 and PQL-2 (`tests/test_contract_cases.py`) |
+| | G5 | rust-host skips `validate_query` when a case also names `materialize` (`sdm-testkit` `host.rs`) |
+| | G6 | No test pins the per-step `driver_class` reset (`_rust/run.py`) |
+| | G10 | `prepush.sh`'s `git diff --name-only` follows renames; add `--no-renames` |
+| | G12 | `coverage.py` reads `tables: []` as "all tables" |
+| | G16, G17 | One shared `cell_type` vector file for `coverage.py` and `admission.rs`; a subject column per claim |
+| Case corpus and loader | C6 | The large-buffer `SET` form must require `=` or `TO` (`run_python.py` and `sdm-testkit`'s case loader) |
+| | C18 | The zone static check should also cover TIMESTAMPTZ cases with no zone set, and zone settings in `contract/bases.yaml` |
+| | M7 | A cross-host case for the "key on the time column" rule (only a unit test holds it) |
+| CI | U14 | Rerun a failed job once on a registry's `toomanyrequests` (likely closed by the self-hosted CI images) |
+| Core and data hygiene | U1 | Day-first warnings from earlier literals are dropped when the query is then refused (`sdm-core` `pql.rs`; the code half, as-built records the behavior) |
+| | U12 | Duplicate `integer()` helpers (`sdm-core` `compose.rs`, `sdm-data` `duckdb.rs`) |
+| | M3 | `schema_check`'s full keyword walk (its wording was fixed at T1.36) |
+| | M6 | `check_memo` does not require `indexes_checked` when bounds exist (`sdm-core` `materialize.rs`) |
+| Differential tools and the live benchmark | M8 | The differential no longer compares `_by_time` seeds outside `AFTER_THE_LABELS` (`contract/tools/differential.py`) |
+| | G8 | The live benchmark's `different` comparison does not fail the run (`scripts/live/real_data_benchmark.py`); fix before any rerun |
+
 ## 9. Process rules
 
 | Rule | How it's enforced |
