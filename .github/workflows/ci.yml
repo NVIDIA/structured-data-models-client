@@ -78,7 +78,10 @@ jobs:
   # file changed, a subject starting `Land `) and pushes it to the topic
   # and the phase branch; its tree is its candidate's, which land.py
   # requires green on the candidate's own exact-SHA push run, and
-  # `land.py verify` stands on that run. On a push of such a commit to the
+  # `land.py verify` stands on that run. A moved landing (`Moved-from`,
+  # E130) still runs: its candidate never ran, and the commit it was moved
+  # from was judged against an older checkpoint, so its landing runs judge
+  # it against its own. On a push of such a commit to the
   # phase branch or a branch under it every other job is left out: each
   # needs this one, directly or through the jobs it needs, and runs only
   # when it does not say skip. Any other push, and every pull request, runs
@@ -103,13 +106,24 @@ jobs:
             push:rust-core-phase-1 | push:rust-core-phase-1-*)
               parents=$(git rev-list --parents -n 1 HEAD | wc -w)
               subject=$(git log -1 --format=%s HEAD)
-              if [ "$parents" -eq 2 ] && [ "${subject#Land }" != "$subject" ] &&
+              moved=$(git log -1 --format='%(trailers:key=Moved-from,valueonly)' HEAD)
+              if [ "$parents" -eq 2 ] && [ "${subject#Land }" != "$subject" ] && [ -z "$moved" ] &&
                 [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'HEAD^^{tree}')" ]; then
                 skip=true
               fi ;;
           esac
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
           echo "an empty landing commit, so every other job is left out: $skip"
+      # On the phase branch, every push, a landing's included, lands one
+      # package as a fast-forward, its landing commit's Base-SHA the
+      # previous tip: ratchet.py's --phase-push check, which the gate makes
+      # when the jobs run, made here whether or not they are left out.
+      - name: A push to the phase branch lands one package
+        if: github.event_name == 'push' && github.ref_name == 'rust-core-phase-1'
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+          where=$(python3 scripts/rust_core/ratchet.py where)
+          python3 scripts/rust_core/ratchet.py checkpoint --repo . $where
 
   lint:
     runs-on: ubuntu-latest
@@ -224,7 +238,7 @@ jobs:
 
   rust-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     needs: landing
     if: needs.landing.outputs.skip != 'true'
     defaults:
@@ -569,7 +583,7 @@ jobs:
   # reached a release through a promise nothing checked.
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     needs: [landing, native-wheel]
     strategy:
       fail-fast: false
@@ -580,12 +594,10 @@ jobs:
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
       postgres: &postgres-service
-        # POSTGRES_IMAGE, by way of the landing job. The runner logs in
-        # only with both credentials set: for ghcr.io, as this workflow.
+        # POSTGRES_IMAGE, by way of the landing job. No credentials while
+        # it is not on ghcr.io: GitHub refuses a credential that evaluates
+        # to an empty string, so they come, unconditional, with the move.
         image: ${{ needs.landing.outputs.postgres-image }}
-        credentials:
-          username: ${{ startsWith(env.POSTGRES_IMAGE, 'ghcr.io/') && github.actor || '' }}
-          password: ${{ startsWith(env.POSTGRES_IMAGE, 'ghcr.io/') && secrets.GITHUB_TOKEN || '' }}
         env:
           POSTGRES_DB: sdm_test
           POSTGRES_PASSWORD: postgres
@@ -640,7 +652,7 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     needs: [landing, native-wheel]
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a

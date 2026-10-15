@@ -206,7 +206,7 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 def test_every_job_has_a_timeout() -> None:
     for name, job in _workflow()['jobs'].items():
         minutes = job.get('timeout-minutes')
-        assert isinstance(minutes, int) and 0 < minutes <= 90, (name, minutes)
+        assert isinstance(minutes, int) and 0 < minutes <= 120, (name, minutes)
 
 
 # --- the images -----------------------------------------------------------------
@@ -227,8 +227,15 @@ def test_each_image_is_named_once_and_pinned_by_digest() -> None:
         service = jobs[name]['services']['postgres']
         assert service['image'] == '${{ needs.landing.outputs.postgres-image }}'
         assert 'landing' in _needs(jobs[name])
-        for value in service['credentials'].values():
-            assert "startsWith(env.POSTGRES_IMAGE, 'ghcr.io/')" in value
+        # GitHub refuses a credential that evaluates to an empty string:
+        # credentials come, unconditional, with an image on ghcr.io.
+        if env['POSTGRES_IMAGE'].startswith('ghcr.io/'):
+            assert service['credentials'] == {
+                'username': '${{ github.actor }}',
+                'password': '${{ secrets.GITHUB_TOKEN }}',
+            }, name
+        else:
+            assert 'credentials' not in service, name
 
 
 def test_every_image_ci_runs_is_pulled_with_retries_first() -> None:

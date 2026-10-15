@@ -10,8 +10,10 @@
 # A registry that refuses a pull for its request rate often takes it a
 # minute later, and wheel-smoke's two lanes start at the same moment, so a
 # failed pull is tried again after 20, 60 and 120 seconds (PULL_DELAYS, in
-# seconds, overrides them) before the step fails. An image not pinned by
-# digest is refused. For an image on ghcr.io it first logs in with
+# seconds, overrides them) before the step fails. A refusal for a data
+# quota ("Data limit exceeded", ECR Public's monthly allowance for
+# anonymous pulls from the runner's address) fails at once: no wait
+# here clears it. An image not pinned by digest is refused. For an image on ghcr.io it first logs in with
 # GITHUB_TOKEN, when the step has one, as GITHUB_ACTOR; every other
 # registry is pulled anonymously, as before.
 
@@ -28,7 +30,14 @@ if [[ $image == ghcr.io/* && -n ${GITHUB_TOKEN:-} ]]; then
 fi
 read -r -a delays <<<"${PULL_DELAYS-20 60 120}"
 attempt=1
-until docker pull --quiet "$image"; do
+errors=$(mktemp)
+trap 'rm -f "$errors"' EXIT
+until docker pull --quiet "$image" 2>"$errors"; do
+  cat "$errors" >&2
+  if grep -qi 'data limit exceeded' "$errors"; then
+    echo "pull_image.sh: $image: the registry's data quota for this address is spent; no retry clears it" >&2
+    exit 1
+  fi
   if ((attempt > ${#delays[@]})); then
     echo "pull_image.sh: $image: no pull in $attempt attempts" >&2
     exit 1
