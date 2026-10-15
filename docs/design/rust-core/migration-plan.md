@@ -349,12 +349,13 @@ A difference only one runtime shows is a register entry naming that runtime, nev
 
 ### Carried into Phase 2 from Phase 1's minor review findings
 
-Phase 1's minor (P3) review findings that T1.36 did not fix, deferred by the owner on 2026-10-14 (the P3 backlog: the cheap set fixed in T1.36, the rest to these named rows), each with where it lives. Line numbers drift; the file is the anchor. FR P3-n is P3 n of the independent subagent's final whole-phase review at c49ee4f8, deferred the same way at T1.36. Host error and warning wording is the one group a user can see, so it comes first.
+Phase 1's minor (P3) review findings that T1.36 did not fix, deferred by the owner on 2026-10-14 (the P3 backlog: the cheap set fixed in T1.36, the rest to these named rows), each with where it lives. Line numbers drift; the file is the anchor. FR P3-n is P3 n of the independent subagent's final whole-phase review at c49ee4f8, deferred the same way at T1.36. FX-n is a gap found while fixing that review's findings (T1.36 fixes 1 to 10), recorded the same way. Host error and warning wording is the one group a user can see, so it comes first.
 
 | Phase 2 row | Item | What is left |
 |---|---|---|
 | Host error and warning wording (first) | G15 | A key or time-column refusal gives a generic message where the reference gave a worded one (`_rust/errors.py`; the P1B-12 follow-up) |
 | | M4 | `materialize`'s `CONTEXT_BEFORE_DATA` and `ANCHOR_AFTER_DATA` in the reference's words (register P1B-75, Phase 1 decision E141) |
+| | FX-1 | Pandas' `RuntimeWarning` when a double past float32's range is cast to float32: the reference raises it beside its `INVALID_REQUEST` at materialize, and the core does not, on a regression target and on a multiclass float target alike (it predates T1.36 fix 1; `contract/tests/test_t136_float_multiclass.py`'s `RUNTIME_WARNINGS` leaves it out of the core's comparison for `refuse.double-past-float32`) |
 | Harness hygiene (tests and tooling) | C1 | T1.32b's cell-claim `[type]` seed claims float64 on a base with float64 features; it must claim a type no source column has (`contract/tests/test_refusal_map.py`) |
 | | C2 | An acceptance test for a rust-host `old: none` ratchet entry stating stage and error (`tests/test_contract_ratchet.py`) |
 | | C4 | Regression tests for `capture_check`'s streaming CLI order and the conftest grouping |
@@ -379,6 +380,7 @@ Phase 1's minor (P3) review findings that T1.36 did not fix, deferred by the own
 | | G10 | `prepush.sh`'s `git diff --name-only` follows renames; add `--no-renames` |
 | | G12 | `coverage.py` reads `tables: []` as "all tables" |
 | | G16, G17 | One shared `cell_type` vector file for `coverage.py` and `admission.rs`; a subject column per claim |
+| | FX-2 | `contract/tests/test_t132d_empty_null_family.py`'s `test_the_answer_comparison_fails_closed` asserts `registered_case('empty.fact-table') == 'P1B-11'`, the first approved entry listing the case, which breaks when an earlier entry comes to list it (as T1.36 fix 7 broke the time family's twin assertion on DT-12, which the test author fixed in Python and Rust at f23d8cf7): assert P1B-11 among every approved entry listing the case. A test author's file |
 | | FR P3-2 | The bridge freeze's coverage against the ledger: `SDMClient._send_body` (`client.py`) is ledgered but not in `COVERED`, and `_rust/codec.py`, `_rust/edits.py` and `_rust/errors.py` hold ledgered rules but are not in `WHOLE` (`scripts/rust_core/bridge_freeze.py`); freeze them, declare the new entries and re-baseline with `--write` |
 | | FR P3-7 | The judging tools' weak points, none exploited in Phase 1: locked check 1b judges check 4's dbr17 clause only through CI's per-cell compare (`gate.sh`), so the packet cites CI's `contract-python (dbr17-pandas2)` job; diagnostic cases are outside checks 4 and 5; `ratchet.py`'s `check_reference` takes a reference line's change under any approved entry naming the case; a non-inventory acceptance case can be demoted under a reviewer-only entry |
 | Case corpus and loader | C6 | The large-buffer `SET` form must require `=` or `TO` (`run_python.py` and `sdm-testkit`'s case loader) |
@@ -390,6 +392,7 @@ Phase 1's minor (P3) review findings that T1.36 did not fix, deferred by the own
 | | U12 | Duplicate `integer()` helpers (`sdm-core` `compose.rs`, `sdm-data` `duckdb.rs`) |
 | | M3 | `schema_check`'s full keyword walk (its wording was fixed at T1.36) |
 | | M6 | `check_memo` does not require `indexes_checked` when bounds exist (`sdm-core` `materialize.rs`) |
+| | FX-3 | Only if the owner answers register P1B-80 with its option (b), the named refusal kept for Phase 1: match the reference for one VARCHAR or BLOB value over 2 GiB under `arrow_large_buffer_size`, keeping it in a large form through describe (the BLOB left out unread, the VARCHAR described, then refused by name at materialize, where the reference runs out of memory). If the owner picks (a), Phase 1 does it and this row lapses |
 | | FR P3-8 | The key cast's edge cases, each with a vector and a note under register P1B-34 or P1B-35: `Decimal('1E-7')` into a text key; a `timedelta` or `time` into an integer key; a float of 2**63 into int64 (the reference saturates); an `arrow.bool8` tag under run-end encoding dropped (`sdm-host` `admission.rs`; DuckDB never writes one) |
 | Differential tools and the live benchmark | M8 | The differential no longer compares `_by_time` seeds outside `AFTER_THE_LABELS` (`contract/tools/differential.py`) |
 | | G8 | The live benchmark's `different` comparison does not fail the run (`scripts/live/real_data_benchmark.py`); fix before any rerun |
