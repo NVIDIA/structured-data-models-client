@@ -1637,7 +1637,22 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     if keys::missing(&indices) {
         return Err(invalid("an entity to predict for is missing", "indices"));
     }
-    let seed_value = seed_scalar(&seed)?;
+    // A seed past what its scalar carries (10**38 or more) is past every
+    // largest seed a provider can declare (a `u64`): where the provider
+    // declares one, RS-7's refusal, as for any seed past it (T1.36 fix 9);
+    // where it declares none, `seed_size` as before.
+    let seed_value = match seed_scalar(&seed) {
+        Ok(value) => value,
+        Err(err) => match asker.capabilities()?.max_seed {
+            Some(max) if !seed.is_negative() => {
+                return Err(crate::compose::past_seed_range(
+                    OptionalRequest::SampleEntities.name(),
+                    max,
+                ));
+            }
+            _ => return Err(err),
+        },
+    };
     let asked = asked(&validated)?;
     options::statistic_for(asked.task, statistic.as_ref())?;
     let entity = graph
@@ -1820,7 +1835,21 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let entity_key = take(named(&sampled, &key)?, &kept)?;
     let entity_time = match &entity.time_column {
         Some(time) => {
-            let all = times_ns(named(&sampled, time)?, time)?;
+            let column = named(&sampled, time)?;
+            // A time of day holds no instant: the reference's engine reads
+            // each as none (`to_datetime`, see `times_of_day_unread`), so no
+            // entity is valid at any anchor and a temporal query collects no
+            // context example, the caller's error below (T1.36 fix 9). A
+            // static query never gets here with one: its time bounds read
+            // every time column first and fail on it (register DT-12).
+            let all = if matches!(
+                column.data_type(),
+                DataType::Time32(_) | DataType::Time64(_)
+            ) {
+                vec![None; column.len()]
+            } else {
+                times_ns(column, time)?
+            };
             Some(kept.iter().map(|&r| all[r]).collect::<Vec<_>>())
         }
         None => None,

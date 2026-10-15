@@ -414,6 +414,10 @@ fn the_core_refuses_a_seed_past_the_largest_duckdb_declares() {
         ((1_u128 << 31) - 1, false),
         (1 << 31, true),
         (1 << 70, true),
+        // Past what a seed's scalar carries, RS-7's refusal all the same
+        // (T1.36 fix 9).
+        (10_u128.pow(38), true),
+        (u128::MAX, true),
     ] {
         let run = materialize(duckdb(), &shop(), QUERY, Some(Seed::from(seed))).unwrap();
         match at_the_sample(run, duckdb_catalog) {
@@ -453,6 +457,7 @@ fn a_host_provider_s_declared_range_is_the_one_the_core_holds_it_to() {
         (Some(0), 1, true),
         (Some(u64::MAX), u128::from(u64::MAX), false),
         (Some(u64::MAX), 1 << 64, true),
+        (Some(u64::MAX), 10_u128.pow(38), true),
         (None, 1 << 70, false),
     ] {
         let run =

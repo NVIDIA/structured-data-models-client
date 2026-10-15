@@ -15,7 +15,7 @@
       "rule": "target_type",
       "owner": "T1.32b",
       "register": "P1B-18",
-      "where": "rust/crates/sdm-engine/src/labels.rs:728",
+      "where": "rust/crates/sdm-engine/src/labels.rs:730",
       "why": "decimal.class-target-38-18 asks for users.tier, a static DECIMAL(38, 18) target: the core refuses a decimal static target by name when it labels it (sdm_engine::labels::label; a decimal static column compared in a condition is labelled, T1.32b), where the reference computes the labels and then fails INTERNAL_ERROR building its task table (an unsupported data type for TARGET; P1B-1, P1B-18). decimal.target-38-18's sum over a DECIMAL(38, 18) column is computed from T1.27, held to the reference's labels exactly on both core hosts, its total held to the column's declared precision from T1.32b, and its decimal feature sent with the reference's wire dtype, reaches predict's result on both runners",
       "observed": {
         "python-core": {

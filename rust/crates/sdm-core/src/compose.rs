@@ -92,7 +92,7 @@ impl DataAccess {
             && let Some(max) = self.capabilities.max_seed
             && integer(seed).is_some_and(|seed| seed > i128::from(max))
         {
-            return Err(past_seed_range(request, max));
+            return Err(past_seed_range(request.name(), max));
         }
         self.layer.plan(request, &self.provider)
     }
@@ -138,14 +138,15 @@ fn integer(seed: &Scalar) -> Option<i128> {
 
 /// The refusal of a sample whose seed is past the largest the provider
 /// declares (register entry RS-7), naming the request, the seed and the
-/// provider's largest, never the provider.
-fn past_seed_range(request: &DataRequest, max: u64) -> CoreError {
+/// provider's largest, never the provider. `materialize` gives it too, for
+/// a seed past what its scalar carries (`seed_scalar`).
+pub(crate) fn past_seed_range(request: &str, max: u64) -> CoreError {
     CoreError::new(
         ErrorKind::InvalidRequest,
         ErrorCode::InvalidRequest,
         "the provider samples with no seed larger than the largest it declares",
     )
-    .with_field("request", Detail::text(request.name()))
+    .with_field("request", Detail::text(request))
     .with_field("field", Detail::text("seed"))
     .with_field("max_seed", Detail::Scalar(Scalar::UInt64(max)))
 }

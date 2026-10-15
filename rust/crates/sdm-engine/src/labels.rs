@@ -552,8 +552,11 @@ impl Wide {
 /// approximation can differ in the last digits, where this stays exact
 /// (P1B-71). A constant the type does not hold is the caller's error,
 /// `INVALID_REQUEST`, as pyarrow refuses it (`ArrowInvalid`) and the
-/// reference's client reports it. Refused by name (`condition_value`): an
-/// integer past int64; a float that is not finite; a negative scale.
+/// reference's client reports it. A float that is not finite (a constant
+/// past a double, `1e999`) no DECIMAL holds: the same `INVALID_REQUEST`, as
+/// pyarrow refuses it ("Cannot convert inf to Decimal128"). Refused by name
+/// (`condition_value`): an integer past int64, which the PQL validator
+/// refuses before it reaches here; a negative scale.
 fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128, CoreError> {
     let refused = || not_yet("condition_value");
     let not_held = || {
@@ -575,7 +578,6 @@ fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128
                 .and_then(|unit| i128::from(value).checked_mul(unit))
                 .ok_or_else(not_held)?
         }
-        Constant::Float(value) if !value.is_finite() => return Err(refused()),
         Constant::Float(value) => float_at_scale(value, scale).ok_or_else(not_held)?,
     };
     let largest = 10_u128.pow(u32::from(precision.clamp(1, 38))) - 1;
@@ -1071,13 +1073,27 @@ mod tests {
         );
         // A constant DECIMAL(4, 2) does not hold is the caller's error, as
         // the reference refuses it (measured: users.f > 100, INVALID_REQUEST
-        // at materialize); an integer past int64 is refused by name. A float
-        // at a scale past 22 is read, not refused (the owner's decision on
-        // P1B-71, 2026-10-13): `tests/t132b_float_constants.rs` holds that.
+        // at materialize), and so is an infinite float (T1.36 fix 9, the
+        // reference's "Cannot convert inf"); an integer past int64 is refused
+        // by name. A float at a scale past 22 is read, not refused (the
+        // owner's decision on P1B-71, 2026-10-13):
+        // `tests/t132b_float_constants.rs` holds that.
         for (constant, precision, scale, code) in [
             (Constant::Int(100), 4, 2, ErrorCode::InvalidRequest),
             (Constant::Float(100.0), 4, 2, ErrorCode::InvalidRequest),
             (Constant::Float(1e300), 4, 2, ErrorCode::InvalidRequest),
+            (
+                Constant::Float(f64::INFINITY),
+                38,
+                0,
+                ErrorCode::InvalidRequest,
+            ),
+            (
+                Constant::Float(f64::NEG_INFINITY),
+                4,
+                2,
+                ErrorCode::InvalidRequest,
+            ),
             (Constant::Int(5), 38, 38, ErrorCode::InvalidRequest),
             (
                 Constant::Int(i128::from(i64::MAX) + 1),
