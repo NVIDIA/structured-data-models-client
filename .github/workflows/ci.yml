@@ -28,6 +28,9 @@ permissions:
   # For the images CI pulls from ghcr.io with GITHUB_TOKEN, once they are
   # hosted there (E131); none is yet.
   packages: read
+  # For the landing job's skip step, which reads the candidate's runs
+  # (E131).
+  actions: read
 
 # A newer push cancels a topic branch's run in progress. On the phase
 # branch and the lane branches a run in progress is not cancelled (E43): a
@@ -98,22 +101,44 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
+      # Skip only on evidence (E131): the pushed commit is an empty landing
+      # commit with no Moved-from, and the commit its tree was tested on,
+      # the first below it that is no empty landing commit (whose runs this
+      # job leaves out, so they are never evidence), has for its newest run
+      # of this workflow on a push to the phase branch or a branch under it
+      # (never an archive branch) one that completed with success, read
+      # with gh. No such run (none, failed, cancelled, unfinished, or the
+      # API unreadable) runs every job.
       - id: landing
         name: An empty landing commit is not tested again
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          empty_landing() {
+            [ "$(git rev-list --parents -n 1 "$1" | wc -w)" -eq 2 ] || return 1
+            case "$(git log -1 --format=%s "$1")" in 'Land '*) ;; *) return 1 ;; esac
+            [ "$(git rev-parse "$1^{tree}")" = "$(git rev-parse "$1^^{tree}")" ]
+          }
           skip=false
+          why='not a push of an empty landing commit under rust-core-phase-1'
           case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
             push:rust-core-phase-1 | push:rust-core-phase-1-*)
-              parents=$(git rev-list --parents -n 1 HEAD | wc -w)
-              subject=$(git log -1 --format=%s HEAD)
               moved=$(git log -1 --format='%(trailers:key=Moved-from,valueonly)' HEAD)
-              if [ "$parents" -eq 2 ] && [ "${subject#Land }" != "$subject" ] && [ -z "$moved" ] &&
-                [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'HEAD^^{tree}')" ]; then
-                skip=true
+              if [ -z "$moved" ] && empty_landing HEAD; then
+                if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+                tested=$(git rev-parse HEAD^)
+                while empty_landing "$tested"; do tested=$(git rev-parse "$tested^"); done
+                newest=$(gh api "repos/${GITHUB_REPOSITORY:-}/actions/workflows/ci.yml/runs?head_sha=$tested&event=push&per_page=100" \
+                  --jq '[.workflow_runs[] | select(.head_branch == "rust-core-phase-1" or ((.head_branch | startswith("rust-core-phase-1-")) and (.head_branch | startswith("rust-core-phase-1-archive-") | not)))]
+                    | sort_by(.created_at) | last | if . == null then "none" else "\(.id) \(.status) \(.conclusion)" end') || newest=unreadable
+                case "$newest" in
+                  *' completed success') skip=true; why="its tree is green in run ${newest%% *} at $tested" ;;
+                  *) why="no green run of its tree at $tested (newest: $newest)" ;;
+                esac
               fi ;;
           esac
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
-          echo "an empty landing commit, so every other job is left out: $skip"
+          echo "every other job left out: $skip; $why"
       # On the phase branch, every push, a landing's included, lands one
       # package as a fast-forward, its landing commit's Base-SHA the
       # previous tip: ratchet.py's --phase-push check, which the gate makes

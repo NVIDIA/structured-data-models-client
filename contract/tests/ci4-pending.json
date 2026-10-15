@@ -2,37 +2,7 @@
  "about": "CI4's second round of independent tests (the coordinator's request on dc1ab8f7): the checkpoint race cases in tests/test_contract_ratchet.py (test_ci4_*: a stacked candidate's checkpoint holds when its package lands mid-run; a landing whose Base-SHA is an unlanded phase commit stays refused; moved copies, a landing the phase branch lacks, a phase push and a recorded base resolve as before) and the audit of tests/test_ci_workflow.py (test_ci4_*: the landing job always runs and hands on its step's answer; the step decides alike in a depth-2 clone; it skips only on a push under rust-core-phase-1; no job's skip condition can be overridden with ||; every image is pinned by digest, wheel-smoke's included; every container is pulled first by pull_image.sh; GITHUB_TOKEN reaches only pull_image.sh and ghcr.io-guarded service credentials; a ghcr.io lookalike gets no token). 'pending' lists, as 'py:' and the test's name with its parameters, those that failed when written at dc1ab8f7; contract/tests/ci4_gate.py holds each to failing until the implementer takes it out, and the implementer changes nothing else: 'pending' stays within 'authored', which is the test author's. The test author rewrote test_ci4_the_token_goes_only_to_ghcr_io on 40520712 (fix round 1: GitHub refuses a service credential that evaluates to an empty string, so a service off ghcr.io takes none and one on it takes github.actor and secrets.GITHUB_TOKEN unconditionally) and added test_ci4_an_empty_moved_landing_commit_runs_everything (P2-6); both pass there and with the ghcr.io swap applied. The test author added the landing job's phase-push check tests on db65059b (test_ci4_the_phase_check_*, test_ci4_a_failing_phase_check_turns_the_run_red: fix round 1's P2-3, run in a clone of depth 2 of a real origin), passing when written, and tightened test_every_job_has_a_timeout's ceilings (landing 10, rust-test 120, every other job 60). Round 4, on cb46bc5a (Codex's P1: the skip step skips only on the underlying candidate's green exact-SHA push run, following empty landing commits down, never on a wrapper's run; missing, failed, cancelled or unfinished evidence, or an API that does not answer, runs the jobs or fails closed): the test author added the evidence cases, run in a clone of depth 2 with gh and curl faked on PATH, and test_ci4_the_skip_step_reads_runs_with_the_workflow_token; those failing at cb46bc5a are pending. _skip now seeds a green run on every commit, so the shape cases keep their meaning, and the token test allows the skip step's API token.",
  "pending": {
   "ratchet": [],
-  "workflow": [
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[another-workflow-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[another-workflow-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[archive-branch-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[archive-branch-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[cancelled-after-green-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[cancelled-after-green-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[in-progress-after-green-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[in-progress-after-green-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[landing-run-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[landing-run-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[main-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[main-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[parent-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[parent-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[pull-request-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[pull-request-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[queued-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[queued-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[red-after-green-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[red-after-green-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[untested-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[untested-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[wrapped-wrapper-skipped-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[wrapped-wrapper-skipped-only-rust-core-phase-1]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[wrapped-wrapper-success-only-rust-core-phase-1-lane-1a]",
-   "py:test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run[wrapped-wrapper-success-only-rust-core-phase-1]",
-   "py:test_ci4_an_api_that_does_not_answer_never_skips[rust-core-phase-1-lane-1a]",
-   "py:test_ci4_an_api_that_does_not_answer_never_skips[rust-core-phase-1]",
-   "py:test_ci4_the_skip_step_reads_runs_with_the_workflow_token"
-  ]
+  "workflow": []
  },
  "authored": {
   "ratchet": [
