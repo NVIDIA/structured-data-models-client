@@ -68,9 +68,15 @@ all = { level = "warn", priority = -1 }
 panic = "unwind"
 
 # No debug info for dependencies: the bundled DuckDB's debug build otherwise
-# fills a CI runner's disk, and nobody steps through it.
+# fills a CI runner's disk, and nobody steps through it. And dependencies
+# optimized (decision E131): the bundled DuckDB and Arrow unoptimized made
+# the DuckDB-backed test files take minutes, t132a_key_cast 94 s locally
+# (2,173 s on one CI runner) against 12 s here at opt-level 1, with no
+# slower build and a smaller target directory. The workspace's own crates
+# stay unoptimized, with their debug assertions.
 [profile.dev.package."*"]
 debug = false
+opt-level = 1
 
 [profile.release]
 panic = "unwind"

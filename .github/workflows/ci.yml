@@ -41,18 +41,21 @@ concurrency:
   cancel-in-progress: ${{ !(github.ref_name == 'rust-core-phase-1' || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
 
 env:
-  # Whether this run saves its caches: the Rust builds and pip's downloads.
-  # GitHub restores a push's caches only from its own branch and the default
-  # branch, so a cache a topic branch saves serves that branch alone, and
-  # those filled the repository's 10 GiB. Only the long-lived branches save,
-  # and the lane branches: each parallel lane of packages pushes to one lane
-  # branch it reuses, so a package's first run restores the builds the
-  # lane's previous package saved (decision E43). Every run restores what
-  # its own branch saved; a run that saves nothing still runs every check.
+  # Whether this run saves its caches: the Rust builds and the DuckDB
+  # extensions. GitHub restores a push's caches only from its own branch
+  # and the default branch, so a cache a topic branch saves serves that
+  # branch alone, and those filled the repository's 10 GiB. Only main,
+  # rust-core and the lane branches save: each parallel lane of packages
+  # pushes to one lane branch it reuses, so a package's first run restores
+  # the builds the lane's previous package saved (decision E43). The phase
+  # branch no longer saves (E131): every push there is a landing commit,
+  # whose jobs are left out, and no other branch can restore its caches.
+  # Every run restores what its own branch saved; a run that saves nothing
+  # still runs every check.
   # pip's caches are saved on main alone (E131): one per job and Python on
   # every long-lived branch took half the 10 GiB, and evicted the Rust
   # builds, which cost far more to redo. Every branch restores main's.
-  SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core", "rust-core-phase-1"]'), github.ref_name) || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
+  SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core"]'), github.ref_name) || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
   SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
   # The images CI pulls, each named here once and pinned by digest (E131),
   # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
