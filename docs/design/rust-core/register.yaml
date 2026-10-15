@@ -505,12 +505,17 @@ entries:
   affected_inputs: Tabular materialize with more context rows than the endpoint accepts.
   cases: [T0.6]
   refs: [G5]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Recommendation: approve.
     Approver: reviewer (T1.33: a keep; no outcome changes).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-RS-5), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: a keep, not a certification that later tabular routes are ported;
+    the subagent: a keep, the tabular path being outside Phase 1.
 
 - id: RS-6
   title: Warehouse sampling SQL text
@@ -526,8 +531,8 @@ entries:
     prints 1e-05 as 0.00001).
   affected_inputs: Push-down entity samples on DuckDB, PostgreSQL, Snowflake and Databricks.
   cases: [T0.6]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     The draws themselves belong to each database; Snowflake, Databricks LIMIT
@@ -542,6 +547,12 @@ entries:
     registering a SQL text change.
     Approver: reviewer (T1.33: a keep of the reference's SQL text and bound
     values).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-RS-6), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: a keep, not a certification that later warehouse routes are
+    ported; the subagent: a keep of the SQL text, only DuckDB's being
+    rendered in Phase 1.
 
 - id: RS-7
   title: The seed range per backend
@@ -790,8 +801,8 @@ entries:
     and as a SQL source.
   affected_inputs: SQL sources whose time column is stored as text.
   cases: [T0.6, time.text-us-date, time.text-one-bad-value]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Checked at the function level only. Recommendation: keep for Phase 1;
@@ -813,6 +824,12 @@ entries:
     E88): text_times is an internal name with no user-visible effect, so not
     an owner item, and the orchestrator keeps it. Approver: reviewer (a keep,
     its behavior settled by E62 and E68).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-DT-7), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the capability kept with E62's and E68's separately approved
+    format decisions; the subagent: a keep of the capability, the readings
+    themselves being DT-12, DT-15 and DT-16, owner-approved.
 
 - id: DT-8
   title: Zone names in any case, known by their IANA spelling
@@ -1275,9 +1292,9 @@ entries:
     core route.
   cases: [T1.28a]
   refs: [DT-12, P1B-1]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Found at T1.28a by contract/tools/differential.py, whose generator now
     makes times of day (seed 29, one source, an edit setting e.tod as the
@@ -1292,6 +1309,13 @@ entries:
     (T1.28a fix round 1).
     Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to a clearer
     code, E66(b)'s class).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-DT-18), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the reference's internal failure to a named refusal under E66(b)
+    only, not a catch-all approval of PROVIDER_ERROR; the subagent, probed:
+    the reference fails INTERNAL_ERROR on DuckDB's TIME to TIMESTAMP
+    ConversionException, the core PROVIDER_ERROR.
 
 - id: ORD-1
   title: Tie order of the shared train set by entity time
@@ -1383,8 +1407,8 @@ entries:
     Relational requests whose neighbor tables have NULL or tied times, or
     null keys.
   cases: [T1.26, T1.26b]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Phase 1 decisions F2 and H15. Settling which policy both paths follow is
@@ -1393,6 +1417,11 @@ entries:
     inventory's values are exact in float32, so no case shows it, and it
     becomes its own entry (ORD-3) if one ever does.
     Approver: reviewer (T1.33: a keep; no outcome changes).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-ORD-2), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the current policy kept while F2 assigns its settlement to Phase
+    4; the subagent: a keep, settled in Phase 4 per F2.
 
 - id: ORD-3
   title: Float32 label sums over an unordered window fetch vary from run to run on large real data, on both routes
@@ -2534,9 +2563,9 @@ entries:
     Edits to a schema Schema.from_source described on the core route that
     name a column by an unhashable value.
   cases: [T1.24b]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured at T1.24b and pinned on both routes by the client's
     tests/test_the_schema_edits.py,
@@ -2547,6 +2576,14 @@ entries:
     owner's or the reviewer's to say. Never self-approved.
     Approver: reviewer (T1.33: the reference's unnamed TypeError to a named
     refusal, E66(b)'s class).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-P1B-16), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the reference's unnamed failure to a named refusal under E66(b)
+    only, not a catch-all approval of INVALID_REQUEST; the subagent, probed:
+    the reference raises TypeError (unhashable type: 'list') for a list
+    time_column and for del schema[t][[c]], the core refuses
+    INVALID_REQUEST.
 
 - id: P1B-17
   title: An edit to a schema changed past its description is refused by name at the edit on the core route
@@ -3286,8 +3323,8 @@ entries:
   - 'contract/key-cast-vectors.json#uint64.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#uint8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#utf8.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
   notes: >-
     Measured at T1.32a on both hosts over the test author's vectors
@@ -3302,6 +3339,14 @@ entries:
     it beside the old route.
     Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to the caller's
     error, E66(b)'s class).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-P1B-32), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the reference's internal failure to a named refusal under E66(b)
+    only, not a catch-all approval of INVALID_REQUEST; the subagent, probed:
+    an entity of 10**20 is the reference's INTERNAL_ERROR (OverflowError)
+    and the core's INVALID_REQUEST, 2**32 and -5 INVALID_REQUEST on both,
+    the 985 key-cast vectors agreeing.
 
 - id: P1B-33
   title: Decimal keys and keys handed over as large text are sampled, where the reference fails on every entity
@@ -3619,8 +3664,8 @@ entries:
     core route.
   cases: [T1.26b, T1.27]
   refs: [P1B-13]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Ported at T1.26b and held there by the old-against-core differential
@@ -3629,6 +3674,11 @@ entries:
     before. Proposed for the reviewer: a keep of the reference, no
     outcome changes.
     Approver: reviewer (T1.33: a keep; no outcome changes).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-SMP-1), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the existing duplicate-key behavior recorded, no new difference
+    authorized; the subagent: a keep, held by the differential.
 
 - id: SMP-2
   title: An integer key column holding a null is sent as float64
@@ -3647,8 +3697,8 @@ entries:
     reference's does.
   cases: [T1.26b, T1.27]
   refs: [P1B-13]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Ported at T1.26b (P1B-13's null handling) and held by its tests and
@@ -3656,6 +3706,11 @@ entries:
     deliberately (checkpoint 7). Proposed for the reviewer; no outcome
     changes.
     Approver: reviewer (T1.33: a keep; no outcome changes).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-SMP-2), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the existing nullable-integer behavior recorded, no new
+    difference authorized; the subagent: a keep, held by the differential.
 
 - id: SMP-3
   title: A text feature is sent as the reference's lowered words
@@ -3673,14 +3728,19 @@ entries:
   affected_inputs: >-
     A text feature on the core route.
   cases: [T1.26b, T1.27]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Ported at T1.26b; registered at T1.27 as a behavior the core keeps
     deliberately (checkpoint 7), with no entry before. Proposed for the
     reviewer; no outcome changes.
     Approver: reviewer (T1.33: a keep; no outcome changes).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-SMP-3), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the existing text-token behavior recorded, no new difference
+    authorized; the subagent: a keep, held by words.json.
 
 # --- The host layer -------------------------------------------------------------
 
@@ -4047,8 +4107,8 @@ entries:
     validate_query against a schema one of whose links names a table the
     schema does not hold, for a query whose join walk reaches that link.
   cases: [T1.20]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Measured by T1.20's batch-2 S0 differential: 1 of the 120 queries run
@@ -4061,6 +4121,14 @@ entries:
     the adapter directly. No case holds it.
     Approver: reviewer (T1.33: the reference's KeyError to a PQL code,
     E66(b)'s class).
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-PQL-5), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: the reference's unnamed failure (its join validator indexing a
+    missing linked table) to a named PQL code under E66(b) only, not a
+    catch-all approval of its code, public-schema reachability unclaimed;
+    the subagent: adapter-level, from T1.20's differential, not reproduced,
+    no public reach shown.
 
 # --- lane 1a entries (P1B-41..49) ---
 
@@ -4945,7 +5013,7 @@ entries:
     30)).
   cases: [T1.32b, T1.32g]
   status: approved
-  approved_by: reviewer
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E99}
   notes: >-
     Rewritten by the owner's decision of 2026-10-13 (E99(c)): the refusal
@@ -4958,12 +5026,16 @@ entries:
     INVALID_REQUEST, a labelled comparison), written by T1.32g's test
     author; the probe's EXPLAINED names this entry for a float at a scale
     of 28 or more where both succeed. Success to success in the same
-    outcome class, so the reviewers may approve it; named to the owner as
-    the core differing from the reference by being exact. Never
-    self-approved.
-    Approver: reviewer (T1.32g's exact-conversion rewrite; success to
-    success under E66(b). The earlier refusal required owner approval and
-    was withdrawn under E99(c)).
+    outcome class, named to the owner as the core differing from the
+    reference by being exact. Never self-approved.
+    Approver: owner (E99(c): the owner's written answer of 2026-10-13,
+    evening, item 6, directed this exact conversion at scales 23 to 38 and
+    this entry as its narrow difference from scale 28, in place of the
+    refusal T1.32b proposed. E66(b) is not its basis: it changes an accepted
+    answer, which E66(b) leaves to the owner's individual decision. The
+    owner's answer also let the reviewers approve it, and both did, below;
+    recorded as the owner's at T1.36 fix 7, on the independent subagent's
+    final whole-phase review at c49ee4f8, P3-5).
     Approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
     the independent subagent), relayed by the orchestrator:
     APPROVE-P1B-71-rewrite, for the narrow exact-conversion behaviour
@@ -5119,7 +5191,8 @@ entries:
     On the core route, which only SDM_CORE_ROUTES forces in this build, the
     host layer admits the nested arrow.bool8 child as boolean, as it does a
     top-level one (T1.33), so the column is list<bool> or struct<a: bool>,
-    refused as the default forms are (list.boolean, P1B-10):
+    refused as the default forms are (list.boolean P1B-51's, a struct
+    P1B-10's):
     UnsupportedRequestError, code UNSUPPORTED_REQUEST, fields operation
     describe_source and rule column_type. The extension on any storage but
     int8 (another integer, text, a dictionary of int8), at any depth, is
@@ -5134,14 +5207,15 @@ entries:
   refs:
   - 'contract/type-set-vectors.json#lossless.list-boolean refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   - 'contract/type-set-vectors.json#lossless.struct-boolean refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E142}
   notes: >-
     A named refusal where the reference fails unnamed, E66(b)'s class, for
-    the reviewer to check it fits; the behavior is the default forms' (P1B-10
-    and the list.boolean vector, approved), reached through DuckDB's lossless
-    Arrow form, written as an entry of its own as P1B-49 is. Approver:
+    the reviewer to check it fits; the behavior is the default forms'
+    (P1B-51's list.boolean vector and P1B-10's struct, approved), reached
+    through DuckDB's lossless Arrow form, written as an entry of its own as
+    P1B-49 is. Approver:
     reviewer. Recommendation: approve. Measured by T1.36's test author (P3
     C13): contract/type-set-vectors.json's two rows, the reference's answers
     recorded through each row's witness by contract/tools/type_set_record.py
@@ -5152,3 +5226,12 @@ entries:
     tests/t136_bool8.rs. Each transition held by
     contract/tests/test_t133_type_set.py, pending until an approved entry
     names it. Never self-approved.
+    Approved by both reviewers of the final whole-phase review at c49ee4f8
+    (Codex's and the independent subagent's: APPROVE-P1B-76), relayed by the
+    orchestrator, recorded at T1.36 fix 7; never the implementer's approval.
+    Codex: a repeat of its cleanup review's approval, held by the
+    real-DuckDB vectors and the independently reproduced reference failures;
+    the subagent, probed on the reference side: lossless BOOLEAN[] an
+    unnamed ValueError, STRUCT(a BOOLEAN) an unnamed RuntimeError, the core
+    side held by T1.36's tests. Its two registration tests leave
+    t133p2-pending.json's pending list with this approval.
