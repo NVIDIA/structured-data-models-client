@@ -560,20 +560,32 @@ def _timestamp(value: codec.Temporal) -> Any:
 
 
 def _shown_timestamp(value: codec.Temporal) -> str:
-    r"""A date or timestamp scalar as the reference shows it in a warning:
-    as pandas holds it, or, where pandas cannot show a zoned value near the
-    years 1 and 9999 whose wall clock in its zone stays inside them
-    (``isoformat`` refuses it, ``toordinal``), as the reference's rows read
-    it there: pyarrow's ``as_py``, a ``datetime`` in the zone (T1.36 fix
-    11)."""
-    try:
-        return str(_timestamp(value))
-    except NotImplementedError:
+    r"""A date or timestamp scalar as the reference shows it in a warning.
+
+    A zoned timestamp as the reference's rows hand it over
+    (``ArrowExtensionArray.__getitem__``): pyarrow's ``as_py``, a
+    ``datetime`` at its wall clock in the zone through ``zoneinfo`` (local
+    mean time before the zone's first transition), boxed as a pandas
+    ``Timestamp`` of the column's unit where that unit is not ``ns``. pandas'
+    own ``tz_convert`` labels such a value with the zone's offset at that
+    instant but moves it by another, and refuses some near year 1
+    (T1.36 fix 11). One ``as_py`` cannot hold, past the years 1 to 9999, and
+    every other value, as pandas holds it."""
+    if value.tag != 'date32' and value.zone is not None:
+        import pandas as pd
         import pyarrow as pa
 
         unit = {'us': 'us', 'ns': 'ns'}[str(value.unit)]
-        kind = pa.timestamp(unit, tz=value.zone)
-        return str(pa.scalar(value.value, kind).as_py())
+        try:
+            read = pa.scalar(value.value, pa.timestamp(unit, tz=value.zone))
+            held = read.as_py()
+        except OverflowError:
+            pass
+        else:
+            if unit != 'ns':
+                held = pd.Timestamp(held).as_unit(unit)
+            return str(held)
+    return str(_timestamp(value))
 
 
 def _as_timestamp(value: str) -> Any:
