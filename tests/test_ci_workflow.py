@@ -478,6 +478,27 @@ def test_ci4_an_empty_landing_commit_runs_everything_off_the_phase_branch(
     _held(request, check)
 
 
+@pytest.mark.parametrize('ref', [PHASE, LANE])
+def test_ci4_an_empty_moved_landing_commit_runs_everything(
+    tmp_path: Path, request: pytest.FixtureRequest, ref: str
+) -> None:
+    r"""A landing carrying ``Moved-from`` (CI3's move) is judged by its
+    own runs against its own Base-SHA (fix round 1, P2-6): its candidate
+    never ran, and the commit it was moved from was judged against an
+    older checkpoint."""
+
+    def check() -> None:
+        repo = _repo(tmp_path)
+        _git(
+            repo, 'commit', '-q', '--allow-empty', '-m',
+            'Land T1.2: the candidate\n\nBase-SHA: x\nCheckpoint-SHA: x\n'
+            'Moved-from: ' + 'a' * 40 + '\nMoved-from-run: 4242',
+        )  # fmt: skip
+        assert _skip(repo, tmp_path, 'push', ref) == 'false'
+
+    _held(request, check)
+
+
 def test_ci4_a_root_commit_titled_land_runs_everything(
     tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:
@@ -604,13 +625,35 @@ def test_ci4_every_container_ci_runs_is_pulled_first_by_pull_image_sh(
     _held(request, check)
 
 
+def _service_image(workflow: dict[str, Any], service: dict[str, Any]) -> str:
+    r"""The image a service runs: POSTGRES_IMAGE when it takes the landing
+    job's output, which must be that env value, or its literal image."""
+    image = str(service['image'])
+    if image == '${{ needs.landing.outputs.postgres-image }}':
+        outputs = workflow['jobs']['landing']['outputs']
+        assert outputs['postgres-image'] == '${{ env.POSTGRES_IMAGE }}'
+        return str(workflow['env']['POSTGRES_IMAGE'])
+    assert '${{' not in image, image
+    return image
+
+
+#: The only credentials a service takes: the workflow's own, for ghcr.io.
+#: GitHub refuses a service credential that evaluates to an empty string
+#: (run 38659551659), so they are unconditional, and only on ghcr.io.
+GHCR_CREDENTIALS = {
+    'username': '${{ github.actor }}',
+    'password': '${{ secrets.GITHUB_TOKEN }}',
+}
+
+
 def test_ci4_the_token_goes_only_to_ghcr_io(
     request: pytest.FixtureRequest,
 ) -> None:
     r"""GITHUB_TOKEN reaches only pull_image.sh, which logs in to ghcr.io
-    alone, and the service credentials, which are empty unless the image
-    is on ghcr.io; no other secret is used, and nothing wider than
-    reading packages is granted."""
+    alone, and the credentials of a service whose image is on ghcr.io,
+    which are exactly ``github.actor`` and ``secrets.GITHUB_TOKEN``; a
+    service whose image is elsewhere has no credentials. No other secret
+    is used, and nothing wider than reading packages is granted."""
 
     def check() -> None:
         workflow = _workflow()
@@ -619,50 +662,44 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
             'packages': 'read',
         }
         assert 'secrets.' not in str(workflow.get('env'))
-        text = CI.read_text(encoding='utf-8')
-        found = 0
+        steps = services = 0
         for name, job in workflow['jobs'].items():
             assert 'secrets.' not in str(job.get('env')), name
             assert 'permissions' not in job, name
+            assert 'container' not in job, name
             for step in job.get('steps', []):
-                env = step.get('env') or {}
-                with_ = step.get('with') or {}
-                if 'secrets.' in str(with_):
-                    raise AssertionError((name, step))
-                for key, value in env.items():
+                assert 'secrets.' not in str(step.get('with')), (name, step)
+                assert 'secrets.' not in str(step.get('run')), (name, step)
+                for key, value in (step.get('env') or {}).items():
                     if 'secrets.' not in str(value):
                         continue
-                    found += 1
+                    steps += 1
                     assert (key, value) == (
                         'GITHUB_TOKEN',
                         '${{ secrets.GITHUB_TOKEN }}',
                     ), (name, key)
-                    assert (
-                        str(step['run'])
-                        .strip()
-                        .startswith('scripts/rust_core/pull_image.sh ')
-                    ), (name, step)
+                    run = str(step['run']).strip()
+                    assert run.startswith('scripts/rust_core/pull_image.sh ')
+                    assert '\n' not in run, (name, run)
             for service in (job.get('services') or {}).values():
-                credentials = service.get('credentials')
-                if credentials is None:
-                    continue
-                found += 2
-                ghcr = "startsWith(env.POSTGRES_IMAGE, 'ghcr.io/')"
-                assert credentials == {
-                    'username': f"${{{{ {ghcr} && github.actor || '' }}}}",
-                    'password': (
-                        f"${{{{ {ghcr} && secrets.GITHUB_TOKEN || '' }}}}"
-                    ),
-                }, (name, credentials)
-        assert found >= 4, found
+                services += 1
+                image = _service_image(workflow, service)
+                if image.startswith('ghcr.io/'):
+                    assert service.get('credentials') == GHCR_CREDENTIALS, (
+                        name,
+                        image,
+                        service.get('credentials'),
+                    )
+                else:
+                    assert 'credentials' not in service, (name, image)
+        assert steps >= 3 and services >= 2, (steps, services)
         # Every secret written in the file is one of those (YAML anchors
         # write a step or a service once for several jobs).
         allowed = {
             'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}',
-            "password: ${{ startsWith(env.POSTGRES_IMAGE, 'ghcr.io/') && "
-            "secrets.GITHUB_TOKEN || '' }}",
+            'password: ${{ secrets.GITHUB_TOKEN }}',
         }
-        for line in text.splitlines():
+        for line in CI.read_text(encoding='utf-8').splitlines():
             if 'secrets' in line and not line.strip().startswith('#'):
                 assert line.strip() in allowed, line
 
