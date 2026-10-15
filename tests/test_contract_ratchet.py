@@ -60,6 +60,8 @@ def _module(path: Path, name: str) -> ModuleType:
 
 
 ratchet = _module(ROOT / 'scripts/rust_core/ratchet.py', 'ratchet')
+#: CI4's pending list (the ``test_ci4_*`` tests).
+CI4 = _module(ROOT / 'contract/tests/ci4_gate.py', 'ci4_gate')
 
 
 def git(repo: Path, *args: str) -> str:
@@ -1295,6 +1297,207 @@ def test_a_landing_commit_is_judged_against_its_recorded_base(
     # In CI on the lane after landing, the phase tip is the landing itself.
     found, problems = resolve(repo, base=tip)
     assert problems == [] and found.sha == landed
+
+
+# --- CI4: a run's checkpoint while the phase branch moves (E131) ---------------
+#
+# The independent test author's cases. A run reads the phase branch's tip
+# when each job starts; a stacked package landing mid-run moves it. Every
+# job of a run must reach the same checkpoint, so the candidate's checkpoint
+# is the same before and after that landing, and nothing an unlanded commit
+# on the phase branch reaches becomes a checkpoint. A phase push and a
+# landing commit's recorded Base-SHA are read from commits, not the live
+# branch, and resolve as before E131. Each is held by ``ci4_gate``.
+
+
+def landing_on(
+    repo: Path,
+    at: str,
+    package: str,
+    base: str,
+    subject: str = 'the package',
+    moved_from: str | None = None,
+) -> str:
+    r"""An empty landing commit on ``at``, as land.py makes it, recording
+    ``base``; with CI3's ``Moved-from`` when the package was moved."""
+    git(repo, 'checkout', '-q', '--detach', at)
+    found = {
+        'Reviewed-by': f'independent reviewer and Codex, {package}',
+        'Protected-paths': 'none',
+        'Base-SHA': base,
+        'Checkpoint-SHA': base,
+    }
+    if moved_from is not None:
+        found['Moved-from'] = moved_from
+    return commit(repo, f'Land {package}: {subject}', trailers=found)
+
+
+def work(repo: Path, at: str, subject: str, name: str) -> str:
+    r"""A package's commit on ``at``, adding an unprotected file."""
+    git(repo, 'checkout', '-q', '--detach', at)
+    return commit(repo, subject, lambda r: (r / f'{name}.txt').write_text(name))
+
+
+def moved_copy(repo: Path, at: str, sha: str) -> str:
+    r"""``sha`` cherry-picked onto ``at`` (CI3's move)."""
+    git(repo, 'checkout', '-q', '--detach', at)
+    git(repo, 'cherry-pick', '--allow-empty', sha)
+    return git(repo, 'rev-parse', 'HEAD')
+
+
+def checkpoint_at(repo: Path, candidate: str, **where: str) -> str:
+    r"""The candidate's checkpoint against ``base`` or ``phase_push``,
+    which must resolve."""
+    git(repo, 'checkout', '-q', '--detach', candidate)
+    found, problems = resolve(repo, **where)
+    assert problems == [] and found is not None, (where, problems)
+    return str(found.sha)
+
+
+def refused_at(repo: Path, candidate: str, **where: str) -> list[str]:
+    git(repo, 'checkout', '-q', '--detach', candidate)
+    found, problems = resolve(repo, **where)
+    assert found is None and problems, (where, found)
+    return list(problems)
+
+
+def ci4(request: pytest.FixtureRequest, check: Callable[[], None]) -> None:
+    CI4.held('ratchet', f'py:{request.node.name}', check)
+
+
+def test_ci4_a_stacked_candidate_keeps_its_checkpoint_when_its_package_lands(
+    repo: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        l0 = checkpoint_of(repo)
+        a1 = work(repo, l0, 'T1.15: the package', 'a1')
+        a2 = work(repo, a1, 'T1.15 fix 1: its review', 'a2')
+        b1 = work(repo, a2, 'T1.16: stacked on T1.15', 'b1')
+        # Before: the phase branch is still at the older landing.
+        assert checkpoint_at(repo, b1, base=l0) == l0
+        # T1.15 lands on its own commits while b1's run goes on.
+        la = landing_on(repo, a2, 'T1.15', l0)
+        assert checkpoint_at(repo, b1, base=la) == l0
+        # And another package lands on top of it before the last job starts.
+        c1 = work(repo, la, 'T1.17: another lane', 'c1')
+        lc = landing_on(repo, c1, 'T1.17', la)
+        assert checkpoint_at(repo, b1, base=lc) == l0
+        # A candidate stacked on the package's first commit only, too.
+        b2 = work(repo, a1, 'T1.18: stacked on T1.15 part way', 'b2')
+        assert checkpoint_at(repo, b2, base=l0) == l0
+        assert checkpoint_at(repo, b2, base=la) == l0
+
+    ci4(request, check)
+
+
+def test_ci4_a_landing_on_an_unlanded_phase_commit_is_still_refused(
+    repo: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        l0 = checkpoint_of(repo)
+        # A commit pushed to the phase branch by hand, never landed.
+        u = work(repo, l0, 'T1.15: pushed to the phase branch unlanded', 'u')
+        on_u = work(repo, u, 'T1.16: built on it', 'on_u')
+        p = work(repo, u, 'T1.17: a package on it', 'p')
+        stacked = work(repo, p, 'T1.18: stacked on T1.17', 'stacked')
+        for candidate in (on_u, stacked):
+            problems = refused_at(repo, candidate, base=u)
+            assert any('not a landing commit' in x for x in problems)
+        # T1.17 lands with the unlanded commit for its Base-SHA.
+        lp = landing_on(repo, p, 'T1.17', u)
+        for candidate in (on_u, stacked):
+            problems = refused_at(repo, candidate, base=lp)
+            assert any('not a landing commit' in x for x in problems), (
+                candidate,
+                problems,
+            )
+
+    ci4(request, check)
+
+
+def test_ci4_a_stack_landed_as_moved_copies_resolves_as_before(
+    repo: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        l0 = checkpoint_of(repo)
+        a1 = work(repo, l0, 'T1.15: the package', 'a1')
+        b1 = work(repo, a1, 'T1.16: stacked on T1.15', 'b1')
+        # Another lane lands first, so T1.15 is moved over it (CI3).
+        x1 = work(repo, l0, 'T1.17: another lane', 'x1')
+        l1 = landing_on(repo, x1, 'T1.17', l0)
+        a1m = moved_copy(repo, l1, a1)
+        b1m = moved_copy(repo, a1m, b1)
+        # Before the moved copies land.
+        on_old = checkpoint_at(repo, b1, base=l1)
+        on_copy = checkpoint_at(repo, b1m, base=l1)
+        assert (on_old, on_copy) == (l0, l1)
+        la = landing_on(repo, a1m, 'T1.15', l1, moved_from=a1)
+        # After: the same checkpoints, and a candidate on the original
+        # commits is still told to rebase.
+        assert checkpoint_at(repo, b1, base=la) == l0
+        git(repo, 'checkout', '-q', '--detach', b1)
+        found, _ = resolve(repo, base=la)
+        assert any('rebase onto it' in note for note in found.notes)
+        assert checkpoint_at(repo, b1m, base=la) == l1
+        # T1.16 moved over the landing (CI3's chain) is judged on it.
+        b1mm = moved_copy(repo, la, b1m)
+        git(repo, 'checkout', '-q', '--detach', b1mm)
+        found, problems = resolve(repo, base=la)
+        assert problems == [] and found.sha == la and found.notes == []
+
+    ci4(request, check)
+
+
+def test_ci4_a_landing_on_the_line_the_phase_branch_lacks_is_passed_over(
+    repo: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        l0 = checkpoint_of(repo)
+        a1 = work(repo, l0, 'T1.15: the package', 'a1')
+        # A landing commit the lane keeps but the phase branch never took.
+        kept = landing_on(repo, a1, 'T1.15', l0, 'the package, not pushed')
+        b1 = work(repo, kept, 'T1.16: stacked on that landing', 'b1')
+        assert checkpoint_at(repo, b1, base=l0) == l0
+        # The phase branch takes another landing of the same commits.
+        la = landing_on(repo, a1, 'T1.15', l0, 'the package, landed')
+        assert la != kept
+        assert checkpoint_at(repo, b1, base=la) == l0
+
+    ci4(request, check)
+
+
+def test_ci4_a_phase_push_and_a_recorded_base_resolve_as_before(
+    repo: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        l0 = checkpoint_of(repo)
+        a1 = work(repo, l0, 'T1.15: the package', 'a1')
+        la = landing_on(repo, a1, 'T1.15', l0)
+        b1 = work(repo, a1, 'T1.16: stacked on T1.15', 'b1')
+        # A landing recording a base it does not descend from: its
+        # recorded base is not the live branch, so no later landing
+        # stands in for the merge base, which is no landing commit.
+        bad = landing_on(repo, b1, 'T1.16', la)
+        problems = refused_at(repo, bad, base=la)
+        assert any('not a landing commit' in x for x in problems), problems
+        assert refused_at(repo, bad, phase_push=la) == [
+            'the push is not a fast-forward of the previous tip'
+        ]
+        # The same package moved onto the landing resolves on it, both ways.
+        b1m = moved_copy(repo, la, b1)
+        lb = landing_on(repo, b1m, 'T1.16', la, moved_from=b1)
+        assert checkpoint_at(repo, lb, phase_push=la) == la
+        c1 = work(repo, lb, 'T1.17: the next package', 'c1')
+        lc = landing_on(repo, c1, 'T1.17', lb)
+        assert checkpoint_at(repo, lb, base=lc) == la
+        assert checkpoint_at(repo, lb, base=l0) == la
+        # A phase push from a tip that is no landing stays refused.
+        u = work(repo, la, 'T1.18: pushed unlanded', 'u')
+        lu = landing_on(repo, u, 'T1.18', u)
+        problems = refused_at(repo, lu, phase_push=u)
+        assert any('not a landing commit' in x for x in problems), problems
+
+    ci4(request, check)
 
 
 # --- reference immutability ---------------------------------------------------------
