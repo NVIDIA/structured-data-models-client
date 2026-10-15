@@ -41,9 +41,11 @@ The pack, in ``--out``, nothing written anywhere else:
   success`` or ``expected refusal`` where every runner answers as the
   reference did and the comparator names no gating difference of the case;
   ``approved improvement`` where every outcome difference is stated by an
-  approved entry's ``case_outcomes`` item for that case, cell (rust-host
-  under ``ref-pandas3``), runner and observed outcome, an owner's for a new
-  refusal; and ``regression`` otherwise. A regression includes:
+  approved entry's ``case_outcomes`` item for that case, runner and
+  observed outcome under the gate's cell, ``ratchet.CELL`` (``ref-pandas3``),
+  whatever cell the runner observed in (a Python runner with no cell
+  recorded is excused by none), an owner's for a new refusal; and
+  ``regression`` otherwise. A regression includes:
   - a runner or the reference not observing the case;
   - an ``INTERNAL_ERROR`` from python-core or rust-host, a panic, even as
     the reference's; python-old's is held only where ``ratchet.py``'s
@@ -384,9 +386,11 @@ def excused_by(
     refusal: bool,
 ) -> str | None:
     r"""The first approved entry stating this case's outcome on this runner
-    and cell (rust-host's under the reference's cell; a Python runner with
-    no cell recorded matches none), by the owner for a new refusal, never
-    ``INTERNAL_ERROR``; or None."""
+    under the gate's cell, ``ratchet.CELL``, whatever cell it was observed
+    in (a Python runner with no cell recorded matches none), by the owner
+    for a new refusal, never ``INTERNAL_ERROR``; or None."""
+    if runner != 'rust-host' and cell is None:
+        return None
     for entry in ratchet().approved({'entries': register}):
         if refusal and entry.get('approved_by') != 'owner':
             continue
@@ -394,8 +398,7 @@ def excused_by(
             if (
                 isinstance(item, dict)
                 and item.get('case') == case
-                and item.get('cell')
-                == (ratchet().CELL if runner == 'rust-host' else cell)
+                and item.get('cell') == ratchet().CELL
                 and item.get('runner') == runner
                 and item.get('new') == new
                 and ratchet().PANIC not in new
@@ -558,9 +561,10 @@ def cases_md(
             "owner's for a new refusal), and `regression` otherwise: a case "
             'a runner did not observe, a panic (`INTERNAL_ERROR` from a core '
             "runner, or python-old's unless it is the reference's own "
-            'crash), or a gating difference of the comparator. An entry '
-            'states a cell: one naming only `ref-pandas3` excuses nothing '
-            'in another cell.',
+            'crash), or a gating difference of the comparator. As at the '
+            'gate, an entry excuses an outcome only by an item naming '
+            '`ref-pandas3`, in every cell; a Python observation with no '
+            'cell recorded is excused by none.',
             '',
             *(f'- {name}: {counts[name]}' for name in CLASSES),
             '',
