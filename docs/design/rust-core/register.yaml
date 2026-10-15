@@ -1869,8 +1869,9 @@ entries:
     and rule): model (the tabular model, once its shape checks pass, which
     refuse a relational request first as the reference does), problem_type
     (a forecast or a link prediction), prediction_statistic (a statistic
-    not written as text), entity_ref (a request with no entity reference
-    column), id_type (an entity key not declared int8 to int64, written as
+    not written as text), entity_ref (a request whose predict half has no
+    entity reference column; lifted by T1.36 fix 8, which falls back to the
+    instance ids as the reference does), id_type (an entity key not declared int8 to int64, written as
     an integer or as plain digits, or string), instance_id_type,
     response_field (an answer carrying scores, rankings, embeddings,
     quantiles, an explanation or item metadata, named in field),
@@ -1880,8 +1881,10 @@ entries:
     materialize does not write). An answer nested past 128 levels (P1B-22)
     and a regression's prediction that is not a number (P1B-23) are
     INVALID_RESPONSE, approved by the owner. A request not materialized on
-    the core, or holding other payloads than the one it wrote, has no core
-    route (RouteError, the seam's own failure). The default route is
+    the core, or holding more or fewer payloads than the one it wrote, has no
+    core route (RouteError, the seam's own failure). The one payload is not
+    checked against what the core wrote: Request.payloads hands back the live
+    dicts, so a caller's edit of them reaches the core's predict. The default route is
     unchanged.
   affected_inputs: >-
     SDMClient.predict of a request materialized on the core over a DuckDB
@@ -1927,6 +1930,15 @@ entries:
     the reference, where this entry approves only E92's Phase 2 class. They
     were [base.regression, base.binary, base.multiclass, T1.11d, T1.26, T1.28,
     T1.28a, T1.28b, T1.29].
+    Corrected at T1.36 fix 5 (the orchestrator's instruction): entity_ref
+    was described as reachable only from a payload the core did not write.
+    It is reachable on the core route by editing the payload materialize
+    wrote, through the public Request.payloads (renaming or dropping
+    __kumo_entity_ref_0 in the predict half). The reference then answers
+    with the instance ids as the items' ids, and the core refused
+    UNSUPPORTED_REQUEST entity_ref after calling the endpoint (measured at
+    c49ee4f8, both routes, against contract/runners/scripted_endpoint.py).
+    T1.36 fix 8 matches the reference.
 
 - id: P1B-5
   title: A DuckDB table named with a double quote is described on the core route where the reference refuses it
