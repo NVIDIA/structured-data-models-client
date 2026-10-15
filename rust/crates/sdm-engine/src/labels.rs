@@ -600,6 +600,25 @@ fn null_condition(has: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError> {
     })
 }
 
+/// A windowed aggregation compared with `= NULL` or `!= NULL`, as the
+/// executor compares it: the examples whose window holds a value keep a
+/// label, each `False` for `=` and `True` for `!=` (it drops the others
+/// before it compares); the rest have none. Where some have none, the
+/// reference's `execute` fails after this, which its caller refuses
+/// (register P1B-21).
+fn aggregated_null(present: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError> {
+    let label = match op {
+        RelOp::Eq => false,
+        RelOp::Ne => true,
+        _ => return Err(not_yet("condition")),
+    };
+    let n = present.iter().filter(|p| **p).count();
+    Ok(Labelled {
+        mask: present,
+        labels: Labels::Bool(vec![label; n]),
+    })
+}
+
 /// A static decimal column compared with a constant, as `execute_rel_op`
 /// compares it: exactly, the constant read at the column's type
 /// ([`decimal_constant`]); the examples with a value keep their answer.
@@ -741,6 +760,9 @@ pub fn label(target: &Target) -> Result<Labelled, CoreError> {
                     labels: Labels::Bool(compare(&inner.labels, *op, *constant)?),
                     mask: inner.mask,
                 }),
+                None if matches!(target.as_ref(), Target::Aggregated(_)) => {
+                    aggregated_null(inner.mask, *op)
+                }
                 None => null_condition(inner.mask, *op),
             }
         }

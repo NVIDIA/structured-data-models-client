@@ -153,7 +153,10 @@ RULES = {
     'target_type': 'P1B-3',
     # From T1.28a: an average compared with NULL, which the reference fails
     # internally (E66(b)'s class); the inference options' text coercions.
+    # From T1.36 fix 2, only where a trial's window holds no value, and a
+    # minimum or maximum compared with NULL alike.
     'average_null': 'P1B-21',
+    'min_max_null': 'P1B-21',
     'inference_config_text': 'P1B-3',
     'target_transform_null': 'P1B-3',
     # A key of a type the bridge's cast takes no Arrow type for (an edit

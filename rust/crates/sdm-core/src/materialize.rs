@@ -160,6 +160,10 @@ const SUBGRAPH_TABLES: usize = 15;
 const PREDICT_ROWS: usize = 1_000;
 /// The most rows an instance table may hold (`MAX_TABLE_ROWS`).
 const TABLE_ROWS: usize = 10_000;
+/// How many examples the reference labels at once, stopping once it has
+/// the run mode's (`_sample_target_set`'s `batch_size`): the first batch
+/// holds every example a context takes whenever all of it is labelled.
+const LABEL_BATCH: usize = 10_000;
 /// `pd.Timestamp.max` and `min`, in nanoseconds: the bounds of a table
 /// whose time column holds no value.
 const TIME_MAX: i64 = i64::MAX;
@@ -502,20 +506,6 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
             let target = shape(target, entity_table)?;
             if matches!(target, Shape::Condition { .. }) {
                 return Err(not_yet("condition"));
-            }
-            // An average compared with `NULL`, which the reference fails
-            // with an internal error, is refused by name (register P1B-21,
-            // the class of decision E66(b)), not labelled.
-            if constant.is_none()
-                && matches!(
-                    &target,
-                    Shape::Aggregated(Windowed {
-                        aggregation: labels::Aggregation::Avg,
-                        ..
-                    })
-                )
-            {
-                return Err(not_yet("average_null"));
             }
             Ok(Shape::Condition {
                 target: Box::new(target),
@@ -1870,6 +1860,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     .target(&asked.target, aggregated.as_ref())
     .await?;
     let labelled = labels::label(&target)?;
+    null_compared(&asked.target, &labelled.mask)?;
     // The examples with a label, in order, the first a context holds.
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
         .filter(|&row| labelled.mask[row])
@@ -2092,6 +2083,50 @@ fn reaches(offset: Offset, at: i64) -> Result<i128, CoreError> {
         Some(span) => Ok(i128::from(at) + span),
         None => offset.add_to(at, "anchor_time").map(i128::from),
     }
+}
+
+/// An average, a minimum or a maximum compared with `NULL`, checked over
+/// the examples [`labels::label`] gave a label (`mask`), as the reference
+/// meets it: its executor labels only the examples with a value in their
+/// window, then indexes every example with those labels (`execute`), so
+/// its first batch of examples ([`LABEL_BATCH`]) decides. Each with a
+/// value: labelled. None with one: numpy's broadcast fails, the caller's
+/// error, `INVALID_REQUEST`. Some without: an `IndexError` the reference
+/// gives as `INTERNAL_ERROR`, refused by name here (`average_null`,
+/// `min_max_null`; register P1B-21, the class of decision E66(b)). An
+/// example past the batch without a value is left unlabelled, never in a
+/// context, as there.
+fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
+    let Shape::Condition {
+        target,
+        constant: None,
+        ..
+    } = target
+    else {
+        return Ok(());
+    };
+    let Shape::Aggregated(Windowed { aggregation, .. }) = target.as_ref() else {
+        return Ok(());
+    };
+    let rule = match aggregation {
+        labels::Aggregation::Avg => "average_null",
+        labels::Aggregation::Min | labels::Aggregation::Max => "min_max_null",
+        labels::Aggregation::Sum | labels::Aggregation::Count => return Ok(()),
+    };
+    let batch = &mask[..mask.len().min(LABEL_BATCH)];
+    if batch.is_empty() {
+        return Ok(());
+    }
+    if !batch.contains(&true) {
+        return Err(invalid(
+            "no example's window holds a value to compare with NULL",
+            "query",
+        ));
+    }
+    if batch.contains(&false) {
+        return Err(not_yet(rule));
+    }
+    Ok(())
 }
 
 /// What a run's labels are read from: the entity rows sampled and, for a

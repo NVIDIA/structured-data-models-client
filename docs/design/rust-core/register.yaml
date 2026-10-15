@@ -1750,7 +1750,8 @@ entries:
     (target_transform_null) refused by name, and an inference config that
     is not a mapping refused INVALID_REQUEST, where the reference takes its
     engine's own config object; an average compared with NULL refused by
-    name (average_null, P1B-21); a multiclass target of floats refused
+    name (average_null, P1B-21; from T1.36 fix 2 only where the reference
+    crashes, and MIN and MAX alike, min_max_null); a multiclass target of floats refused
     target_type, its classes' text being Python's repr of a float32's
     double.
     The entities are cast to the key's type as the
@@ -2793,36 +2794,58 @@ entries:
     by the error's fields, would be a rule in the host.
 
 - id: P1B-21
-  title: An average compared with NULL is refused by name where the reference fails INTERNAL_ERROR
+  title: AVG, MIN or MAX compared with NULL is refused by name only where the reference fails INTERNAL_ERROR
   kind: change
   old_behavior: >-
-    The reference's materialize of a target AVG(...) = NULL or AVG(...) !=
-    NULL fails inside its executor, which its client raises as
-    StructuredDataError with code INTERNAL_ERROR.
+    The reference labels a target AGG(...) = NULL or AGG(...) != NULL (AGG
+    one of AVG, MIN and MAX) on ordinary data: a binary classification,
+    classes false and true, positive class true, every context label False
+    for = NULL and True for != NULL. It fails INTERNAL_ERROR (an IndexError
+    in its executor) when some row among the first 10,000 rows of its
+    training-trial list has no fact with a non-null aggregated value in its
+    window (anchor + start, anchor + end]; a row past the first 10,000 with
+    an empty window is not labelled and is in no context, and the rows
+    predicted for are not labelled at all. It fails INVALID_REQUEST
+    (numpy's broadcast ValueError, in numpy's words) when none of those
+    rows has a value.
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build,
-    materialize refuses the query's shape before anything is fetched:
-    UnsupportedRequestError, code UNSUPPORTED_REQUEST, fields operation
-    materialize and rule average_null (T1.28a; until T1.28a the core
-    labelled it and refused classification_task after the labels). The
-    default route is unchanged.
+    materialize labels these targets as the reference does (the same task,
+    classes, context and predicted rows), refuses INVALID_REQUEST
+    (InvalidRequestError, field query) where no row among the first 10,000
+    trials has a value, and refuses by name, UnsupportedRequestError with
+    code UNSUPPORTED_REQUEST and fields operation materialize and rule
+    average_null (AVG) or min_max_null (MIN, MAX), only where some of those
+    rows has none (the crash condition), after its labels' fetch, from the
+    labels it computes, with no other statement to the provider. Before
+    T1.36 fix 2 the core refused AVG on every input (average_null, before
+    anything was fetched; from T1.28a) and labelled MIN and MAX where the
+    reference crashed or refused (an empty window labelled True for = NULL);
+    it now does neither. SUM and COUNT, which the reference always labels,
+    are unchanged. The default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize with indices over a DuckDB source under a
-    forced core route whose target compares a windowed AVG with NULL.
-  cases: [T1.27, T1.28a]
+    forced core route whose target compares a windowed AVG, MIN or MAX with
+    NULL.
+  cases: [T1.27, T1.28a, T1.36]
+  refs: [contract/t136-average-null-vectors.json, contract/tests/test_t136_average_null.py, contract/tools/average_null_record.py, E145]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Carried from T1.27's review into T1.28a, which lifts classification_task:
-    the independent test author's avg-equals-null case holds the core to a
-    named refusal other than INTERNAL_ERROR and not one of the rules
-    T1.28a lifts. Fits the class the owner approved on 2026-10-11 (E66(b):
-    where the reference crashes or gives an internal error, a named
-    refusal is approved): for the reviewer to approve under the class,
-    never self-approved.
-    Approver: reviewer (T1.33: the reference's INTERNAL_ERROR to a named
-    refusal, E66(b)'s class).
+    Narrowed at T1.36 fix 2 to the reference's crash condition. The
+    independent test author's 104 cases recorded on the reference (54
+    labelled, 32 failing INTERNAL_ERROR, 18 refused INVALID_REQUEST;
+    contract/t136-average-null-vectors.json, recorded by
+    contract/tools/average_null_record.py) hold the core to them
+    (contract/tests/test_t136_average_null.py), with
+    packages/structured-data-models-client/tests/test_the_materialize_route.py
+    and test_t128a_payload_rules.py's avg-equals-null case (shop, where
+    the reference crashes) unchanged. The 10,000 rows are the reference's
+    label batch (_sample_target_set's batch_size), whose first batch decides.
+    Approver: reviewer (E66(b): INTERNAL_ERROR to a named refusal, narrowed
+    at T1.36 fix 2 after both final reviews, the subagent's REJECT-P1B-21
+    and Codex's APPROVE-P1B-21)
 
 - id: P1B-22
   title: A model's answer nested past 128 levels is refused INVALID_RESPONSE where the reference reads it
