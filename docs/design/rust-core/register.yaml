@@ -3087,9 +3087,10 @@ entries:
     the statement's answer travels as Arrow, which needs no pytz, so a
     zoned timestamp is read over the whole table as every other kind is:
     the answer the reference gives where pytz is installed. Where the
-    preview and the whole table disagree the time column chosen, or the
-    warning, differs from the reference's in ref-pandas3: a zoned column
-    held only past the first 1,000 rows, or mostly empty past them, is
+    reference's whole-table query fails without pytz, the time column
+    chosen, or the warning, can differ from the reference's in ref-pandas3:
+    a zoned column held only past the first 1,000 rows, or mostly empty
+    past them, is
     passed over (sparse) where the reference took it unchecked; one whose
     first 1,000 rows hold one value is taken with no warning where the
     reference warned it was taken unchecked; one holding a single value,
@@ -3122,8 +3123,9 @@ entries:
     whole-table MIN's text and P1B-39's zoned whole table held as measured"
     (contract/t136-host2-zone-vectors.json's p1b39 section, 2,500 rows
     under UTC, beside shop), fall under the general sentence above (where
-    the preview and the whole table disagree, the time column chosen or
-    the warning differs): p1b39.held-past-the-preview (events.f null in
+    the reference's whole-table query fails without pytz, the time column
+    chosen or the warning can differ): p1b39.held-past-the-preview
+    (events.f null in
     the 1,000 rows the preview reads, 2020-01-01+00 after) and
     p1b39.constant-in-every-row (2020-01-01+00 in every row). In both the
     reference without pytz takes f unchecked ("taken as the time column
@@ -3132,6 +3134,14 @@ entries:
     ("every row that holds a value holds 2020-01-01 00:00:00+00:00",
     "every row holds ..."); p1b39.control.varying agrees on every route.
     Recorded at T1.36 fix 13; the status and approval stand.
+    The general sentence reworded at T1.36 fix 14 (the independent
+    subagent's re-check of fix 13, its P3-3): it read "where the preview
+    and the whole table disagree", but in p1b39.constant-in-every-row they
+    agree, and the reference differs only because its query fails without
+    pytz. Wording only: the status, the approver and the cases the entry
+    covers are unchanged. Where the reference's query fails with pytz too
+    (a zoned candidate held, past the preview, only at a value whose wall
+    clock leaves the years), the difference is P1B-89's, the owner's.
 
 - id: P1B-40
   title: Rows a walk reaches with a null text or decimal key beside keys that are not null are left out, with a warning, where the reference fails
@@ -5427,6 +5437,80 @@ entries:
     five: the reference gives 5, the core the text; Arabic-Indic five: 5 on
     both). Never self-approved.
 
+- id: P1B-89
+  title: A zoned time column candidate held past the preview only at a value whose wall clock leaves the years is passed over as constant where the reference with pytz takes it unchecked
+  kind: change
+  old_behavior: >-
+    With pytz installed (as under pandas 2, dbr17-pandas2) and a DuckDB
+    TimeZone other than UTC, the reference's time column choice fetches a
+    TIMESTAMP WITH TIME ZONE candidate's whole-table MIN and MAX as Python
+    datetimes in that zone. Where the candidate is null in the 1,000 rows
+    the preview reads and holds after them only a value whose wall clock in
+    the zone lies before the year 1 or after 9999 (TIMESTAMPTZ '0001-01-01
+    00:00+00' under America/New_York, in the year 0 at its wall clock;
+    '9999-12-31 23:00+00' under Asia/Tokyo, in the year 10000), that fetch
+    fails even with pytz (OverflowError, "date value out of range"), so the reference falls back to its preview,
+    as it does whenever the whole-table query fails (E85(a)), and takes the
+    column as the time column unchecked, with its warning that the query
+    over the whole table failed. Without pytz the query fails for any zoned
+    candidate, which is P1B-39's case.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    whole-table statement's answer travels as Arrow and is read whatever the
+    wall clock (P1B-39): the candidate's MIN and MAX are its one value, so
+    it is passed over as constant, no time column taken, with the
+    constant-column warning ("every row that holds a value holds
+    0001-01-01 00:00:00+00"). Both
+    routes succeed; the time column chosen and the warning differ. A
+    candidate whose first previewed value leaves the years is refused by
+    name under P1B-81(b), and a realistic sentinel (one such value late in a
+    column whose other values vary) is chosen alike on both routes, with
+    and without pytz. The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source under a forced core route over a DuckDB table of
+    1,000 rows or more, its TimeZone not UTC, holding a TIMESTAMP WITH TIME
+    ZONE time column candidate that is null in its first 1,000 rows and
+    holds after them only a value whose wall clock in that zone lies outside
+    the years 1 to 9999, compared with the reference run with pytz
+    (dbr17-pandas2).
+  cases: [T1.36]
+  refs:
+  - contract/t136-host2-zone-vectors.json#p1b89.held-past-the-preview.new-york.year-1
+  - contract/t136-host2-zone-vectors.json#p1b89.held-past-the-preview.tokyo.year-9999
+  - contract/t136-host2-zone-vectors.json#p1b89.control.utc.year-1
+  - contract/t136-host2-zone-vectors.json#p1b89.control.sentinel.new-york
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E85}
+  notes: >-
+    Found by the independent subagent's re-check of T1.36 fix 13 at
+    b6ac5b76 (its P3-1 and its OWNER line), reproduced there with pytz
+    installed for the comparison; recorded at T1.36 fix 14. P1B-39 does not
+    cover it: P1B-39's reference with pytz reads the whole table, and here
+    its query fails with pytz too. A different success, not E66(b)'s class,
+    so the owner's. Approver: owner. The owner's question (P1B-89): match
+    the reference's fallback (take it as the time column) or keep the
+    core's choice? (a) Treat a whole-table MIN or MAX whose wall clock in
+    the zone leaves the years 1 to 9999 as the query failing and fall back
+    to the preview, which matches the reference with and without pytz; or
+    (b) keep the whole-table reading. Cost of (a): about one condition in
+    sdm-schema's time column choice (infer.rs, where it reads the
+    column_ranges answer), plus the test author's vectors and tests, a few
+    hours; (b) costs nothing. Recommendation: (b) for Phase 1, with (a) as
+    Phase 2 row FX-5 (migration-plan.md section 8) if the owner prefers
+    exact matching: both routes succeed, the input is a column holding only
+    instants Python cannot hold in that zone, the core's "constant" is the
+    more accurate answer, and realistic sentinels agree. Measured by the
+    test author's "T1.36 tests: P1B-89's zoned whole table that pytz cannot
+    read held as measured": contract/t136-host2-zone-vectors.json's p1b89
+    section (2,500 events rows beside shop, f null in the 1,000 the preview
+    reads), held by contract/tests/test_t136_host2_zones.py's test_p1b89_*
+    tests: in New York and Tokyo the reference takes f with and without
+    pytz, the core none; the UTC control agrees with the reference with
+    pytz (without it, P1B-39's case); the sentinel control agrees on every
+    route; DuckDB's fetchall of the edge values fails with pytz. Never
+    self-approved.
+
 - id: P1B-79
   title: A single text or binary value past int32 offsets without large buffers is refused by name where the reference fails unnamed
   kind: change
@@ -5589,8 +5673,8 @@ entries:
   - 'contract/t136-host2-zone-vectors.json#zone.whole.tokyo.utc-year-0 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   - 'contract/t136-host2-zone-vectors.json#zone.first.pago-pago.utc-year-0.last-us refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   - 'contract/t136-host2-zone-vectors.json#zone.first.pago-pago.utc-year-10000.local-last-second refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
   notes: >-
     (a) A named refusal where the reference fails with INTERNAL_ERROR, and
@@ -5636,3 +5720,15 @@ entries:
     value past the years is shown in a warning at its UTC instant rather
     than failing the host's formatting, though the refusal comes first
     wherever the test author measured. Never self-approved.
+    Approved by both reviewers at b6ac5b76 (APPROVE-P1B-81 from Codex's
+    re-check of fix 13 and from the independent subagent's re-check of fix
+    13, each at b6ac5b76), relayed by the orchestrator, recorded at T1.36
+    fix 14; never the implementer's approval. Codex had rejected it at
+    84d68cf5 (the wall clock unread) and at 4a2aee5b (the UTC instant
+    unread); at b6ac5b76 it reran both public-route reproductions (New York
+    with a UTC year 10000, Tokyo with a UTC year 0: VALUE_OUT_OF_RANGE on
+    the core, OverflowError on the default route) and the original
+    wall-clock cases, and found infer.rs checking both readings. The
+    subagent, which approved it in round 2, re-ran the boundary sweep at
+    b6ac5b76 in five zones: the core holds both the UTC instant and the wall
+    clock to the years 1 to 9999 exactly as the reference does.
