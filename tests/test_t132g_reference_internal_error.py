@@ -412,10 +412,27 @@ def _differs_outside_the_baseline(line: dict[str, Any]) -> None:
     line['public']['schema']['tables'][0]['duplicate_keys'] += 1
 
 
+#: A committed reference success's public result (a reference line is never
+#: changed or removed), for a crash whose line otherwise equals the
+#: reference's but carries one.
+A_PUBLIC_RESULT = helpers.reference(ROOT)['base.binary']['public']['result']
+
+
+def _another_public_result(line: dict[str, Any]) -> None:
+    r"""A public result where the reference's crash has none (T1.36 C17)."""
+    assert line['public']['result'] is None
+    assert A_PUBLIC_RESULT is not None
+    line['public']['result'] = copy.deepcopy(A_PUBLIC_RESULT)
+
+
 DIFFERENT: dict[str, Callable[[dict[str, Any]], None]] = {
     'another stage': outcome_of(stage='predict'),
     'another error': outcome_of(error='ValueError'),
     'outside the baseline fields': _differs_outside_the_baseline,
+    # T1.36 C17 (T1.32g p2f review P3): same code, another outcome result.
+    'another result': outcome_of(result='success'),
+    # T1.36 C17 (T1.32g p2f review P3): same outcome, another public result.
+    'another public result': _another_public_result,
 }
 
 
@@ -449,6 +466,77 @@ def test_python_old_s_internal_error_where_the_reference_succeeded_fails(
     commit(repo)
     found = check(repo, landed, (observed,))
     assert panics(found, SUCCEEDS, 'python-old'), found
+
+
+#: A diagnostic corpus case, held by no runner, the reference refuses with
+#: INVALID_REQUEST at materialize (StructuredDataError): the reference's
+#: crash but for its code.
+REFUSES = 's0.boundary.escape-lone-surrogate'
+
+
+def _the_reference_refuses_but_for_the_code(r: Path) -> dict[str, Any]:
+    reference = helpers.reference(r)[REFUSES]
+    assert reference['outcome'] == {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'StructuredDataError',
+        'code': 'INVALID_REQUEST',
+    }
+    return reference
+
+
+def test_python_old_s_internal_error_where_the_reference_refused_with_another_code_fails(
+    repo: Path, tmp_path: Path
+) -> None:
+    # T1.36 C17 (T1.32g p2f review P3): python-old's INTERNAL_ERROR equal to
+    # the reference line but for the code (INVALID_REQUEST) is no crash.
+    reference = _the_reference_refuses_but_for_the_code(repo)
+    observed = observe(
+        repo, tmp_path, 'python-old', changed(REFUSES, panic_outcome)
+    )
+    ours = lines_of(observed)[REFUSES]
+    assert ours['outcome'] == {**reference['outcome'], 'code': 'INTERNAL_ERROR'}
+    # Held at that same INTERNAL_ERROR: equal to its baseline, not to the
+    # reference, which refused with another code.
+    landed = checkpoint_holding(repo, 'python-old', REFUSES, observed)
+    commit(repo)
+    found = check(repo, landed, (observed,))
+    assert panics(found, REFUSES, 'python-old'), found
+
+
+def test_python_old_s_other_code_where_the_reference_crashed_is_no_crash(
+    repo: Path, tmp_path: Path
+) -> None:
+    # T1.36 C17 (T1.32g p2f review P3): python-old answering with another
+    # code (INVALID_REQUEST) where the reference crashed, held at the
+    # reference's INTERNAL_ERROR, fails as an unapproved change and is never
+    # noted as the old client's crash.
+    for name in ('crashed', 'other-code'):
+        (tmp_path / name).mkdir()
+    crashed = observe(repo, tmp_path / 'crashed', 'python-old')
+    landed = checkpoint_holding(repo, 'python-old', CASE, crashed)
+    commit(repo)
+    observed = observe(
+        repo,
+        tmp_path / 'other-code',
+        'python-old',
+        changed(CASE, outcome_of(code='INVALID_REQUEST')),
+    )
+    assert lines_of(observed)[CASE]['outcome'] == {
+        **helpers.reference(repo)[CASE]['outcome'],
+        'code': 'INVALID_REQUEST',
+    }
+    report = ratchet.check(repo, landed, [observed], None)
+    assert any(
+        p.startswith(f'baselines: {CASE}: python-old: {PANIC_TEXT} became ')
+        and 'INVALID_REQUEST' in p
+        for p in report.problems
+    ), report.problems
+    # The corpus's own seven are noted; this case is not.
+    assert not any(
+        n.startswith(f'baselines: {CASE}: ') and "old client's crash" in n
+        for n in report.notes
+    ), report.notes
 
 
 @pytest.mark.parametrize('runner', ['python-core', 'rust-host'])
@@ -579,6 +667,10 @@ PROPOSED_UNEQUAL: dict[str, tuple[str, Callable[[dict[str, Any]], None]]] = {
     'another error': (CASE, outcome_of(error='ValueError')),
     'outside the baseline fields': (CASE, _differs_outside_the_baseline),
     'the reference succeeded': (UNHELD_SUCCESS, panic_outcome),
+    # T1.36 C17 (T1.32g p2f review P3): the three seeds below.
+    'another result': (CASE, outcome_of(result='success')),
+    'another public result': (CASE, _another_public_result),
+    'the reference refused with another code': (REFUSES, panic_outcome),
 }
 
 
