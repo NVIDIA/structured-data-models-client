@@ -1,0 +1,6864 @@
+{
+ "format": "sdm-float-multiclass-vectors/1",
+ "recorded_by": "contract/tools/float_multiclass_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "template": "contract/cases/s1/base.multiclass.json",
+ "question": "PREDICT users.f FOR EACH users.user_id",
+ "indices": [
+  0,
+  1
+ ],
+ "register_ref": "contract/float-multiclass-vectors.json#",
+ "preview_rules": {
+  "preview.double-nan": "float_nan",
+  "preview.float-nan": "float_nan",
+  "preview.double-nan-asked": "float_nan",
+  "preview.double-signed-zeros": "float_signed_zero",
+  "preview.float-signed-zeros": "float_signed_zero"
+ },
+ "payload_exclusions": [
+  [
+   "metadata",
+   "request_id"
+  ]
+ ],
+ "vectors": [
+  {
+   "id": "double.one-to-five",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (1 + user_id % 5)::DOUBLE AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 5,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     "4.0",
+     "5.0",
+     "1.0",
+     "2.0",
+     "3.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "226cb5cf9b29074caa2bd7909663f50cd33781c4a737db289a1012542aef6546",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "5.0",
+        "1.0",
+        "2.0",
+        "4.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 5,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "4.0"
+        },
+        {
+         "number": "5.0"
+        }
+       ],
+       "digest": "e200f9a1ffec49b1161ae8d953815d514cbfee4a64c3518e0423b1e57b4262ef",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "5.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "4.0"
+        },
+        {
+         "number": "2.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.tenths",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([0.1::DOUBLE, 0.2::DOUBLE, 0.3::DOUBLE])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "0.1",
+     "0.2",
+     "0.3",
+     "0.1",
+     "0.2",
+     "0.3",
+     "0.1",
+     "0.2"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "23bba6f30a0ed7bafb916f9c04b1b91950bf871b9471544b227f5bdcce98eaac",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "f34167bc164299d6003bce459bc9e71b10cdf663e3edf71df436a4317d46a103",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "0.30000001192092896",
+        "0.20000000298023224",
+        "0.10000000149011612"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.30000001192092896"
+        }
+       ],
+       "digest": "a489bc18da2572fbda004949bd771bfa7babbaa86411fcc88873fee7c5276b09",
+       "cells": [
+        {
+         "number": "0.30000001192092896"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.30000001192092896"
+        },
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.10000000149011612"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "float.one-to-five",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (1 + user_id % 5)::FLOAT AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 5,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     "4.0",
+     "5.0",
+     "1.0",
+     "2.0",
+     "3.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "226cb5cf9b29074caa2bd7909663f50cd33781c4a737db289a1012542aef6546",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "5.0",
+        "1.0",
+        "2.0",
+        "4.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 5,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "4.0"
+        },
+        {
+         "number": "5.0"
+        }
+       ],
+       "digest": "e200f9a1ffec49b1161ae8d953815d514cbfee4a64c3518e0423b1e57b4262ef",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "5.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "4.0"
+        },
+        {
+         "number": "2.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "float.tenths",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([0.1::FLOAT, 0.2::FLOAT, 0.3::FLOAT])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "0.10000000149011612",
+     "0.20000000298023224",
+     "0.30000001192092896",
+     "0.10000000149011612",
+     "0.20000000298023224",
+     "0.30000001192092896",
+     "0.10000000149011612",
+     "0.20000000298023224"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "23bba6f30a0ed7bafb916f9c04b1b91950bf871b9471544b227f5bdcce98eaac",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "f34167bc164299d6003bce459bc9e71b10cdf663e3edf71df436a4317d46a103",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "0.30000001192092896",
+        "0.20000000298023224",
+        "0.10000000149011612"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.30000001192092896"
+        }
+       ],
+       "digest": "a489bc18da2572fbda004949bd771bfa7babbaa86411fcc88873fee7c5276b09",
+       "cells": [
+        {
+         "number": "0.30000001192092896"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.30000001192092896"
+        },
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.10000000149011612"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "float.null-in-context",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN NULL ELSE (1 + user_id % 3)::FLOAT END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 1,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     null,
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "tables": {
+       "context.instance_table": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 50,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 5,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "a2c4c8ffc5b94e6417fe4761e804f2ae95b6747a6403e4d8ce5f09353e84566b",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.small-spellings",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([7.0::DOUBLE, 8.0::DOUBLE, 1e-7::DOUBLE, 0.0001::DOUBLE, 0.001::DOUBLE, 1e-5::DOUBLE, -0.5::DOUBLE, 2.5::DOUBLE])[1 + user_id % 8] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 8,
+    "values": [
+     "7.0",
+     "8.0",
+     "1e-07",
+     "0.0001",
+     "0.001",
+     "1e-05",
+     "-0.5",
+     "2.5"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "14557b3d507f448457fe5504c63114f560ee30297d278358cb6a122999130e17",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "a5dd24a68886743608a272a1279ecb901c552e672fdb1c7709044423fc795f9c",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "1.0000000116860974e-07",
+        "2.5",
+        "0.0010000000474974513",
+        "9.999999747378752e-06",
+        "8.0",
+        "9.999999747378752e-05",
+        "7.0",
+        "-0.5"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 6,
+       "listed": [
+        {
+         "number": "-0.5"
+        },
+        {
+         "number": "0.0010000000474974513"
+        },
+        {
+         "number": "1.0000000116860974e-07"
+        },
+        {
+         "number": "2.5"
+        },
+        {
+         "number": "9.999999747378752e-05"
+        },
+        {
+         "number": "9.999999747378752e-06"
+        }
+       ],
+       "digest": "96288a99aa89e215b138378115bc3bdc6a15b057aab9255c8cbfb4d35647ada0",
+       "cells": [
+        {
+         "number": "1.0000000116860974e-07"
+        },
+        {
+         "number": "2.5"
+        },
+        {
+         "number": "0.0010000000474974513"
+        },
+        {
+         "number": "9.999999747378752e-06"
+        },
+        {
+         "number": "9.999999747378752e-05"
+        },
+        {
+         "number": "-0.5"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.large-spellings",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([7.0::DOUBLE, 8.0::DOUBLE, 1e20::DOUBLE, 123456789.0::DOUBLE, 1e16::DOUBLE, 16777217.0::DOUBLE, 9999999999999998.0::DOUBLE, -1e10::DOUBLE])[1 + user_id % 8] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 8,
+    "values": [
+     "7.0",
+     "8.0",
+     "1e+20",
+     "123456789.0",
+     "1e+16",
+     "16777217.0",
+     "9999999999999998.0",
+     "-10000000000.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "a2705ac2d617a5e23a116be6c238aecba3316e4e0cd748ce6ce039dd94ba6d63",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "34577a096175bae8429765a8a660dce330ca55f2f3c35ea78054449f9116f4a4",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "1.0000000200408773e+20",
+        "-10000000000.0",
+        "1.0000000272564224e+16",
+        "16777216.0",
+        "8.0",
+        "123456792.0",
+        "7.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 5,
+       "listed": [
+        {
+         "number": "-10000000000.0"
+        },
+        {
+         "number": "1.0000000200408773e+20"
+        },
+        {
+         "number": "1.0000000272564224e+16"
+        },
+        {
+         "number": "123456792.0"
+        },
+        {
+         "number": "16777216.0"
+        }
+       ],
+       "digest": "5f4b86616e692c2a4876bde5085cce4a75d3d0d10e1f4cfeee98786173cc3aa2",
+       "cells": [
+        {
+         "number": "1.0000000200408773e+20"
+        },
+        {
+         "number": "-10000000000.0"
+        },
+        {
+         "number": "1.0000000272564224e+16"
+        },
+        {
+         "number": "16777216.0"
+        },
+        {
+         "number": "123456792.0"
+        },
+        {
+         "number": "1.0000000272564224e+16"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.one-float32",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([0.1::DOUBLE, 0.1000000000001::DOUBLE, 0.2::DOUBLE])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "0.1",
+     "0.1000000000001",
+     "0.2",
+     "0.1",
+     "0.1000000000001",
+     "0.2",
+     "0.1",
+     "0.1000000000001"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "1cb18fa3b1c584a7b284d313e7a2b0c5b70c6a9d30c8a9e051c24077ab0ffd25",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "c26df06c350219e42def2524c14b01a43d9fcaf38a94ace160fd8b16f62d67b4",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "0.20000000298023224",
+        "0.10000000149011612"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 2,
+       "listed": [
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.20000000298023224"
+        }
+       ],
+       "digest": "2245c637d2c3f7f2d89a7df1eac79fc9d9b6c667bf7bc274c6ec9d0525fe3b80",
+       "cells": [
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.20000000298023224"
+        },
+        {
+         "number": "0.10000000149011612"
+        },
+        {
+         "number": "0.10000000149011612"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.float32-limits",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([1.0::DOUBLE, 2.0::DOUBLE, 3.4028234663852886e38::DOUBLE, 1e-40::DOUBLE, 1e-46::DOUBLE, 1.0::DOUBLE, 2.0::DOUBLE, 1e-40::DOUBLE])[1 + user_id % 8] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 5,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.4028234663852886e+38",
+     "1e-40",
+     "1e-46",
+     "1.0",
+     "2.0",
+     "1e-40"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "2aa04f1beba73efa3d6fd489097f88e21d55ffcbdec0484c84e5297adfea1b78",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "58d2661d74e38413e008f5b0c236f6b5350434897a7e897ed11dc9279ca7cd50",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.4028234663852886e+38",
+        "9.99994610111476e-41",
+        "0.0",
+        "1.0",
+        "2.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 5,
+       "listed": [
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.4028234663852886e+38"
+        },
+        {
+         "number": "9.99994610111476e-41"
+        }
+       ],
+       "digest": "8dc30c1a6fde865c468c41c94fc89f06de0a47e270253f601d939d94892886de",
+       "cells": [
+        {
+         "number": "3.4028234663852886e+38"
+        },
+        {
+         "number": "9.99994610111476e-41"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "9.99994610111476e-41"
+        },
+        {
+         "number": "2.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.null-in-context",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN NULL ELSE (1 + user_id % 3)::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 1,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     null,
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "tables": {
+       "context.instance_table": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 50,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 5,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "a2c4c8ffc5b94e6417fe4761e804f2ae95b6747a6403e4d8ce5f09353e84566b",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.null-asked",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 0 THEN NULL ELSE (1 + user_id % 3)::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 1,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     null,
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "cbb5b26327bfad799e9127d9509563deeb5cdf7f7d6cad178ee6b8d634313580",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "b6c326eec499c87ff5ff9b4d86f10ba2546c5d8ce57424b6f94438520af4c2a5",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "double.negative-zero",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (['-0.0'::DOUBLE, 1.0::DOUBLE, 2.0::DOUBLE])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 3
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "-0.0",
+     "1.0",
+     "2.0",
+     "-0.0",
+     "1.0",
+     "2.0",
+     "-0.0",
+     "1.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "7b44c08463148e36bbe998a02c1404ac8dded212a35bef797e83205b61390de2",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "13bce87992dfa60676dc709b5c0b8195e8d91c469a11ad6dd2271cfcb30f7f75",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "2.0",
+        "1.0",
+        "-0.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        }
+       ],
+       "digest": "83a12d508298b5e9d8190765b4b5b74c2daed25f5cda968102135c6605230fad",
+       "cells": [
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "-0.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "float.negative-zero",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (['-0.0'::FLOAT, 1.0::FLOAT, 2.0::FLOAT])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 3
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "-0.0",
+     "1.0",
+     "2.0",
+     "-0.0",
+     "1.0",
+     "2.0",
+     "-0.0",
+     "1.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "7b44c08463148e36bbe998a02c1404ac8dded212a35bef797e83205b61390de2",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "13bce87992dfa60676dc709b5c0b8195e8d91c469a11ad6dd2271cfcb30f7f75",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "2.0",
+        "1.0",
+        "-0.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        }
+       ],
+       "digest": "83a12d508298b5e9d8190765b4b5b74c2daed25f5cda968102135c6605230fad",
+       "cells": [
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "-0.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "preview.double-nan",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 'nan'::DOUBLE ELSE (1 + user_id % 3)::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 1,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 4,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     "nan",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "tables": {
+       "context.instance_table": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 50,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 5,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "a2c4c8ffc5b94e6417fe4761e804f2ae95b6747a6403e4d8ce5f09353e84566b",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "preview.float-nan",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 'nan'::FLOAT ELSE (1 + user_id % 3)::FLOAT END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 1,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 4,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     "nan",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "tables": {
+       "context.instance_table": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 50,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 5,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 5,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "a2c4c8ffc5b94e6417fe4761e804f2ae95b6747a6403e4d8ce5f09353e84566b",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "preview.double-nan-asked",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 0 THEN 'nan'::DOUBLE ELSE (1 + user_id % 3)::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 1,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 4,
+    "values": [
+     "nan",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "cbb5b26327bfad799e9127d9509563deeb5cdf7f7d6cad178ee6b8d634313580",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "b6c326eec499c87ff5ff9b4d86f10ba2546c5d8ce57424b6f94438520af4c2a5",
+       "cells": [
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "preview.double-signed-zeros",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([0.0::DOUBLE, '-0.0'::DOUBLE, 1.0::DOUBLE])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 3,
+     "negative_zeros": 3
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "0.0",
+     "-0.0",
+     "1.0",
+     "0.0",
+     "-0.0",
+     "1.0",
+     "0.0",
+     "-0.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "e7d02251f4ac4d18d466dde5b532d25e22260fee1c33b806d7cd371672f58b5c",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "bd1c414de19a1ad32f94c4f0ddbf3aa1d86d2968d3fee9e395c97eb7cb293f81",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "1.0",
+        "-0.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ],
+       "digest": "8605b7bb4813c25fceeb2cb04f4619459703f87c8ca24f8999f041366bb41779",
+       "cells": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "0.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "preview.float-signed-zeros",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, (['-0.0'::FLOAT, 0.0::FLOAT, 1.0::FLOAT])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 3,
+     "negative_zeros": 3
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "-0.0",
+     "0.0",
+     "1.0",
+     "-0.0",
+     "0.0",
+     "1.0",
+     "-0.0",
+     "0.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "5d69fc625374dc9cf436e17a11c387cfbcb7f4345bc03c0f91e95150b726973a",
+      "tables": {
+       "context.instance_table": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 60,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 6,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "bd1c414de19a1ad32f94c4f0ddbf3aa1d86d2968d3fee9e395c97eb7cb293f81",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "1.0",
+        "0.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 6,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "1.0"
+        }
+       ],
+       "digest": "40975d669bd0b30fb9315ff5fa9e92b09e13adda17097a280b6fcab0e6c3013e",
+       "cells": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "-0.0"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.double-whole",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, (1 + i % 3)::DOUBLE AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "c9bab6ea53fb3728aa97a3027e4809fb9d42a5d800039a2026f2d5a815a0237d",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "b06ac26add2285441e7a34992c47b060aef766a4496feaf0d4340c797cb7e805"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.double-nan-past-preview",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, CASE WHEN i >= 1000 AND i % 2 = 0 THEN 'nan'::DOUBLE ELSE (1 + i % 3)::DOUBLE END AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 100,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "7202edefbfbd024ce95225d561a6e8b592aa7ce2ec8d57ed2626755920682a66",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "758818f738b5ec130177a8118b773869cd45cd4089780e0f90a5457846e3f94a"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.float-nan-past-preview",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, CASE WHEN i >= 1000 AND i % 2 = 0 THEN 'nan'::FLOAT ELSE (1 + i % 3)::FLOAT END AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 100,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "7202edefbfbd024ce95225d561a6e8b592aa7ce2ec8d57ed2626755920682a66",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "1.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 3,
+       "listed": [
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "758818f738b5ec130177a8118b773869cd45cd4089780e0f90a5457846e3f94a"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.double-negative-zero-past-preview",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, CASE WHEN i >= 1000 AND i % 2 = 0 THEN '-0.0'::DOUBLE WHEN i % 3 = 0 THEN 0.0::DOUBLE ELSE (1 + i % 3)::DOUBLE END AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 334,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 33,
+     "negative_zeros": 100
+    },
+    "distinct_in_preview": 3
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "bd4283bb5ae6955baf74288f7b56e070da55be2c55b863e23c258c50ff672066",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "0.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 4,
+       "listed": [
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "db0b34e252aac6859f834961ca5ce161fc16008e57a251e04361cf92aecb1d85"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.double-positive-zero-past-preview",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, CASE WHEN i >= 1000 AND i % 2 = 0 THEN 0.0::DOUBLE WHEN i % 3 = 0 THEN '-0.0'::DOUBLE ELSE (1 + i % 3)::DOUBLE END AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 334
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 100,
+     "negative_zeros": 33
+    },
+    "distinct_in_preview": 3
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "a2de21fceccef2650ce6d6ac1f8638b2414c7d8242c2b44ba6cb711ce055cdff",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "649d93e53d1d1ab881a2f34f42784a6a101abf8309745487e76d42c22b877ac5",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "3.0",
+        "2.0",
+        "-0.0"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 4,
+       "listed": [
+        {
+         "number": "-0.0"
+        },
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "3.0"
+        }
+       ],
+       "digest": "55221261cd665afef7ceb42d2bf685a20bf02472538622644649d7ec12150425"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.double-ten-classes",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, (i % 10)::DOUBLE / 8 AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 100,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 20,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 10
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "1c8b39341c40a1ae00cc5a161a95b87d5ac66abf7ce2605b4650431f2b615ef3",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "dfd8f7a76e552dc74c1c19f831a9a300f16d9243ff14bed02eed4696efe33d5b",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "0.625",
+        "0.25",
+        "0.125",
+        "0.875",
+        "0.5",
+        "0.0",
+        "0.375",
+        "1.0",
+        "1.125",
+        "0.75"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 10,
+       "listed": [
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "0.125"
+        },
+        {
+         "number": "0.25"
+        },
+        {
+         "number": "0.375"
+        },
+        {
+         "number": "0.5"
+        },
+        {
+         "number": "0.625"
+        },
+        {
+         "number": "0.75"
+        },
+        {
+         "number": "0.875"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.125"
+        }
+       ],
+       "digest": "fde7cc5d92e6ec2bf3271a802e1f901e4e8579ff31af8b48e8150f262a46c76b"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.float-ten-classes",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, ((i % 10)::DOUBLE / 8)::FLOAT AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 100,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 20,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 10
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "1c8b39341c40a1ae00cc5a161a95b87d5ac66abf7ce2605b4650431f2b615ef3",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "dfd8f7a76e552dc74c1c19f831a9a300f16d9243ff14bed02eed4696efe33d5b",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "multiclass_classification",
+      "target": {
+       "classes": [
+        "0.625",
+        "0.25",
+        "0.125",
+        "0.875",
+        "0.5",
+        "0.0",
+        "0.375",
+        "1.0",
+        "1.125",
+        "0.75"
+       ],
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "categorical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 10,
+       "listed": [
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "0.125"
+        },
+        {
+         "number": "0.25"
+        },
+        {
+         "number": "0.375"
+        },
+        {
+         "number": "0.5"
+        },
+        {
+         "number": "0.625"
+        },
+        {
+         "number": "0.75"
+        },
+        {
+         "number": "0.875"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.125"
+        }
+       ],
+       "digest": "fde7cc5d92e6ec2bf3271a802e1f901e4e8579ff31af8b48e8150f262a46c76b"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "large.double-sixty-one-values",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, (i % 61)::DOUBLE / 8 AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 17,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 3,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 61
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "numerical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "e7a0667de6865c3268a57dbe414155be28c6628ea2cdc2fa81465f074b32199b",
+      "tables": {
+       "context.instance_table": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 9980,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 998,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 20,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       }
+      }
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "dtype": "int64",
+       "name": "row_index"
+      },
+      {
+       "dtype": "int64",
+       "name": "id"
+      },
+      {
+       "dtype": "float64",
+       "name": "prediction"
+      }
+     ],
+     "digest": "bd1c414de19a1ad32f94c4f0ddbf3aa1d86d2968d3fee9e395c97eb7cb293f81",
+     "rows": 2
+    },
+    "task": [
+     {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      }
+     }
+    ],
+    "labels": [
+     {
+      "context.instance_table": {
+       "declared": {
+        "dtype": "float32",
+        "stype": "numerical"
+       },
+       "rows": 998,
+       "nulls": 0,
+       "kinds": [
+        "number"
+       ],
+       "distinct": 61,
+       "listed": [
+        {
+         "number": "0.0"
+        },
+        {
+         "number": "0.125"
+        },
+        {
+         "number": "0.25"
+        },
+        {
+         "number": "0.375"
+        },
+        {
+         "number": "0.5"
+        },
+        {
+         "number": "0.625"
+        },
+        {
+         "number": "0.75"
+        },
+        {
+         "number": "0.875"
+        },
+        {
+         "number": "1.0"
+        },
+        {
+         "number": "1.125"
+        },
+        {
+         "number": "1.25"
+        },
+        {
+         "number": "1.375"
+        },
+        {
+         "number": "1.5"
+        },
+        {
+         "number": "1.625"
+        },
+        {
+         "number": "1.75"
+        },
+        {
+         "number": "1.875"
+        },
+        {
+         "number": "2.0"
+        },
+        {
+         "number": "2.125"
+        },
+        {
+         "number": "2.25"
+        },
+        {
+         "number": "2.375"
+        }
+       ],
+       "digest": "51edffc34a8e959205b4aeefae7d282db10edab1130be6b56fea5e58524e1a29"
+      }
+     }
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.double-inf-in-context",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 'inf'::DOUBLE ELSE (1 + user_id % 3)::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 1,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 4,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     "inf",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.float-negative-inf-in-context",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN '-inf'::FLOAT ELSE (1 + user_id % 3)::FLOAT END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "FLOAT",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 1,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 4,
+    "values": [
+     "1.0",
+     "2.0",
+     "3.0",
+     "-inf",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.double-inf-asked",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 0 THEN 'inf'::DOUBLE ELSE (1 + user_id % 3)::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 1,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 4,
+    "values": [
+     "inf",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0",
+     "3.0",
+     "1.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.double-past-float32",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, ([1e39::DOUBLE, 1.0::DOUBLE, 2.0::DOUBLE])[1 + user_id % 3] AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 3,
+    "values": [
+     "1e+39",
+     "1.0",
+     "2.0",
+     "1e+39",
+     "1.0",
+     "2.0",
+     "1e+39",
+     "1.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "RuntimeWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.double-forty-classes",
+   "rows": 1200,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 40)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country, (i % 40)::DOUBLE / 8 AS f FROM range(1200) t(i)",
+    "CREATE OR REPLACE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 1200)::BIGINT AS user_id, (10 + (i % 97) * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days(((i * 7) % 420)::INTEGER) AS ts FROM range(12000) t(i)"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 1200,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 25,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 5,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 40
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "predict",
+     "error": "UnsupportedRequestError",
+     "code": "UNSUPPORTED_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning",
+     "SDMWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.double-one-class",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, 2.0::DOUBLE AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 1,
+    "values": [
+     "2.0",
+     "2.0",
+     "2.0",
+     "2.0",
+     "2.0",
+     "2.0",
+     "2.0",
+     "2.0"
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "predict",
+     "error": "UnsupportedRequestError",
+     "code": "UNSUPPORTED_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "refuse.double-no-class",
+   "rows": 8,
+   "setup": [
+    "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id > 1 THEN NULL ELSE 1.0::DOUBLE END AS f FROM users"
+   ],
+   "duckdb": {
+    "f_type": "DOUBLE",
+    "rows": 8,
+    "preview": {
+     "nulls": 6,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "past_preview": {
+     "nulls": 0,
+     "nans": 0,
+     "infinities": 0,
+     "positive_zeros": 0,
+     "negative_zeros": 0
+    },
+    "distinct_in_preview": 1,
+    "values": [
+     "1.0",
+     "1.0",
+     null,
+     null,
+     null,
+     null,
+     null,
+     null
+    ]
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "predict",
+     "error": "UnsupportedRequestError",
+     "code": "UNSUPPORTED_REQUEST"
+    },
+    "schema": {
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ],
+     "tables": [
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "order_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "float64",
+         "name": "price",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "timestamp[us]",
+         "name": "ts",
+         "stype": "timestamp"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "orders",
+       "primary_key": "order_id",
+       "time_column": "ts"
+      },
+      {
+       "columns": [
+        {
+         "dtype": "int64",
+         "name": "user_id",
+         "stype": "ID"
+        },
+        {
+         "dtype": "int64",
+         "name": "age",
+         "stype": "numerical"
+        },
+        {
+         "dtype": "string",
+         "name": "country",
+         "stype": "categorical"
+        },
+        {
+         "dtype": "float64",
+         "name": "f",
+         "stype": "categorical"
+        }
+       ],
+       "duplicate_keys": 0,
+       "name": "users",
+       "primary_key": "user_id",
+       "time_column": null
+      }
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "SDMWarning"
+    ],
+    "payload": null,
+    "result": null,
+    "task": null,
+    "labels": null
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  }
+ ]
+}
