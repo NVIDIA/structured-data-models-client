@@ -1,0 +1,282 @@
+sdm-testkit v1.0.0 (<worktree>/rust/crates/sdm-testkit)
+├── anyhow v1.0.104
+├── duckdb v1.10506.0
+│   ├── arrow v58.4.0
+│   │   ├── arrow-arith v58.4.0
+│   │   │   ├── arrow-array v58.4.0
+│   │   │   │   ├── ahash v0.8.12
+│   │   │   │   │   ├── cfg-if v1.0.5
+│   │   │   │   │   ├── getrandom v0.3.4
+│   │   │   │   │   │   ├── cfg-if v1.0.5
+│   │   │   │   │   │   └── libc v0.2.190
+│   │   │   │   │   ├── once_cell v1.21.4
+│   │   │   │   │   └── zerocopy v0.8.61
+│   │   │   │   │       └── zerocopy-derive v0.8.61 (proc-macro)
+│   │   │   │   │           ├── proc-macro2 v1.0.107
+│   │   │   │   │           │   └── unicode-ident v1.0.26
+│   │   │   │   │           ├── quote v1.0.47
+│   │   │   │   │           │   └── proc-macro2 v1.0.107 (*)
+│   │   │   │   │           └── syn v2.0.119
+│   │   │   │   │               ├── proc-macro2 v1.0.107 (*)
+│   │   │   │   │               ├── quote v1.0.47 (*)
+│   │   │   │   │               └── unicode-ident v1.0.26
+│   │   │   │   ├── arrow-buffer v58.4.0
+│   │   │   │   │   ├── bytes v1.12.1
+│   │   │   │   │   ├── half v2.7.1
+│   │   │   │   │   │   ├── cfg-if v1.0.5
+│   │   │   │   │   │   ├── num-traits v0.2.19
+│   │   │   │   │   │   │   └── libm v0.2.16
+│   │   │   │   │   │   └── zerocopy v0.8.61 (*)
+│   │   │   │   │   ├── num-bigint v0.4.8
+│   │   │   │   │   │   ├── num-integer v0.1.47
+│   │   │   │   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   │   ├── arrow-data v58.4.0
+│   │   │   │   │   ├── arrow-buffer v58.4.0 (*)
+│   │   │   │   │   ├── arrow-schema v58.4.0
+│   │   │   │   │   │   └── bitflags v2.13.2
+│   │   │   │   │   ├── half v2.7.1 (*)
+│   │   │   │   │   ├── num-integer v0.1.47 (*)
+│   │   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   │   ├── chrono v0.4.45
+│   │   │   │   │   ├── iana-time-zone v0.1.65
+│   │   │   │   │   │   └── core-foundation-sys v0.8.7
+│   │   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   │   ├── half v2.7.1 (*)
+│   │   │   │   ├── hashbrown v0.17.1
+│   │   │   │   ├── num-complex v0.4.6
+│   │   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   │   ├── num-integer v0.1.47 (*)
+│   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   ├── arrow-buffer v58.4.0 (*)
+│   │   │   ├── arrow-data v58.4.0 (*)
+│   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   ├── chrono v0.4.45 (*)
+│   │   │   └── num-traits v0.2.19 (*)
+│   │   ├── arrow-array v58.4.0 (*)
+│   │   ├── arrow-buffer v58.4.0 (*)
+│   │   ├── arrow-cast v58.4.0
+│   │   │   ├── arrow-array v58.4.0 (*)
+│   │   │   ├── arrow-buffer v58.4.0 (*)
+│   │   │   ├── arrow-data v58.4.0 (*)
+│   │   │   ├── arrow-ord v58.4.0
+│   │   │   │   ├── arrow-array v58.4.0 (*)
+│   │   │   │   ├── arrow-buffer v58.4.0 (*)
+│   │   │   │   ├── arrow-data v58.4.0 (*)
+│   │   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   │   └── arrow-select v58.4.0
+│   │   │   │       ├── ahash v0.8.12 (*)
+│   │   │   │       ├── arrow-array v58.4.0 (*)
+│   │   │   │       ├── arrow-buffer v58.4.0 (*)
+│   │   │   │       ├── arrow-data v58.4.0 (*)
+│   │   │   │       ├── arrow-schema v58.4.0 (*)
+│   │   │   │       └── num-traits v0.2.19 (*)
+│   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   ├── arrow-select v58.4.0 (*)
+│   │   │   ├── atoi v2.0.0
+│   │   │   │   └── num-traits v0.2.19 (*)
+│   │   │   ├── base64 v0.22.1
+│   │   │   ├── chrono v0.4.45 (*)
+│   │   │   ├── comfy-table v7.1.4
+│   │   │   │   ├── crossterm v0.28.1
+│   │   │   │   │   ├── bitflags v2.13.2
+│   │   │   │   │   ├── parking_lot v0.12.5
+│   │   │   │   │   │   ├── lock_api v0.4.14
+│   │   │   │   │   │   │   └── scopeguard v1.2.0
+│   │   │   │   │   │   └── parking_lot_core v0.9.12
+│   │   │   │   │   │       ├── cfg-if v1.0.5
+│   │   │   │   │   │       ├── libc v0.2.190
+│   │   │   │   │   │       └── smallvec v1.16.2
+│   │   │   │   │   └── rustix v0.38.44
+│   │   │   │   │       ├── bitflags v2.13.2
+│   │   │   │   │       ├── errno v0.3.14
+│   │   │   │   │       │   └── libc v0.2.190
+│   │   │   │   │       └── libc v0.2.190
+│   │   │   │   ├── unicode-segmentation v1.13.3
+│   │   │   │   └── unicode-width v0.2.2
+│   │   │   ├── half v2.7.1 (*)
+│   │   │   ├── lexical-core v1.0.6
+│   │   │   │   ├── lexical-parse-float v1.0.6
+│   │   │   │   │   ├── lexical-parse-integer v1.0.6
+│   │   │   │   │   │   └── lexical-util v1.0.7
+│   │   │   │   │   └── lexical-util v1.0.7
+│   │   │   │   ├── lexical-parse-integer v1.0.6 (*)
+│   │   │   │   ├── lexical-util v1.0.7
+│   │   │   │   ├── lexical-write-float v1.0.6
+│   │   │   │   │   ├── lexical-util v1.0.7
+│   │   │   │   │   └── lexical-write-integer v1.0.6
+│   │   │   │   │       └── lexical-util v1.0.7
+│   │   │   │   └── lexical-write-integer v1.0.6 (*)
+│   │   │   ├── num-traits v0.2.19 (*)
+│   │   │   └── ryu v1.0.23
+│   │   ├── arrow-data v58.4.0 (*)
+│   │   ├── arrow-ord v58.4.0 (*)
+│   │   ├── arrow-row v58.4.0
+│   │   │   ├── arrow-array v58.4.0 (*)
+│   │   │   ├── arrow-buffer v58.4.0 (*)
+│   │   │   ├── arrow-data v58.4.0 (*)
+│   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   └── half v2.7.1 (*)
+│   │   ├── arrow-schema v58.4.0 (*)
+│   │   ├── arrow-select v58.4.0 (*)
+│   │   └── arrow-string v58.4.0
+│   │       ├── arrow-array v58.4.0 (*)
+│   │       ├── arrow-buffer v58.4.0 (*)
+│   │       ├── arrow-data v58.4.0 (*)
+│   │       ├── arrow-schema v58.4.0 (*)
+│   │       ├── arrow-select v58.4.0 (*)
+│   │       ├── memchr v2.8.3
+│   │       ├── num-traits v0.2.19 (*)
+│   │       ├── regex v1.13.1
+│   │       │   ├── aho-corasick v1.1.5
+│   │       │   │   └── memchr v2.8.3
+│   │       │   ├── memchr v2.8.3
+│   │       │   ├── regex-automata v0.4.18
+│   │       │   │   ├── aho-corasick v1.1.5 (*)
+│   │       │   │   ├── memchr v2.8.3
+│   │       │   │   └── regex-syntax v0.8.11
+│   │       │   └── regex-syntax v0.8.11
+│   │       └── regex-syntax v0.8.11
+│   ├── cast v0.3.0
+│   ├── comfy-table v7.1.4 (*)
+│   ├── fallible-iterator v0.3.0
+│   ├── fallible-streaming-iterator v0.1.9
+│   ├── hashlink v0.10.0
+│   │   └── hashbrown v0.15.5
+│   │       └── foldhash v0.1.5
+│   ├── libduckdb-sys v1.10506.0
+│   ├── num v0.4.3
+│   │   ├── num-bigint v0.4.8 (*)
+│   │   ├── num-complex v0.4.6 (*)
+│   │   ├── num-integer v0.1.47 (*)
+│   │   ├── num-iter v0.1.46
+│   │   │   ├── num-integer v0.1.47 (*)
+│   │   │   └── num-traits v0.2.19 (*)
+│   │   ├── num-rational v0.4.2
+│   │   │   ├── num-bigint v0.4.8 (*)
+│   │   │   ├── num-integer v0.1.47 (*)
+│   │   │   └── num-traits v0.2.19 (*)
+│   │   └── num-traits v0.2.19 (*)
+│   ├── num-integer v0.1.47 (*)
+│   └── strum v0.27.2
+│       └── strum_macros v0.27.2 (proc-macro)
+│           ├── heck v0.5.0
+│           ├── proc-macro2 v1.0.107 (*)
+│           ├── quote v1.0.47 (*)
+│           └── syn v2.0.119 (*)
+├── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract)
+│   ├── arrow-array v58.4.0 (*)
+│   ├── arrow-buffer v58.4.0 (*)
+│   ├── arrow-schema v58.4.0 (*)
+│   ├── base64 v0.22.1
+│   ├── schemars v1.2.2
+│   │   ├── dyn-clone v1.0.20
+│   │   ├── ref-cast v1.0.27
+│   │   │   └── ref-cast-impl v1.0.27 (proc-macro)
+│   │   │       ├── proc-macro2 v1.0.107 (*)
+│   │   │       ├── quote v1.0.47 (*)
+│   │   │       └── syn v3.0.6
+│   │   │           ├── proc-macro2 v1.0.107 (*)
+│   │   │           ├── quote v1.0.47 (*)
+│   │   │           └── unicode-ident v1.0.26
+│   │   ├── schemars_derive v1.2.2 (proc-macro)
+│   │   │   ├── proc-macro2 v1.0.107 (*)
+│   │   │   ├── quote v1.0.47 (*)
+│   │   │   ├── serde_derive_internals v0.30.0
+│   │   │   │   ├── proc-macro2 v1.0.107 (*)
+│   │   │   │   ├── quote v1.0.47 (*)
+│   │   │   │   └── syn v3.0.6 (*)
+│   │   │   └── syn v3.0.6 (*)
+│   │   ├── serde v1.0.229
+│   │   │   ├── serde_core v1.0.229
+│   │   │   └── serde_derive v1.0.229 (proc-macro)
+│   │   │       ├── proc-macro2 v1.0.107 (*)
+│   │   │       ├── quote v1.0.47 (*)
+│   │   │       └── syn v3.0.6 (*)
+│   │   └── serde_json v1.0.151
+│   │       ├── indexmap v2.14.2
+│   │       │   ├── equivalent v1.0.2
+│   │       │   └── hashbrown v0.17.1
+│   │       ├── itoa v1.0.18
+│   │       ├── memchr v2.8.3
+│   │       ├── serde_core v1.0.229
+│   │       └── zmij v1.0.23
+│   ├── serde v1.0.229 (*)
+│   ├── serde_json v1.0.151 (*)
+│   └── serde_stacker v0.1.14
+│       ├── serde_core v1.0.229
+│       └── stacker v0.1.25
+│           ├── cfg-if v1.0.5
+│           ├── libc v0.2.190
+│           └── psm v0.1.32
+├── sdm-host v1.0.0 (<worktree>/rust/crates/sdm-host)
+│   ├── arrow-array v58.4.0 (*)
+│   ├── arrow-buffer v58.4.0 (*)
+│   ├── arrow-schema v58.4.0 (*)
+│   ├── arrow-select v58.4.0 (*)
+│   ├── jiff v0.2.38
+│   │   ├── jiff-core v0.1.1
+│   │   └── jiff-tzdb v0.1.9
+│   ├── jiff-tzdb v0.1.9
+│   ├── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   ├── sdm-core v1.0.0 (<worktree>/rust/crates/sdm-core)
+│   │   ├── arrow-array v58.4.0 (*)
+│   │   ├── arrow-schema v58.4.0 (*)
+│   │   ├── arrow-select v58.4.0 (*)
+│   │   ├── jiff v0.2.38 (*)
+│   │   ├── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   │   ├── sdm-engine v1.0.0 (<worktree>/rust/crates/sdm-engine)
+│   │   │   ├── arrow-array v58.4.0 (*)
+│   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   ├── jiff v0.2.38 (*)
+│   │   │   ├── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   │   │   └── sdm-schema v1.0.0 (<worktree>/rust/crates/sdm-schema)
+│   │   │       ├── arrow-array v58.4.0 (*)
+│   │   │       ├── arrow-schema v58.4.0 (*)
+│   │   │       └── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   │   ├── sdm-pql v1.0.0 (<worktree>/rust/crates/sdm-pql)
+│   │   │   └── jiff v0.2.38 (*)
+│   │   ├── sdm-request v1.0.0 (<worktree>/rust/crates/sdm-request)
+│   │   │   ├── arrow-array v58.4.0 (*)
+│   │   │   ├── arrow-schema v58.4.0 (*)
+│   │   │   ├── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   │   │   ├── sdm-engine v1.0.0 (<worktree>/rust/crates/sdm-engine) (*)
+│   │   │   └── sdm-wire v1.0.0 (<worktree>/rust/crates/sdm-wire)
+│   │   │       ├── schemars v1.2.2 (*)
+│   │   │       ├── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   │   │       ├── serde v1.0.229 (*)
+│   │   │       └── serde_json v1.0.151 (*)
+│   │   ├── sdm-schema v1.0.0 (<worktree>/rust/crates/sdm-schema) (*)
+│   │   ├── sdm-wire v1.0.0 (<worktree>/rust/crates/sdm-wire) (*)
+│   │   ├── serde v1.0.229 (*)
+│   │   ├── serde_json v1.0.151 (*)
+│   │   ├── stacker v0.1.25 (*)
+│   │   └── tracing v0.1.44
+│   │       ├── log v0.4.34
+│   │       ├── pin-project-lite v0.2.17
+│   │       └── tracing-core v0.1.36
+│   │           └── once_cell v1.21.4
+│   ├── sdm-data v1.0.0 (<worktree>/rust/crates/sdm-data)
+│   │   ├── arrow-array v58.4.0 (*)
+│   │   └── sdm-contract v1.0.0 (<worktree>/rust/crates/sdm-contract) (*)
+│   ├── serde_json v1.0.151 (*)
+│   └── thiserror v2.0.21
+│       └── thiserror-impl v2.0.21 (proc-macro)
+│           ├── proc-macro2 v1.0.107 (*)
+│           ├── quote v1.0.47 (*)
+│           └── syn v3.0.6 (*)
+├── serde v1.0.229 (*)
+├── serde_json v1.0.151 (*)
+└── sha2 v0.10.9
+    ├── cfg-if v1.0.5
+    ├── cpufeatures v0.2.17
+    │   └── libc v0.2.190
+    └── digest v0.10.7
+        ├── block-buffer v0.10.4
+        │   └── generic-array v0.14.7
+        │       └── typenum v1.20.1
+        └── crypto-common v0.1.7
+            ├── generic-array v0.14.7 (*)
+            └── typenum v1.20.1

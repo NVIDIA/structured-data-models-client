@@ -1,0 +1,18 @@
+gate: candidate 0a8a74125d8372b9bc71363239322a785430cc5c
+gate: base c505788f3d74845c8192ce78822606f32f6992f4, checkpoint c505788f3d74845c8192ce78822606f32f6992f4
+gate: judged by the checkpoint's harness, at landing c505788f Land T1.36: the final review's findings closed, the register settled, the owner's confirmations recorded
+gate summary (judged by the checkpoint's harness, at landing c505788f Land T1.36: the final review's findings closed, the register settled, the owner's confirmations recorded):
+  ok   observations
+  ok   ratchet
+  ok   compare
+  ok   l0
+  ok   coverage
+  ok   runners
+  ok   l1
+  ok   inventory
+locked checks (1b):
+  ok   check 4: runners observations ratchet compare l1 inventory
+  ok   check 5: observations ratchet compare inventory
+  ok   check 6: l0 observations ratchet compare coverage runners l1 inventory
+evidence: <git-common-dir>/sdm-gate-evidence/gate/0a8a74125d8372b9bc71363239322a785430cc5c.json
+gate: passed (--locked 1b)
