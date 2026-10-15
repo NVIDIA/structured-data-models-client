@@ -170,6 +170,43 @@ def test_snowflake_credentials_still_open_their_own_connection(monkeypatch):
     assert backend.connect(account='a', user='u', password='p') is opened
 
 
+def test_snowflake_passes_the_common_connection_arguments_to_the_driver(
+    monkeypatch,
+):
+    r"""The arguments nearly every Snowflake caller passes reach the driver.
+
+    The allow-list is read from the installed driver. On
+    snowflake-connector-python 5.0 the table it used to be read from is an
+    empty stub and the constructor no longer names its parameters, so even
+    ``database`` and ``schema`` were refused as unexpected. The driver's own
+    ``connect`` is replaced, so no connection is opened.
+    """
+    pytest.importorskip('snowflake.connector')
+    from sdm_connectors.backends import snowflake as backend
+
+    arguments = {
+        'account': 'a',
+        'user': 'u',
+        'password': 'p',
+        'database': 'DB',
+        'schema': 'SCH',
+        'warehouse': 'WH',
+        'role': 'R',
+        'login_timeout': 30,
+        'session_parameters': {'QUERY_TAG': 'sdm'},
+    }
+    opened, seen = _Conn(), {}
+    monkeypatch.setattr(backend, '_active_snowpark_connection', lambda: None)
+    monkeypatch.setattr(
+        backend.snowflake_connector,
+        'connect',
+        lambda **kwargs: seen.update(kwargs) or opened,
+    )
+
+    assert backend.connect(**arguments) is opened
+    assert seen == arguments
+
+
 def test_snowflake_no_arguments_and_no_session_explains_requirements(
     monkeypatch,
 ):
