@@ -137,7 +137,16 @@ pub fn start(
                             return Err(internal("the payload is not the bytes named"));
                         };
                         let query: String = take_json(&mut attachments, step.query)?;
-                        later.push((step.step, payload, query));
+                        // Each step's call carries its own id (T1.36 fix 24).
+                        let Some(request_id) = step.request_id.clone() else {
+                            return Err(CoreError::new(
+                                ErrorKind::InvalidRequest,
+                                ErrorCode::InvalidRequest,
+                                "a forecast's later step names no request id",
+                            )
+                            .with_field("field", Detail::text("state.forecast.request_id")));
+                        };
+                        later.push((step.step, payload, query, request_id));
                     }
                     Some(later)
                 }

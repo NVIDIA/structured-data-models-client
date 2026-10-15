@@ -353,8 +353,15 @@ def predict(
             at = 2 * number - 1
             attachments[at] = _payload(more)
             attachments[at + 1] = codec.attachment(asked)
+            # Each step's call its own id, drawn as the adapter draws one
+            # for every call, in step order (T1.36 fix 24).
             operation['state']['forecast'].append(
-                {'step': number, 'payload': at, 'query': at + 1}
+                {
+                    'step': number,
+                    'payload': at,
+                    'query': at + 1,
+                    'request_id': _request_id(),
+                }
             )
     finished = run(operation, attachments, model=model_call)
     answered = finished.result

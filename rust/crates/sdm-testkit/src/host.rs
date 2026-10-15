@@ -1195,6 +1195,8 @@ fn predict(
                             step: *step,
                             payload: AttachmentId(3 + 2 * at),
                             query: AttachmentId(4 + 2 * at),
+                            // This host's one constant id, for every step.
+                            request_id: Some(REQUEST_ID.into()),
                         })
                         .collect()
                 }),

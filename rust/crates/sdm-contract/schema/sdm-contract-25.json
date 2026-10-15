@@ -3337,6 +3337,13 @@
         },
         "query": {
           "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this step's call carries in its `metadata.request_id`, which\nthe host draws for each step as it draws [`Predict::request_id`] for\nstep 1's, one per call as the reference's client draws them (T1.36\nfix 24). `materialize` writes none; `predict` refuses a later step\nwithout one (`INVALID_REQUEST`).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,

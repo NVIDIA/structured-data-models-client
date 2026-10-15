@@ -419,7 +419,8 @@ class _Capture:
     is forgotten when the next run starts. The request id the host starts
     ``predict`` with is recorded where it reaches the endpoint, in the
     call's ``metadata.request_id``, and a call that does not carry it is a
-    runner failure."""
+    runner failure; a forecast's later calls each carry the id the host gave
+    its step (T1.36 fix 24)."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
@@ -440,6 +441,7 @@ class _Capture:
         self._description: int | None = None
         self._state: dict[str, Any] | None = None
         self._request_id: str | None = None
+        self._request_ids: list[str] = []
         self._call: int | None = None
         self._body: dict[str, Any] | None = None
         self._answer: dict[str, Any] | None = None
@@ -460,6 +462,11 @@ class _Capture:
         if operation['op'] == 'predict':
             state = operation['state']
             self._request_id = operation['request_id']
+            # A forecast's later steps each carry their own id, in step
+            # order (T1.36 fix 24).
+            self._request_ids = [operation['request_id']] + [
+                step['request_id'] for step in state.get('forecast') or ()
+            ]
             self.inputs.append(
                 {
                     'op': 'predict',
@@ -568,9 +575,13 @@ class _Capture:
             self._body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
-            if self._body.get('metadata', {}).get('request_id') != (
-                self._request_id
-            ):
+            # The id of the step this call is: the calls come in step order.
+            expected = (
+                self._request_ids.pop(0)
+                if self._request_ids
+                else self._request_id
+            )
+            if self._body.get('metadata', {}).get('request_id') != expected:
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
                     'was started with'

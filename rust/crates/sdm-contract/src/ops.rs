@@ -866,6 +866,13 @@ pub struct ForecastStep {
     pub step: u32,
     pub payload: AttachmentId,
     pub query: AttachmentId,
+    /// The id this step's call carries in its `metadata.request_id`, which
+    /// the host draws for each step as it draws [`Predict::request_id`] for
+    /// step 1's, one per call as the reference's client draws them (T1.36
+    /// fix 24). `materialize` writes none; `predict` refuses a later step
+    /// without one (`INVALID_REQUEST`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 /// Send a materialized request to the model and lay out its answer.

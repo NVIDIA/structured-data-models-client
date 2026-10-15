@@ -1604,6 +1604,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             step,
             payload,
             query,
+            request_id: None,
         });
     }
     let first = attached.remove(0);

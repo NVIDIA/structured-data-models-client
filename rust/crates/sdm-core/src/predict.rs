@@ -50,6 +50,9 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     (sdm_request::predict::OUTPUTS_ABSENT, &[]),
 ];
 
+/// A forecast's later step: its number, payload, query and request id.
+pub(crate) type LaterStep = (u32, Vec<u8>, String, String);
+
 /// What a `predict` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {
@@ -65,10 +68,11 @@ pub(crate) struct Inputs {
     pub default_outputs: bool,
     /// The inference options the caller set at `materialize`.
     pub inference_asked: Vec<String>,
-    /// A forecast's later steps, each its number, payload and query, in
-    /// order; none for a forecast of one step, and `None` for any other
-    /// request (T1.36 fix 21).
-    pub forecast: Option<Vec<(u32, Vec<u8>, String)>>,
+    /// A forecast's later steps, each its number, payload, query and the
+    /// request id its call carries (T1.36 fix 24), in order; none for a
+    /// forecast of one step, and `None` for any other request (T1.36 fix
+    /// 21).
+    pub forecast: Option<Vec<LaterStep>>,
 }
 
 /// The JSON a request state's payload holds, or a refusal naming where in
@@ -109,14 +113,20 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
     // each part (`_answer_in_parts`), in order, a refusal naming the step
     // it happened in (`forecast_step`), and the answers put together as
     // its `_by_step` puts them.
-    let mut steps = vec![(1, inputs.payload.clone(), inputs.query.clone())];
+    let mut steps = vec![(
+        1,
+        inputs.payload.clone(),
+        inputs.query.clone(),
+        inputs.request_id.clone(),
+    )];
     steps.extend(later);
     let mut answers = Vec::with_capacity(steps.len());
     let mut outputs = Vec::new();
-    for (step, payload, query) in steps {
+    for (step, payload, query, request_id) in steps {
         let asked = Inputs {
             payload,
             query,
+            request_id,
             forecast: None,
             ..inputs.clone()
         };
