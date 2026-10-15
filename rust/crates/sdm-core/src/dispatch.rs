@@ -83,8 +83,9 @@ pub fn start(
             let source: SourceSpec = take_json(&mut attachments, request.source)?;
             let access = root.data_access(&request.provider)?;
             let check_keys = request.check_keys;
+            let zones = Arc::clone(&zones);
             Run::with_data(access, move |asker| {
-                crate::describe::run(asker, source, check_keys, facts)
+                crate::describe::run(asker, source, check_keys, facts, zones)
             })
         }
         Operation::EditSchema(request) => {

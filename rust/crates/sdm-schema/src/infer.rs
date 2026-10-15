@@ -373,7 +373,6 @@ fn choose(
         presence,
         firsts,
     } = previewed;
-    past_a_datetime(&table, &firsts)?;
     let time = choose_time_column(
         &table.columns,
         &Read {
@@ -980,30 +979,56 @@ const FIRST_REAL_DAY: i128 = -2_177_452_800 * 1_000_000_000;
 const DATETIME_MIN_US: i64 = -62_135_596_800_000_000;
 const DATETIME_MAX_US: i64 = 253_402_300_799_999_999;
 
+/// The offset east of UTC, in seconds, a zone named as an Arrow timestamp
+/// names one has at an instant: the host's zone database's, as the run
+/// resolves zones (`sdm_engine::time::Zones`), local mean time before the
+/// zone's first transition included. Inference has no zones of its own, so
+/// the caller hands them in.
+pub trait WallClocks {
+    /// The offset of `zone` at `utc_micros` microseconds since the epoch,
+    /// or `None` where the run's zones do not hold `zone`.
+    fn offset_seconds(&self, zone: &str, utc_micros: i64) -> Option<i32>;
+}
+
 /// The reference's time column choice reads the first value the preview
 /// holds of each timestamp it chooses among, but a stamp of a load or a
 /// date of birth (`_refused_for_values`, `present.iloc[0]`), as a Python
-/// `datetime`, and fails unnamed (an `OverflowError`) at Schema.from_source
-/// where that value lies outside the years 1 to 9999. The core refuses the
-/// table there by name, `VALUE_OUT_OF_RANGE` naming the table and the
-/// column, the first such in table order (register P1B-81, T1.36 fix 3).
-/// A value with a zone is held to its UTC instant: within a day of either
-/// end, where its wall clock in the zone decides for the reference, they
-/// may differ. A later row's value, and a nanosecond's (which never leaves
-/// those years), are read as before.
-fn past_a_datetime(table: &InferredTable, firsts: &[Option<Scalar>]) -> Result<(), CoreError> {
+/// `datetime`: the UTC instant, then, for a value with a zone, its wall
+/// clock in that zone at that instant (pyarrow's `as_py`, `astimezone`).
+/// Where that wall clock lies outside the years 1 to 9999 its
+/// Schema.from_source fails unnamed (an `OverflowError`). The core refuses
+/// the table there by name, `VALUE_OUT_OF_RANGE` naming the table and the
+/// column, the first such in table order (register P1B-81, T1.36 fixes 3
+/// and 11). `clocks` gives a zone's offset, as the run resolves zones; a
+/// zone they do not hold is read at its UTC instant. A later row's value,
+/// and a nanosecond's (which never leaves those years in any zone), are
+/// read as before. The describe run calls this where the reference's
+/// choice reads the value: after the whole table's reading is asked for,
+/// before the choice ([`finish`]).
+pub fn first_values_past_the_years(
+    previewed: &Previewed,
+    clocks: &dyn WallClocks,
+) -> Result<(), CoreError> {
+    let table = &previewed.table;
     for i in candidates(&table.columns, table.primary_key.as_deref()) {
         let name = &table.columns[i].name;
         if names::is_load_stamp(name) || names::is_birth_date(name) {
             continue;
         }
-        if let Some(Scalar::Timestamp {
+        let Some(Scalar::Timestamp {
             unit: Unit::Us,
+            zone,
             value,
-            ..
-        }) = &firsts[i]
-            && !(DATETIME_MIN_US..=DATETIME_MAX_US).contains(value)
-        {
+        }) = &previewed.firsts[i]
+        else {
+            continue;
+        };
+        let offset = zone
+            .as_deref()
+            .and_then(|zone| clocks.offset_seconds(zone, *value))
+            .unwrap_or(0);
+        let wall = i128::from(*value) + i128::from(offset) * 1_000_000;
+        if !(i128::from(DATETIME_MIN_US)..=i128::from(DATETIME_MAX_US)).contains(&wall) {
             return Err(CoreError::new(
                 ErrorKind::Unsupported,
                 ErrorCode::ValueOutOfRange,

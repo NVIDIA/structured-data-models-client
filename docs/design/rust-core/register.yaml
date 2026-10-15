@@ -5533,9 +5533,11 @@ entries:
     first values of its preview, the same rows in the same order, and
     refuses the table at Schema.from_source, StructuredDataError, code
     VALUE_OUT_OF_RANGE, naming the table and the column (the first such in
-    table order). A value with a zone is held to its UTC instant; within a
-    day of either end its wall clock in the zone decides for the reference,
-    so the two may differ there. A value past those years in a later row, a
+    table order). A value with a zone is read as the reference reads it, at
+    its wall clock in that zone (the Arrow zone DuckDB hands over, its
+    database's global TimeZone), the zone's offset at that instant from the
+    zones the run resolves (local mean time before the zone's first
+    transition included). A value past those years in a later row, a
     nanosecond's, and one in a column named as a load stamp or a date of
     birth are described as the reference describes them. The default route
     is unchanged.
@@ -5547,6 +5549,15 @@ entries:
   - 'contract/t136-host2-vectors.json#time.far.* refusal INTERNAL_ERROR -> refusal PROVIDER_ERROR'
   - 'contract/t136-host2-vectors.json#first.* refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   - 'contract/t136-host2-vectors.json#generated.* refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.verbatim.los-angeles.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.session.utc.global-new-york.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.new-york.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.new-york.year-1.local-midnight-less-1us refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.tokyo.year-9999 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.tokyo.year-9999.local-midnight refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.kiritimati.year-9999 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.kiritimati.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.candidate.new-york.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
@@ -5570,5 +5581,18 @@ entries:
     succeed on both, 23 are DT-14's, 7 are (a) and 3 are (b); over 54 more
     with such a value first or after a null in its column (TIMESTAMPTZ too,
     under names that are and are not load stamps, dates of birth, creation
-    and edit stamps), 39 are described alike and 15 are (b). Never
-    self-approved.
+    and edit stamps), 39 are described alike and 15 are (b). T1.36 fix 11
+    (final review round 2, Codex's P2: the check read a zoned value's UTC
+    instant only) reads the wall clock in the value's zone, held by the test
+    author's contract/t136-host2-zone-vectors.json and
+    contract/tests/test_t136_host2_zones.py (39ce95c5): the 9 zoned sources
+    the reference fails unnamed refused by name at from_source, its 14
+    controls (a zone's last microsecond inside the years, Pago Pago's local
+    mean time ahead of UTC in year 1, a load stamp) described as the
+    reference does. The same fix shows a zoned value pandas cannot format
+    near the years' ends (a whole column at New York's or Pago Pago's local
+    midnight of year 1) in the core's constant-column warning as the
+    reference shows it, where the host crashed unnamed. A third
+    differential, over 54 sources of such values in ten zones, first in
+    their column or filling it: 6 succeed on both, 43 are DT-14's and 5 are
+    (b). Never self-approved.

@@ -28,6 +28,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
@@ -35,8 +36,8 @@ use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, Cat
 use sdm_contract::data::{DataRequest, DescribePart, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
-use sdm_engine::time::Instant;
 use sdm_engine::time::text::Reader;
+use sdm_engine::time::{Instant, Zones};
 use sdm_schema::assemble::{self, Assembled, Given};
 use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
@@ -62,14 +63,33 @@ pub(crate) fn text_reader(facts: &HostFacts) -> Result<Reader, CoreError> {
     Ok(Reader::new(Instant::from_count(*value, unit).civil(0).year))
 }
 
+/// A zone's offset at an instant, as the run resolves zones (decision
+/// H14): local mean time before the zone's first transition, the rule its
+/// database ends with past its last (`Instant::to_local`). Inference's
+/// first-value check reads a timestamp's wall clock by it (P1B-81).
+struct ZoneClocks<'a>(&'a dyn Zones);
+
+impl infer::WallClocks for ZoneClocks<'_> {
+    fn offset_seconds(&self, zone: &str, utc_micros: i64) -> Option<i32> {
+        let zone = self.0.zone(zone).ok()?;
+        Some(
+            Instant::from_count(utc_micros, TimeUnit::Microsecond)
+                .to_local(&zone)
+                .offset_seconds,
+        )
+    }
+}
+
 /// The body of a `describe_source` run.
 pub(crate) async fn run(
     asker: Asker,
     spec: SourceSpec,
     check_keys: bool,
     facts: HostFacts,
+    zones: Arc<dyn Zones>,
 ) -> Result<OperationResult, CoreError> {
     let reader = text_reader(&facts)?;
+    let clocks = ZoneClocks(&*zones);
     // The tables named, each under the schema's name and read by the
     // source's (`_require_table_names`); none named, every table the
     // source lists, under its own name.
@@ -193,6 +213,7 @@ pub(crate) async fn run(
         // asks its source (`full_range`), in one statement.
         let asked = previewed.whole_table_columns();
         let inferred = if asked.is_empty() {
+            infer::first_values_past_the_years(&previewed, &clocks)?;
             infer::finish(previewed, None)?
         } else {
             let asking = DataRequest::ColumnRanges {
@@ -208,13 +229,20 @@ pub(crate) async fn run(
             // fetch raises, so only the provider's error, or a refusal of
             // the request as undeclared, falls back; any other error, and an
             // answer of another shape, stays the core's.
-            match ask(&asker, asking).await {
+            // The reference asks before its choice reads the first values
+            // (`_WholeTable`, then `_refused_for_values`).
+            let answer = ask(&asker, asking).await;
+            match answer {
                 Ok(read) => {
                     check_ranges(&read, &asked, &preview)?;
                     let whole = infer::whole_table(&asked, &read.batches, &reader)?;
+                    infer::first_values_past_the_years(&previewed, &clocks)?;
                     infer::finish(previewed, Some(&whole))?
                 }
-                Err(failed) if falls_back(&failed) => infer::finish_unchecked(previewed)?,
+                Err(failed) if falls_back(&failed) => {
+                    infer::first_values_past_the_years(&previewed, &clocks)?;
+                    infer::finish_unchecked(previewed)?
+                }
                 Err(failed) => return Err(failed),
             }
         };

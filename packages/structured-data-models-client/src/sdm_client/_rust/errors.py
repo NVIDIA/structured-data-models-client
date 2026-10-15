@@ -533,7 +533,7 @@ class _Words(string.Formatter):
         if conversion == 't':
             if isinstance(value, str):
                 return str(_as_timestamp(value))
-            return str(_timestamp(value))
+            return _shown_timestamp(value)
         if conversion == 'T':
             return repr(
                 [
@@ -557,6 +557,23 @@ def _timestamp(value: codec.Temporal) -> Any:
     if value.zone is None:
         return pd.Timestamp(value.value, unit=unit)
     return pd.Timestamp(value.value, unit=unit, tz='UTC').tz_convert(value.zone)
+
+
+def _shown_timestamp(value: codec.Temporal) -> str:
+    r"""A date or timestamp scalar as the reference shows it in a warning:
+    as pandas holds it, or, where pandas cannot show a zoned value near the
+    years 1 and 9999 whose wall clock in its zone stays inside them
+    (``isoformat`` refuses it, ``toordinal``), as the reference's rows read
+    it there: pyarrow's ``as_py``, a ``datetime`` in the zone (T1.36 fix
+    11)."""
+    try:
+        return str(_timestamp(value))
+    except NotImplementedError:
+        import pyarrow as pa
+
+        unit = {'us': 'us', 'ns': 'ns'}[str(value.unit)]
+        kind = pa.timestamp(unit, tz=value.zone)
+        return str(pa.scalar(value.value, kind).as_py())
 
 
 def _as_timestamp(value: str) -> Any:
