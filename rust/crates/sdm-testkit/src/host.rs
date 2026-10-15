@@ -54,11 +54,6 @@ use crate::{duck, endpoint};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Observed {
     pub operations: Vec<String>,
-    /// Every model call's body `predict` sent, in order, each number as its
-    /// text: a forecast's one per step (T1.36 fix 22). Not written to the
-    /// observation, whose `core.predicted.body` is the last call's, as the
-    /// Python runner records it.
-    pub calls: Vec<Value>,
     pub inputs: Vec<Value>,
     pub fetches: Vec<Value>,
     pub described: Option<Value>,
@@ -223,7 +218,6 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
     };
     let (input, answer) = validate(case, spec)?;
     Ok(Observed {
-        calls: vec![],
         operations: vec!["validate_query".into()],
         inputs: vec![input],
         fetches: vec![],
@@ -465,7 +459,6 @@ fn describe_on(
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
     let attachments = BTreeMap::from([(AttachmentId(1), Attachment::Bytes(source_bytes))]);
     let mut observed = Observed {
-        calls: vec![],
         operations: vec!["describe_source".into()],
         inputs: vec![input],
         fetches: Vec::new(),
@@ -1070,7 +1063,6 @@ pub fn materialize_repeatedly_holding(
     let mut seen = Vec::with_capacity(calls);
     for _ in 0..calls {
         let mut observed = Observed {
-            calls: vec![],
             operations: Vec::new(),
             inputs: Vec::new(),
             fetches: Vec::new(),
@@ -1234,8 +1226,8 @@ fn predict(
     };
     // Each model call answered in turn, a forecast's one per step (T1.36
     // fix 21); the body recorded is the last call's, as the Python runner
-    // records `core.predicted.body`, and every call's is kept in
-    // `Observed::calls` (T1.36 fix 22).
+    // records `core.predicted.body`, and every call's is kept in the
+    // answer's `calls`, which the observation leaves out (T1.36 fix 22).
     let mut bodies: Vec<Value> = Vec::new();
     let mut next = handle.next();
     take_warnings(&handle, &mut observed.warnings)?;
@@ -1288,7 +1280,6 @@ fn predict(
         take_warnings(&handle, &mut observed.warnings)?;
     }
     let sent = bodies.last().cloned().unwrap_or(Value::Null);
-    observed.calls = bodies;
     observed.answer = match next {
         Err(failed) => error_of(&failed)?,
         Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
@@ -1304,13 +1295,21 @@ fn predict(
                 else {
                     bail!("{}: the metadata is not attached", case.id);
                 };
-                Answer::Predicted(json!({
+                let mut answer = json!({
                     "body": sent,
                     "model": predicted.model,
                     "request_id": predicted.request_id,
                     "metadata": serde_json::from_slice::<Value>(&metadata)?,
                     "result": result_rows(&result)?,
-                }))
+                });
+                // Every call's body, in order, where there were several (a
+                // forecast's, one per step); in process only, the
+                // observation keeping `body`, the last call's, as
+                // python-core records it.
+                if bodies.len() > 1 {
+                    answer["calls"] = Value::Array(bodies);
+                }
+                Answer::Predicted(answer)
             }
             _ => bail!("{}: predict answered another step", case.id),
         },

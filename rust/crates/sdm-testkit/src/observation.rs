@@ -99,7 +99,16 @@ pub fn write(
     let (accepted, predicted, error) = match &observed.answer {
         Answer::Validated(accepted) => (Some(*accepted), Value::Null, Value::Null),
         Answer::Described(_) | Answer::Materialized(_) => (None, Value::Null, Value::Null),
-        Answer::Predicted(answer) => (None, answer.clone(), Value::Null),
+        Answer::Predicted(answer) => {
+            // The answer's `calls` are this host's in-process record of
+            // every call; `core.predicted` holds python-core's shape, its
+            // `body` the last call's (T1.36 fix 22).
+            let mut predicted = answer.clone();
+            if let Value::Object(members) = &mut predicted {
+                members.remove("calls");
+            }
+            (None, predicted, Value::Null)
+        }
         Answer::Error { kind, code, .. } => {
             (None, Value::Null, json!({"kind": kind, "code": code}))
         }
