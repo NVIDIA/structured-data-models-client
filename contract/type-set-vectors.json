@@ -3226,6 +3226,71 @@
    "cells": "cast"
   },
   {
+   "id": "lossless.list-boolean",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, [user_id % 2 = 0, NULL]::BOOLEAN[] AS f FROM users"
+   ],
+   "type": {
+    "List": "Int8"
+   },
+   "extension": "arrow.bool8",
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "BOOLEAN[] under arrow_lossless_conversion: a list whose item is int8 storage of the extension arrow.bool8 (the item field's, not the column's) | the item read as a boolean, as a top-level arrow.bool8 is (admission admits nested types child by child), so f is list<bool>, and inferred as the vector list.boolean is (T1.36 C13)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "list<l: extension<arrow.bool8>>"
+  },
+  {
+   "id": "lossless.struct-boolean",
+   "witness": [
+    "SET arrow_lossless_conversion = true",
+    "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id % 2 = 0} AS f FROM users"
+   ],
+   "type": {
+    "Struct": [
+     [
+      "a",
+      "Int8"
+     ]
+    ]
+   },
+   "extension": "arrow.bool8",
+   "inference": {
+    "refusal": {
+     "code": "UNSUPPORTED_REQUEST",
+     "rule": "column_type"
+    }
+   },
+   "core": "refusal UNSUPPORTED_REQUEST",
+   "reach": "STRUCT(a BOOLEAN) under arrow_lossless_conversion: a struct whose field a is int8 storage of the extension arrow.bool8 (the child field's, not the column's) | a read as a boolean, as a top-level arrow.bool8 is (admission admits nested types child by child), so f is struct<a: bool>, and inferred as any struct is, refused by the rule column_type (T1.36 C13)",
+   "reference": "refusal UNNAMED",
+   "reference_answer": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "RuntimeError",
+     "code": null
+    },
+    "described": null
+   },
+   "duckdb_arrow": "struct<a: extension<arrow.bool8>>"
+  },
+  {
    "id": "lossless.hugeint",
    "witness": [
     "SET arrow_lossless_conversion = true",
