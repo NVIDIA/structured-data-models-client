@@ -1090,6 +1090,12 @@ entries:
     E88: times past the nanosecond range get VALUE_OUT_OF_RANGE), relayed by
     the orchestrator, recorded at T1.33 part 2; never the implementer's
     approval.
+    T1.36 fix 3 (contract/t136-host2-vectors.json, the test author's 22
+    vectors past int64 microseconds) brings a TIMESTAMP_S or TIMESTAMP_MS
+    value past int64 microseconds, an infinity or a finite value an Arrow
+    import kept, under this entry: admitted as the microsecond infinity on
+    its side and refused here at materialize, as the reference describes
+    such a source and refuses it at materialize; its scope is unchanged.
 
 # --- Orderings ----------------------------------------------------------------
 
@@ -3827,16 +3833,19 @@ entries:
     bump, and keep the cap for control JSON proper.
 
 - id: HOST-2
-  title: Arrow types admission still refuses, which the reference fails unnamed
+  title: An interval or a union, refused by name where the reference fails unnamed
   kind: change
   old_behavior: >-
     The reference reads the Arrow DuckDB returns into pandas (to_pandas with
     pd.ArrowDtype) and takes each column's dtype from its catalog type, or
-    infers it from the sample where that gives none. It fails unnamed at
-    from_source on a column it cannot type: an interval and a union, and also,
-    as contract/type-set-vectors.json records (T1.33), an ENUM, the view
-    types, decimal32 and decimal64, the extension types of a lossless
-    connection and a VARINT.
+    infers it from the sample where that gives none. Through DuckDB 1.5.6
+    its Schema.from_source fails an INTERVAL column, Arrow's month_day_nano
+    interval, with an unnamed RuntimeError, alone, in a list or in a struct,
+    and a UNION column unnamed likewise, in its default form and under
+    arrow_large_buffer_size or produce_arrow_string_view (the refs; T1.33).
+    The other types it fails unnamed (an ENUM, the view types, decimal32 and
+    decimal64, a lossless connection's extension types, a VARINT) are other
+    entries' (P1B-43 to P1B-49).
   new_behavior: >-
     Admission widens losslessly into the closed set (Phase 1 decisions H16
     and H27): float16, decimal32 and decimal64, duration and time32 at s or
@@ -3846,54 +3855,76 @@ entries:
     and from T1.33 an int8 carrying the canonical extension arrow.bool8
     (DuckDB's booleans under arrow_lossless_conversion) is read as boolean;
     a batch whose values pass int32 offsets is split between rows.
-    Proposed: what still cannot convert is refused by name. Generated at
-    T1.7d from the admission tests' family table (sdm-host
-    tests/admission.rs, which fails if this list and the code disagree),
-    the type families still refused, StructuredDataError with code
-    UNSUPPORTED_TYPE naming the column and its Arrow type, are `interval`,
-    not reference-accepted (marked at T1.33: through DuckDB 1.5.6 the
-    reference's Schema.from_source fails an INTERVAL column, Arrow's
-    month_day_nano interval, with an unnamed RuntimeError, alone, in a
-    list or in a struct: contract/nested-type-vectors.json's
-    scalar.interval*, orders.interval and list.interval,
-    contract/type-set-vectors.json's interval.month-day-nano and
-    struct.interval, case time.feature-interval; DuckDB hands over no
-    year-month or day-time interval), and `union`, not reference-accepted
-    (marked at T1.33: the reference fails a UNION column unnamed at
-    from_source, contract/nested-type-vectors.json's union.integer-varchar
-    and case nested.union; DuckDB hands over no dense union).
-    No public call reaches the engine's explicit-dtype path that would skip
-    that inference (rfm/base/table.py:262-296). The client builds every engine
-    table through engine_graph (sdm_client/materializers/sources.py:125-170),
-    whose specs carry a table's name and source name and never a column's
-    dtype (:147-153), so the engine reads every column of the source table and
+    What still cannot convert is refused by name. Generated at T1.7d from
+    the admission tests' family table (sdm-host tests/admission.rs, which
+    fails if this list and the code disagree), the type families still
+    refused, StructuredDataError with code UNSUPPORTED_TYPE naming the column
+    and its Arrow type, are `interval`, not reference-accepted (marked at
+    T1.33: through DuckDB 1.5.6 the reference's Schema.from_source fails an
+    INTERVAL column with an unnamed RuntimeError, alone, in a list or in a
+    struct: contract/nested-type-vectors.json's scalar.interval*,
+    orders.interval and list.interval, contract/type-set-vectors.json's
+    interval.month-day-nano and struct.interval, case time.feature-interval;
+    DuckDB hands over no year-month or day-time interval), and `union`, not
+    reference-accepted (marked at T1.33: the reference fails a UNION column
+    unnamed at from_source, contract/nested-type-vectors.json's
+    union.integer-varchar and case nested.union, and its large-buffer and
+    view forms; DuckDB hands over no dense union). The approval covers those
+    measured transitions only, the refs. No public call reaches the engine's
+    explicit-dtype path that would skip that inference
+    (rfm/base/table.py:262-296). The client builds every engine table
+    through engine_graph (sdm_client/materializers/sources.py:125-170), whose
+    specs carry a table's name and source name and never a column's dtype
+    (:147-153), so the engine reads every column of the source table and
     types each as above, the columns a gather does not want removed only
     afterwards (:80-87). That holds for Schema.from_source (schema.py:1194)
     and for a Schema built by its constructor from SourceTable objects
     (schema.py:715, :851), which materialize reads through the same
-    engine_graph (sources.py:42-77). The values still
-    refused are a timestamp, duration or date64 at s or ms whose value
-    passes int64 microseconds, and a single string, binary or list value
-    past int32 offsets; any type T1.33 finds no lossless row for joins
-    them.
-  affected_inputs: Sources returning Arrow types outside the closed set with no lossless conversion.
-  cases: [T1.7c, T1.33]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+    engine_graph (sources.py:42-77). A duration or a date64 is not reachable
+    from any Phase 1 public source: the core routes DuckDB only
+    (_routing.py's CORE_ROUTED), which turns a duration into an INTERVAL
+    (month_day_nano) and a date64 into a DATE (date32), and
+    contract/type-set-vectors.json marks both not reachable. A value is no
+    type: a timestamp at s or ms past int64 microseconds is DT-14's (T1.36
+    fix 3), a single value past int32 offsets P1B-79's and P1B-80's.
+  affected_inputs: >-
+    Sources returning an Arrow interval or union, alone or nested, which the
+    reference fails unnamed at from_source.
+  cases: [T1.7c, T1.33, T1.36]
+  refs:
+  - 'contract/type-set-vectors.json#interval.month-day-nano refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/type-set-vectors.json#list.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/type-set-vectors.json#struct.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/type-set-vectors.json#union.sparse refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/type-set-vectors.json#large.union refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/type-set-vectors.json#view.union refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/nested-type-vectors.json#scalar.interval* refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/nested-type-vectors.json#orders.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/nested-type-vectors.json#list.interval refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  - 'contract/nested-type-vectors.json#union.* refusal UNNAMED -> refusal UNSUPPORTED_TYPE'
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
   notes: >-
-    At the T1.7b check-in (2026-10-08) the owner chose to decode run_end_encoded rather than refuse it (Phase 1 decisions row E17, T1.7d); the entry stays proposed for interval and union until T1.33 shows whether the reference reads them. From the batch 2 code review. Each remaining refusal of a type the
-    reference accepts needs the owner (P1B-1 process); T1.7c writes the
-    generated list here and T1.33 marks each type reference-accepted or not,
-    with a case where the inventory reaches one.
-    Marked at T1.33 (contract/type-set-vectors.json, the test author's, and
-    the reference's code): neither family is reference-accepted, so what
-    remains is a named refusal where the reference fails unnamed, E66(b)'s
-    class, P1B-7 and P1B-8 the inventory's cases of it. The values still
-    refused (a timestamp, duration or date64 at s or ms past int64
-    microseconds; a single value past int32 offsets) are not measured against
-    the reference here: the reviewer checks them, and one the reference reads
-    goes to the owner. Approver: reviewer.
+    At the T1.7b check-in (2026-10-08) the owner chose to decode
+    run_end_encoded rather than refuse it (Phase 1 decisions row E17, T1.7d).
+    From the batch 2 code review. Marked at T1.33
+    (contract/type-set-vectors.json, the test author's, and the reference's
+    code): neither family is reference-accepted, so what remains is a named
+    refusal where the reference fails unnamed, E66(b)'s class, the
+    reviewer's; P1B-7, P1B-8, P1B-47, P1B-49 and P1B-51 are the cases of it.
+    Approved by the reviewer, as both final reviews of Phase 1 at c49ee4f8
+    asked: Codex, "restrict this E66(b) approval to the measured
+    interval/union transitions"; the independent subagent, "interval and
+    union fit E66(b) ... and I would approve that part". Narrowed at T1.36
+    fix 3 as both asked; DT-14 cited separately for the timestamp tail. The
+    entry's value refusals and its clause for types T1.33 might find were
+    taken out: a timestamp at s or ms past int64 microseconds is now
+    admitted and refused at materialize as DT-14's time past the nanosecond
+    range (contract/t136-host2-vectors.json, the test author's, measured on
+    both routes), a single value past int32 offsets is P1B-79 and P1B-80, and
+    any further type is an entry of its own. Recorded at T1.36 fix 3 (E146);
+    never the implementer's approval.
 
 - id: HOST-3
   title: The floor cell's to_pandas raises pandas' BlockManager DeprecationWarning
@@ -5365,3 +5396,142 @@ entries:
     old-route versus core-route probe at T1.36 fix 8 (Kawi and Tangsa digit
     five: the reference gives 5, the core the text; Arabic-Indic five: 5 on
     both). Never self-approved.
+
+- id: P1B-79
+  title: A single text or binary value past int32 offsets without large buffers is refused by name where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    Without SET arrow_large_buffer_size = true, DuckDB 1.5.6 refuses to hand
+    over a VARCHAR or BLOB column holding one value of 2**31 + 16 bytes
+    ("Arrow Appender: The maximum total string size for regular string
+    buffers is 2147483647 but the offset of 2147483667 exceeds this"); the
+    reference's Schema.from_source fails with GraphConstructionError, which
+    carries no code.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    same DuckDB failure reaches the core as the provider's: Schema.from_source
+    fails StructuredDataError, code PROVIDER_ERROR, the host naming the
+    driver's class. The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source, without arrow_large_buffer_size,
+    holding a VARCHAR or BLOB value of more than 2,147,483,647 bytes, under a
+    forced core route.
+  cases: [T1.36]
+  refs:
+  - 'contract/t136-host2-vectors.json#big.varchar.small refusal UNNAMED -> refusal PROVIDER_ERROR'
+  - 'contract/t136-host2-vectors.json#big.blob.small refusal UNNAMED -> refusal PROVIDER_ERROR'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
+  notes: >-
+    A named refusal where the reference fails unnamed, E66(b)'s class, for
+    the reviewer to check it fits. Approver: reviewer (E66(b)). Measured by
+    T1.36's test author (contract/tools/host2_values_record.py --big, each
+    route alone, peak RSS 3.8 to 5.8 GiB per process): the vectors' big rows,
+    held by contract/tests/test_t136_host2_values.py, the public calls only
+    with SDM_T136_BIG=1 (about 7 GB). Taken out of HOST-2 at T1.36 fix 3,
+    where its offsets clause stood unmeasured. Never self-approved.
+
+- id: P1B-80
+  title: A single text or binary value past int32 offsets under arrow_large_buffer_size is refused at from_source where the reference reads it
+  kind: change
+  old_behavior: >-
+    Under SET arrow_large_buffer_size = true DuckDB 1.5.6 hands a VARCHAR or
+    BLOB column holding one value of 2**31 + 16 bytes over as large_string or
+    large_binary. The reference's Schema.from_source succeeds: the BLOB
+    column is left out (SDMWarning "users leaves out f (binary)") and the
+    calls go on through predict; the VARCHAR is described string,
+    categorical, and its materialize fails INTERNAL_ERROR with DuckDB's
+    OutOfMemoryException after 370 s on a 24 GB machine (so an answer of the
+    machine).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer's admission narrows large_string and large_binary into utf8
+    and binary, whose int32 offsets cannot hold the value: the batch is split
+    between rows and the one row still past them is refused, so
+    Schema.from_source fails StructuredDataError, code VALUE_OUT_OF_RANGE,
+    naming the column and the type received (sdm-host tests/widening.rs,
+    a_single_value_past_the_offset_capacity_is_refused_by_name). A refusal of
+    an input the reference accepts: the BLOB end to end, the VARCHAR at
+    from_source. The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source under arrow_large_buffer_size
+    holding a VARCHAR or BLOB value of more than 2,147,483,647 bytes, under a
+    forced core route.
+  cases: [T1.36]
+  refs:
+  - 'contract/t136-host2-vectors.json#big.varchar.large success -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-vectors.json#big.blob.large success -> refusal VALUE_OUT_OF_RANGE'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
+  notes: >-
+    A refusal of an input the reference accepts, so the owner's. Approver:
+    owner. The owner's question (P1B-80): for one text or binary value over
+    2 GiB handed over in large buffers, (a) match the reference, or (b) keep
+    the named refusal at from_source for Phase 1? (a) needs the value kept in
+    a large form through describe: large_utf8 and large_binary in the closed
+    type set (sdm-contract's ColumnType and its wire names), or an exception
+    to it for describe alone, with admission, inference's reading of text
+    (sdm-schema) and the description taking it, so the BLOB is left out
+    unread and the VARCHAR described, and then a named refusal of the
+    VARCHAR at materialize, where the reference runs out of memory
+    (E66(b)). Estimated at 1.5 to 2 days, with tests that need several GiB
+    CI cannot give. (b) costs nothing; matching becomes a Phase 2 row.
+    Recommendation: (b), for one value no Phase 1 case reaches. Until it is
+    answered contract/tests/test_t136_host2_values.py's opt-in
+    big.varchar.large and big.blob.large (SDM_T136_BIG=1) fail. Found at
+    T1.36 fix 3 (the test author's measurement at dcf61b02). Never
+    self-approved.
+
+- id: P1B-81
+  title: A time value past int64 microseconds where the reference fails unnamed, refused by name
+  kind: change
+  old_behavior: >-
+    (a) A finite TIMESTAMP_S or TIMESTAMP_MS value past int64 microseconds in
+    the time column, which a table built from Arrow keeps (DuckDB's own casts
+    refuse it): the reference's Schema.from_source describes the source, and
+    its materialize fails INTERNAL_ERROR, "the relational engine failed while
+    building this request: ConversionException", DuckDB failing the time
+    bounds' CAST(ts AS TIMESTAMP). (b) Some columns holding two or more
+    values past int64 microseconds, or one with a value of the year 1000
+    (both infinities in a TIMESTAMP_MS feature, three finite ones in the
+    entity table's timestamp): the reference's Schema.from_source fails
+    unnamed (OverflowError: Python int too large to convert to C int, date
+    value out of range).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build: (a)
+    the core sends the reference's same bounds statement and DuckDB fails it
+    the same way, which reaches the core as the provider's failure:
+    materialize fails StructuredDataError, code PROVIDER_ERROR, the host
+    naming the driver's class. DT-14's VALUE_OUT_OF_RANGE would need the core
+    to read why the driver failed, which the contract does not carry (a
+    provider's error holds no message, and DuckDB gives no SQLSTATE). (b) the
+    core describes the column as it describes one such value (timestamp[us],
+    each value admitted as the microsecond infinity on its side, T1.36 fix
+    3) and refuses at materialize with VALUE_OUT_OF_RANGE (DT-14). The
+    default route is unchanged.
+  affected_inputs: >-
+    A DuckDB source whose TIMESTAMP_S or TIMESTAMP_MS column holds values
+    past int64 microseconds, under a forced core route.
+  cases: [T1.36]
+  refs:
+  - 'contract/t136-host2-vectors.json#time.far.* refusal INTERNAL_ERROR -> refusal PROVIDER_ERROR'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
+  notes: >-
+    A named refusal where the reference fails unnamed or with
+    INTERNAL_ERROR, E66(b)'s class, for the reviewer to check it fits; in (b)
+    the core's refusal comes at materialize, after a description the
+    reference never gives, which the reviewer may judge the owner's.
+    Approver: reviewer. Found at T1.36 fix 3: (a) by the test author's four
+    time.far vectors (contract/t136-host2-vectors.json), which
+    contract/tests/test_t136_host2_values.py holds to VALUE_OUT_OF_RANGE and
+    which fail until the test or the code moves; (a) and (b) by the
+    implementer's differential, old route against core route over 54
+    generated DuckDB sources (TIMESTAMP_S, _MS, TIMESTAMP and _NS columns as
+    the time column, a feature and the entity table's timestamp, holding
+    infinities, finite values past int64 microseconds, values past the
+    nanosecond range and ordinary ones): 21 succeed on both, 23 are DT-14's,
+    7 are (a) and 3 are (b). Never self-approved.

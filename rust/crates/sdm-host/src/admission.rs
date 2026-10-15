@@ -42,12 +42,19 @@
 //! is kept beside the admitted one ([`ArrowData::received`]). Anything the
 //! table does not take into the set is refused with `UNSUPPORTED_TYPE`,
 //! naming the column (with its path through nested types) and the Arrow
-//! type received there. A value the admitted type cannot hold, such as a
-//! `timestamp[s]` past what an int64 count of microseconds reaches, is
-//! refused with `VALUE_OUT_OF_RANGE`, never cut. Where the values of a
-//! batch would pass the int32 offsets of the admitted type, the batch is
-//! split between rows; only a single row past them is refused, with
-//! `VALUE_OUT_OF_RANGE` naming the column and the type received.
+//! type received there. A `timestamp[s]` or `timestamp[ms]` value past
+//! what an int64 count of microseconds reaches (DuckDB's `'infinity'` at
+//! those units, or a finite value an Arrow import kept) is admitted as the
+//! microsecond count furthest from the epoch on its side, DuckDB's own
+//! microsecond infinity, which `materialize` refuses with
+//! `VALUE_OUT_OF_RANGE` as a time past the nanosecond range (register
+//! DT-14), as the reference describes such a value and refuses it there.
+//! Any other value the admitted type cannot hold, such as a `duration[s]`
+//! past int64 microseconds, is refused with `VALUE_OUT_OF_RANGE`, never
+//! cut. Where the values of a batch would pass the int32 offsets of the
+//! admitted type, the batch is split between rows; only a single row past
+//! them is refused, with `VALUE_OUT_OF_RANGE` naming the column and the
+//! type received (registers P1B-79 and P1B-80).
 //!
 //! Native-to-Arrow conversion (pandas dtypes, JDBC types) stays in each host.
 
@@ -470,6 +477,33 @@ fn scale(
         .ok_or_else(overflow)
 }
 
+/// The microsecond count furthest from the epoch on each side: DuckDB's
+/// `'infinity'` and `'-infinity'` as a `TIMESTAMP`.
+const MICROS_PAST: i64 = i64::MAX;
+
+/// Scales every valid timestamp by `factor`, a value past what an int64
+/// count of microseconds holds kept as [`MICROS_PAST`] on its side, as
+/// DuckDB hands over a microsecond infinity (register DT-14, T1.36 fix 3):
+/// every such value is past what a nanosecond count holds, which
+/// `materialize` refuses with `VALUE_OUT_OF_RANGE` wherever it reads one,
+/// and kept so it orders after (or before) every value the type holds. A
+/// null slot's value is not a value, and is written as 0.
+fn saturate(
+    values: impl Iterator<Item = i64>,
+    nulls: Option<&NullBuffer>,
+    factor: i64,
+) -> Vec<i64> {
+    values
+        .enumerate()
+        .map(|(i, v)| match nulls {
+            Some(n) if n.is_null(i) => 0,
+            _ => v
+                .checked_mul(factor)
+                .unwrap_or(if v < 0 { -MICROS_PAST } else { MICROS_PAST }),
+        })
+        .collect()
+}
+
 impl Admit {
     /// Admits `batch` into `out`, split between rows wherever its values
     /// would pass the offset capacity.
@@ -635,7 +669,7 @@ impl Admit {
                         )));
                     }
                 };
-                let scaled = scale(values.iter().copied(), nulls.as_ref(), factor, overflow)?;
+                let scaled = saturate(values.iter().copied(), nulls.as_ref(), factor);
                 Arc::new(
                     TimestampMicrosecondArray::try_new(ScalarBuffer::from(scaled), nulls)
                         .map_err(rebuilt)?

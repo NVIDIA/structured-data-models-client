@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The admission table: each rule keeps every value, null and field, an
-//! overflowing value is refused by name, and every Arrow type family outside
+//! overflowing value is refused by name (a time past int64 microseconds
+//! kept as the microsecond infinity, for `materialize` to refuse), and every Arrow type family outside
 //! the set is refused by name, a bounded representative of each. A run-end
 //! array of every family the set takes is decoded through `HostRun` (E17).
 
@@ -19,17 +20,18 @@ use std::sync::{Arc, mpsc};
 use arrow_array::builder::{Int64Builder, LargeStringBuilder, MapBuilder, StringBuilder};
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
-    Int8Type, Int16Type, Int32Type, Int64Type, RunEndIndexType, UInt8Type, UInt16Type, UInt32Type,
-    UInt64Type,
+    Int8Type, Int16Type, Int32Type, Int64Type, RunEndIndexType, TimestampMicrosecondType,
+    UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
 use arrow_array::{
     Array, ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Date32Array, Date64Array,
     Decimal32Array, Decimal64Array, Decimal128Array, Decimal256Array, DictionaryArray,
-    DurationNanosecondArray, FixedSizeBinaryArray, FixedSizeListArray, Float16Array, Float32Array,
-    Float64Array, Int32Array, Int64Array, LargeBinaryArray, LargeListArray, LargeListViewArray,
-    LargeStringArray, ListArray, ListViewArray, NullArray, PrimitiveArray, RecordBatch, RunArray,
-    StringArray, StringViewArray, StructArray, Time32SecondArray, Time64MicrosecondArray,
-    TimestampMillisecondArray, TimestampSecondArray, UInt64Array, new_empty_array,
+    DurationMillisecondArray, DurationNanosecondArray, DurationSecondArray, FixedSizeBinaryArray,
+    FixedSizeListArray, Float16Array, Float32Array, Float64Array, Int32Array, Int64Array,
+    LargeBinaryArray, LargeListArray, LargeListViewArray, LargeStringArray, ListArray,
+    ListViewArray, NullArray, PrimitiveArray, RecordBatch, RunArray, StringArray, StringViewArray,
+    StructArray, Time32SecondArray, Time64MicrosecondArray, TimestampMillisecondArray,
+    TimestampSecondArray, UInt64Array, new_empty_array,
 };
 use arrow_buffer::{OffsetBuffer, ScalarBuffer, i256};
 use arrow_schema::{
@@ -262,17 +264,50 @@ fn assert_out_of_range(result: Result<ArrowData, CoreError>, column: &str) {
     assert_eq!(text(&err, "column"), column);
 }
 
+/// A `timestamp[s]` or `timestamp[ms]` value past int64 microseconds is
+/// admitted as DuckDB's microsecond infinity on its side, which
+/// `materialize` refuses as a time past the nanosecond range (DT-14), as
+/// the reference describes the source and refuses there (T1.36 fix 3).
+#[test]
+fn a_time_past_int64_microseconds_is_admitted_as_the_microsecond_infinity() {
+    let far: ArrayRef = Arc::new(TimestampSecondArray::from(vec![
+        Some(0),
+        Some(i64::MAX / 1000),
+        None,
+        Some(-(i64::MAX / 1000)),
+        Some(9_223_372_036_854),
+    ]));
+    let admitted = admit(&data(vec![("far", far)])).unwrap();
+    let got = column(&admitted, "far");
+    let got = got.as_primitive::<TimestampMicrosecondType>();
+    assert_eq!(
+        got.iter().collect::<Vec<_>>(),
+        [
+            Some(0),
+            Some(i64::MAX),
+            None,
+            Some(-i64::MAX),
+            Some(9_223_372_036_854_000_000)
+        ]
+    );
+    let far: ArrayRef = Arc::new(TimestampMillisecondArray::from(vec![i64::MIN, i64::MAX]));
+    let admitted = admit(&data(vec![("far", far)])).unwrap();
+    let got = column(&admitted, "far");
+    let got = got.as_primitive::<TimestampMicrosecondType>();
+    assert_eq!(got.values().to_vec(), [-i64::MAX, i64::MAX]);
+}
+
 #[test]
 fn a_value_the_admitted_type_cannot_hold_is_refused_by_name() {
-    let far: ArrayRef = Arc::new(TimestampSecondArray::from(vec![
+    let far: ArrayRef = Arc::new(DurationSecondArray::from(vec![
         Some(0),
         Some(i64::MAX / 1000),
     ]));
     assert_out_of_range(admit(&data(vec![("far", far)])), "far");
-    let far: ArrayRef = Arc::new(TimestampMillisecondArray::from(vec![i64::MIN]));
+    let far: ArrayRef = Arc::new(DurationMillisecondArray::from(vec![i64::MIN]));
     assert_out_of_range(admit(&data(vec![("far", far)])), "far");
     // A null slot's value is not a value, whatever it holds.
-    let masked: ArrayRef = Arc::new(TimestampSecondArray::from(vec![Some(1), None]));
+    let masked: ArrayRef = Arc::new(DurationSecondArray::from(vec![Some(1), None]));
     let masked = masked
         .to_data()
         .into_builder()
@@ -304,15 +339,11 @@ fn a_value_the_admitted_type_cannot_hold_is_refused_by_name() {
     assert!(admitted.batches.iter().all(|b| b.num_rows() == 1));
 
     // Nested, the path names the child.
-    let inner = Arc::new(Field::new(
-        "t",
-        DataType::Timestamp(TimeUnit::Second, None),
-        true,
-    ));
+    let inner = Arc::new(Field::new("t", DataType::Duration(TimeUnit::Second), true));
     let list = LargeListArray::try_new(
         inner,
         OffsetBuffer::new(ScalarBuffer::from(vec![0i64, 1])),
-        Arc::new(TimestampSecondArray::from(vec![i64::MIN])),
+        Arc::new(DurationSecondArray::from(vec![i64::MIN])),
         None,
     )
     .unwrap();

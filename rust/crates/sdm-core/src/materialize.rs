@@ -537,6 +537,29 @@ pub(crate) fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayR
 
 /// A time column's values in nanoseconds, a zone-less timestamp's only.
 fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreError> {
+    times_ns_from(array, column, false)
+}
+
+/// DuckDB's `'-infinity'` in a timestamp of any unit: `-(2^63 - 1)`.
+const NEGATIVE_INFINITY: i64 = -i64::MAX;
+
+/// The smallest times of the time bounds in nanoseconds, as
+/// [`times_ns`], but [`NEGATIVE_INFINITY`] in a coarser unit read as
+/// [`TIME_MIN`], `pd.Timestamp.min`: the reference reads that bound (the
+/// time bounds' cast to `TIMESTAMP` turns a `TIMESTAMP_NS`, `_S` or `_MS`
+/// `'-infinity'` into the microsecond one) as `datetime.min`, 0001-01-01,
+/// which is before every anchor a nanosecond count holds, as `TIME_MIN`
+/// is, and goes on (T1.36 fix 3). Any other time past what nanoseconds
+/// hold, a finite one or `'infinity'`, is refused as before (DT-14).
+fn earliest_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreError> {
+    times_ns_from(array, column, true)
+}
+
+fn times_ns_from(
+    array: &ArrayRef,
+    column: &str,
+    earliest: bool,
+) -> Result<Vec<Option<i64>>, CoreError> {
     let DataType::Timestamp(unit, None) = array.data_type() else {
         return Err(not_yet("time_type"));
     };
@@ -563,9 +586,10 @@ fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreErro
     };
     raw.into_iter()
         .map(|v| {
-            v.map(|v| {
-                v.checked_mul(per)
-                    .ok_or_else(|| sample::out_of_range(column))
+            v.map(|v| match v.checked_mul(per) {
+                Some(nanos) => Ok(nanos),
+                None if earliest && v == NEGATIVE_INFINITY => Ok(TIME_MIN),
+                None => Err(sample::out_of_range(column)),
             })
             .transpose()
         })
@@ -1068,7 +1092,7 @@ async fn read_bounds(
         .as_primitive_opt::<Int32Type>()
         .ok_or_else(|| crate::run::schema_mismatch("expected", Some(BOUNDS_POSITION), "not int32"))?
         .clone();
-    let mins = times_ns(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN)?;
+    let mins = earliest_ns(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN)?;
     let maxs = times_ns(named(&batch, BOUNDS_MAX)?, BOUNDS_MAX)?;
     let mut out = vec![None; tables.len()];
     for row in 0..batch.num_rows() {
