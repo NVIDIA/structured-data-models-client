@@ -75,7 +75,6 @@ duckdb=[
     "structured-data-models-connectors[duckdb]",
 ]
 snowflake=[
-    "numpy<2.0",
     "structured-data-models-connectors[snowflake]",
     "pyyaml",
 ]
