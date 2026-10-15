@@ -5256,7 +5256,7 @@
    "id": "null.timestamptz",
    "table": "users",
    "setup": [
-    "SET TimeZone = 'UTC'",
+    "SET GLOBAL TimeZone = 'UTC'",
     "CREATE OR REPLACE TABLE users AS SELECT *, NULL::TIMESTAMPTZ AS f FROM users"
    ],
    "duckdb": {
@@ -9050,7 +9050,7 @@
    "id": "null.time-timestamptz",
    "table": null,
    "setup": [
-    "SET TimeZone = 'UTC'",
+    "SET GLOBAL TimeZone = 'UTC'",
     "CREATE OR REPLACE TABLE orders AS SELECT * REPLACE (CASE WHEN order_id % 10 = 0 THEN NULL ELSE ts::TIMESTAMPTZ END AS ts) FROM orders"
    ],
    "duckdb": {

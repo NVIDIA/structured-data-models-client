@@ -154,7 +154,7 @@ def _null_columns() -> list[dict[str, Any]]:
     for suffix, sql_type in NULL_TYPES:
         setup = _add('users', f'NULL::{sql_type}')
         if sql_type == 'TIMESTAMPTZ':
-            setup = ["SET TimeZone = 'UTC'", *setup]
+            setup = ["SET GLOBAL TimeZone = 'UTC'", *setup]
         out.append({'id': f'null.{suffix}', 'table': 'users', 'setup': setup})
     for suffix, sql_type in NULL_TYPES:
         if suffix in FACT_NULL_TYPES:
@@ -415,7 +415,7 @@ VECTORS: list[dict[str, Any]] = [
         'id': 'null.time-timestamptz',
         'table': None,
         'setup': [
-            "SET TimeZone = 'UTC'",
+            "SET GLOBAL TimeZone = 'UTC'",
             'CREATE OR REPLACE TABLE orders AS SELECT * REPLACE '
             '(CASE WHEN order_id % 10 = 0 THEN NULL ELSE ts::TIMESTAMPTZ END '
             'AS ts) FROM orders',

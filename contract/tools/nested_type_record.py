@@ -198,7 +198,7 @@ TYPES: list[dict[str, Any]] = [
         'id': 'list.timestamptz',
         'table': 'users',
         'setup': [
-            "SET TimeZone = 'UTC'",
+            "SET GLOBAL TimeZone = 'UTC'",
             *_users(
                 "[TIMESTAMPTZ '2024-01-01 00:00:00+00' + to_days(user_id::INTEGER)]"
             ),

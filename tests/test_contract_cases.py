@@ -500,6 +500,61 @@ def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
         assert not _zone_problems('seed', [statement]), statement
 
 
+#: The setups a vector file's tests run as written: each list (or single
+#: statement) under one of these keys, at any depth.
+_VECTOR_SETUP_KEYS = ('setup', 'witness')
+#: Per-connection zone statements still in a vector file, each named by
+#: file, vector id and statement. type-set-vectors.json's witnesses are
+#: read through the source's cursors, so they reach the process's zone,
+#: not the one named (another test author owns that file); drop an entry
+#: once its vector sets the zone with SET GLOBAL.
+_VECTOR_ZONE_PENDING = {
+    _zone_problems(f'type-set-vectors.json {vector}', [statement])[0]
+    for vector, statement in (
+        ('timestamp.us.utc', "SET TimeZone = 'UTC'"),
+        ('timestamp.us.named-zone', "SET TimeZone = 'America/Los_Angeles'"),
+    )
+}
+
+
+def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
+    r"""Each setup ``node`` holds under :data:`_VECTOR_SETUP_KEYS`, with
+    the id of the nearest enclosing object that has one."""
+    found: list[tuple[str, list[str]]] = []
+    if isinstance(node, dict):
+        where = str(node.get('id', where))
+        for key, value in node.items():
+            if key in _VECTOR_SETUP_KEYS and isinstance(value, (str, list)):
+                statements = [value] if isinstance(value, str) else value
+                found.append(
+                    (where, [s for s in statements if isinstance(s, str)])
+                )
+            found += _vector_setups(value, where)
+    elif isinstance(node, list):
+        for each in node:
+            found += _vector_setups(each, where)
+    return found
+
+
+def test_a_vector_sets_its_time_zone_for_every_cursor() -> None:
+    # T1.36 C16: a vector's setup runs on one connection and the source
+    # reads through cursors, which take the process's local zone unless the
+    # database's is set, so a per-connection SET TimeZone made the recorded
+    # reference answer depend on the recorder's TZ (empty-null-vectors.json
+    # null.time-timestamptz: 361 order rows under UTC or Los Angeles, 359
+    # under Asia/Kolkata). Every vector file's setups name the zone only as
+    # SET GLOBAL TimeZone, as the cases do.
+    problems = set()
+    named = 0
+    for path in sorted((ROOT / 'contract').glob('*-vectors.json')):
+        document = json.loads(path.read_text(encoding='utf-8'))
+        for vector, setup in _vector_setups(document, '?'):
+            named += sum(bool(_ZONE.search(each)) for each in setup)
+            problems.update(_zone_problems(f'{path.name} {vector}', setup))
+    assert problems == _VECTOR_ZONE_PENDING
+    assert named > len(_VECTOR_ZONE_PENDING), 'no vector sets its zone'
+
+
 def test_the_bases_are_the_inventorys_and_adventureworks() -> None:
     # The inventory's bases, and E27's AdventureWorks base beside them, in
     # addition to the inventory (E31; T1.21b).
