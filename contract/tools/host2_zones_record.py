@@ -98,7 +98,16 @@ ABOUT = (
     'review): the same instants in every row, a constant column the '
     'reference warns of, the warning showing the value at its wall clock '
     '("every row holds 0001-01-01 00:00:00-04:56:02"). Held by '
-    'contract/tests/test_t136_host2_zones.py.'
+    "contract/tests/test_t136_host2_zones.py. `zone.preview.*` (fix 13's "
+    'review): a value only past the 1,000 rows the preview reads, warned of '
+    "with the whole table's MIN, which the reference reads through DuckDB's "
+    "fetchall: outside Python's years DuckDB's own text, in UTC "
+    '(`zones.fetchall_outside_the_years`). `p1b39`: register P1B-39 '
+    '(approved), the reference without pytz (`reference`, its checkout), '
+    'the reference with pytz (`reference_with_pytz`, the default route of '
+    'an interpreter of the same environment with pytz installed, '
+    '`p1b39.environment`) and the core, each with its from_source warnings '
+    'whole.'
 )
 
 #: The value every other row holds.
@@ -141,6 +150,25 @@ def whole(zone: str, instant: str) -> list[str]:
         f"UPDATE users SET f = TIMESTAMPTZ '{literal(instant)}'",
     ]
 
+
+def events(zone: str, instant: str, held_from: int = 1000) -> list[str]:
+    r"""``events``, beside ``shop`` (so that the time columns' warning is
+    given): 2,500 rows, ``f TIMESTAMPTZ`` null in rows before ``held_from``
+    and ``instant`` (a literal) in the rest, read under ``zone``."""
+    return [
+        f"SET GLOBAL TimeZone = '{zone}'",
+        'CREATE TABLE events AS SELECT i::BIGINT AS event_id, CASE WHEN '
+        f"i < {held_from} THEN NULL ELSE TIMESTAMPTZ '{instant}' END AS f "
+        'FROM range(2500) t(i)',
+    ]
+
+
+#: The role of a value only past the 1,000 rows the preview reads.
+PREVIEW = (
+    'events.f, 2,500 rows: null in the 1,000 the preview reads, the instant '
+    'in the 1,500 after (a constant column, warned of with the whole '
+    "table's MIN)"
+)
 
 NY = 'America/New_York'
 TOKYO = 'Asia/Tokyo'
@@ -485,14 +513,75 @@ _SPECS: dict[str, tuple[str, str, str, list[str] | None]] = {
         'clock 9999-12-31 12:59:59.999999)',
         None,
     ),
+    # Fix 13's review: a value the preview never holds. events.f is null in
+    # the 1,000 rows read and holds the instant in the 1,500 after, so both
+    # routes take its start from the whole table's MIN and refuse it as
+    # constant, the warning showing that MIN. The reference reads it
+    # through DuckDB's fetchall, which hands a TIMESTAMPTZ outside Python's
+    # years over as DuckDB's own text, in UTC.
+    'zone.preview.new-york.year-10000': (
+        NY,
+        '10000-01-01 00:00:00',
+        PREVIEW,
+        events(NY, '10000-01-01 00:00:00+00'),
+    ),
+    'zone.preview.new-york.year-10000.fraction': (
+        NY,
+        '10000-06-01 12:34:56.5',
+        PREVIEW + ' (a fraction of a second)',
+        events(NY, '10000-06-01 12:34:56.5+00'),
+    ),
+    'zone.preview.tokyo.utc-year-0': (
+        TOKYO,
+        '0001-01-01 00:00:00+09',
+        PREVIEW + ' (UTC before the years)',
+        events(TOKYO, '0001-01-01 00:00:00+09'),
+    ),
+}
+
+#: Register P1B-39 (approved, E83/E85(c)): without pytz the reference's
+#: whole-table statement fails for any table holding a zoned candidate
+#: (DuckDB's fetchall needs pytz for a TIMESTAMPTZ within Python's years),
+#: and the reference chooses from its preview; the core reads the whole
+#: table, as the reference does with pytz. name: (zone, instant, role,
+#: setup).
+_P1B39_SPECS: dict[str, tuple[str, str, str, list[str]]] = {
+    'p1b39.held-past-the-preview': (
+        'UTC',
+        '2020-01-01 00:00:00+00',
+        PREVIEW + ' (within the years)',
+        events('UTC', '2020-01-01 00:00:00+00'),
+    ),
+    'p1b39.constant-in-every-row': (
+        'UTC',
+        '2020-01-01 00:00:00+00',
+        'events.f, 2,500 rows, the instant in every row',
+        events('UTC', '2020-01-01 00:00:00+00', held_from=0),
+    ),
+    'p1b39.control.varying': (
+        'UTC',
+        '2020-01-01 00:00:00+00',
+        'events.f, 2,500 rows, the instant plus i hours in row i (control: '
+        'the preview says what the whole table says)',
+        [
+            "SET GLOBAL TimeZone = 'UTC'",
+            'CREATE TABLE events AS SELECT i::BIGINT AS event_id, '
+            "TIMESTAMPTZ '2020-01-01 00:00:00+00' + to_hours(i) AS f "
+            'FROM range(2500) t(i)',
+        ],
+    ),
 }
 
 
-def _sources() -> dict[str, dict[str, Any]]:
+def _sources(
+    specs: dict[str, tuple[str, str, str, list[str] | None]],
+) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
-    for name, (zone, instant, role, setup) in _SPECS.items():
+    for name, (zone, instant, role, setup) in specs.items():
         column = (
-            'users.ts'
+            'events.f'
+            if name.startswith(('zone.preview.', 'p1b39.'))
+            else 'users.ts'
             if name.startswith('zone.verbatim.')
             else 'users.loaded_at'
             if name.endswith('.loaded_at')
@@ -508,7 +597,8 @@ def _sources() -> dict[str, dict[str, Any]]:
     return out
 
 
-SOURCES = _sources()
+SOURCES = _sources(_SPECS)
+P1B39 = _sources(dict(_P1B39_SPECS))
 
 
 def wall_clock(zone: str, instant: str) -> dict[str, str]:
@@ -637,11 +727,26 @@ def zone_facts() -> dict[str, Any]:
             .type
         ),
     }
+    # What DuckDB's fetchall (the reference's read of the whole table's
+    # MIN) hands over for a TIMESTAMPTZ outside Python's years: its own
+    # text, in UTC, whatever the zone, and with or without pytz.
+    fetched = duckdb.connect()
+    fetched.execute(f"SET GLOBAL TimeZone = '{NY}'")
+    outside = {
+        spec['instant']: repr(
+            fetched.execute(
+                f"SELECT TIMESTAMPTZ '{spec['instant']}'"
+            ).fetchall()[0][0]
+        )
+        for name, spec in SOURCES.items()
+        if name.startswith('zone.preview.')
+    }
     return {
         'version': duckdb.__version__,
         'handed_over': handed,
         'session_and_global': sessions,
         'arrow_import': import_kept,
+        'fetchall_outside_the_years': outside,
         'wall_clocks': {
             name: {
                 'zone': spec['zone'],
@@ -703,10 +808,11 @@ def main() -> int:
             sys.argv[1:] = ['--child', 'environment']
             return int(R.main())
         route, names = sys.argv[3], sys.argv[4:]
+        every = {**SOURCES, **P1B39}
         for name in names:
-            got = R.answer(SOURCES[name]['setup'], route)
+            got = R.answer(every[name]['setup'], route)
             got['from_source_text'] = from_source_text(
-                SOURCES[name]['setup'], route
+                every[name]['setup'], route
             )
             print(json.dumps({'name': name, **got}), flush=True)
         return 0
@@ -715,7 +821,14 @@ def main() -> int:
         '--reference-python', default=str(R.REFERENCE / '.venv/bin/python')
     )
     parser.add_argument('--candidate-python', default=sys.executable)
+    parser.add_argument(
+        '--pytz-python',
+        help="an interpreter of the reference's environment with pytz "
+        "installed, whose default route (the reference's code) records "
+        "P1B-39's reference_with_pytz; without it they are kept as recorded",
+    )
     args = parser.parse_args()
+    previous = json.loads(OUT.read_text()) if OUT.exists() else {}
 
     def head(path: Path) -> str:
         return subprocess.run(
@@ -732,7 +845,7 @@ def main() -> int:
     answers: dict[str, dict[str, Any]] = {}
     environments: dict[str, Any] = {}
     for route, python in pythons.items():
-        lines, code = _run(python, ['sources', route, *SOURCES])
+        lines, code = _run(python, ['sources', route, *SOURCES, *P1B39])
         if code != 0:
             return code
         for line in lines:
@@ -744,6 +857,26 @@ def main() -> int:
         if code != 0:
             return code
         environments[route] = json.loads(lines[-1])
+    with_pytz: dict[str, Any] = {
+        v['name']: {
+            'answer': v['reference_with_pytz'],
+            'text': v['from_source_text']['reference_with_pytz'],
+        }
+        for v in previous.get('p1b39', {}).get('vectors', [])
+    }
+    pytz_environment = previous.get('p1b39', {}).get('environment')
+    if args.pytz_python:
+        lines, code = _run(args.pytz_python, ['sources', 'reference', *P1B39])
+        if code != 0:
+            return code
+        for line in lines:
+            got = json.loads(line)
+            text = got.pop('from_source_text')
+            with_pytz[got.pop('name')] = {'answer': got, 'text': text}
+        lines, code = _run(args.pytz_python, ['environment'])
+        if code != 0:
+            return code
+        pytz_environment = {**json.loads(lines[-1]), 'pytz': True}
     document = {
         'format': 'sdm-host2-zone-vectors/1',
         'about': ABOUT,
@@ -771,6 +904,25 @@ def main() -> int:
             }
             for name, spec in SOURCES.items()
         ],
+        'p1b39': {
+            'entry': 'P1B-39',
+            'environment': pytz_environment,
+            'vectors': [
+                {
+                    'name': name,
+                    **spec,
+                    'reference': answers[name]['reference'],
+                    'reference_with_pytz': with_pytz[name]['answer'],
+                    'core_at_measurement': answers[name]['core'],
+                    'from_source_text': {
+                        'reference': answers[name]['reference_text'],
+                        'reference_with_pytz': with_pytz[name]['text'],
+                        'core_at_measurement': answers[name]['core_text'],
+                    },
+                }
+                for name, spec in P1B39.items()
+            ],
+        },
     }
     OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
     print(f'{len(SOURCES)} vectors recorded to {OUT}', file=sys.stderr)
