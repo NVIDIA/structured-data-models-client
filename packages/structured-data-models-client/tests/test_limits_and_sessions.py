@@ -55,7 +55,7 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     """
     assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_max'] == 1_000
+    assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
     assert RELATIONAL_LIMITS['explanation_predict_rows'] == 1
     assert RELATIONAL_LIMITS['hops_max'] == 6
@@ -250,6 +250,65 @@ def test_the_preflight_runs_through_a_real_materialized_request():
                 request, ('prediction', 'explanation')
             )
         )
+
+
+def gathered_in_calls(*, calls: int, context_rows: int):
+    """A relational request already gathered as ``calls`` envelopes."""
+    import pandas as pd
+
+    from sdm_client import Request
+
+    return Request.materialized(
+        payloads=tuple(
+            payload(predict_rows=2, context_rows=context_rows)
+            for _ in range(calls)
+        ),
+        schema=Schema.from_data({'users': pd.DataFrame({'user_id': [1]})}),
+        query='PREDICT ... FOR EACH users.user_id',
+        indices=[1, 2, 3, 4],
+        entity_table='users',
+    )
+
+
+@pytest.mark.parametrize('over', [False, True], ids=['under', 'over'])
+def test_the_context_cap_is_held_to_each_call_and_not_their_sum(over):
+    """Both sides of the cap, because only the allowed one was covered: a
+    per-call count that always read nought would have passed that alone."""
+    from sdm_client.base import check_request_against_model
+
+    cap = RELATIONAL_LIMITS['context_rows_max']
+    each = cap + 1 if over else cap // 2 + 1
+    request = gathered_in_calls(calls=2, context_rows=each)
+    if not over:
+        check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
+        return
+    with pytest.raises(StructuredDataError) as refused:
+        check_request_against_model(request, KUMO_RELATIONAL, ('prediction',))
+    assert f'{each:,} context rows' in str(refused.value)
+
+
+def test_a_batched_request_reports_the_context_one_call_carries():
+    """The sum reads as a context no call sends: two calls of 1,000 are not a
+    2,000-row context, and the cap they are held to is 1,000."""
+    request = gathered_in_calls(calls=2, context_rows=1_000)
+    assert request.context_rows == 2_000
+    assert 'up to 1000 context rows per call across 2 calls' in repr(request)
+
+
+def test_a_request_built_from_frames_still_describes_itself():
+    """`payloads` is None on that route, and counting it is how a description
+    of the gathered one stopped every direct request from being printed."""
+    import pandas as pd
+
+    from sdm_client import Request
+
+    request = Request(
+        context=pd.DataFrame({'x': [1, 2], 'y': [0, 1]}),
+        predict=pd.DataFrame({'x': [3]}),
+        target='y',
+        task='classification',
+    )
+    assert '2 context rows, 1 to score' in repr(request)
 
 
 def correlated_payload(*, rows: int, kind: str = 'regression') -> dict:

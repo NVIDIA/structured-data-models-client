@@ -38,21 +38,33 @@ from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 from sdm_client.base import ModelSpec, RuntimeContract
 from sdm_client.errors import StructuredDataError, UnknownModelError
 
-# Sizes the relational endpoint enforces. It refuses past them, so the client
-# refuses first with a message that names the limit. See the architecture note
-# on inference knobs: `run_mode` is derived from these rather than being set.
+# Sizes the relational endpoint enforces. `predict_rows_max` is the serving
+# layer's own `TFM_MAX_TEST_ROWS`, measured at the boundary rather than read
+# from a document: 10,000 rows to score are answered, and 10,001 come back
+#
+#   [422 UNSUPPORTED_SHAPE] N_test 10001 exceeds limit 10000.
+#
+# A deployment may be configured to hold to less, which is what the
+# `rows_per_call` option on materialize() is for.
+#
+# The endpoint refuses past these, so the client refuses first with a message
+# that names the limit. See the architecture note on inference knobs:
+# `run_mode` is derived from these rather than being set.
 #
 # `predict_rows_max` and `predict_rows_temporal_link_prediction` restate the
-# engine's own `_MAX_PRED_SIZE` and `_MAX_PRED_SIZE_TEMPORAL_LINK_PREDICTION`
-# (sdm_relational_engine/rfm/rfm.py:75-76). The duplication predates this
-# client, but
-# it is load-bearing now that the check runs here first: if the two ever
-# disagree the client refuses work the engine would have taken. Change them
-# together.
+# engine's own `_MAX_PRED_SIZE`, which defaults to the first and holds the
+# second for `TaskType.TEMPORAL_LINK_PREDICTION`
+# (sdm_relational_engine/rfm/rfm.py). The duplication predates this client,
+# and it is load-bearing: this value is what the client asks the engine to
+# batch at, so a drift would gather batches the endpoint refuses, or ask for
+# smaller ones than it would take, and the engine's own refusal names a
+# `batch_size=` argument this client's callers have not got. Change them
+# together; `test_the_two_ceilings_are_the_engine_s_own` fails if they move
+# apart.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
     'context_rows_max': 10_000,
-    'predict_rows_max': 1_000,
+    'predict_rows_max': 10_000,
     'predict_rows_temporal_link_prediction': 200,
     'explanation_predict_rows': 1,
     'hops_max': 6,

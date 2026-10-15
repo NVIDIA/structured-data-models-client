@@ -362,9 +362,10 @@ unified tabular and relational.
 Tabular is the case where `schema` has one table and no relationships. That is
 the whole difference.
 
-`Request` is **singular**. The adapter splits a run that exceeds the server's
-per-call cap into several round trips. Batching belongs to transport, not a
-user-facing type.
+`Request` is **singular**. A relational run that exceeds the server's per-call
+cap is gathered as several envelopes, and `predict()` sends one round trip for
+each and returns one result. Batching belongs to transport, not a user-facing
+type.
 
 **The direct builder is the single-table one.** A relational request is
 gathered, not assembled from frames: the neighbourhood around each entity is

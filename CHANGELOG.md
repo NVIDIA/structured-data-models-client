@@ -5,6 +5,44 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
+## Unreleased
+
+### Changed
+
+- A relational `materialize()` takes more entities than one call scores. They
+  are gathered in batches of 10,000, or 200 for a temporal link prediction,
+  and `predict()` sends one call per batch and returns one result. Each call's
+  rows are numbered from where the last call's ended, so `to_pandas()`, which
+  orders by that number, gives the indices back in the order they were asked
+  for rather than interleaving the batches. It used to refuse more than 1,000
+  and ask for the calls to be split by hand.
+
+  `materialize()` takes `rows_per_call` to ask in smaller batches than the
+  endpoint's cap, which is what a graph wide enough to outrun the 30 MiB body
+  needs, and what a deployment holding to less than 10,000 needs. It only goes
+  down: a larger call buys a refusal rather than a bigger call. Where the
+  context is itself over the body, no batch is small enough, and the refusal
+  says which options do come down instead.
+
+  Two things are still refused. Every batch is built before the first is sent,
+  so more than 100,000 entities, or more than 100 calls, in one
+  `materialize()` is refused rather than held in memory at once; and a
+  question asked in parts, a ranking or a forecast, is not batched, because
+  each part is already a call and the fan-out budget counts those.
+
+- A call that fails part way through carries the answers already paid for on
+  the error, as `details['answered']` and `details['rows_answered']`, rather
+  than discarding them. A forecast keeps its answered steps the same way, with
+  how many under `details['parts_answered']`. A ranking keeps only that count,
+  because an order over some of its candidates is a different answer rather
+  than part of the one that was asked for.
+
+- In the relational engine, `batch_mode(batch_size='max')` now means 10,000
+  entities a batch rather than 1,000, following the size the endpoint answers.
+  A graph wide enough that 10,000 entities exceed the 30 MiB body is refused
+  on the first batch where it used to be gathered as batches of 1,000; pass an
+  explicit `batch_size=` for the old behaviour.
+
 ## 1.0.0 - 2026-10-13
 
 First public release. The five distributions are versioned and published

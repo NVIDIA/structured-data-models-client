@@ -7,6 +7,7 @@ r"""Gather and encode relational requests with the relational engine."""
 from __future__ import annotations
 
 import copy
+import math
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -43,7 +44,7 @@ from sdm_client.schema import (
 from sdm_client.wire.dtypes import arrow_decimal_type
 
 if TYPE_CHECKING:
-    from predictive_query import TaskType, ValidatedPredictiveQuery
+    from predictive_query import ValidatedPredictiveQuery
     from sdm_relational_engine.rfm import (
         Graph,
         KumoRelational,
@@ -77,6 +78,151 @@ def _warn_of_a_context_the_default_mode_capped(
     )
 
 
+#: More entities than this in one `materialize()` and the request is gathered
+#: in pieces that no longer fit in memory together. Every batch is built
+#: before any is sent, each carrying its own context.
+MOST_ENTITIES = 100_000
+
+#: And more calls than this, which is the other way to hold too much: a
+#: context is gathered for every call, so a `rows_per_call` of 1 would hold
+#: one per entity. Loose enough that lowering the batch size for a wide graph
+#: is unaffected, and only a caller who set it very low meets it.
+MOST_CALLS = 100
+
+
+def _rows_per_call(
+    kind: object, limits: Mapping[str, int] = RELATIONAL_LIMITS
+) -> int:
+    r"""How many entities the endpoint scores in one call of a task ``kind``."""
+    if str(kind) == 'temporal_link_prediction':
+        return limits['predict_rows_temporal_link_prediction']
+    return limits['predict_rows_max']
+
+
+def rows_one_call_scores(
+    asked: Any = None,
+    kind: object = None,
+    limits: Mapping[str, int] = RELATIONAL_LIMITS,
+) -> int:
+    r"""How many entities one call will score, as the caller asked or as the
+    endpoint allows.
+
+    ``rows_per_call`` only ever goes down. The endpoint refuses a call past
+    its own cap, so a larger number would buy a 422 rather than a bigger call;
+    a smaller one is how a graph too wide for a full batch, or a deployment
+    holding to less than this client knows of, is asked in pieces that fit.
+    """
+    cap = _rows_per_call(kind, limits)
+    if asked is None:
+        return cap
+    return min(int(asked), cap)
+
+
+def rows_per_call_asked_for(options: Mapping[str, Any]) -> int | None:
+    r"""The batch size the caller chose, refused if it is not a size.
+
+    ``None`` is not choosing one. Every gathering option travels as a keyword
+    and a caller passing one through reads an unset value as absent, so a
+    question asked in parts, which drops them before passing them on, and one
+    asked whole have to agree about that.
+    """
+    given = options.get('rows_per_call')
+    if given is None:
+        return None
+    if (
+        not isinstance(given, Integral)
+        or isinstance(given, bool)
+        or int(given) < 1
+    ):
+        raise StructuredDataError(
+            f'rows_per_call is {given!r}, and a call scores a whole number of '
+            f'rows, at least one',
+            code='INVALID_REQUEST',
+        )
+    return int(given)
+
+
+def _the_largest_batch(task: TaskTable, per_call: int) -> int:
+    r"""How many rows the largest batch of this request actually carries.
+
+    Not the size asked for: a request for one entity is one call of one row
+    whatever the batch size allows, and telling its caller to ask for smaller
+    calls names a remedy that has nothing left to divide.
+    """
+    asked = getattr(task, 'num_prediction_examples', None)
+    if not isinstance(asked, Integral) or int(asked) < 1:
+        return per_call
+    return min(per_call, int(asked))
+
+
+def refuse_more_entities_than_fit_in_memory(asked: int, held: int = 1) -> None:
+    r"""Refuse a population too large to hold, from the count alone.
+
+    Checked before the engine is reached, because reaching it means building
+    the graph and computing a label for every index, which for a population
+    far past this ceiling is minutes of work and the memory that goes with it
+    before anything says no.
+
+    ``held`` is how many times over the population is gathered: one for an
+    ordinary question, and one per part for a question asked in parts, each
+    of which gathers the whole population with a context of its own.
+    """
+    total = asked * held
+    if total <= MOST_ENTITIES:
+        return
+    gathered = (
+        f'{asked:,} entities'
+        if held == 1
+        else f'{asked:,} entities gathered {held:,} times over, {total:,} in all,'
+    )
+    raise StructuredDataError(
+        f'{gathered} is past the {MOST_ENTITIES:,} one materialize() will '
+        f'hold at once, since every batch is built, with its own context, '
+        f'before any is sent; ask about fewer entities at a time',
+        code='UNSUPPORTED_REQUEST',
+        details={'entities': asked, 'gathered_times': held, 'total': total},
+    )
+
+
+def _refuse_more_entities_than_fit_in_memory(
+    task: TaskTable, per_call: int
+) -> None:
+    r"""Refuse a population too large to hold as gathered batches.
+
+    The engine builds every batch before the first is sent, so the cost of a
+    population is paid in memory up front. This is the ceiling that the old
+    per-call entity check used to supply as a side effect of refusing to batch
+    at all.
+    """
+    asked = getattr(task, 'num_prediction_examples', None)
+    if not isinstance(asked, Integral) or per_call <= 0:
+        return
+    asked = int(asked)
+    calls = math.ceil(asked / per_call)
+    met = [
+        said
+        for said, over in (
+            (f'{MOST_ENTITIES:,} entities', asked > MOST_ENTITIES),
+            (f'{MOST_CALLS:,} calls', calls > MOST_CALLS),
+        )
+        if over
+    ]
+    if not met:
+        return
+    raise StructuredDataError(
+        f'{asked:,} entities are gathered as {calls:,} calls of '
+        f'{per_call:,}, and every one is built, with its own context, before '
+        f'any is sent. That is past the {" and ".join(met)} this will hold at '
+        f'once; ask about fewer entities at a time',
+        code='UNSUPPORTED_REQUEST',
+        details={
+            'entities': asked,
+            'calls': calls,
+            'rows_per_call': per_call,
+        },
+    )
+
+
 class RelationalMaterializer:
     r"""Materialize resolved PQL against a relational schema."""
 
@@ -95,6 +241,7 @@ class RelationalMaterializer:
             'return_embeddings',
             'top_k',
             'prediction_statistic',
+            'rows_per_call',
         }
     )
 
@@ -138,6 +285,7 @@ class RelationalMaterializer:
             )
 
         statistic = _statistic_asked_for(options)
+        rows_per_call_asked_for(options)
         self._refuse_a_name_the_wire_reserves()
         self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
         _warn_the_filter_chose_only_the_examples(query, indices)
@@ -180,9 +328,15 @@ class RelationalMaterializer:
         num_context_samples: int | None,
         options: dict[str, Any],
     ) -> tuple[dict[str, Any], ...]:
-        r"""Sample and encode using the engine's own materializer."""
+        r"""Sample and encode using the engine's own materializer.
+
+        More entities than one call scores are gathered as several payloads
+        of at most that many, which `predict()` sends one at a time and
+        answers as one result. One call scores what the endpoint takes, or
+        the smaller ``rows_per_call`` the caller asked for.
+        """
         run_mode = self._run_mode_for(num_context_samples)
-        self._check_entity_count(indices)
+        refuse_more_entities_than_fit_in_memory(len(indices))
         self._check_shape(options, RELATIONAL_LIMITS)
         with self._engine_errors():
             model = self._get_model()
@@ -209,14 +363,21 @@ class RelationalMaterializer:
         if not hasattr(task, 'task_type'):
             raise StructuredDataError(
                 'the resolved task does not say what kind it is, so the '
-                'entity limit for it cannot be checked',
+                'entities it scores per call cannot be known',
                 code='INTERNAL_ERROR',
             )
-        self._check_entity_count(indices, task.task_type)
         _warn_of_a_context_the_default_mode_capped(task, num_context_samples)
         task = self._narrow_context(task, num_context_samples)
 
-        with self._engine_errors(model):
+        per_call = rows_one_call_scores(
+            rows_per_call_asked_for(options), task.task_type
+        )
+        _refuse_more_entities_than_fit_in_memory(task, per_call)
+        largest = _the_largest_batch(task, per_call)
+        with (
+            self._engine_errors(model, largest),
+            model.batch_mode(batch_size=per_call),
+        ):
             parts = model.materialize_task(
                 task,
                 run_mode=run_mode,
@@ -435,7 +596,9 @@ class RelationalMaterializer:
 
     @contextmanager
     def _engine_errors(
-        self, model: KumoRelational | None = None
+        self,
+        model: KumoRelational | None = None,
+        per_call: int | None = None,
     ) -> Iterator[None]:
         r"""Re-raise engine failures through this client's error surface.
 
@@ -490,10 +653,14 @@ class RelationalMaterializer:
                 if isinstance(error, TypeError)
                 else self._sanitization_detail(model)
             )
+            refused = _what_the_engine_refused(str(error))
+            said = str(error)
+            if refused.get('batch_too_large_to_send'):
+                said = _said_in_this_client_s_terms(said, per_call)
             raise StructuredDataError(
-                f'{error}{detail}',
+                f'{said}{detail}',
                 code='INVALID_REQUEST',
-                details=_what_the_engine_refused(str(error)),
+                details=refused,
             ) from error
 
     @staticmethod
@@ -553,23 +720,6 @@ class RelationalMaterializer:
         return f' [{"; ".join(reasons)}]' if reasons else ''
 
     @staticmethod
-    def _check_entity_count(
-        indices: Sequence[object], task_kind: TaskType | None = None
-    ) -> None:
-        r"""Refuse more entities than the endpoint will score."""
-        ceiling = RELATIONAL_LIMITS['predict_rows_max']
-        described = 'the endpoint scores at most'
-        if task_kind is not None and 'link_prediction' in str(task_kind):
-            ceiling = RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
-            described = 'a temporal link prediction scores at most'
-        if len(indices) > ceiling:
-            raise StructuredDataError(
-                f'{len(indices):,} entities were asked for, and {described} '
-                f'{ceiling:,} at a time; split them across calls',
-                code='UNSUPPORTED_REQUEST',
-            )
-
-    @staticmethod
     def _narrow_context(
         task: TaskTable, num_context_samples: int | None
     ) -> TaskTable:
@@ -610,11 +760,7 @@ class RelationalMaterializer:
         if rows is None:
             return
         kind = payload.get('task', {}).get('kind')
-        cap = (
-            limits['predict_rows_temporal_link_prediction']
-            if kind == 'temporal_link_prediction'
-            else limits['predict_rows_max']
-        )
+        cap = _rows_per_call(kind, limits)
         if len(rows) > cap:
             raise StructuredDataError(
                 f'this batch scores {len(rows)} rows and the endpoint accepts at '
@@ -779,11 +925,77 @@ def _holds_text(values: pd.Series) -> bool:
     return pd.api.types.infer_dtype(values, skipna=True) == 'string'
 
 
+#: How the engine says a gathered batch is too large for the endpoint's body.
+_A_BATCH_TOO_LARGE_TO_SEND = ('size exceeds the 30mb limit',)
+
+#: How the engine offers a smaller batch, which it does only where the batch
+#: that failed has more than one row in it. Read rather than worked out again
+#: here, because which batch failed is the engine's to know: a request may be
+#: gathered as several of different sizes, and the last of them is smaller
+#: than the size the rest were built to.
+_THE_ENGINE_S_ENTITIES = 'the number of entities predicted at once'
+
+#: Where the engine's own remedy for that begins. It ends by offering the run
+#: mode, which this client derives rather than takes, so a caller following it
+#: lands on a refusal. Replaced rather than appended to, because advice that
+#: cannot be taken is worse than none.
+_THE_ENGINE_S_REMEDY = 'Please reduce either'
+
+#: What to do about it here. Both halves are real and which one binds was
+#: measured: a wide graph at the default context is gathered by asking in
+#: smaller calls, and the same graph at 10,000 context rows is over the body
+#: on the context alone, where only a narrower context helps.
+_ASK_IN_SMALLER_CALLS = (
+    'What comes down is one of three. For an ordinary question it is the '
+    'call: materialize(rows_per_call=N) below the {per_call} this one holds '
+    'asks for the same entities in more and smaller calls. Where the context '
+    'is itself over the limit, no call is small enough, and it is '
+    'num_context_samples, num_neighbors or the columns the graph carries. '
+    'For a ranking or a forecast, which is one call per candidate or step '
+    'and is never batched, it is the entities.'
+)
+
+
+#: What to say when a call already scores one row. There is no smaller call
+#: to ask for, so offering one would be asking for a number that does not
+#: exist.
+_NO_CALL_IS_SMALLER = (
+    'A call already scores one row, so there is no smaller one to ask for: '
+    'what comes down is num_context_samples, num_neighbors or the columns '
+    'the graph carries.'
+)
+
+
 _A_WINDOW_THAT_OUTRAN_THE_DATA = (
     'aggregation time range',
     'we would need data back to',
     'anchor timestamp is too early',
 )
+
+
+def _said_in_this_client_s_terms(said: str, per_call: int | None) -> str:
+    r"""The engine's size complaint, keeping its figures and not its remedy.
+
+    What it measured is the useful half and is kept whole. What to do about it
+    is written for a caller who can set a run mode and a batch size directly,
+    and through this client one of those is derived and the other is named
+    differently, so that half is replaced.
+
+    The size named is the one this question holds to, which is not always the
+    10,000 of an ordinary task: a temporal link prediction holds 200, and
+    advice to come down to 500 would be followed into the same failure.
+
+    Whether a smaller call is worth offering at all is the engine's answer,
+    not one worked out from the size asked for. Only the engine knows which
+    batch failed, and a request gathered as `2, 2, 1` can fail on the one
+    that no batch size can divide.
+    """
+    at = said.find(_THE_ENGINE_S_REMEDY)
+    measured = said if at < 0 else said[:at].rstrip()
+    if _THE_ENGINE_S_ENTITIES not in said:
+        return f'{measured} {_NO_CALL_IS_SMALLER}'
+    holds = f'{per_call:,}' if per_call else 'number'
+    return f'{measured} ' + _ASK_IN_SMALLER_CALLS.format(per_call=holds)
 
 
 def _what_the_engine_refused(said: str) -> dict[str, Any]:
@@ -797,6 +1009,8 @@ def _what_the_engine_refused(said: str) -> dict[str, Any]:
     lowered = said.lower()
     if any(mark in lowered for mark in _A_WINDOW_THAT_OUTRAN_THE_DATA):
         return {'window_outran_the_data': True}
+    if any(mark in lowered for mark in _A_BATCH_TOO_LARGE_TO_SEND):
+        return {'batch_too_large_to_send': True}
     return {}
 
 
