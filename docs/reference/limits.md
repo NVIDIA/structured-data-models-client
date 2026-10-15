@@ -23,7 +23,8 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | context rows | relational | 1,000 by default, up to 10,000 with `num_context_samples` | at `materialize()` |
 | context rows | tabular | 10,000 | sampled at `materialize()`, refused before sending on a direct `Request` |
 | rows scored per call | relational | 10,000, or 200 for link prediction | more are gathered as several calls at `materialize()` |
-| entities one `materialize()` gathers | relational | 100,000, in at most 100 calls | at `materialize()`, and this client's own: the endpoint is never asked for more than one call's worth |
+| entities one question gathers | relational | 100,000, in at most 100 calls | at `materialize()`, and this client's own: the endpoint is never asked for more than one call's worth |
+| calls a question asked in parts makes | relational | 200, one per candidate or step | at `materialize()`, as `sdm_client.decompose.MOST_PARTS` |
 | request body | relational | 30 MiB per call | at `materialize()` |
 | request body | relational, through Databricks model serving | 16 MB per call, the gateway's own decimal limit | before sending, on the wrapped envelope |
 | an explanation | relational | exactly one entity | before sending |
@@ -77,8 +78,12 @@ whichever of the two it met. The second is what a small `rows_per_call`
 reaches, and what a temporal link prediction reaches at 20,001 entities, since
 it scores 200 a call.
 
-Both govern the batches of one question. A question asked in parts is one call
-per part and is held to `sdm_client.decompose.MOST_PARTS`, which is 200.
+Both govern the batches of one question, and neither counts the parts of a
+question asked in several. A ranking is one call per candidate and a forecast
+one per step, and what bounds those is `sdm_client.decompose.MOST_PARTS`, 200,
+which is why a 101-candidate ranking makes 101 calls without meeting the 100
+above. What the two ceilings hold for such a question is the population each
+part gathers, counted across all of them.
 
 A call that fails ends the request. The answers already paid for are carried
 on the error as `details['answered']`, and the rows they cover as
@@ -93,7 +98,10 @@ that was asked for.
 body is checked per batch at `materialize()`, before anything is sent.
 Databricks model serving weighs its own wrapped envelope against a smaller
 16 MB, and only at send time, so a wide graph can pass `materialize()` and be
-refused on the first call. Ask about fewer entities at a time there.
+refused on the first call. Ask in smaller calls there, with `rows_per_call`,
+unless the context alone is over the gateway's limit, which a single-entity
+request can be: then it is `num_context_samples`, `num_neighbors` or the
+columns the graph carries, as it is for the 30 MiB body.
 
 **A question asked in parts is not batched.** A ranking is asked as one call
 per candidate and a forecast as one per step, and `MOST_PARTS` counts those
