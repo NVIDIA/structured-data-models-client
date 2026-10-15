@@ -20,7 +20,7 @@ use std::collections::BTreeSet;
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
 use sdm_contract::ops::{Dtype, Stype};
-use sdm_contract::{ColumnType, CoreError, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
 
 use crate::names;
 use crate::not_yet;
@@ -373,6 +373,7 @@ fn choose(
         presence,
         firsts,
     } = previewed;
+    past_a_datetime(&table, &firsts)?;
     let time = choose_time_column(
         &table.columns,
         &Read {
@@ -973,6 +974,47 @@ struct Read<'a> {
 /// 1900-01-01, stands for no date (`_FIRST_REAL_DAY`, 1901-01-01 UTC), in
 /// nanoseconds since the epoch.
 const FIRST_REAL_DAY: i128 = -2_177_452_800 * 1_000_000_000;
+
+/// The microseconds since the epoch of Python's `datetime.min`,
+/// 0001-01-01T00:00, and `datetime.max`, 9999-12-31T23:59:59.999999.
+const DATETIME_MIN_US: i64 = -62_135_596_800_000_000;
+const DATETIME_MAX_US: i64 = 253_402_300_799_999_999;
+
+/// The reference's time column choice reads the first value the preview
+/// holds of each timestamp it chooses among, but a stamp of a load or a
+/// date of birth (`_refused_for_values`, `present.iloc[0]`), as a Python
+/// `datetime`, and fails unnamed (an `OverflowError`) at Schema.from_source
+/// where that value lies outside the years 1 to 9999. The core refuses the
+/// table there by name, `VALUE_OUT_OF_RANGE` naming the table and the
+/// column, the first such in table order (register P1B-81, T1.36 fix 3).
+/// A value with a zone is held to its UTC instant: within a day of either
+/// end, where its wall clock in the zone decides for the reference, they
+/// may differ. A later row's value, and a nanosecond's (which never leaves
+/// those years), are read as before.
+fn past_a_datetime(table: &InferredTable, firsts: &[Option<Scalar>]) -> Result<(), CoreError> {
+    for i in candidates(&table.columns, table.primary_key.as_deref()) {
+        let name = &table.columns[i].name;
+        if names::is_load_stamp(name) || names::is_birth_date(name) {
+            continue;
+        }
+        if let Some(Scalar::Timestamp {
+            unit: Unit::Us,
+            value,
+            ..
+        }) = &firsts[i]
+            && !(DATETIME_MIN_US..=DATETIME_MAX_US).contains(value)
+        {
+            return Err(CoreError::new(
+                ErrorKind::Unsupported,
+                ErrorCode::ValueOutOfRange,
+                "the first time a time column's choice reads is outside the years 1 to 9999",
+            )
+            .with_field("table", Detail::text(table.name.clone()))
+            .with_field("column", Detail::text(name.clone())));
+        }
+    }
+    Ok(())
+}
 
 /// The timestamps a table's time column is chosen among, in table order:
 /// every column of a timestamp's meaning but the key.

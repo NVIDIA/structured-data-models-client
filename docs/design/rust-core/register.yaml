@@ -5485,7 +5485,7 @@ entries:
     self-approved.
 
 - id: P1B-81
-  title: A time value past int64 microseconds where the reference fails unnamed, refused by name
+  title: A time value past int64 microseconds or the years 1 to 9999 where the reference fails unnamed, refused by name
   kind: change
   old_behavior: >-
     (a) A finite TIMESTAMP_S or TIMESTAMP_MS value past int64 microseconds in
@@ -5493,45 +5493,64 @@ entries:
     refuse it): the reference's Schema.from_source describes the source, and
     its materialize fails INTERNAL_ERROR, "the relational engine failed while
     building this request: ConversionException", DuckDB failing the time
-    bounds' CAST(ts AS TIMESTAMP). (b) Some columns holding two or more
-    values past int64 microseconds, or one with a value of the year 1000
-    (both infinities in a TIMESTAMP_MS feature, three finite ones in the
-    entity table's timestamp): the reference's Schema.from_source fails
-    unnamed (OverflowError: Python int too large to convert to C int, date
-    value out of range).
+    bounds' CAST(ts AS TIMESTAMP). (b) A time column candidate (any column
+    of a timestamp's meaning, in any table, but the key and one named as a
+    load stamp or a date of birth, whatever role it then gets) whose first
+    value held in the rows the reference previews lies outside the years 1
+    to 9999 (an infinity, a finite value past int64 microseconds, the year
+    10000): the reference's Schema.from_source fails unnamed, an
+    OverflowError, where its time column choice reads that value as a
+    Python datetime (predictive_query/time_columns.py, _refused_for_values,
+    present.iloc[0]).
   new_behavior: >-
     On the core route, which only SDM_CORE_ROUTES forces in this build: (a)
     the core sends the reference's same bounds statement and DuckDB fails it
     the same way, which reaches the core as the provider's failure:
-    materialize fails StructuredDataError, code PROVIDER_ERROR, the host
-    naming the driver's class. DT-14's VALUE_OUT_OF_RANGE would need the core
-    to read why the driver failed, which the contract does not carry (a
-    provider's error holds no message, and DuckDB gives no SQLSTATE). (b) the
-    core describes the column as it describes one such value (timestamp[us],
-    each value admitted as the microsecond infinity on its side, T1.36 fix
-    3) and refuses at materialize with VALUE_OUT_OF_RANGE (DT-14). The
-    default route is unchanged.
+    materialize fails StructuredDataError, code PROVIDER_ERROR, request
+    time_bounds, the host naming the driver's class. DT-14's
+    VALUE_OUT_OF_RANGE would need the core to read why the driver failed,
+    which the contract does not carry (a provider's error holds no message,
+    and DuckDB gives no SQLSTATE). (b) the core's inference, which mirrors
+    the reference's choice (sdm-schema infer.rs), reads the same candidates'
+    first values of its preview, the same rows in the same order, and
+    refuses the table at Schema.from_source, StructuredDataError, code
+    VALUE_OUT_OF_RANGE, naming the table and the column (the first such in
+    table order). A value with a zone is held to its UTC instant; within a
+    day of either end its wall clock in the zone decides for the reference,
+    so the two may differ there. A value past those years in a later row, a
+    nanosecond's, and one in a column named as a load stamp or a date of
+    birth are described as the reference describes them. The default route
+    is unchanged.
   affected_inputs: >-
-    A DuckDB source whose TIMESTAMP_S or TIMESTAMP_MS column holds values
-    past int64 microseconds, under a forced core route.
+    A DuckDB source whose timestamp column holds a value past int64
+    microseconds or the years 1 to 9999, under a forced core route.
   cases: [T1.36]
   refs:
   - 'contract/t136-host2-vectors.json#time.far.* refusal INTERNAL_ERROR -> refusal PROVIDER_ERROR'
+  - 'contract/t136-host2-vectors.json#first.* refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-vectors.json#generated.* refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
   notes: >-
-    A named refusal where the reference fails unnamed or with
-    INTERNAL_ERROR, E66(b)'s class, for the reviewer to check it fits; in (b)
-    the core's refusal comes at materialize, after a description the
-    reference never gives, which the reviewer may judge the owner's.
-    Approver: reviewer. Found at T1.36 fix 3: (a) by the test author's four
-    time.far vectors (contract/t136-host2-vectors.json), which
-    contract/tests/test_t136_host2_values.py holds to VALUE_OUT_OF_RANGE and
-    which fail until the test or the code moves; (a) and (b) by the
-    implementer's differential, old route against core route over 54
-    generated DuckDB sources (TIMESTAMP_S, _MS, TIMESTAMP and _NS columns as
-    the time column, a feature and the entity table's timestamp, holding
-    infinities, finite values past int64 microseconds, values past the
-    nanosecond range and ordinary ones): 21 succeed on both, 23 are DT-14's,
-    7 are (a) and 3 are (b). Never self-approved.
+    (a) A named refusal where the reference fails with INTERNAL_ERROR, and
+    (b) a reference crash at from_source turned into a named refusal at
+    from_source: both E66(b)'s class, for the reviewer to check they fit.
+    Approver: reviewer. The microsecond case of (b), a TIMESTAMP 'infinity'
+    or the year 10000 first in its column, predates fix 3: the core
+    described it and refused at materialize, an unregistered new success at
+    from_source, which this closes. Found at T1.36 fix 3 and held by the
+    test author's contract/t136-host2-vectors.json and
+    contract/tests/test_t136_host2_values.py (092fbace): (a) the four
+    time.far vectors, PROVIDER_ERROR at materialize, request time_bounds;
+    (b) the 17 first-read sources the reference fails unnamed, each refused
+    by name at from_source, with its controls (the year 9999, a nanosecond
+    infinity, a load stamp's or a date of birth's name, an infinity in a
+    later row) described as the reference does. The implementer's
+    differentials, old route against core route: over 54 generated DuckDB
+    sources of TIMESTAMP_S, _MS, TIMESTAMP and _NS values in three roles, 21
+    succeed on both, 23 are DT-14's, 7 are (a) and 3 are (b); over 54 more
+    with such a value first or after a null in its column (TIMESTAMPTZ too,
+    under names that are and are not load stamps, dates of birth, creation
+    and edit stamps), 39 are described alike and 15 are (b). Never
+    self-approved.
