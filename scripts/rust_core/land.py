@@ -85,8 +85,15 @@ branch and moved the phase branch only once that commit's own run was
 green, is refused as obsolete (E131): CI skips that run, so it would never
 come.
 
-``verify`` (decision E131) checks that the landing commit changes no file
-and carries its trailers, and stands on the run it landed on: the newest
+A run CI left out tested nothing: wherever a run is evidence (the
+candidate's, the moved-from commit's, and in ``verify``), an empty landing
+commit (one parent, its parent's tree, a subject starting ``Land ``) is
+followed down to the first commit below it that is not one, whose run
+stands for it (E131).
+
+``verify`` (decision E131) checks that the landing commit changes no file,
+carries its trailers and is in the phase branch on the remote, and stands
+on the run it landed on: the newest
 gating run on the candidate (the landing commit's parent), or, for a moved
 landing, on its ``Moved-from`` commit, whose tree must be the landing's.
 That run must be green; a red one fails, and a cancelled or unfinished one
@@ -646,12 +653,52 @@ def describe(run: dict[str, object]) -> str:
     return f'run {run.get("databaseId")} on {run.get("headBranch")}: {state}'
 
 
+def skip_shaped(tools: Tools, sha: str) -> bool:
+    """Whether CI leaves out ``sha``'s jobs (decision E131): one parent,
+    its parent's tree, a subject starting ``Land ``. Its run, green with
+    every job but the first skipped, tested nothing."""
+    if not tools.git('log', '-1', '--format=%s', sha).startswith('Land '):
+        return False
+    parent = tools.attempt('git', 'rev-parse', '--verify', '--quiet', f'{sha}^')
+    second = tools.attempt(
+        'git', 'rev-parse', '--verify', '--quiet', f'{sha}^2'
+    )
+    if parent.returncode != 0 or second.returncode == 0:
+        return False
+    return (
+        tools.git('rev-parse', f'{sha}^{{tree}}').strip()
+        == tools.git('rev-parse', f'{sha}^^{{tree}}').strip()
+    )
+
+
+def tested_commit(tools: Tools, sha: str) -> str:
+    """``sha``, or, when CI leaves out its jobs, the first commit below it
+    whose jobs CI runs: the same tree, so its run is the evidence."""
+    while skip_shaped(tools, sha):
+        sha = tools.git('rev-parse', f'{sha}^').strip()
+    return sha
+
+
+def below(sha: str, tested: str) -> str:
+    """How a refusal names the commit whose run stands for ``sha``."""
+    if tested == sha:
+        return ''
+    return (
+        f' (the first commit below {sha[:12]} that is no empty landing '
+        'commit, whose runs CI leaves out)'
+    )
+
+
 def check_candidate_ci(
     tools: Tools, candidate: str, what: str = 'the candidate'
 ) -> dict[str, object]:
     """The newest gating run on ``candidate``'s exact SHA, when it is
     green; ``what`` names the commit in a refusal (the moved-from commit,
-    under ``--moved-from``)."""
+    under ``--moved-from``). An empty landing commit's run tested nothing
+    (E131), so for one the first commit below it that is none stands."""
+    tested = tested_commit(tools, candidate)
+    what = what + below(candidate, tested)
+    candidate = tested
     runs = runs_on(tools, candidate)
     if not runs:
         raise Refusal(
@@ -1055,7 +1102,8 @@ def land(
         green = check_candidate_ci(tools, candidate)
         out(f'ok   {describe(green)}, on {candidate[:12]} itself')
         evidence = (
-            f'Candidate run {green.get("databaseId")} green at {candidate}; '
+            f'Candidate run {green.get("databaseId")} green at '
+            f'{green.get("headSha") or candidate}; '
             'this commit changes no file, so the phase branch moves at once '
             'and CI skips its own runs (E43 (b), E131).'
         )
@@ -1241,6 +1289,17 @@ def verify(
                 f"{moved[:12]}'s, so that commit's run is no evidence for it"
             )
         evidenced, what = moved or '', 'the moved-from commit'
+    if evidenced:
+        # An empty landing commit's run tested nothing (E131).
+        tested = tested_commit(tools, evidenced)
+        what, evidenced = what + below(evidenced, tested), tested
+    # The landing is on the phase branch: verify stands for what landed.
+    head = phase_head(tools, args.remote, args.phase_branch)
+    if not tools.git_ok('merge-base', '--is-ancestor', sha, head):
+        problems.append(
+            f'{sha[:12]} is not in {args.phase_branch} (at {head[:12]}); '
+            'verify checks a landing the phase branch holds'
+        )
     unresolved: list[dict[str, object]] = []
     green: dict[str, object] | None = None
     if evidenced and not problems:
