@@ -1316,7 +1316,13 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
         ]
     if is_.is_struct(kind):
         names = [kind.field(j).name for j in range(kind.num_fields)]
-        children = [_arrow_cells(child, odd) for child in array.flatten()]
+        # Each child as stored, at the struct's offset: flatten() would merge
+        # the struct's nulls into each child, which aborts the process for a
+        # union child (a union has no validity bitmap). A null struct row is
+        # null below, whatever its children hold.
+        children = [
+            _arrow_cells(array.field(j), odd) for j in range(kind.num_fields)
+        ]
         return [
             ['struct', [[name, children[j][i]] for j, name in enumerate(names)]]
             if ok
