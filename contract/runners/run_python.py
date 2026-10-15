@@ -364,10 +364,15 @@ def _cell(versions: dict[str, str]) -> str | None:
 
 
 def _environment() -> str:
-    r"""The SHA-256 of the environment's installed distributions."""
+    r"""The SHA-256 of the environment's installed distributions, each
+    counted once: a package installed editable is found twice, by the
+    metadata installed in the environment and by the ``*.egg-info`` in its
+    source tree, and the digest must not depend on whether that is there."""
     names = sorted(
-        f'{(dist.metadata["Name"] or "").lower()}=={dist.version}'
-        for dist in importlib.metadata.distributions()
+        {
+            f'{(dist.metadata["Name"] or "").lower()}=={dist.version}'
+            for dist in importlib.metadata.distributions()
+        }
     )
     return digest('\n'.join(names).encode())
 

@@ -15,13 +15,15 @@
 #
 # The distributions are every one importlib.metadata finds from the
 # reference environment's interpreter, as name==version, the name
-# lower-cased, sorted. The five packages installed editable from the
-# reference checkout appear twice: once by the metadata installed in the
-# environment and once by the egg-info in their source trees.
+# lower-cased, sorted, each once. The five packages installed editable
+# from the reference checkout are found twice, by the metadata installed in
+# the environment and by the egg-info in their source trees, and listed
+# once (T1.36), so the digest does not depend on whether the egg-info is
+# there.
 reference: b413e9ad6c613e82e5f1fc2ad0bc152870f59e74
 platform: darwin-arm64
 python: 3.12.13
-environment: 4cef5f2a3d933088a0dad5b54f41c1259c6ea981e891bd3fb03706a25854c4ce
+environment: 85ec83f2c13b98c99ce51d0283e82774e8c5411d1903b51d6d1468e58409f0e6
 
 adbc-driver-manager==1.12.0
 adbc-driver-sqlite==1.12.0
@@ -119,14 +121,9 @@ s3transfer==0.19.2
 setuptools==84.0.0
 six==1.17.0
 structured-data-models-api==1.0.0
-structured-data-models-api==1.0.0
-structured-data-models-client==1.0.0
 structured-data-models-client==1.0.0
 structured-data-models-connectors==1.0.0
-structured-data-models-connectors==1.0.0
 structured-data-models-pql==1.0.0
-structured-data-models-pql==1.0.0
-structured-data-models-relational-engine==1.0.0
 structured-data-models-relational-engine==1.0.0
 sympy==1.14.0
 tabulate==0.10.0
