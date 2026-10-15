@@ -3,8 +3,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Records the reference's ``AVG(...) = NULL`` and ``!= NULL`` into
-``contract/t136-average-null-vectors.json`` (register P1B-21, T1.36).
+r"""Records the reference's ``AVG(...) = NULL`` and ``!= NULL``, and every
+other aggregation's, into ``contract/t136-average-null-vectors.json``
+(register P1B-21, T1.36).
 
 Run with the reference checkout's interpreter (the environment of
 ``contract/reference-env.txt``), from this repository's root::
@@ -14,7 +15,8 @@ Run with the reference checkout's interpreter (the environment of
 Written by T1.36's independent test author before the fix. Each case is a
 DuckDB source (``users`` and ``orders`` as ``contract/bases.yaml``'s
 ``shop`` lays them out, changed by the case's statements), a query whose
-target compares a windowed ``AVG`` with ``NULL``, and the arguments of
+target compares a windowed aggregation (``AVG`` unless the case's name
+starts with another's) with ``NULL``, and the arguments of
 ``PredictiveQuery.materialize``. Every case is asked with both operators.
 The reference materializes it and this script keeps what
 ``contract/tests/test_t136_average_null.py`` compares (``observe``): the
@@ -27,8 +29,11 @@ inputs; every expected value is the reference's.
 What the reference does (``sdm_relational_engine``'s
 ``PQueryPandasExecutor``): an aggregation across the entity's link is a
 ``Join``, whose ``execute_join`` asks the aggregation with ``filter_na``
-set, so ``AVG`` gives one value per training-trial row whose window holds
-a non-null value and none for the others; ``execute_condition`` then, the
+set, so ``AVG``, ``MIN`` and ``MAX`` give one value per training-trial
+row whose window holds a non-null value and none for the others (``SUM``
+and ``COUNT`` give every row one, 0 for an empty window, so they never
+fail; the validator refuses ``COUNT_DISTINCT``, ``FIRST``, ``LAST``,
+``LIST_DISTINCT`` and an aggregation of a time column first); ``execute_condition`` then, the
 constant being ``NULL``, keeps every value it got; ``= NULL`` labels each
 ``False`` and ``!= NULL`` each ``True``. ``execute`` then indexes the entity
 mask (one entry per row) with the condition's (one per value): where the
@@ -36,7 +41,8 @@ two counts differ it raises ``IndexError`` (the client's
 ``INTERNAL_ERROR``), and where there is no value at all, ``ValueError``
 from the broadcast after it (the client's ``INVALID_REQUEST``, numpy's
 words). So the reference labels a source only when every row of its
-training trials has a non-null value in its window. Which rows those are:
+training trials has a non-null value in its window. A trial row past the
+first batch is never labelled: it is in no context. Which rows those are:
 the duckdb sampler's ``_sample_target_set`` labels the training trials in
 batches of 10,000 rows and stops once it has the run mode's examples
 (1,000, or 10,000 past a context of 1,000), so the first batch decides:
@@ -116,16 +122,20 @@ def gap(user: int, after: str, through: str) -> str:
     )
 
 
-def query(window: str = '0, 30, days', where: str = '') -> str:
-    return (
-        f'PREDICT AVG(orders.price, {window}) {{op}} '
-        f'FOR EACH users.user_id{where}'
-    )
+def query(
+    window: str = '0, 30, days', where: str = '', of: str = 'AVG(orders.price'
+) -> str:
+    return f'PREDICT {of}, {window}) {{op}} FOR EACH users.user_id{where}'
 
 
-#: The cases, each asked with both operators. ``labels``: every row of the
-#: reference's training trials has a non-null price in its window, so it
-#: labels them; ``fails``: some row has none, so it fails.
+#: The cases, each asked with both operators. ``labels``: the reference
+#: labels the context (for AVG, MIN and MAX: every row of its first 10,000
+#: training trials has a non-null value in its window; SUM and COUNT always);
+#: ``fails``: some of those rows has none, and the reference fails
+#: ``INTERNAL_ERROR`` (an ``IndexError``); ``refused``: the reference refuses
+#: with a code of its own, ``INVALID_REQUEST`` (its validator's refusal of
+#: an aggregation, or, where none of those rows has a value, numpy's
+#: broadcast ``ValueError``).
 CASES: list[dict[str, Any]] = []
 
 
@@ -360,14 +370,132 @@ case(
     query('0, 6, days'),
     dense(days=100, every=7),
 )
+
+# --- refused with the reference's own code ---------------------------------
+ALL_NULL = 'UPDATE orders SET price = NULL'
 case(
     'dense.all-null',
-    'fails',
+    'refused',
     'every price NULL: no row has a value (the reference fails '
-    'INVALID_REQUEST, a broadcast error, not INTERNAL_ERROR)',
+    'INVALID_REQUEST, a broadcast ValueError, not INTERNAL_ERROR)',
     query(),
-    dense('UPDATE orders SET price = NULL'),
+    dense(ALL_NULL),
 )
+
+# --- the 10,000-row batch, at its edge ---------------------------------------
+# 40 users and a 24-hour window: each anchor's 40 rows, anchors a day apart
+# from 2024-02-29 back; the anchor 2023-06-25 holds rows 9,960 to 9,999 (user
+# 16 at row 9,999), the anchor 2023-06-24 rows 10,000 to 10,039 (user 9 at
+# row 10,000), measured on the reference (seed 42). The fast run mode's
+# trials end at row 9,999; a context of 1,001 asks 100,000 (17,000 here).
+case(
+    'hours.40-users.gap-at-row-9999',
+    'fails',
+    'user 16 orders nothing on 2023-06-26, the window of row 9,999, the '
+    'last of the first 10,000 trials',
+    query('0, 24, hours'),
+    dense(gap(16, '2023-06-25', '2023-06-26'), count=40),
+)
+case(
+    'hours.40-users.gap-at-row-9999.context-1001',
+    'fails',
+    'the same with a context of 1,001',
+    query('0, 24, hours'),
+    dense(gap(16, '2023-06-25', '2023-06-26'), count=40),
+    num_context_samples=1_001,
+)
+case(
+    'hours.40-users.gap-at-row-10000',
+    'labels',
+    'user 9 orders nothing on 2023-06-25, the window of row 10,000, the '
+    "first past the fast run mode's trials",
+    query('0, 24, hours'),
+    dense(gap(9, '2023-06-24', '2023-06-25'), count=40),
+)
+case(
+    'hours.40-users.gap-at-row-10000.context-1001',
+    'labels',
+    'the same with a context of 1,001: row 10,000 is a trial, past the '
+    'first batch, so it is never labelled and never in the context',
+    query('0, 24, hours'),
+    dense(gap(9, '2023-06-24', '2023-06-25'), count=40),
+    num_context_samples=1_001,
+)
+
+# --- the other aggregations ---------------------------------------------------
+# MIN and MAX run the reference's AVG path (execute_aggregation_type, the
+# rows without a value dropped); SUM and COUNT reindex every row with 0, so
+# they never fail; the validator refuses the rest before sampling.
+for of in ('MIN(orders.price', 'MAX(orders.price'):
+    name = of.split('(')[0].lower()
+    case(
+        f'{name}.dense',
+        'labels',
+        'every window holds a price',
+        query(of=of),
+        dense(),
+    )
+    case(
+        f'{name}.dense.half-null',
+        'labels',
+        'every other day the price is NULL',
+        query(of=of),
+        dense('UPDATE orders SET price = NULL WHERE (order_id // 8) % 2 = 0'),
+    )
+    case(
+        f'{name}.shop',
+        'fails',
+        "shop's orders: many windows empty",
+        query(of=of),
+        shop(),
+    )
+    case(
+        f'{name}.dense.gap-in-the-last-window',
+        'fails',
+        'user 3 orders nothing in the latest training window',
+        query(of=of),
+        dense(gap(3, '2024-01-31', '2024-03-01')),
+        indices=[3, 4],
+    )
+    case(
+        f'{name}.dense.all-null',
+        'refused',
+        'every price NULL: the broadcast ValueError, INVALID_REQUEST',
+        query(of=of),
+        dense(ALL_NULL),
+    )
+for of in ('SUM(orders.price', 'COUNT(orders.price', 'COUNT(orders.*'):
+    name = of.split('(')[0].lower() + ('.star' if '*' in of else '')
+    case(
+        f'{name}.shop',
+        'labels',
+        "shop's orders: empty windows give 0, never NULL",
+        query(of=of),
+        shop(),
+    )
+    case(
+        f'{name}.dense.all-null',
+        'labels',
+        'every price NULL',
+        query(of=of),
+        dense(ALL_NULL),
+    )
+for of in (
+    'COUNT_DISTINCT(orders.price',
+    'FIRST(orders.price',
+    'LAST(orders.price',
+    'LIST_DISTINCT(orders.price',
+    'MIN(orders.ts',
+    'MAX(orders.ts',
+):
+    name = of.split('(')[0].lower() + ('.ts' if '.ts' in of else '')
+    case(
+        f'{name}.dense',
+        'refused',
+        "the reference's validator refuses the aggregation (INVALID_REQUEST)",
+        query(of=of),
+        dense(),
+    )
 
 
 def _rows(table: Any) -> Any:

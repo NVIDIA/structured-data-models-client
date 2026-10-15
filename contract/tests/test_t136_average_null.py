@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""T1.36, register P1B-21: ``AVG(...) = NULL`` and ``!= NULL`` as the reference.
+"""T1.36, register P1B-21: an aggregation compared with ``NULL`` as the reference.
 
 Written by the package's independent test author, before the fix.
 
@@ -10,12 +10,16 @@ Written by the package's independent test author, before the fix.
 
 Until T1.36 the core refused a windowed ``AVG`` compared with ``NULL`` on
 every source (``UNSUPPORTED_REQUEST``, rule ``average_null``), before
-fetching anything. The reference does not fail on every source: it labels
-the context wherever each of its training trials has a non-null value in
-its window (``= NULL`` every label ``False``, ``!= NULL`` every label
-``True``, a binary classification), and fails only where one has none
-(``IndexError``, ``INTERNAL_ERROR``; with no value at all, a ``ValueError``
-the client gives as ``INVALID_REQUEST`` in numpy's words).
+fetching anything, and labelled ``MIN`` and ``MAX`` compared with ``NULL``
+on every source. The reference does neither: for ``AVG``, ``MIN`` and
+``MAX`` it labels the context wherever each of its training trials has a
+non-null value in its window (``= NULL`` every label ``False``, ``!= NULL``
+every label ``True``, a binary classification), and fails only where one
+has none (``IndexError``, ``INTERNAL_ERROR``; with no value at all, a
+``ValueError`` the client gives as ``INVALID_REQUEST`` in numpy's words).
+``SUM`` and ``COUNT`` it always labels; ``COUNT_DISTINCT``, ``FIRST``,
+``LAST``, ``LIST_DISTINCT`` and an aggregation of a time column its
+validator refuses (``INVALID_REQUEST``).
 ``contract/tools/average_null_record.py`` says why, and which rows are the
 trials: the first 10,000 of the training-trial list (the context size asked
 narrows the context afterwards, not the trials; the predicted rows are not
@@ -31,10 +35,18 @@ source is asked with both operators. Here each runs forced onto the core
   labels among them), the instance ids each related table keeps and the
   counts must equal the reference's (locked check 5: an input the
   reference accepts is not refused);
-- where the reference fails (``expect: fails``), the core must refuse it by
-  name, ``UNSUPPORTED_REQUEST`` with rule ``average_null`` (E66(b): the
-  reference's failure is an internal or an unnamed one), and neither
-  ``INTERNAL_ERROR`` nor a panic.
+- where the reference fails ``INTERNAL_ERROR`` (``expect: fails``), the
+  core must refuse it by name (E66(b)): ``UnsupportedRequestError``,
+  ``UNSUPPORTED_REQUEST``, rule ``average_null`` for ``AVG`` (the rule the
+  core and its other tests already name) and a named rule for ``MIN`` and
+  ``MAX`` (``average_null`` generalised or a sibling: the implementer's
+  choice), never ``INTERNAL_ERROR`` nor a panic;
+- where the reference refuses with a code of its own (``expect:
+  refused``: ``INVALID_REQUEST``, from its validator or, where no trial
+  row has a value, from numpy's broadcast), the core must refuse at
+  materialize with that code, raised as (a subclass of) the reference's
+  class: E66(b) covers an internal or unnamed failure only, not a coded
+  one.
 """
 
 from __future__ import annotations
@@ -83,6 +95,11 @@ R = _recorder()
 CASES = RECORDED['cases']
 LABELLED = [c for c in CASES if c['expect'] == 'labels']
 FAILED = [c for c in CASES if c['expect'] == 'fails']
+REFUSED = [c for c in CASES if c['expect'] == 'refused']
+
+
+def _aggregation(case: dict[str, Any]) -> str:
+    return case['query'].split()[1].split('(')[0]
 
 
 def _labels(case: dict[str, Any]) -> set[Any]:
@@ -103,14 +120,15 @@ def test_the_recording_is_the_reference_s() -> None:
     # cases in its order, each source asked with both operators; where the
     # reference labels, = NULL labels every row False and != NULL True, a
     # binary classification; where it fails, it fails INTERNAL_ERROR from
-    # an IndexError, or with no value at all INVALID_REQUEST from a
-    # ValueError (numpy's broadcast).
+    # an IndexError; where it refuses, INVALID_REQUEST, from a ValueError
+    # (numpy's broadcast: no trial row has a value) or from its validator.
     assert RECORDED['recorded_by'] == 'contract/tools/average_null_record.py'
     assert len(RECORDED['reference']) == 40
     assert [c['name'] for c in CASES] == [c['name'] for c in R.CASES]
     for case, spec in zip(CASES, R.CASES, strict=True):
         assert {k: case[k] for k in spec} == spec, case['name']
-    assert len(LABELLED) >= 10 and len(FAILED) >= 10
+    assert len(LABELLED) >= 10 and len(FAILED) >= 10 and len(REFUSED) >= 10
+    assert {_aggregation(c) for c in FAILED} == {'AVG', 'MIN', 'MAX'}
     for case in CASES:
         assert case['query'].count('NULL') == 1, case['name']
         equals = ' = NULL ' in case['query']
@@ -120,14 +138,19 @@ def test_the_recording_is_the_reference_s() -> None:
             assert expected['task']['kind'] == 'binary_classification'
             assert expected['counts']['num_context_examples'] > 0
             assert _labels(case) == {not equals}, case['name']
-        else:
+        elif case['expect'] == 'fails':
             assert expected['outcome'] == 'refused', case['name']
-            assert (expected['code'], expected['cause'].split(':')[0]) in {
-                ('INTERNAL_ERROR', 'IndexError'),
-                ('INVALID_REQUEST', 'ValueError'),
-            }, case['name']
-            if expected['code'] == 'INVALID_REQUEST':
-                assert 'could not be broadcast' in expected['cause']
+            assert expected['code'] == 'INTERNAL_ERROR', case['name']
+            assert expected['cause'].startswith('IndexError: '), case['name']
+        else:
+            assert case['expect'] == 'refused', case['name']
+            assert expected['outcome'] == 'refused', case['name']
+            assert expected['code'] == 'INVALID_REQUEST', case['name']
+            cause = expected['cause']
+            assert cause is None or (
+                cause.startswith('ValueError: ')
+                and 'could not be broadcast' in cause
+            ), case['name']
 
 
 @pytest.mark.parametrize('spec', LABELLED, ids=[c['name'] for c in LABELLED])
@@ -154,9 +177,27 @@ def test_the_core_refuses_by_name_where_the_reference_fails(
         'labelled where the reference fails '
         f'({spec["expected"]["code"]}, {spec["expected"]["cause"]})'
     )
-    assert (got['code'], got['rule']) == (
-        'UNSUPPORTED_REQUEST',
-        'average_null',
-    ), got['message']
+    assert got['code'] == 'UNSUPPORTED_REQUEST', got['message']
+    if _aggregation(spec) == 'AVG':
+        assert got['rule'] == 'average_null', got['message']
+    else:
+        assert isinstance(got['rule'], str) and got['rule'], got['message']
     assert 'StructuredDataError' in got['mro'], got['mro']
     assert got['class'] == 'UnsupportedRequestError', got['class']
+
+
+@pytest.mark.parametrize('spec', REFUSED, ids=[c['name'] for c in REFUSED])
+def test_the_core_refuses_as_the_reference_refuses(
+    spec: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    got = _on_the_core(spec, monkeypatch)
+    expected = spec['expected']
+    assert got['outcome'] == 'refused', (
+        f'labelled where the reference refuses {expected["code"]} '
+        f'({expected["cause"] or "its validator"})'
+    )
+    assert got['code'] == expected['code'], (
+        f'{got["code"]} (rule {got["rule"]!r}) where the reference refuses '
+        f'{expected["code"]}: {got["message"]}'
+    )
+    assert expected['class'] in got['mro'], got['mro']
