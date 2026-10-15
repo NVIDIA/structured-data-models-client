@@ -11,13 +11,16 @@ summarised here so the pack does not depend on them.
   0a8a7412: locked 1a (checks 1, 2, 3 and 6, wheel-smoke on CI's wheels) and
   1b (checks 4, 5 and 6) both passed ([gate/](gate/)).
 - The final code, 9779fcbc (landed as 852e1e26, an identical tree): CI run
-  38791629299 green; its locked gates are recorded in decisions.md's go
-  record (E154) and the go/no-go packet. Pending in this snapshot.
+  38791629299 green; locked 1a (checks 1, 2, 3 and 6, the seeded suite and
+  wheel-smoke on that run's wheels) and 1b (checks 4, 5 and 6) both passed,
+  judged by bbb6c67f's harness ([gate/final-9779fcb/](gate/final-9779fcb/),
+  NOTES.md item 9); decisions.md's go record, E154.
 
 ## Seeded faults
 
 The seeded suite runs inside locked 1a (`seeded` step, check 2): ok at
-0a8a7412 ([gate/final-gate-1a-1b-summary.txt](gate/final-gate-1a-1b-summary.txt)).
+0a8a7412 ([gate/final-gate-1a-1b-summary.txt](gate/final-gate-1a-1b-summary.txt))
+and at 9779fcbc ([gate/final-9779fcb/gate-1a-summary.txt](gate/final-9779fcb/gate-1a-summary.txt)).
 
 ## The final whole-phase reviews
 

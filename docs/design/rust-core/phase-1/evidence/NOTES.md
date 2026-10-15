@@ -79,3 +79,11 @@ The checkpoint's runner files equal the phase commit's, so the gate's observatio
      - the captured statement result values and their digests (both legs, 30 cases). The materialize seed is unset in these cases, so sampling differs run to run.
      - No outcome changed.
    - The executor gives no verdict.
+9. **Locked gates on the final code 9779fcbcf3d652e808939e98d6c11a89cb2e297b: 1a and 1b both passed.** Merge SHA `852e1e26b9a7eb2026f68ea58964858c7026b8d3`, an empty landing commit on the phase branch whose parent is 9779fcbc and whose tree is identical. Under owner item 36 the candidate's gate evidence and CI run stand for the merge commit. Files are in `gate/final-9779fcb/`.
+   - 9779fcbc's only change from 274d0755 (item 8's held-out evidence) is `rust/bindings/sdm-py/tests/messages.py` (CONTRACT = 25), so the held-out evidence of item 8 holds for this code.
+   - **CI:** run 38791629299 on 9779fcbc, green.
+   - **Gate setup:** both halves were judged by the checkpoint bbb6c67f's harness (base bbb6c67f, the phase head the package started from), in ref-pandas3. `$PYTHON` held 9779fcbc's local client build, native SHA-256 `b79f6386…`, the same as items 7 and 8.
+   - **1b:** checks 4, 5 and 6 ok (`gate-1b-summary.txt`).
+   - **1a:** checks 1, 2, 3 and 6 ok (`gate-1a-summary.txt`). The seeded suite passed. Wheel-smoke ok in both lanes, on run 38791629299's native-wheel and native-wheel-test-ops, each built from 9779fcbc from a clean tree.
+   - **Evidence JSON:** `<git-common-dir>/sdm-gate-evidence/gate/9779fcbcf3d652e808939e98d6c11a89cb2e297b.json` holds both halves as passed. Its SHA-256 is in `gate/final-9779fcb/evidence-json.sha256`; it stays outside the tree.
+   - The 0a8a7412 gate results (item 1) stay in `gate/` as the record for that phase head.

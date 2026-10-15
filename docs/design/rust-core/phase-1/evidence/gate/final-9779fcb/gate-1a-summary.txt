@@ -1,0 +1,19 @@
+gate: candidate 9779fcbcf3d652e808939e98d6c11a89cb2e297b
+gate: base bbb6c67f5f33abf1efc4413b7820b611cf825d89, checkpoint bbb6c67f5f33abf1efc4413b7820b611cf825d89
+gate: judged by the checkpoint's harness, at landing bbb6c67f Land T1.36: the owner's answers on the last four register entries
+observations   ok
+ratchet        ok
+compare        ok
+l0             ok
+coverage       ok
+runners        ok
+l1             ok
+seeded         ok
+wheel-smoke    ok
+locked checks (1a):
+  ok   check 1: runners observations ratchet compare coverage l1
+  ok   check 2: seeded
+  ok   check 3: wheel-smoke
+  ok   check 6: l0 observations ratchet compare coverage runners l1 seeded wheel-smoke
+evidence: <git-common-dir>/sdm-gate-evidence/gate/9779fcbcf3d652e808939e98d6c11a89cb2e297b.json
+gate: passed (--locked 1a)
