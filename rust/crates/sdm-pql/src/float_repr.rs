@@ -97,6 +97,20 @@ mod tests {
             // Below a power of two, where the nearest does not round-trip.
             (-5.960_464_477_539_063e-8, "-5.960464477539063e-08"),
             (1e22, "1e+22"),
+            // A float32's double, as a float target's classes spell it.
+            (f64::from(3.0_f32), "3.0"),
+            (f64::from(0.1_f32), "0.10000000149011612"),
+            (f64::from(1e20_f32), "1.0000000200408773e+20"),
+            (f64::from(1e-7_f32), "1.0000000116860974e-07"),
+            (f64::from(1e-4_f32), "9.999999747378752e-05"),
+            (f64::from(123_456_789_f32), "123456792.0"),
+            (
+                f64::from(f32::from_bits(0x0001_16c2)),
+                "9.99994610111476e-41",
+            ),
+            (f64::from(-0.0_f32), "-0.0"),
+            (f64::NAN, "nan"),
+            (f64::NEG_INFINITY, "-inf"),
         ] {
             assert_eq!(float_repr(x), want, "{x}");
         }

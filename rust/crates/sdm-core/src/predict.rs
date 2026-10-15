@@ -185,5 +185,5 @@ async fn call(
         bad_response("response", reason).with_field("category", Detail::text(e.category))
     })?;
     let response = PredictionResponse::read(&read).map_err(refused)?;
-    layout(payload, &response)
+    layout(payload, &response, crate::pql::float_text)
 }

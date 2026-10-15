@@ -2079,6 +2079,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         run_mode: mode,
         options,
         statistic,
+        float_text: crate::pql::float_text,
     })?;
     // What the request leaves out, said as the client says it, in its
     // order: the tables, the columns the model does not read, and the

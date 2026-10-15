@@ -762,6 +762,14 @@ fn ranks_foreign_key(target: &PqlNode, schema: &QuerySchema) -> bool {
     schema.links.iter().flatten().any(|c| c == column)
 }
 
+/// The text a float class is spelled in, as the reference spells it: the
+/// parser's float text, the shortest digits that read back to the double
+/// ([`sdm_pql::float_repr`]). The payload and the answer's layout take it
+/// from here, the one module that names the parser.
+pub(crate) fn float_text(x: f64) -> String {
+    parser::float_repr::float_repr(x)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

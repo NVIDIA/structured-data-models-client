@@ -158,6 +158,11 @@ pub struct Sampled {
     pub options: Options,
     /// The regression's statistic the caller chose.
     pub statistic: Option<String>,
+    /// The text a float's class is spelled in: the shortest digits that
+    /// read back to the double, laid out as the reference's `str` lays them
+    /// out (`_class_label`). The parser crate holds it; the caller passes
+    /// it in.
+    pub float_text: fn(f64) -> String,
 }
 
 /// A payload built: its JSON text, the bytes the request sends, and how
@@ -601,9 +606,14 @@ fn table_schema(frame: &Frame, stypes: &[(String, Stype)], key: &[String]) -> Ta
 /// (`_target_dtype`, `_target_json_value`): its dtype and one cell per
 /// label; and a classification's classes, in the order the context first
 /// holds them (`pd.unique`), as their text (`_class_label`). A multiclass
-/// float target is refused by name (`target_type`): its classes' text is
-/// Python's `repr` of a float32's double, which this layout does not write.
-fn target(kind: Kind, labels: &Labels) -> Result<(Dtype, Vec<Value>, Vec<String>), CoreError> {
+/// float target's labels are its float32s as doubles, and its classes the
+/// distinct values, a negative and a positive zero one class spelled as
+/// first met, each as `float_text` spells its double.
+fn target(
+    kind: Kind,
+    labels: &Labels,
+    float_text: fn(f64) -> String,
+) -> Result<(Dtype, Vec<Value>, Vec<String>), CoreError> {
     let classes = |texts: Vec<String>| {
         let mut seen = BTreeSet::new();
         texts
@@ -642,7 +652,22 @@ fn target(kind: Kind, labels: &Labels) -> Result<(Dtype, Vec<Value>, Vec<String>
                 .collect::<Result<_, _>>()?,
             classes(values.iter().map(i64::to_string).collect()),
         ),
-        (Kind::Multiclass, Labels::Float(_)) => return Err(sdm_engine::not_yet("target_type")),
+        (Kind::Multiclass, Labels::Float(values)) => {
+            let mut seen = BTreeSet::new();
+            (
+                Dtype::Float32,
+                values
+                    .iter()
+                    .map(|v| float_cell(f64::from(*v), TARGET))
+                    .collect::<Result<_, _>>()?,
+                values
+                    .iter()
+                    // Adding zero makes a negative zero positive.
+                    .filter(|v| seen.insert((**v + 0.0).to_bits()))
+                    .map(|v| float_text(f64::from(*v)))
+                    .collect(),
+            )
+        }
         (Kind::Regression, Labels::Float(values)) => (
             Dtype::Float32,
             values
@@ -781,7 +806,8 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         } else {
             None
         };
-    let (target_dtype, mut target_cells, classes) = target(kind, &sampled.labels)?;
+    let (target_dtype, mut target_cells, classes) =
+        target(kind, &sampled.labels, sampled.float_text)?;
     target_cells.resize(examples, Value::Null);
     instance.columns.push(FrameColumn {
         name: TARGET.to_owned(),

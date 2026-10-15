@@ -53,6 +53,7 @@ fn shop() -> Sampled {
         run_mode: RunMode::Fast,
         options: Options::default(),
         statistic: Some("mean".into()),
+        float_text: |x| format!("{x:?}"),
         tables: vec![
             SampledTable {
                 name: "users".into(),
@@ -131,6 +132,7 @@ fn family() -> Sampled {
         run_mode: RunMode::Best,
         options: Options::default(),
         statistic: None,
+        float_text: |x| format!("{x:?}"),
         tables: vec![
             SampledTable {
                 name: "Users".into(),
@@ -226,6 +228,19 @@ fn the_payload_the_producer_builds_is_the_locked_definition_s() {
         json!(["True", "False"])
     );
     assert!(multiclass["task"]["target"].get("positive_class").is_none());
+    // A float target's classes: its distinct float32s as the caller's
+    // `float_text` spells their doubles, the two zeros one class spelled as
+    // first met; its labels the doubles, each zero's sign kept.
+    let floats = built(&classified(
+        Kind::Multiclass,
+        Labels::Float(vec![-0.0, 0.1, 0.0]),
+    ));
+    assert_eq!(check("StatePayload", &floats), Ok(()));
+    assert_eq!(floats["task"]["target"]["dtype"], json!("float32"));
+    assert_eq!(
+        floats["task"]["target"]["classes"],
+        json!(["-0.0", "0.10000000149011612"])
+    );
     // The two samples take the producer's optional branches both ways.
     let shop = built(&shop());
     let family = built(&family());

@@ -54,6 +54,7 @@ fn sampled(note: &str) -> Sampled {
         run_mode: RunMode::Fast,
         options: Options::default(),
         statistic: None,
+        float_text: |x| format!("{x:?}"),
     }
 }
 

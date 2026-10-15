@@ -794,10 +794,13 @@ pub enum Answer {
     NonFinite(f64),
 }
 
-/// The type a part's predictions are given back as.
+/// The type a part's predictions are given back as: a regression's
+/// number (`Float`), or a class as its target's type, a float target's as
+/// a double (`FloatClass`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnswerType {
     Float,
+    FloatClass,
     Bool,
     Int,
     Text,
@@ -855,9 +858,8 @@ fn target_dtype(payload: &Value) -> Option<&str> {
 
 /// How a payload's answers are given back (`as_declared_target`): a
 /// regression's as doubles, a classification's as its target's dtype, a
-/// boolean, an integer or, for any other dtype, the class's text. A
-/// classification of a float target is not one `materialize` writes
-/// (`target_type`), and is refused by name.
+/// boolean, an integer, a double or, for any other dtype, the class's
+/// text.
 fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
     let kind = called(payload)?;
     if !classifies(kind) {
@@ -866,7 +868,7 @@ fn answer_type(payload: &Value) -> Result<AnswerType, CoreError> {
     Ok(match target_dtype(payload) {
         Some(d) if d.starts_with("bool") => AnswerType::Bool,
         Some(d) if d.starts_with("int") => AnswerType::Int,
-        Some(d) if d.starts_with("float") => return Err(not_yet("target_type")),
+        Some(d) if d.starts_with("float") => AnswerType::FloatClass,
         _ => AnswerType::Text,
     })
 }
@@ -914,6 +916,20 @@ fn as_int(value: &Value) -> Option<i64> {
     }
 }
 
+/// A class read back as the target's double (`as_declared`'s `float`):
+/// text of a number (trimmed; an infinity or a NaN by name), or a number,
+/// an integer past a double's range not one.
+fn as_float(value: &Value) -> Option<f64> {
+    match value {
+        Value::Text(text) => text.trim().parse::<f64>().ok(),
+        Value::Number(token) => token
+            .parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite() || !is_integer_token(token)),
+        _ => None,
+    }
+}
+
 /// One answer's prediction as the result gives it.
 fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, CoreError> {
     let Some(value) = prediction else {
@@ -937,6 +953,11 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
                 .map_err(|_| bad_response("prediction.prediction", "not_a_number")),
             _ => Err(bad_response("prediction.prediction", "not_a_number")),
         },
+        // A float target's class is read back as a double, a non-finite one
+        // too, which the target's type holds.
+        AnswerType::FloatClass => as_float(value)
+            .map(Answer::Float)
+            .ok_or_else(|| not_yet("prediction_type")),
         // A class written as a non-finite number is passed through as the
         // reference passes it (owner decision of 2026-10-12): no target's
         // type holds it, so `as_declared` leaves it as it is.
@@ -969,8 +990,13 @@ fn non_finite(value: &Value) -> Option<f64> {
 
 /// The probabilities keyed by each class as the target column spells it
 /// (`_as_the_column_spells_them`), left as written where reading them back
-/// would make two classes one.
-fn spelled(probabilities: &[(String, f64)], answers: AnswerType) -> Vec<(String, f64)> {
+/// would make two classes one; a float target's class as `float_text`
+/// spells the double it reads as.
+fn spelled(
+    probabilities: &[(String, f64)],
+    answers: AnswerType,
+    float_text: fn(f64) -> String,
+) -> Vec<(String, f64)> {
     let respelled: Vec<(String, f64)> = probabilities
         .iter()
         .map(|(class, p)| {
@@ -984,6 +1010,7 @@ fn spelled(probabilities: &[(String, f64)], answers: AnswerType) -> Vec<(String,
                     }
                 }),
                 AnswerType::Int => as_int(&as_written).map(|n| n.to_string()),
+                AnswerType::FloatClass => as_float(&as_written).map(float_text),
                 _ => None,
             };
             (key.unwrap_or_else(|| class.clone()), *p)
@@ -1008,8 +1035,13 @@ fn spelled(probabilities: &[(String, f64)], answers: AnswerType) -> Vec<(String,
 /// reference gives it: its id the instance id it was answered under, as
 /// text, and no row checked (a `row_index` or forecast step past int64,
 /// which the result's columns do not hold, refused as `INVALID_RESPONSE`,
-/// register P1B-86).
-pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, CoreError> {
+/// register P1B-86). On both paths its probabilities are keyed as
+/// [`spelled`] keys them, a float target's class by `float_text`.
+pub fn layout(
+    payload: &Value,
+    response: &PredictionResponse,
+    float_text: fn(f64) -> String,
+) -> Result<Part, CoreError> {
     let answers = answer_type(payload)?;
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
     let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
@@ -1038,7 +1070,7 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, Co
             probabilities: item
                 .probabilities
                 .as_ref()
-                .map(|given| spelled(given, answers)),
+                .map(|given| spelled(given, answers, float_text)),
         });
     }
     Ok(Part {
@@ -1314,6 +1346,16 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
                             reason = "as the reference's frame reads an integer among floats"
                         )]
                         Answer::Int(n) => Some(n as f64),
+                        _ => None,
+                    },
+                ))),
+            ),
+            // A float target's classes as doubles.
+            AnswerType::FloatClass => (
+                DataType::Float64,
+                Arc::new(Float64Array::from_iter(rows.iter().map(
+                    |r| match r.prediction {
+                        Answer::Float(v) => Some(v),
                         _ => None,
                     },
                 ))),
@@ -1601,5 +1643,43 @@ mod tests {
         // No dtype known, or a text key: as written.
         assert_eq!(entity(&text("7"), None), Entity::Text("7".into()));
         assert_eq!(entity(&number("7"), Some("string")), Entity::Integer(7));
+    }
+
+    #[test]
+    fn a_float_target_s_class_reads_back_as_a_double() {
+        let number = |t: &str| Value::Number(t.to_owned());
+        let text = |t: &str| Value::Text(t.to_owned());
+        assert_eq!(as_float(&text(" 3.0 ")), Some(3.0));
+        assert_eq!(
+            as_float(&text("0.10000000149011612")),
+            Some(f64::from(0.1_f32))
+        );
+        assert_eq!(as_float(&text("-inf")), Some(f64::NEG_INFINITY));
+        assert!(as_float(&text("NaN")).is_some_and(f64::is_nan));
+        assert_eq!(as_float(&number("3")), Some(3.0));
+        assert_eq!(as_float(&number("1e400")), Some(f64::INFINITY));
+        // Text that is no number, a boolean, and an integer past a double's
+        // range are not a double: the answer is refused (`prediction_type`).
+        assert_eq!(as_float(&text("three")), None);
+        assert_eq!(as_float(&Value::Bool(true)), None);
+        assert_eq!(as_float(&number(&"9".repeat(400))), None);
+        assert_eq!(
+            answer_of(Some(&text("3.0")), AnswerType::FloatClass),
+            Ok(Answer::Float(3.0))
+        );
+        assert!(answer_of(Some(&text("three")), AnswerType::FloatClass).is_err());
+    }
+
+    #[test]
+    fn a_float_target_s_probabilities_are_keyed_as_its_classes_are_spelled() {
+        let spell = |x: f64| format!("<{x}>");
+        let given = vec![("3".to_owned(), 0.5), ("x".to_owned(), 0.5)];
+        assert_eq!(
+            spelled(&given, AnswerType::FloatClass, spell),
+            vec![("<3>".to_owned(), 0.5), ("x".to_owned(), 0.5)]
+        );
+        // Two keys that read as one double are left as written.
+        let same = vec![("3".to_owned(), 0.5), ("3.0".to_owned(), 0.5)];
+        assert_eq!(spelled(&same, AnswerType::FloatClass, spell), same);
     }
 }

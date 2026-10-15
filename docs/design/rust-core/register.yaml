@@ -1838,6 +1838,8 @@ entries:
     were [base.regression, base.adventureworks, base.binary, base.multiclass,
     decimal.target-38-18, T1.11c, T1.21b, T1.21e, T1.22, T1.25, T1.26, T1.27,
     T1.28, T1.28a, T1.29].
+    T1.36 fix 1 lifted target_type for a multiclass target of floats: it is
+    materialized as the reference's (contract/float-multiclass-vectors.json).
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet
@@ -1940,6 +1942,8 @@ entries:
     UNSUPPORTED_REQUEST entity_ref after calling the endpoint (measured at
     c49ee4f8, both routes, against contract/runners/scripted_endpoint.py).
     T1.36 fix 8 matches the reference.
+    T1.36 fix 1 lifted target_type for a classification of a float target:
+    its answer is given back as doubles, as the reference's.
 
 - id: P1B-5
   title: A DuckDB table named with a double quote is described on the core route where the reference refuses it
