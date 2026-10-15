@@ -687,9 +687,9 @@ entries:
     year-first column, and reads_as_a_date only asks whether a value reads.
   cases: [T0.6]
   refs: [M1]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E140}
   notes: >-
     Recorded so the difference is not rediscovered; all 121 column cases agree.
     Recommendation: approve; the reviewer can approve it.
@@ -697,6 +697,10 @@ entries:
     value read day-first under dayfirst, which E66(b) keeps for individual
     decision; the note above reads it as the reviewer's since no inventory
     case reaches it, a reading the orchestrator may take instead).
+    Approved by the owner on 2026-10-14 (morning; the orchestrator's record of
+    the owner's answers, item 23: DT-4 approved, ISO 8601's year-first text is
+    year, month, day), relayed by the orchestrator, recorded at T1.36 (E140);
+    never the implementer's approval.
 
 - id: DT-5
   title: PQL date literals with a run of five digits or more (rule D8), refused by name
@@ -908,9 +912,9 @@ entries:
     its UTC instant, neither through a zone's rules.
   cases: [T1.25]
   refs: [DT-1, M4]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E140}
   notes: >-
     Measured at T1.25 (rust/crates/sdm-engine/tests/time_ranges_record.py
     records pandas' own answer beside each expected one). It refuses nothing
@@ -922,6 +926,9 @@ entries:
     individual decision; elsewhere the reference raises. E66's row records the
     orchestrator's reading that the range ends are the reviewer's, which the
     orchestrator may keep instead).
+    Approved by the owner on 2026-10-14 (morning; the orchestrator's record of
+    the owner's answers, item 23: DT-10 approved), relayed by the orchestrator,
+    recorded at T1.36 (E140); never the implementer's approval.
 
 - id: DT-11
   title: Text time values with mixed offsets refused by name
@@ -4272,9 +4279,9 @@ entries:
   - 'contract/type-set-vectors.json#utf8-view refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#binary-view refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#view.list-utf8 refusal UNNAMED -> success'
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E140}
   notes: >-
     The reference fails it unnamed and the core reads it: a new success, which
     E66(b) keeps for individual decision (the core accepting what the
@@ -4289,6 +4296,10 @@ entries:
     From T1.33's fix round 1 also view.list-utf8 (a VARCHAR[] under
     produce_arrow_string_view, list<string_view>), which the subagent's review
     found reachable: the same new success.
+    Approved by the owner on 2026-10-14 (morning; the orchestrator's record of
+    the owner's answers, item 22: P1B-44 approved, the owner preferring reading
+    where possible, confirmed in item 27), relayed by the orchestrator,
+    recorded at T1.36 (E140); never the implementer's approval.
 
 - id: P1B-45
   title: A list DuckDB hands over as a large list view is left out as a list where the reference fails unnamed
@@ -4310,9 +4321,9 @@ entries:
   cases: [T1.33]
   refs:
   - 'contract/type-set-vectors.json#large-list-view.int32 refusal UNNAMED -> success'
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E140}
   notes: >-
     The reference fails it unnamed and the core reads it: a new success, which
     E66(b) keeps for individual decision (the core accepting what the
@@ -4324,6 +4335,10 @@ entries:
     pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
     to its transition by contract/tests/test_t133_type_set.py, pending until
     an approved entry names it. Never self-approved.
+    Approved by the owner on 2026-10-14 (morning; the orchestrator's record of
+    the owner's answers, item 22: P1B-45 approved, the owner preferring reading
+    where possible, confirmed in item 27), relayed by the orchestrator,
+    recorded at T1.36 (E140); never the implementer's approval.
 
 - id: P1B-46
   title: Decimals DuckDB hands over as decimal32 or decimal64 are read as decimal128 where the reference fails unnamed
@@ -4348,9 +4363,9 @@ entries:
   - 'contract/type-set-vectors.json#decimal32.9-2 refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#decimal64.18-2 refusal UNNAMED -> success'
   - 'contract/type-set-vectors.json#decimal64.18-0 refusal UNNAMED -> success'
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E89}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E140}
   notes: >-
     The reference fails it unnamed and the core reads it: a new success, which
     E66(b) keeps for individual decision (the core accepting what the
@@ -4362,6 +4377,10 @@ entries:
     pure-Rust host by sdm-host's tests/t133_type_set.rs, which passes); held
     to its transition by contract/tests/test_t133_type_set.py, pending until
     an approved entry names it. Never self-approved.
+    Approved by the owner on 2026-10-14 (morning; the orchestrator's record of
+    the owner's answers, item 22: P1B-46 approved, confirmed in item 27),
+    relayed by the orchestrator, recorded at T1.36 (E140); never the
+    implementer's approval.
 
 - id: P1B-47
   title: A struct holding an interval is refused UNSUPPORTED_TYPE where the reference fails unnamed
@@ -5030,3 +5049,47 @@ entries:
     T1.32h's part 2, from the commit both reviewers approved. Held by the
     client's tests/test_t132h_keys_and_times.py (the m.*-table rows and
     test_d4_the_table_name_is_refused_before_the_source_is_read).
+
+- id: P1B-75
+  title: The materialize warnings CONTEXT_BEFORE_DATA and ANCHOR_AFTER_DATA in the core's words, not the reference's
+  kind: change
+  old_behavior: >-
+    The reference's materialize warns, as a UserWarning, when the context
+    reaches back before the data: "Context anchor timestamp is too early or
+    aggregation time range is too large. To form proper input data, we would
+    need data back to '<time>', however, your data only contains data back to
+    '<min time>'."; and when the anchor time is more than a day after the
+    data: "Anchor timestamp '<anchor>' is after the latest timestamp '<max
+    time>' in the data. Please make sure this is intended."
+    (sdm_relational_engine rfm.py).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core warns under the same conditions with the codes CONTEXT_BEFORE_DATA
+    and ANCHOR_AFTER_DATA (sdm-core's materialize.rs), and the Python host
+    shows them as the same class, UserWarning, in the core's words
+    (_rust/errors.py): "[CONTEXT_BEFORE_DATA] the context's anchor time is too
+    early, or the aggregation's window too long, for the data to reach back as
+    far as the examples need" and "[ANCHOR_AFTER_DATA] the anchor time is
+    after the latest time in the data", naming no time. The condition, the
+    class and when the warning shows are unchanged; only the text differs.
+    The default route is unchanged.
+  affected_inputs: >-
+    materialize under a forced core route with a context anchor time or an
+    aggregation window reaching before the earliest time in the data, or an
+    anchor time more than a day after the latest. No contract case reaches
+    either warning.
+  cases: [T1.25]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E141}
+  notes: >-
+    Found by the P3 scan of T1.25's review reports (M4): E59 gave the
+    reference's words to the warnings T1.26 ported, and these two kept the
+    core's, with no entry. It changes the text of a warning the reference
+    gives, which is not E66(b)'s class, so it was the owner's. Approved by the
+    owner on 2026-10-14 (the orchestrator's record of the owner's decisions,
+    item 38(a): the core's wording for these two warnings is accepted for
+    Phase 1, matching the old wording a Phase 2 row), relayed by the
+    orchestrator, recorded at T1.36 (E141); never the implementer's approval.
+    The Phase 2 row is migration-plan.md's "host error and warning wording".
+    Held by the client's tests/test_the_rust_host.py, which pins both texts.
