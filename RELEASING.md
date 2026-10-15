@@ -76,8 +76,9 @@ release missing it publishes an extra nobody can install. It then generates the
 SBOM, and takes the release's notes from the changelog's entry for that
 version, refusing a tag that has none: notes that read like a diff are fixable
 afterwards and a distribution on PyPI is not, so both happen before anything is
-uploaded. It attaches every distribution and the SBOM to the GitHub Release for the
-tag, and then asks Kitmaker's Portal to publish from those asset URLs.
+uploaded. It attaches every distribution and the SBOM to the GitHub Release for
+the tag, and stops there. **A green workflow means the artifacts are built and
+public, not that anything is on PyPI.**
 
 **Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
 NVIDIA's PyPI organization and this project's OSRB record commits to releasing
@@ -87,30 +88,36 @@ accepts an Artifactory path or a GitHub release asset, and it refuses private
 GitHub assets, so **a release cannot publish while the repository is
 internal**.
 
-One Portal project exists per distribution, because Kitmaker matches the
-project name against the distribution name parsed from each filename. Their
-ids are in `.github/workflows/kitmaker_release.py`, and each is checked against
-the name it should carry before anything is sent, so a renamed or reassigned id
-fails early rather than being trusted. Every project that has something left to publish is validated
-and dry-run to a terminal state before *any* of them publishes, because the five
-distributions pin each other by exact version and a client live without its
-engine is worse than a release that never started. Kitmaker batches are
-sequential and not atomic, and a published file cannot be recalled.
+**The publish is run by a person, from inside NVIDIA's network.** Kitmaker's
+Portal is not on the public internet, so a GitHub-hosted runner cannot resolve
+it, and no workflow here can do this step. The repository holds no Portal
+address, project id or publishing credential for the same reason: none of them
+belongs in a public repository, and nothing in CI has a use for them. The
+procedure and the script live with the release owner, outside this repository.
 
-The GitHub Release is created in the same job that publishes, behind the
-protected `pypi` environment. A release cannot be a draft, because Kitmaker
-needs a public URL, so creating it in an earlier ungated job would make it
-public before anyone approved the upload.
+What that procedure has to do, so that a replacement is held to it: one Portal
+project exists per distribution, because Kitmaker matches the project name
+against the distribution name parsed from each filename, and each id is checked
+against the name it should carry before anything is sent, so a renamed or
+reassigned id fails early rather than being trusted. Every project that has
+something left to publish is validated and dry-run to a terminal state before
+*any* of them publishes, because the five distributions pin each other by exact
+version and a client live without its engine is worse than a release that never
+started. Kitmaker batches are sequential and not atomic, and a published file
+cannot be recalled.
 
-**There is a stored credential.** `KITMAKER_API_TOKEN` is a long-lived bearer
-token, read only by the `release` job behind the protected `pypi` environment.
-It must be an **environment** secret on `pypi`, not a repository secret:
-approval gates environment secrets, so a repository secret is readable by a
-workflow on any branch and the approval protects nothing. The previous Trusted
-Publishing setup avoided a stored token; this is the cost of publishing through
-Kitmaker.
+The GitHub Release is created behind the protected `pypi` environment, because
+creating it is what makes the distributions public. It cannot be a draft
+instead, because a draft's asset URLs are private and Kitmaker could not fetch
+them. Declining the approval means nothing was created at all.
 
-**This workflow no longer signs what it ships.** PEP 740 attestations go to
+**Nothing in CI can publish to an index.** There is no stored publishing
+credential and no environment secret; the most the `release` job can do is
+attach files to a Release. The credential Kitmaker needs is a long-lived bearer
+token, which is why it is held by the person running the publish rather than by
+a workflow on a public repository.
+
+**This workflow does not sign what it ships.** PEP 740 attestations go to
 whoever uploads, and that is Kitmaker, so nothing here produces one naming this
 repository. SECURITY.md tells consumers what they can check instead.
 
@@ -120,14 +127,16 @@ repository. SECURITY.md tells consumers what they can check instead.
 byte reproducible, so rebuilding produces a different wheel and sdist for the
 same version. The workflow will not clobber an already-attached asset, so a
 full re-run would leave the release holding the original bytes while `dist/`
-holds new ones. The publish step compares each attached asset's digest against
-what this run built and refuses before submitting anything, since Kitmaker
-fetches the asset rather than the local file and a published file cannot be
-recalled. "Re-run failed jobs" reuses the original `distributions` artifact,
-which is what you want.
+holds new ones. The publish compares each attached asset's digest against what
+the run built and refuses before submitting anything, since Kitmaker fetches
+the asset rather than the local file and a published file cannot be recalled.
+"Re-run failed jobs" reuses the original `distributions` artifact, which is
+what you want.
 
-`kitmaker-summary.txt`, printed at the end of the job, is the record to read
-before doing anything else. It names each of the five projects. For any whose upload was requested it says
+### If the publish fails partway
+
+The summary the publish writes is the record to read before doing anything
+else. It names each of the five projects. For any whose upload was requested it says
 what **PyPI** holds for this version, not what Portal reported: Portal's batches
 are not atomic, so a failure can follow files that already published, and a
 refusal is not proof that nothing did. Only the index knows. The other states
@@ -159,13 +168,15 @@ that is part-published is reduced to the files still missing, since PyPI takes
 files into a version one at a time. A re-run after a partial publish therefore
 finishes what did not land.
 
-**If the build artifact is gone**, neither re-run works, and they fail
-differently. "Re-run failed jobs" stops at `actions/download-artifact`, since
-an expired artifact cannot be downloaded. "Re-run all jobs" builds fresh,
-non-reproducible files, finds the earlier assets still attached, and stops at
-"release assets are not the bytes this run built". This happens once the
-artifact's retention runs out, and after any change to the workflow that needs
-a fresh build.
+**If the build artifact is gone**, "Re-run failed jobs" stops at
+`actions/download-artifact`, since an expired artifact cannot be downloaded.
+"Re-run all jobs" builds fresh, non-reproducible files, finds the earlier
+assets still attached, leaves them alone and reports each as already attached.
+That run goes green with the release holding one set of bytes and `dist/`
+another, so the workflow is not what catches this. The publish is, because it
+compares every attached asset's digest against the artifact before it submits
+anything. This happens once the artifact's retention runs out, and after any
+change to the workflow that needs a fresh build.
 
 Recovery depends on the index: if nothing for this version is on PyPI, delete
 the release assets and run again; if anything is, the version is spent, so
@@ -184,6 +195,13 @@ Two states it refuses to guess at, both needing a hand:
 Check the five projects on pypi.org and confirm each shows NVIDIA organization
 ownership. Portal reporting that a release completed is not the same as the
 package being installable, so install it the way a user would.
+
+Then mark the GitHub Release Latest. The workflow leaves it unmarked on
+purpose, because until the publish has worked it would advertise a version the
+index does not have. One exception is worth knowing: when there is no earlier
+release to hold the position, GitHub reports the newest non-draft release as
+the latest one regardless, so the first release reads as Latest from the
+moment it is created.
 
 ## Yanking
 
