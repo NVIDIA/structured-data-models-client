@@ -25,8 +25,7 @@ on:
 
 permissions:
   contents: read
-  # For the images CI pulls from ghcr.io with GITHUB_TOKEN, once they are
-  # hosted there (E131); none is yet.
+  # For the images CI pulls from ghcr.io with GITHUB_TOKEN (E131).
   packages: read
   # For the landing job's skip step, which reads the candidate's runs
   # (E131).
@@ -63,14 +62,15 @@ env:
   # The images CI pulls, each named here once and pinned by digest (E131),
   # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
   # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
-  # The PostgreSQL server for test and engine: Docker's official image,
-  # from its public ECR mirror (Docker Hub's anonymous pull limit failed
-  # every attempt of a run), by the digest CI pulled for postgres:17. A
-  # service container's image cannot read env, so the landing job hands
-  # it on.
-  POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
-  # The manylinux2014 image both wheel builds run in.
-  MANYLINUX: quay.io/pypa/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
+  # Each a private copy, on this repository's GitHub Packages, of the
+  # upstream image by the same digest (E131): anonymous pulls from public
+  # registries failed for their limits.
+  # The PostgreSQL server for test and engine: Docker's official image
+  # for postgres:17. A service container's image cannot read env, so the
+  # landing job hands it on.
+  POSTGRES_IMAGE: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+  # The manylinux2014 image both wheel builds run in (PyPA's, published on quay.io).
+  MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
   # The binding's tests run at the E16 floor; DuckDB, at the reference's
   # version, is for the DuckDB provider's tests there (T1.11b).
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6
@@ -619,10 +619,12 @@ jobs:
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
       postgres: &postgres-service
-        # POSTGRES_IMAGE, by way of the landing job. No credentials while
-        # it is not on ghcr.io: GitHub refuses a credential that evaluates
-        # to an empty string, so they come, unconditional, with the move.
+        # POSTGRES_IMAGE, by way of the landing job, pulled from ghcr.io
+        # as this workflow, which needs packages: read.
         image: ${{ needs.landing.outputs.postgres-image }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_DB: sdm_test
           POSTGRES_PASSWORD: postgres

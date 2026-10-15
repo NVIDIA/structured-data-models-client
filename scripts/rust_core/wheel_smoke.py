@@ -181,9 +181,9 @@ INPUTS = (
 @dataclasses.dataclass(frozen=True)
 class Lane:
     python: str
-    #: A Python image pinned by its index digest, from the public mirror of
-    #: Docker's official images (Docker Hub's anonymous pull limit failed
-    #: CI's pulls before).
+    #: Docker's official Python image, pinned by its index digest: a private
+    #: copy on this repository's GitHub Packages by the same digest (E131),
+    #: since anonymous pulls from public registries failed for their limits.
     image: str
     #: What the lane installs as requirements and constraints.
     pins: tuple[str, ...]
@@ -195,14 +195,14 @@ class Lane:
 LANES = {
     'floor': Lane(
         python='3.10',
-        image='public.ecr.aws/docker/library/python:3.10.22-trixie'
+        image='ghcr.io/nvidia/structured-data-models-client/python:3.10.22-trixie'
         '@sha256:c10791e6f69086d5216f7b5d3b839929c454e24305867ed9bc5152f0355b5423',
         pins=('pyarrow==14.0.1', 'pandas==2.2.0', 'numpy==1.26.4'),
         resolved={'pyarrow': '14.0.1', 'pandas': '2.2.0', 'numpy': '1.26.4'},
     ),
     'newest': Lane(
         python='3.14',
-        image='public.ecr.aws/docker/library/python:3.14.8-trixie'
+        image='ghcr.io/nvidia/structured-data-models-client/python:3.14.8-trixie'
         '@sha256:446efb4225200a0a196707aa7953898b37962fd3b8859a636035de3af657081e',
         pins=('pandas>=3', 'numpy>=2', 'pyarrow'),
         resolved={'pandas': '3.', 'numpy': '2.'},
