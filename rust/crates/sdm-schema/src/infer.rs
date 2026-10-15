@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
+use sdm_contract::data::{BIG_INTEGER_MARKED, BIG_INTEGER_MARKER};
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::{ColumnType, CoreError, ErrorCode, ErrorKind, Scalar};
 
@@ -76,8 +77,8 @@ pub struct InferredColumn {
     /// Whether the catalog declares a primary or unique key of this one
     /// column.
     pub unique: bool,
-    /// The catalog's declared type, for a column received as
-    /// `decimal128(38, 0)` only (`DescribedColumn::declared_type`).
+    /// The catalog's declared type, for a big-integer column the host layer
+    /// read and marked only (`DescribedColumn::declared_type`).
     pub declared_type: Option<String>,
 }
 
@@ -487,8 +488,9 @@ pub fn preview(
             received: ColumnType::from_arrow(&declared.name, field.data_type())?,
             nullable: !is_primary && !declared.not_null,
             unique: declared_unique.contains(&declared.name),
-            declared_type: (field.data_type() == &DataType::Decimal128(38, 0))
-                .then(|| declared.declared_type.clone()),
+            declared_type: (field.metadata().get(BIG_INTEGER_MARKER).map(String::as_str)
+                == Some(BIG_INTEGER_MARKED))
+            .then(|| declared.declared_type.clone()),
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {

@@ -25,8 +25,8 @@ use crate::ArrowData;
 
 /// The field metadata key the host layer sets on a big-integer column it
 /// read, and its value.
-pub const MARKER: &str = "sdm:big_integer";
-pub const MARKED: &str = "true";
+pub const MARKER: &str = sdm_contract::data::BIG_INTEGER_MARKER;
+pub const MARKED: &str = sdm_contract::data::BIG_INTEGER_MARKED;
 
 /// Whether `field` is a big-integer column the host layer read.
 pub fn is_marked(field: &Field) -> bool {

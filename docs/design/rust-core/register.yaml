@@ -4190,8 +4190,9 @@ entries:
     (binary, left out). A decimal128(38, 0) seed key is joined in the
     joined key's own type where that is an integer type, as describe_source
     read it from the source's catalog and the described schema keeps it
-    (DescribedColumn.declared_type, contract version 24, for a column
-    received as decimal128(38, 0) only), so materialize adds no statement
+    (DescribedColumn.declared_type, contract version 24, for a big-integer
+    column the host layer read from an opaque type only; any other key joins
+    as before part 3), so materialize adds no statement
     (t.key = TRY_CAST(seed AS type), a VARINT through HUGEINT), exact and
     native: no one SQL type compares such a seed exactly
     with a VARINT and a UHUGEINT key alike (DuckDB has no DECIMAL(38, 0) to

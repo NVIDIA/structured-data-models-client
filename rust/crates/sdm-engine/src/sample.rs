@@ -307,8 +307,8 @@ pub fn by_pkey(
 }
 
 /// `seeds`, their key column naming the declared type of `table`'s `key`
-/// ([`SEED_KEY_TYPE`]) where the described schema keeps one (a key
-/// received as `decimal128(38, 0)`, `DescribedColumn::declared_type`) and
+/// ([`SEED_KEY_TYPE`]) where the described schema keeps one (a big-integer
+/// key the host layer read and marked, `DescribedColumn::declared_type`) and
 /// the seed key is of that type: the data layer joins such a seed in the
 /// key's own type (register P1B-43), from what `describe_source` read, so
 /// `materialize` asks the source nothing more.

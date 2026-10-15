@@ -31,10 +31,16 @@ use crate::types::{ColumnType, Field, Unit};
 
 /// The column of a seed key set that holds each seed's key (decision H15).
 pub const SEED_KEY: &str = "key";
+/// The field metadata key (and its value, [`BIG_INTEGER_MARKED`]) the host
+/// layer sets on a big-integer column it read from an opaque extension type
+/// (a HUGEINT, UHUGEINT or VARINT, register P1B-43), so the core holds the
+/// column to one tier and keeps its declared type.
+pub const BIG_INTEGER_MARKER: &str = "sdm:big_integer";
+pub const BIG_INTEGER_MARKED: &str = "true";
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
-/// catalog's `type`, kept in the described schema,
-/// `DescribedColumn::declared_type`), set by the core for a
+/// catalog's `type`, kept in the described schema for a marked big-integer
+/// column, `DescribedColumn::declared_type`), set by the core for a
 /// `decimal128(38, 0)` seed key: a SQL layer joins the seeds in the key's
 /// own type where that is exact (register P1B-43); a host provider may
 /// ignore it.
