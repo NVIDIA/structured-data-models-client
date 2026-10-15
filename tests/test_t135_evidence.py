@@ -76,8 +76,10 @@ The pack, in ``--out``:
     class): ``correct success`` or ``expected refusal`` as the reference
     succeeded or refused;
   - every difference from the reference stated by an approved entry's
-    ``case_outcomes`` item for that case, runner and cell (rust-host's,
-    which has no cell, under ``ref-pandas3``), its ``new`` the observed
+    ``case_outcomes`` item for that case and runner under ``ref-pandas3``,
+    whatever cell the runner observed in, as the gate matches it (T1.36,
+    ``tests/test_t136_evidence_cells.py``; a Python runner with no cell
+    recorded is excused by none), its ``new`` the observed
     outcome as ``ratchet.py``'s ``outcome_text`` writes it, and an entry
     approved by the owner where the reference succeeded and the runner
     refused: ``approved improvement``, naming the entry;
