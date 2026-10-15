@@ -27,10 +27,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.metadata
 import importlib.util
 import json
 import re
 import shutil
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -107,6 +109,20 @@ def read_environment(
             problems.append(f'{path.name}: distribution line {line[:40]!r}')
     if distributions != sorted(distributions):
         problems.append(f'{path.name}: the distributions are not sorted')
+    # Each distribution once (T1.36 U2): a line twice, or a name (PEP 503
+    # normalized) at more than one line, is a distribution counted twice.
+    lines_of: dict[str, list[str]] = {}
+    for line in distributions:
+        match = DISTRIBUTION.fullmatch(line)
+        if match is not None:
+            name = re.sub(r'[-_.]+', '-', match[1])
+            lines_of.setdefault(name, []).append(line)
+    for name, listed in sorted(lines_of.items()):
+        if len(listed) > 1:
+            problems.append(
+                f'{path.name}: {name} listed {len(listed)} times: '
+                + ', '.join(listed)
+            )
     found = hashlib.sha256('\n'.join(distributions).encode()).hexdigest()
     if header.get('environment') != found:
         problems.append(
@@ -244,6 +260,91 @@ def test_the_reference_observations_carry_the_recording_s_identity() -> None:
     assert header['reference'].startswith('b413e9a')
     for line in ('pandas==3.0.6', 'pyarrow==25.0.1', 'numpy==2.5.3'):
         assert line in distributions
+
+
+def test_the_reference_environment_lists_each_distribution_once() -> None:
+    # T1.36 U2: reference-env.txt counts each distribution once, its digest
+    # the one of those lines. Today the five editable packages appear twice.
+    header, distributions, problems = read_environment(ENVIRONMENT)
+    assert problems == []
+    repeated = sorted(
+        {line for line in distributions if distributions.count(line) > 1}
+    )
+    assert repeated == [], f'listed twice: {repeated}'
+    names = [DISTRIBUTION.fullmatch(line)[1] for line in distributions]
+    assert len(names) == len(set(names)), 'a name at more than one line'
+    found = hashlib.sha256('\n'.join(distributions).encode()).hexdigest()
+    assert header['environment'] == found
+
+
+def _distribution_dir(root: Path, kind: str, version: str) -> Path:
+    r"""A directory holding one distribution, ``t136-u2-demo`` at
+    ``version``: installed metadata (``dist-info``) or an editable source
+    tree's ``egg-info``, as the reference checkout's packages are found."""
+    root.mkdir(parents=True)
+    if kind == 'dist-info':
+        meta = root / f't136_u2_demo-{version}.dist-info' / 'METADATA'
+    else:
+        meta = root / 't136_u2_demo.egg-info' / 'PKG-INFO'
+    meta.parent.mkdir()
+    meta.write_text(
+        f'Metadata-Version: 2.1\nName: t136-u2-demo\nVersion: {version}\n'
+    )
+    return root
+
+
+def test_the_environment_digest_counts_a_distribution_found_twice_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T1.36 U2: run_python._environment() is the same whether a distribution
+    # is found once or twice (installed metadata and an egg-info), and still
+    # differs when its version differs. Real discovery, through sys.path.
+    base = list(sys.path)
+
+    def digest_with(*dirs: Path) -> str:
+        monkeypatch.setattr(sys, 'path', [*map(str, dirs), *base])
+        importlib.invalidate_caches()
+        found = [
+            dist
+            for dist in importlib.metadata.distributions()
+            if dist.metadata['Name'] == 't136-u2-demo'
+        ]
+        assert len(found) == len(dirs), found
+        return run_python._environment()
+
+    once = digest_with(_distribution_dir(tmp_path / 'a', 'dist-info', '1.0'))
+    twice = digest_with(
+        _distribution_dir(tmp_path / 'b', 'dist-info', '1.0'),
+        _distribution_dir(tmp_path / 'c', 'egg-info', '1.0'),
+    )
+    other = digest_with(_distribution_dir(tmp_path / 'd', 'dist-info', '1.1'))
+    other_twice = digest_with(
+        _distribution_dir(tmp_path / 'e', 'dist-info', '1.1'),
+        _distribution_dir(tmp_path / 'f', 'egg-info', '1.1'),
+    )
+    assert twice == once
+    assert other_twice == other
+    assert other != once
+
+
+def test_the_environment_digest_is_of_the_distinct_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.36 U2: with every distribution the interpreter finds listed twice,
+    # the digest is still the one of each found once.
+    found = list(importlib.metadata.distributions())
+    monkeypatch.setattr(
+        importlib.metadata, 'distributions', lambda: iter(found)
+    )
+    once = run_python._environment()
+    monkeypatch.setattr(
+        importlib.metadata, 'distributions', lambda: iter(found + found[:5])
+    )
+    assert run_python._environment() == once
+    monkeypatch.setattr(
+        importlib.metadata, 'distributions', lambda: iter(found + found)
+    )
+    assert run_python._environment() == once
 
 
 # --- seeded faults ---------------------------------------------------------------
@@ -479,6 +580,35 @@ def _unsorted(lines: list[str]) -> None:
     lines[-1], lines[-2] = lines[-2], lines[-1]
 
 
+def _redigest(lines: list[str]) -> None:
+    r"""Sort the distribution lines and give the header their digest, so a
+    fault in them is caught by its own rule, not by the digest's."""
+    at = next(
+        n for n, line in enumerate(lines) if line.startswith('environment')
+    )
+    lines[at + 2 :] = sorted(lines[at + 2 :])
+    found = hashlib.sha256('\n'.join(lines[at + 2 :]).encode()).hexdigest()
+    lines[at] = f'environment: {found}'
+
+
+def _listed_twice(lines: list[str]) -> None:
+    lines.append(next(line for line in lines if line.startswith('pandas==')))
+    _redigest(lines)
+
+
+def _two_versions(lines: list[str]) -> None:
+    lines.append('pandas==3.0.7')
+    _redigest(lines)
+
+
+def _two_spellings(lines: list[str]) -> None:
+    line = next(
+        line for line in lines if line.startswith('typing_extensions==')
+    )
+    lines.append(line.replace('typing_extensions', 'typing-extensions'))
+    _redigest(lines)
+
+
 FILE_FAULTS: dict[str, tuple[Callable[[Path, Path], None], str]] = {
     'no environment file': (
         lambda _, environment: environment.unlink(),
@@ -515,6 +645,19 @@ FILE_FAULTS: dict[str, tuple[Callable[[Path, Path], None], str]] = {
     'the distributions unsorted': (
         _environment_lines(_unsorted),
         'not sorted',
+    ),
+    # T1.36 U2: each distribution once, the digest recomputed.
+    'a distribution listed twice': (
+        _environment_lines(_listed_twice),
+        'pandas listed 2 times',
+    ),
+    'a distribution at two versions': (
+        _environment_lines(_two_versions),
+        'pandas listed 2 times',
+    ),
+    'a distribution under two spellings': (
+        _environment_lines(_two_spellings),
+        'typing-extensions listed 2 times',
     ),
     'no reference file': (
         lambda reference, _: next(reference.iterdir()).unlink(),
