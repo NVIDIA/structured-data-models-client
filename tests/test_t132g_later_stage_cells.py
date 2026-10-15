@@ -101,6 +101,7 @@ def compared(
     tmp: Path,
     seed: dict[str, Any] | None,
     change: Change | None = None,
+    register: Path | None = None,
 ) -> Any:
     landed = land(r, 'T1.32f', later.with_fixtures)
     if seed is not None:
@@ -131,6 +132,7 @@ def compared(
         files['python-ref'],
         [files[who] for who in RUNNERS],
         expect_file=expect,
+        **({} if register is None else {'register_file': register}),
     )
 
 
@@ -259,4 +261,173 @@ def test_without_an_approved_move_the_pair_is_held_in_full(
     repo: Path, tmp_path: Path, seed: str
 ) -> None:
     found = pair(compared(repo, tmp_path, NOT_APPROVED[seed]), HUGEINT)
+    assert held_past(found), found
+
+
+# --- the floor cell: python-old's runtime deprecations before its stop ------------
+#
+# T1.32g part 2f's fix after CI run 38668036301, cell floor-pandas2.2 (pandas
+# 2.2.0, pyarrow 14.0.1): on nested.fixed-array python-old crashes at
+# from_source as the reference does, but first records two runtime
+# DeprecationWarnings from pandas ("Passing a BlockManager to DataFrame is
+# deprecated"); python-core, past the stop (P1B-9), records the SDMWarning
+# COLUMNS_LEFT_OUT at from_source and the UserWarning MISSING_INDICES at
+# materialize. Under HOST-5 (approved in the register) python-old's warnings
+# with its runtime DeprecationWarnings left out are the first of python-core's,
+# in order, under HOST-5's matching rules; python-core's past those are past
+# the stop and not compared.
+
+FLOOR = 'floor-pandas2.2'
+RUNTIME = ('DeprecationWarning', 'pandas')
+ARROW = ('DeprecationWarning', 'pyarrow')
+
+
+def host(*warnings: tuple[str, str | None]) -> dict[str, Any]:
+    return {
+        'warnings': [name for name, _ in warnings],
+        'origins': [
+            {'class': name, 'module': module} for name, module in warnings
+        ],
+    }
+
+
+#: python-old's host section on nested.fixed-array in the floor cell, as run.
+AS_RUN = host(RUNTIME, RUNTIME)
+
+
+def _floor(old: dict[str, Any], case: str = FIXED) -> Change:
+    r"""Both Python runners' lines in the floor cell, python-old's host
+    section on ``case`` ``old``."""
+
+    def change(found: dict[str, dict[str, Line]]) -> None:
+        for who in ('python-core', 'python-old'):
+            for line in found[who].values():
+                line['identity']['cell'] = FLOOR
+        found['python-old'][case]['host'] = old
+
+    return change
+
+
+def test_the_floor_fixture_is_what_ci_recorded() -> None:
+    found = lines()
+    core = found['python-core'][FIXED]
+    assert core['host'] == host(
+        ('SDMWarning', '__main__'), ('UserWarning', '__main__')
+    )
+    _floor(AS_RUN)(found)
+    old, ref = found['python-old'][FIXED], found['python-ref'][FIXED]
+    assert old['outcome'] == ref['outcome']
+    assert old['outcome']['stage'] == 'from_source'
+    assert {
+        found[w][FIXED]['identity']['cell']
+        for w in ('python-core', 'python-old')
+    } == {FLOOR}
+
+
+#: python-old's host section on nested.fixed-array in the floor cell whose
+#: warnings, the runtime's left out, are the first of python-core's.
+FLOOR_PASSES = {
+    'as run: two pandas deprecations': AS_RUN,
+    'a pyarrow deprecation too': host(RUNTIME, ARROW, RUNTIME),
+    'around a kept warning': host(
+        RUNTIME, ('SDMWarning', 'sdm_client'), RUNTIME
+    ),
+    'both kept, the runtime s between': host(
+        ('SDMWarning', 'sdm_client'), RUNTIME, ('UserWarning', 'sdm_client')
+    ),
+}
+
+
+@pytest.mark.parametrize('seed', sorted(FLOOR_PASSES))
+def test_python_old_s_runtime_deprecations_before_its_stop_are_left_out(
+    repo: Path, tmp_path: Path, seed: str, request: pytest.FixtureRequest
+) -> None:
+    report = compared(repo, tmp_path, APPROVED, _floor(FLOOR_PASSES[seed]))
+
+    def clean() -> None:
+        assert pair(report, FIXED) == [], pair(report, FIXED)
+        assert of(report, FIXED) == [], of(report, FIXED)
+
+    G.held('exits', f'py:{request.node.name}', clean)
+
+
+#: python-old's host section on nested.fixed-array in the floor cell that
+#: HOST-5 does not reconcile with python-core's first warnings.
+FLOOR_FAILS = {
+    # A non-runtime warning python-old shows that python-core does not
+    # show first.
+    'a kept warning python-core shows otherwise': host(
+        ('UserWarning', 'sdm_relational_engine'), RUNTIME
+    ),
+    'kept warnings in another order': host(
+        ('UserWarning', 'sdm_client'), RUNTIME, ('SDMWarning', 'sdm_client')
+    ),
+    'a kept warning python-core does not show': host(
+        RUNTIME, ('SDMWarning', 'sdm_client'), ('FutureWarning', 'sdm_client')
+    ),
+    # Not the runtime's: a deprecation from another module is kept.
+    'deprecations of the client s own': host(
+        ('DeprecationWarning', 'sdm_client'),
+        ('DeprecationWarning', 'sdm_client'),
+    ),
+    # Origins required (a line with none recorded is refused before this,
+    # as a malformed observation).
+    'origins short': {
+        'warnings': ['DeprecationWarning', 'DeprecationWarning'],
+        'origins': [{'class': 'DeprecationWarning', 'module': 'pandas'}],
+    },
+    'an origin retyped': {
+        'warnings': ['DeprecationWarning', 'DeprecationWarning'],
+        'origins': [
+            {'class': 'DeprecationWarning', 'module': 'pandas'},
+            {'class': 'UserWarning', 'module': 'pandas'},
+        ],
+    },
+}
+
+
+@pytest.mark.parametrize('seed', sorted(FLOOR_FAILS))
+def test_python_old_s_warnings_hosts_five_does_not_reconcile_still_fail(
+    repo: Path, tmp_path: Path, seed: str
+) -> None:
+    found = pair(
+        compared(repo, tmp_path, APPROVED, _floor(FLOOR_FAILS[seed])), FIXED
+    )
+    assert has(found, 'warnings', PAIR), found
+
+
+def _unapproved(tmp: Path) -> Path:
+    r"""The register with HOST-5 proposed, not approved by the owner."""
+    import yaml
+
+    loaded = yaml.safe_load(compare.REGISTER.read_text(encoding='utf-8'))
+    for each in loaded['entries']:
+        if each.get('id') == compare.RUNTIME_DEPRECATIONS:
+            each.update(status='proposed', approved_by=None)
+    path = tmp / 'register.yaml'
+    path.write_text(yaml.safe_dump(loaded), encoding='utf-8')
+    assert not compare.owner_approved(compare.RUNTIME_DEPRECATIONS, path)
+    return path
+
+
+def test_the_floor_cell_s_runtime_deprecations_need_host_5_approved(
+    repo: Path, tmp_path: Path
+) -> None:
+    assert compare.owner_approved(compare.RUNTIME_DEPRECATIONS)
+    found = pair(
+        compared(
+            repo, tmp_path, APPROVED, _floor(AS_RUN), _unapproved(tmp_path)
+        ),
+        FIXED,
+    )
+    assert has(found, 'warnings', PAIR), found
+
+
+def test_without_a_stop_python_core_s_warnings_are_held_in_full(
+    repo: Path, tmp_path: Path
+) -> None:
+    # No approved move: python-core's warnings must be exactly python-old's
+    # with the runtime's left out, which they are not.
+    found = pair(compared(repo, tmp_path, None, _floor(AS_RUN)), FIXED)
+    assert has(found, 'warnings', PAIR), found
     assert held_past(found), found
