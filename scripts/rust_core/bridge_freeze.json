@@ -10,7 +10,7 @@
         "fingerprint": "11fa0297f63b6f8a068b46d118d50505516bf6a21e7115d3a212b30ce99bf660"
       },
       "from_source": {
-        "fingerprint": "aa9ee930defd632e90145b3cd92f4a6ec01aa14d027f72ef52f0f7b6f1c3c91b"
+        "fingerprint": "89e120a24cabe1953861c382d04f8ba1c1d5c01ef06b48d590de254fb3acbe61"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
