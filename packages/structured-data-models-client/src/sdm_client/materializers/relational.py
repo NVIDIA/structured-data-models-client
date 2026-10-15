@@ -155,6 +155,35 @@ def _the_largest_batch(task: TaskTable, per_call: int) -> int:
     return min(per_call, int(asked))
 
 
+def refuse_more_entities_than_fit_in_memory(asked: int, held: int = 1) -> None:
+    r"""Refuse a population too large to hold, from the count alone.
+
+    Checked before the engine is reached, because reaching it means building
+    the graph and computing a label for every index, which for a population
+    far past this ceiling is minutes of work and the memory that goes with it
+    before anything says no.
+
+    ``held`` is how many times over the population is gathered: one for an
+    ordinary question, and one per part for a question asked in parts, each
+    of which gathers the whole population with a context of its own.
+    """
+    total = asked * held
+    if total <= MOST_ENTITIES:
+        return
+    gathered = (
+        f'{asked:,} entities'
+        if held == 1
+        else f'{asked:,} entities gathered {held:,} times over, {total:,} in all,'
+    )
+    raise StructuredDataError(
+        f'{gathered} is past the {MOST_ENTITIES:,} one materialize() will '
+        f'hold at once, since every batch is built, with its own context, '
+        f'before any is sent; ask about fewer entities at a time',
+        code='UNSUPPORTED_REQUEST',
+        details={'entities': asked, 'gathered_times': held, 'total': total},
+    )
+
+
 def _refuse_more_entities_than_fit_in_memory(
     task: TaskTable, per_call: int
 ) -> None:
@@ -307,6 +336,7 @@ class RelationalMaterializer:
         the smaller ``rows_per_call`` the caller asked for.
         """
         run_mode = self._run_mode_for(num_context_samples)
+        refuse_more_entities_than_fit_in_memory(len(indices))
         self._check_shape(options, RELATIONAL_LIMITS)
         with self._engine_errors():
             model = self._get_model()
@@ -898,6 +928,13 @@ def _holds_text(values: pd.Series) -> bool:
 #: How the engine says a gathered batch is too large for the endpoint's body.
 _A_BATCH_TOO_LARGE_TO_SEND = ('size exceeds the 30mb limit',)
 
+#: How the engine offers a smaller batch, which it does only where the batch
+#: that failed has more than one row in it. Read rather than worked out again
+#: here, because which batch failed is the engine's to know: a request may be
+#: gathered as several of different sizes, and the last of them is smaller
+#: than the size the rest were built to.
+_THE_ENGINE_S_ENTITIES = 'the number of entities predicted at once'
+
 #: Where the engine's own remedy for that begins. It ends by offering the run
 #: mode, which this client derives rather than takes, so a caller following it
 #: lands on a refusal. Replaced rather than appended to, because advice that
@@ -947,10 +984,15 @@ def _said_in_this_client_s_terms(said: str, per_call: int | None) -> str:
     The size named is the one this question holds to, which is not always the
     10,000 of an ordinary task: a temporal link prediction holds 200, and
     advice to come down to 500 would be followed into the same failure.
+
+    Whether a smaller call is worth offering at all is the engine's answer,
+    not one worked out from the size asked for. Only the engine knows which
+    batch failed, and a request gathered as `2, 2, 1` can fail on the one
+    that no batch size can divide.
     """
     at = said.find(_THE_ENGINE_S_REMEDY)
     measured = said if at < 0 else said[:at].rstrip()
-    if per_call is not None and per_call <= 1:
+    if _THE_ENGINE_S_ENTITIES not in said:
         return f'{measured} {_NO_CALL_IS_SMALLER}'
     holds = f'{per_call:,}' if per_call else 'number'
     return f'{measured} ' + _ASK_IN_SMALLER_CALLS.format(per_call=holds)

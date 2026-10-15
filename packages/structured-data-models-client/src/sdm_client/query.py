@@ -41,6 +41,7 @@ from sdm_client.decompose import (
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
 from sdm_client.materializers.relational import (
+    refuse_more_entities_than_fit_in_memory,
     rows_one_call_scores,
     rows_per_call_asked_for,
 )
@@ -405,11 +406,11 @@ class PredictiveQuery:
         import copy
 
         how = {name: value for name, value in how.items() if value is not None}
+        asked = 0 if how.get('indices') is None else len(how['indices'])
         refuse_a_part_that_would_take_several_calls(
-            rewritten,
-            0 if how.get('indices') is None else len(how['indices']),
-            rows_one_call_scores(rows_per_call_asked_for(how)),
+            rewritten, asked, rows_one_call_scores(rows_per_call_asked_for(how))
         )
+        refuse_more_entities_than_fit_in_memory(asked, len(rewritten.parts))
         # How many candidates to keep belongs to the whole ranking. Each part
         # is one yes-or-no question, and a task that ranks nothing is refused
         # by the endpoint for carrying an option it cannot act on.

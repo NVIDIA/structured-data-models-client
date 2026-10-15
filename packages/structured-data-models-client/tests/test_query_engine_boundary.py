@@ -330,29 +330,30 @@ def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
 
 
 @pytest.mark.parametrize(
-    ('rows_per_call', 'says'),
-    [
-        (2, 'rows_per_call=N) below the 2'),
-        (1, 'no smaller one to ask for'),
-    ],
-    ids=['a_smaller_call', 'no_smaller_call'],
+    ('splittable', 'says'),
+    [(True, 'rows_per_call=N) below the 2'), (False, 'no smaller one')],
+    ids=['a_batch_with_rows_to_lose', 'a_batch_of_one'],
 )
 def test_a_size_refusal_is_answered_in_options_this_client_takes(
-    monkeypatch, rows_per_call, says
+    monkeypatch, splittable, says
 ):
     """The engine offers the run mode, which this client derives rather than
-    takes, so a caller following its advice lands on another refusal. The size
-    it offers instead is the one the question in hand holds to, and where a
-    call already scores one row it offers none.
+    takes, so a caller following its advice lands on another refusal.
 
-    Raised from where the engine raises it, through the gathering the caller
-    asked for, because the rewriting is only reached if the guard around that
-    gathering is told what a call holds.
+    Whether a smaller call is worth offering is read off the engine's own
+    message, which omits its entity remedy exactly when the batch that failed
+    holds one row. Only the engine knows which batch that was: a request
+    gathered as `2, 2, 1` can fail on the one nothing can divide.
     """
-    from sdm_relational_engine.rfm.rfm import _SIZE_LIMIT_MSG
+    from sdm_relational_engine.rfm.rfm import _FEWER_ENTITIES, _SIZE_LIMIT_MSG
 
     def too_large(*args, **kwargs):
-        raise ValueError(_SIZE_LIMIT_MSG.format(stats='9 nodes.', entities=''))
+        raise ValueError(
+            _SIZE_LIMIT_MSG.format(
+                stats='9 nodes.',
+                entities=_FEWER_ENTITIES if splittable else '',
+            )
+        )
 
     built = query()
     monkeypatch.setattr(
@@ -366,7 +367,7 @@ def test_a_size_refusal_is_answered_in_options_this_client_takes(
             built.materialize(
                 indices=[5, 6, 7, 8, 9],
                 num_context_samples=20,
-                rows_per_call=rows_per_call,
+                rows_per_call=2,
             )
     said = str(refused.value)
     assert '9 nodes' in said
@@ -375,21 +376,38 @@ def test_a_size_refusal_is_answered_in_options_this_client_takes(
     assert refused.value.details['batch_too_large_to_send']
 
 
-def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
+def test_a_population_past_the_ceiling_is_refused_before_the_engine_is_reached(
     monkeypatch,
 ):
-    """Every batch is built, with its own context, before any is sent, so
-    nothing else bounds what one `materialize()` holds.
+    """Reaching the engine means building the graph and labelling every index,
+    which for a population far past the ceiling is minutes of work and the
+    memory with it before anything says no."""
+    from sdm_client.materializers import relational as materializer
 
-    The gathering is made to fail if it is reached, because a guard that runs
-    after it would refuse the same request with the same message, having
-    already built everything it was there to prevent being built.
+    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
+    monkeypatch.setattr(
+        materializer.RelationalMaterializer,
+        '_get_model',
+        lambda self: pytest.fail('the engine was reached'),
+    )
+    with pytest.raises(StructuredDataError) as refused:
+        query().materialize(indices=list(range(5)), num_context_samples=20)
+    assert refused.value.code == 'UNSUPPORTED_REQUEST'
+    assert refused.value.details['entities'] == 5
+
+
+def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
+    monkeypatch,
+):
+    """The calls a population comes to is known only once the engine has said
+    how many entities it really holds, so this one is checked there, and still
+    before the batches themselves are built.
     """
     from sdm_client.materializers import relational as materializer
     from sdm_client.models import RELATIONAL_LIMITS
 
     monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
+    monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
     monkeypatch.setattr(
         type(query()._relational_materializer._get_model()),
         'materialize_task',
@@ -400,7 +418,6 @@ def test_more_entities_than_fit_in_memory_are_refused_before_they_are_built(
         with pytest.raises(StructuredDataError) as refused:
             query().materialize(indices=[5, 6, 7, 8, 9], num_context_samples=20)
     assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['entities'] == 5
     assert refused.value.details['calls'] == 3
 
 
