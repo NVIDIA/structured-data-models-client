@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from predictive_query.schema.typing import Dtype
+from sdm_relational_engine.rfm.backend.snow.binding import paramstyle_attribute
 from sdm_relational_engine.rfm.base import SourceColumn, SourceForeignKey
 from sdm_relational_engine.rfm.graph import _unsafe_expr_reason
 
@@ -242,7 +243,7 @@ class _Connection(SnowflakeConnection):
     def __init__(self, scalar: Any = None) -> None:
         self.calls: list[str] = []
         self.scalar = scalar
-        self._paramstyle = 'pyformat'
+        setattr(self, paramstyle_attribute(self), 'pyformat')
 
     def cursor(self) -> _Cursor:  # type: ignore[override]
         return _Cursor(self)

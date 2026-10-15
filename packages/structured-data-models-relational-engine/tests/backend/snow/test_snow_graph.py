@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 from sdm_relational_engine.exceptions import GraphConstructionError
 from sdm_relational_engine.rfm import Graph
+from sdm_relational_engine.rfm.backend.snow.binding import paramstyle_attribute
 from sdm_relational_engine.rfm.base import KeyCount, count_keys
 
 try:
@@ -244,7 +245,7 @@ class _FakeConnection(Connection):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.closed = False
-        self._paramstyle = 'pyformat'
+        setattr(self, paramstyle_attribute(self), 'pyformat')
         self.statements: list[str] = []
         self.hybrid: set[str] = set()
         self.listing = ('created_on', 'name', 'is_hybrid')

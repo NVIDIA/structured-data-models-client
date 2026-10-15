@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from typing import TYPE_CHECKING, Any, TypeAlias
 
@@ -57,8 +58,24 @@ def _declared_connect_args() -> frozenset[str]:
     with ``SnowflakeConnection.__init__`` restores them, and folding in
     ``_AUTH_ARGS`` keeps the allow-list from ever contradicting the
     borrow logic that runs after it.
+
+    Version 5 of the driver moved its parameters to the public
+    ``ConnectionConfig`` dataclass, one field per parameter, and left
+    ``DEFAULT_CONFIGURATION`` behind as an empty stub. Its fields are read
+    where the class exists, so the same names are accepted on either side of
+    that change. A leading underscore marks the class's own bookkeeping
+    rather than a parameter.
     """
-    declared = set(snowflake_connector.connection.DEFAULT_CONFIGURATION)
+    declared = set(
+        getattr(snowflake_connector.connection, 'DEFAULT_CONFIGURATION', ())
+    )
+    config = getattr(snowflake_connector, 'ConnectionConfig', None)
+    if dataclasses.is_dataclass(config):
+        declared.update(
+            field.name
+            for field in dataclasses.fields(config)
+            if not field.name.startswith('_')
+        )
     signature = inspect.signature(Connection.__init__)
     declared.update(
         name
