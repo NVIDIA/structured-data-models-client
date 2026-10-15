@@ -569,8 +569,10 @@ def _shown_timestamp(value: codec.Temporal) -> str:
     ``Timestamp`` of the column's unit where that unit is not ``ns``. pandas'
     own ``tz_convert`` labels such a value with the zone's offset at that
     instant but moves it by another, and refuses some near year 1
-    (T1.36 fix 11). One ``as_py`` cannot hold, past the years 1 to 9999, and
-    every other value, as pandas holds it."""
+    (T1.36 fix 11). One ``as_py`` cannot hold, past the years 1 to 9999
+    in UTC or in the zone, which the reference cannot show at all (its
+    from_source fails there), at its UTC instant, so no warning fails on it
+    (T1.36 fix 13); every other value as pandas holds it."""
     if value.tag != 'date32' and value.zone is not None:
         import pandas as pd
         import pyarrow as pa
@@ -580,11 +582,10 @@ def _shown_timestamp(value: codec.Temporal) -> str:
             read = pa.scalar(value.value, pa.timestamp(unit, tz=value.zone))
             held = read.as_py()
         except OverflowError:
-            pass
-        else:
-            if unit != 'ns':
-                held = pd.Timestamp(held).as_unit(unit)
-            return str(held)
+            return str(pd.Timestamp(value.value, unit=unit, tz='UTC'))
+        if unit != 'ns':
+            held = pd.Timestamp(held).as_unit(unit)
+        return str(held)
     return str(_timestamp(value))
 
 

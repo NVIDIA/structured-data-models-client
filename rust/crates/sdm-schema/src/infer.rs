@@ -993,13 +993,14 @@ pub trait WallClocks {
 /// The reference's time column choice reads the first value the preview
 /// holds of each timestamp it chooses among, but a stamp of a load or a
 /// date of birth (`_refused_for_values`, `present.iloc[0]`), as a Python
-/// `datetime`: the UTC instant, then, for a value with a zone, its wall
-/// clock in that zone at that instant (pyarrow's `as_py`, `astimezone`).
-/// Where that wall clock lies outside the years 1 to 9999 its
-/// Schema.from_source fails unnamed (an `OverflowError`). The core refuses
-/// the table there by name, `VALUE_OUT_OF_RANGE` naming the table and the
-/// column, the first such in table order (register P1B-81, T1.36 fixes 3
-/// and 11). `clocks` gives a zone's offset, as the run resolves zones; a
+/// `datetime`: the UTC instant first (`datetime(1970, 1, 1)` and the
+/// microseconds), then, for a value with a zone, its wall clock in that
+/// zone at that instant (pyarrow's `as_py`, `astimezone`). Where either
+/// reading, the UTC instant or the wall clock, lies outside the years 1 to
+/// 9999 its Schema.from_source fails unnamed (an `OverflowError`). The core
+/// refuses the table there by name, `VALUE_OUT_OF_RANGE` naming the table
+/// and the column, the first such in table order (register P1B-81, T1.36
+/// fixes 3, 11 and 13). `clocks` gives a zone's offset, as the run resolves zones; a
 /// zone they do not hold is read at its UTC instant. A later row's value,
 /// and a nanosecond's (which never leaves those years in any zone), are
 /// read as before. The describe run calls this where the reference's
@@ -1028,7 +1029,8 @@ pub fn first_values_past_the_years(
             .and_then(|zone| clocks.offset_seconds(zone, *value))
             .unwrap_or(0);
         let wall = i128::from(*value) + i128::from(offset) * 1_000_000;
-        if !(i128::from(DATETIME_MIN_US)..=i128::from(DATETIME_MAX_US)).contains(&wall) {
+        let years = i128::from(DATETIME_MIN_US)..=i128::from(DATETIME_MAX_US);
+        if !years.contains(&i128::from(*value)) || !years.contains(&wall) {
             return Err(CoreError::new(
                 ErrorKind::Unsupported,
                 ErrorCode::ValueOutOfRange,

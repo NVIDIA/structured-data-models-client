@@ -5533,11 +5533,14 @@ entries:
     first values of its preview, the same rows in the same order, and
     refuses the table at Schema.from_source, StructuredDataError, code
     VALUE_OUT_OF_RANGE, naming the table and the column (the first such in
-    table order). A value with a zone is read as the reference reads it, at
-    its wall clock in that zone (the Arrow zone DuckDB hands over, its
-    database's global TimeZone), the zone's offset at that instant from the
-    zones the run resolves (local mean time before the zone's first
-    transition included). A value past those years in a later row, a
+    table order). A value is read as the reference reads it, which builds
+    its UTC instant first and then, for a value with a zone, its wall clock
+    in that zone (the Arrow zone DuckDB hands over, its database's global
+    TimeZone; the zone's offset at that instant from the zones the run
+    resolves, local mean time before the zone's first transition included):
+    the table is refused where either reading, the UTC instant or the wall
+    clock, lies outside 0001-01-01T00:00 to 9999-12-31T23:59:59.999999. A
+    value past those years in a later row, a
     nanosecond's, and one in a column named as a load stamp or a date of
     birth are described as the reference describes them. The default route
     is unchanged.
@@ -5558,6 +5561,15 @@ entries:
   - 'contract/t136-host2-zone-vectors.json#zone.first.kiritimati.year-9999 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   - 'contract/t136-host2-zone-vectors.json#zone.first.kiritimati.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   - 'contract/t136-host2-zone-vectors.json#zone.candidate.new-york.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.whole.new-york.year-1 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.verbatim.new-york.year-10000 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.new-york.year-10000 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.whole.new-york.year-10000 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.verbatim.tokyo.utc-year-0 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.tokyo.utc-year-0 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.whole.tokyo.utc-year-0 refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.pago-pago.utc-year-0.last-us refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
+  - 'contract/t136-host2-zone-vectors.json#zone.first.pago-pago.utc-year-10000.local-last-second refusal UNNAMED -> refusal VALUE_OUT_OF_RANGE'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
@@ -5585,7 +5597,7 @@ entries:
     (final review round 2, Codex's P2: the check read a zoned value's UTC
     instant only) reads the wall clock in the value's zone, held by the test
     author's contract/t136-host2-zone-vectors.json and
-    contract/tests/test_t136_host2_zones.py (39ce95c5): the 9 zoned sources
+    contract/tests/test_t136_host2_zones.py (1b98a500 and b3b36349): the 9 zoned sources
     the reference fails unnamed refused by name at from_source, its 14
     controls (a zone's last microsecond inside the years, Pago Pago's local
     mean time ahead of UTC in year 1, a load stamp) described as the
@@ -5595,4 +5607,13 @@ entries:
     reference shows it, where the host crashed unnamed. A third
     differential, over 54 sources of such values in ten zones, first in
     their column or filling it: 6 succeed on both, 43 are DT-14's and 5 are
-    (b). Never self-approved.
+    (b). T1.36 fix 13 (Codex's re-check of fix 11: the wall clock alone was
+    checked, where the reference fails on its UTC instant too) holds both
+    readings to the years, by the test author's 8e33ab3c: New York's
+    10000-01-01T00:00Z (wall clock 9999-12-31 19:00), Tokyo's 0001-01-01
+    00:00+09 (UTC in the year 0) and Pago Pago's two, first in their column
+    or filling it, refused by name at from_source; the controls with both
+    readings inside the years described as the reference does. A zoned
+    value past the years is shown in a warning at its UTC instant rather
+    than failing the host's formatting, though the refusal comes first
+    wherever the test author measured. Never self-approved.
