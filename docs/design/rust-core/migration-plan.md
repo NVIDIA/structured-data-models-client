@@ -382,6 +382,7 @@ Phase 1's minor (P3) review findings that T1.36 did not fix, deferred by the own
 | Case corpus and loader | C6 | The large-buffer `SET` form must require `=` or `TO` (`run_python.py` and `sdm-testkit`'s case loader) |
 | | C18 | The zone static check should also cover TIMESTAMPTZ cases with no zone set, and zone settings in `contract/bases.yaml` |
 | | M7 | A cross-host case for the "key on the time column" rule (only a unit test holds it) |
+| | C16 (rest) | `contract/type-set-vectors.json`'s witnesses `timestamp.us.utc` and `timestamp.us.named-zone`, and its `duckdb_arrow_by_setting` zoned row, set the zone per connection, so a cursor takes the recorder's zone: re-record with `SET GLOBAL TimeZone`, then take the two from `tests/test_contract_cases.py`'s pending list (T1.36 fixed the empty-null and nested vectors) |
 | CI | U14 | Rerun a failed job once on a registry's `toomanyrequests` (likely closed by the self-hosted CI images) |
 | Core and data hygiene | U1 | Day-first warnings from earlier literals are dropped when the query is then refused (`sdm-core` `pql.rs`; the code half, as-built records the behavior) |
 | | U12 | Duplicate `integer()` helpers (`sdm-core` `compose.rs`, `sdm-data` `duckdb.rs`) |

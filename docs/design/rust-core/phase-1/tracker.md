@@ -312,7 +312,15 @@ Folded into T1.33 part 1; see [T1.33](#t133).
 
 ### T1.36
 
-None yet.
+**The cleanup package** (the P3 backlog's fix-now set, the owner's decision of 2026-10-14, items 37 and 38; the owner's approvals and confirmations). On `t136-cleanup`, from T1.33 part 3's tip (351b4676), each code fix on a separate test author's `T1.36 tests:` commit:
+- C3: `run_python.py`'s `_arrow_cells` read a struct's children through `flatten()`, which aborts the process for a union child under a null struct row; it reads them with `field(j)` and counts unencodable values only in the rows the struct shows (fix round 1, both reviewers). Before T1.35's one-shot held-out run.
+- U2: the reference environment's digest counts each distribution once; `reference-env.txt` regenerated (109 distributions) and `python-ref` recorded again (76 cases, every semantic projection unchanged, design.md's T1.36 re-recording).
+- C13: `arrow.bool8` on storage other than `int8` refused by name (E142); DuckDB's lossless nested booleans registered, P1B-76, proposed, the reviewer's.
+- C16: the empty-null and nested vectors' recorders set their zone with `SET GLOBAL` (the recorded answer moved with the recorder's zone); the type set's two witnesses are a Phase 2 row.
+- C17: seeds for python-old differing from the reference's `INTERNAL_ERROR` by code and by result (the ratchet already held them).
+- The docs, comments and register wording of tier 2; the two Databricks notebooks' NumPy pin for DBR 14.3 (item 38(b)).
+- Register: DT-4, DT-10 and P1B-44 to P1B-46 approved by the owner (E140); P1B-75, the core's words for two materialize warnings, approved by the owner (item 38(a), E141). The 58 "owner to confirm" rows confirmed (E143).
+- Deferred: every other P3, as named Phase 2 rows in migration-plan.md section 8.
 
 ## Size-trend reviews
 
