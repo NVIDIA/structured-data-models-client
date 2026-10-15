@@ -27,6 +27,21 @@ write: a dense union in a struct with a null row, and lists of structs
 holding a dense or a sparse union, so a read that drops a struct's offset
 gives other cells.
 
+A value under a null struct row is hidden: no cell shows it, so it names
+nothing unencodable either, as the reading before the fix (``flatten()``
+nulled it) and ``sdm-testkit``'s ``values`` (row by row) agree. Reading a
+struct's children as stored (``StructArray.field``) reaches those values;
+the second set of vectors, added by the test author after review of the
+first fix, holds that: built (DuckDB nulls a null struct's children
+itself), each a null struct row hiding a value the form does not hold
+(a ``date64``) as a child, as the member a union chooses at that row
+(dense and sparse), in a list's struct at an offset, in a map's value and
+in a struct in a struct; each expects the cells it gave before and
+``unencodable`` empty. A control holds a visible ``date64`` beside a
+hidden one, which still names ``arrow:date64[ms]``. Every vector's
+``unencodable`` is exactly the names its visible cells show as ``["?",
+name]``.
+
 Each vector is read through ``run_python.arrow_values`` in a child process
 (this file run as a script, given the vector's name), so the abort is this
 test failing, named, and not the pytest session dying. Nothing else of the
@@ -39,6 +54,7 @@ file's vectors are held to the Python runner only.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import importlib.util
 import json
@@ -147,6 +163,94 @@ def _sparse_lists() -> Any:
     return _lists(_structs(union, [True, False, False, True, False]), [0, 2, 5])
 
 
+# --- a value the form does not hold, hidden under a null struct row ---------
+
+#: The day a hidden (or visible) date64 holds.
+DAY = datetime.date(2020, 1, 1)
+
+
+def _dates(days: list[Any]) -> Any:
+    return pa.array(days, pa.date64())
+
+
+def _dated(days: list[Any], nulls: list[bool]) -> Any:
+    r"""A struct of ``d`` (a date64) and ``n`` (its row's index)."""
+    return pa.StructArray.from_arrays(
+        [_dates(days), pa.array(range(len(nulls)), pa.int32())],
+        names=['d', 'n'],
+        mask=pa.array(nulls),
+    )
+
+
+def _hidden_date() -> Any:
+    r"""Row 0 visible, its date null; row 1 null, hiding a date."""
+    return pa.table({'a': _dated([None, DAY], [False, True])})
+
+
+def _hidden_dense_member() -> Any:
+    r"""Row 1, null, hides the union's date64 member, chosen there."""
+    union = pa.UnionArray.from_dense(
+        pa.array([3, 7], pa.int8()),
+        pa.array([0, 0], pa.int32()),
+        [pa.array([5], pa.int32()), _dates([DAY])],
+        ['i', 'd'],
+        [3, 7],
+    )
+    return pa.table({'a': _structs(union, [False, True])})
+
+
+def _hidden_sparse_member() -> Any:
+    union = pa.UnionArray.from_sparse(
+        pa.array([3, 7], pa.int8()),
+        [pa.array([5, None], pa.int32()), _dates([None, DAY])],
+        ['i', 'd'],
+        [3, 7],
+    )
+    return pa.table({'a': _structs(union, [False, True])})
+
+
+def _hidden_date_lists() -> Any:
+    r"""The second list's structs from offset 2; its null struct (3) hides
+    a date. Read from offset 0 its structs would be 0 to 2, all valid, and
+    their indices other."""
+    return _lists(
+        _dated(
+            [None, None, None, DAY, None], [False, False, False, True, False]
+        ),
+        [0, 2, 5],
+    )
+
+
+def _hidden_date_map() -> Any:
+    r"""A map whose ``j`` value is a null struct hiding a date."""
+    return pa.table(
+        {
+            'm': pa.MapArray.from_arrays(
+                pa.array([0, 2], pa.int32()),
+                pa.array(['k', 'j']),
+                _dated([None, DAY], [False, True]),
+            )
+        }
+    )
+
+
+def _hidden_date_inner() -> Any:
+    r"""A struct in a struct; the outer null in row 1, the inner valid
+    there, holding a date."""
+    inner = pa.StructArray.from_arrays([_dates([None, DAY])], names=['d'])
+    outer = pa.StructArray.from_arrays(
+        [inner, pa.array([0, 1], pa.int32())],
+        names=['o', 'n'],
+        mask=pa.array([False, True]),
+    )
+    return pa.table({'a': outer})
+
+
+def _visible_date() -> Any:
+    r"""The control: row 0 visible with a date, row 1 null hiding one."""
+    return pa.table({'a': _dated([DAY, DAY], [False, True])})
+
+
 BUILT: dict[str, Callable[[], Any]] = {
     'a built struct with a null row holding a dense union': _dense_struct,
     'built lists of structs holding a dense union, null structs among them': (
@@ -155,6 +259,19 @@ BUILT: dict[str, Callable[[], Any]] = {
     'built lists of structs holding a sparse union, null structs among them': (
         _sparse_lists
     ),
+    'a null struct row hiding a date64': _hidden_date,
+    "a null struct row hiding a dense union's chosen date64 member": (
+        _hidden_dense_member
+    ),
+    "a null struct row hiding a sparse union's chosen date64 member": (
+        _hidden_sparse_member
+    ),
+    'lists of structs at an offset, a null struct hiding a date64': (
+        _hidden_date_lists
+    ),
+    "a map's value a null struct hiding a date64": _hidden_date_map,
+    'a struct in a null struct hiding a date64': _hidden_date_inner,
+    'a visible date64 beside a null struct row hiding one': _visible_date,
 }
 
 
@@ -191,12 +308,12 @@ def test_the_vector_file_is_what_it_says() -> None:
             assert vector['build'] == vector['name']
             assert vector['build'] in BUILT, vector['name']
             assert vector['values']['types'] is None, vector['name']
-        # Every vector holds a struct holding a union.
-        assert any(
-            'struct<' in f['type'] and 'union<' in f['type']
-            for f in vector['arrow']
+        # Every vector holds a struct, and lists unencodable exactly the
+        # names its visible cells show.
+        assert any('struct<' in f['type'] for f in vector['arrow'])
+        assert vector['values']['unencodable'] == sorted(
+            {name for row in vector['rows'] for name in _shown(row)}
         ), vector['name']
-        assert vector['values']['unencodable'] == [], vector['name']
         assert vector['values']['columns'] == [
             f['name'] for f in vector['arrow']
         ]
@@ -212,6 +329,23 @@ def test_the_vector_file_is_what_it_says() -> None:
     assert any('dense_union<' in t for t in arrow)
     assert any('sparse_union<' in t for t in arrow)
     assert {'sql', 'build'} <= {k for v in vectors for k in v}
+    # Hidden date64s, as a child and as dense and sparse chosen members,
+    # and the control that names a visible one.
+    assert sum('date64' in t for t in arrow) >= 5
+    assert any('dense_union<i: int32=3, d: date64[ms]=7>' in t for t in arrow)
+    assert any('sparse_union<i: int32=3, d: date64[ms]=7>' in t for t in arrow)
+    assert [v['values']['unencodable'] for v in vectors].count(
+        ['arrow:date64[ms]']
+    ) == 1
+
+
+def _shown(cell: Any) -> list[str]:
+    r"""The names of the unencodable values a cell shows, ``["?", name]``."""
+    if not isinstance(cell, list):
+        return []
+    if len(cell) == 2 and cell[0] == '?' and isinstance(cell[1], str):
+        return [cell[1]]
+    return [name for item in cell for name in _shown(item)]
 
 
 def test_the_built_vectors_are_the_arrow_they_say() -> None:
@@ -226,7 +360,8 @@ def test_the_built_vectors_are_the_arrow_they_say() -> None:
 
 def test_the_built_lists_hold_structs_at_an_offset() -> None:
     r"""A built list's second row is a slice of its structs at offset 2, a
-    null struct among them, so a read that drops the offset is caught."""
+    null struct among them, so a read that drops the offset is caught;
+    the date64 one hides its date there."""
     for name in BUILT:
         table, _ = _read({'build': name})
         if not pa.types.is_list(table.schema.field(0).type):
@@ -267,6 +402,12 @@ def test_a_struct_with_a_null_row_holding_a_union_reads_as_the_vector_says(
     assert [
         {'name': f.name, 'type': str(f.type)} for f in table.schema
     ] == vector['arrow']
+    assert got['unencodable'] == vector['values']['unencodable'], (
+        f'{vector["name"]!r} lists unencodable {got["unencodable"]}, the '
+        f'vector {vector["values"]["unencodable"]}: a value hidden under a '
+        'null struct row is in no cell, so it names nothing unencodable; '
+        'only a value a visible row shows does'
+    )
     assert got == vector['values'], (
         f'{vector["name"]!r} read otherwise than the vector says; its cells: '
         f'{_text(vector["rows"])}'

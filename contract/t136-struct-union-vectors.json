@@ -1,6 +1,6 @@
 {
   "format": "sdm-result-vectors/1",
-  "about": "T1.36 P3 C3's vectors, written by the independent test author before the fix: a struct with a null row holding a union, which run_python's arrow_values must read without aborting (StructArray.flatten() folds the struct's validity into a union child, which has none, and Arrow C++ aborts). The form is contract/t132g-p2c-vectors.json's: a null struct row is null; a non-null one [\"struct\", [[name, cell], ...]]; a union [\"union\", type code, member name, the member's cell], a null union DuckDB writes a null under its first member. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by contract/tests/test_t136_struct_null_union.py (DuckDB writes no dense union): built lists hold their structs at a non-zero offset, so a read that drops a struct's offset gives other cells. Read by the Python runner's test only.",
+  "about": "T1.36 P3 C3's vectors, written by the independent test author before the fix: a struct with a null row holding a union, which run_python's arrow_values must read without aborting (StructArray.flatten() folds the struct's validity into a union child, which has none, and Arrow C++ aborts). The form is contract/t132g-p2c-vectors.json's: a null struct row is null; a non-null one [\"struct\", [[name, cell], ...]]; a union [\"union\", type code, member name, the member's cell], a null union DuckDB writes a null under its first member. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by contract/tests/test_t136_struct_null_union.py (DuckDB writes no dense union): built lists hold their structs at a non-zero offset, so a read that drops a struct's offset gives other cells. A value under a null struct row is hidden: no cell shows it, so it names nothing unencodable (the second set, built, each hides a date64 the form does not hold: as a child, as a union's chosen member, in a list's struct at an offset, in a map value, in a struct in a struct); a control's visible date64 still names arrow:date64[ms]. Read by the Python runner's test only.",
   "vectors": [
     {
       "name": "a struct with a null row holding a sparse union",
@@ -726,6 +726,402 @@
               ]
             ]
           ]
+        ]
+      ]
+    },
+    {
+      "name": "a null struct row hiding a date64",
+      "build": "a null struct row hiding a date64",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<d: date64[ms], n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "e0eb2911a48d33e256d475cbd6607ad949598f5a0a742d0ea9ffc47e183fb89f",
+        "unordered": "e0eb2911a48d33e256d475cbd6607ad949598f5a0a742d0ea9ffc47e183fb89f",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "d",
+                null
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a null struct row hiding a dense union's chosen date64 member",
+      "build": "a null struct row hiding a dense union's chosen date64 member",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<u: dense_union<i: int32=3, d: date64[ms]=7>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  3,
+                  "i",
+                  [
+                    "i",
+                    "5"
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a null struct row hiding a sparse union's chosen date64 member",
+      "build": "a null struct row hiding a sparse union's chosen date64 member",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<u: sparse_union<i: int32=3, d: date64[ms]=7>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  3,
+                  "i",
+                  [
+                    "i",
+                    "5"
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "lists of structs at an offset, a null struct hiding a date64",
+      "build": "lists of structs at an offset, a null struct hiding a date64",
+      "arrow": [
+        {
+          "name": "l",
+          "type": "list<item: struct<d: date64[ms], n: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "l"
+        ],
+        "types": null,
+        "ordered": "3549c35212cb93583b0f9284f2c789f0e24a39d284e5d917d3e049ec1d733a54",
+        "unordered": "3549c35212cb93583b0f9284f2c789f0e24a39d284e5d917d3e049ec1d733a54",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "0"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "1"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "2"
+                    ]
+                  ]
+                ]
+              ],
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "4"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a map's value a null struct hiding a date64",
+      "build": "a map's value a null struct hiding a date64",
+      "arrow": [
+        {
+          "name": "m",
+          "type": "map<string, struct<d: date64[ms], n: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "m"
+        ],
+        "types": null,
+        "ordered": "36dedab5d63429d144a3e57e50a44d3261d6f437811235417ec6a034cd93b377",
+        "unordered": "36dedab5d63429d144a3e57e50a44d3261d6f437811235417ec6a034cd93b377",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "map",
+            [
+              [
+                [
+                  "s",
+                  "k"
+                ],
+                [
+                  "struct",
+                  [
+                    [
+                      "d",
+                      null
+                    ],
+                    [
+                      "n",
+                      [
+                        "i",
+                        "0"
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "s",
+                  "j"
+                ],
+                null
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a struct in a null struct hiding a date64",
+      "build": "a struct in a null struct hiding a date64",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<o: struct<d: date64[ms]>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "c5feab137222905770d009c38b7680c876700dccb034f52e0a714a2350324880",
+        "unordered": "c5feab137222905770d009c38b7680c876700dccb034f52e0a714a2350324880",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "o",
+                [
+                  "struct",
+                  [
+                    [
+                      "d",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a visible date64 beside a null struct row hiding one",
+      "build": "a visible date64 beside a null struct row hiding one",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<d: date64[ms], n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "7e820ecf22d68df25f833592c7dc9d92a4dccdbe5e9d82b7810a12f629ba9287",
+        "unordered": "7e820ecf22d68df25f833592c7dc9d92a4dccdbe5e9d82b7810a12f629ba9287",
+        "unencodable": [
+          "arrow:date64[ms]"
+        ]
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "d",
+                [
+                  "?",
+                  "arrow:date64[ms]"
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
         ]
       ]
     }
