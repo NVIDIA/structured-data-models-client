@@ -99,6 +99,7 @@ fn predict_run_with(
             version,
             payload: AttachmentId(1),
             query: AttachmentId(2),
+            forecast: None,
         },
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),

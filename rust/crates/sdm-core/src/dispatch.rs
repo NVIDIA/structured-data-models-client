@@ -126,6 +126,22 @@ pub fn start(
             // names the target from it where the wire calls it TARGET
             // (T1.28b).
             let query: String = take_json(&mut attachments, request.state.query)?;
+            // A forecast's later steps, each as the first is (T1.36 fix 21).
+            let forecast = match &request.state.forecast {
+                None => None,
+                Some(steps) => {
+                    let mut later = Vec::with_capacity(steps.len());
+                    for step in steps {
+                        let Some(Attachment::Bytes(payload)) = attachments.remove(&step.payload)
+                        else {
+                            return Err(internal("the payload is not the bytes named"));
+                        };
+                        let query: String = take_json(&mut attachments, step.query)?;
+                        later.push((step.step, payload, query));
+                    }
+                    Some(later)
+                }
+            };
             let inputs = crate::predict::Inputs {
                 payload,
                 query,
@@ -134,6 +150,7 @@ pub fn start(
                 outputs: request.outputs,
                 default_outputs: request.default_outputs,
                 inference_asked: request.inference_asked,
+                forecast,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }
@@ -248,6 +265,7 @@ pub(crate) fn materialize(
                 anchor_entity: request.anchor_entity,
                 values,
                 options: request.options,
+                most_parts: request.most_parts,
                 facts,
                 zones: Arc::clone(&zones),
                 #[cfg(feature = "test-ops")]

@@ -208,6 +208,7 @@ fn predict_operation(version: u32, model: &str, outputs: &[String]) -> Predict {
             version,
             payload: AttachmentId(1),
             query: AttachmentId(2),
+            forecast: None,
         },
         "model": model,
         "request_id": host::REQUEST_ID,

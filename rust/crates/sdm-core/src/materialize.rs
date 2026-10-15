@@ -71,8 +71,8 @@ use sdm_contract::data::{
 };
 use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
-    ColumnRef, Materialized, MemoBounds, OperationResult, ProfileName, ProfileSpec, QueryColumn,
-    QuerySchema, QueryTable, RequestState, SamplerMemo, Seed, SourceDescription,
+    ColumnRef, ForecastStep, Materialized, MemoBounds, OperationResult, ProfileName, ProfileSpec,
+    QueryColumn, QuerySchema, QueryTable, RequestState, SamplerMemo, Seed, SourceDescription,
 };
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
@@ -174,6 +174,7 @@ const DAY_NS: i128 = 86_400_000_000_000;
 pub use sdm_contract::ops::REQUEST_STATE_VERSION;
 
 /// What a `materialize` start gives its body.
+#[derive(Clone)]
 pub(crate) struct Inputs {
     pub description: SourceDescription,
     pub query: String,
@@ -185,6 +186,8 @@ pub(crate) struct Inputs {
     /// The call's option values (`Materialize.values`), as read.
     pub values: Option<sdm_wire::json::Value>,
     pub options: Vec<String>,
+    /// The most steps a forecast is asked as (`Materialize.most_parts`).
+    pub most_parts: Option<u32>,
     pub facts: HostFacts,
     /// The zones the run resolves names with: the host's local zone, which
     /// places a date literal's two-digit year (`pql::local_year`).
@@ -1513,11 +1516,146 @@ fn notices(
 }
 
 /// The body of a `materialize` run.
+/// The most steps a forecast is asked as where the host names no limit:
+/// the client's `decompose.MOST_PARTS` as it ships (T1.36 fix 21).
+pub const MOST_PARTS: u32 = 200;
+
+/// What one question's run gathered: its payload's bytes and its query's
+/// text; or, for the test-only `labels` operation, its result.
+enum Gathered {
+    Request(Vec<u8>, String),
+    #[cfg_attr(not(feature = "test-ops"), allow(dead_code))]
+    Done(OperationResult),
+}
+
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
+    let Some(steps) = forecast_steps(&inputs) else {
+        return match one(&asker, inputs).await? {
+            Gathered::Done(result) => Ok(result),
+            Gathered::Request(payload, query) => {
+                let (payload, query) = attach_request(&asker, payload, &query)?;
+                Ok(OperationResult::Materialize(Materialized {
+                    state: RequestState {
+                        version: REQUEST_STATE_VERSION,
+                        payload,
+                        query,
+                        forecast: None,
+                    },
+                }))
+            }
+        };
+    };
+    // A forecast, asked as one regression per step, each gathered as the
+    // client's `_in_parts` gathers it (T1.36 fix 21): in order, each by a
+    // materializer of its own, so with no memo of an earlier one's reads,
+    // each refusal naming the step it happened in (`forecast_step`).
+    // The materializer's own memo is left as it was handed, done or failed,
+    // as the client's per-step materializers leave the caller's untouched.
+    // The client's refusals of a forecast before it gathers anything
+    // (`parts_of`): `top_k`, which ranks, then more steps than the host's
+    // limit, 200 by default (`_refuse_too_many`).
+    if inputs.options.iter().any(|name| name == "top_k") {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "top_k is a ranking's, and a forecast ranks nothing",
+        )
+        .with_field("field", Detail::text("top_k"))
+        .with_field("rule", Detail::text("forecast_top_k")));
+    }
+    let most = inputs.most_parts.unwrap_or(MOST_PARTS);
+    if steps.len() > most as usize {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "a forecast asks for more steps than the host's limit, one call each",
+        )
+        .with_field("field", Detail::text("query"))
+        .with_field("rule", Detail::text("too_many_parts"))
+        .with_field("steps", count(steps.len()))
+        .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
+    }
+    let handed = inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
+        source: inputs.source.clone(),
+        ..SamplerMemo::default()
+    });
+    let mut gathered = Vec::with_capacity(steps.len());
+    for (at, text) in steps.into_iter().enumerate() {
+        let step = u32::try_from(at + 1).map_err(|_| internal("a forecast's steps past u32"))?;
+        let mut asked = inputs.clone();
+        asked.query = text;
+        asked.memo = None;
+        let tagged =
+            |e: CoreError| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step)));
+        let done = one(&asker, asked).await;
+        asker.keep(handed.clone());
+        match done.map_err(tagged)? {
+            Gathered::Done(result) => return Ok(result),
+            Gathered::Request(payload, query) => gathered.push((step, payload, query)),
+        }
+    }
+    let mut attached = Vec::with_capacity(gathered.len());
+    for (step, payload, query) in gathered {
+        let (payload, query) = attach_request(&asker, payload, &query)?;
+        attached.push(ForecastStep {
+            step,
+            payload,
+            query,
+        });
+    }
+    let first = attached.remove(0);
+    Ok(OperationResult::Materialize(Materialized {
+        state: RequestState {
+            version: REQUEST_STATE_VERSION,
+            payload: first.payload,
+            query: first.query,
+            forecast: Some(attached),
+        },
+    }))
+}
+
+/// A request's payload and query, attached.
+fn attach_request(
+    asker: &Asker,
+    payload: Vec<u8>,
+    query: &str,
+) -> Result<(AttachmentId, AttachmentId), CoreError> {
+    let payload = asker.attach(Attachment::Bytes(payload))?;
+    let query = asker.attach(Attachment::Bytes(
+        serde_json::to_vec(query).map_err(|_| internal("a query does not serialize"))?,
+    ))?;
+    Ok((payload, query))
+}
+
+/// A forecast's steps, each the regression it is asked as
+/// ([`crate::pql::resolve`]'s `steps`), when the query resolves to one;
+/// none otherwise, the query then gathered as itself, which refuses it
+/// where it does not resolve as before.
+fn forecast_steps(inputs: &Inputs) -> Option<Vec<String>> {
+    let mut description = inputs.description.clone();
+    consistent(&mut description).ok()?;
+    let profile = Profile::resolve(&ProfileSpec {
+        name: ProfileName::Relational,
+        model: None,
+        capabilities: Default::default(),
+    });
+    crate::pql::resolve(
+        &inputs.query,
+        &query_schema(&description),
+        &profile,
+        &inputs.facts,
+        &*inputs.zones,
+    )
+    .ok()?
+    .steps
+}
+
+/// One question gathered: the body of `materialize` before T1.36 fix 21.
+async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     // The memo the run leaves the host: the one handed back, or a new one
     // (decision E52), left as it is by a run refused before it reads.
     let mut memo = Memo {
-        asker: &asker,
+        asker,
         memo: inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
             source: inputs.source.clone(),
             ..SamplerMemo::default()
@@ -1648,7 +1786,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     };
     // What the sampler needs of its provider, refused before anything is
     // fetched.
-    let nulls = sampling_capabilities(&asker)?;
+    let nulls = sampling_capabilities(asker)?;
     // The index read, the sampler's check of the indexes it would use
     // (only under the provider's index advice, once for a materializer),
     // comes before anything of the task is read, as the reference builds
@@ -1793,14 +1931,14 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             && reaches(windowed.end.negated(), context_anchor)? < i128::from(bounds.min)
         {
             warn(
-                &asker,
+                asker,
                 CONTEXT_BEFORE_DATA,
                 "the context reaches back before the data",
             );
         }
         if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
             warn(
-                &asker,
+                asker,
                 ANCHOR_AFTER_DATA,
                 "the anchor time is after the data",
             );
@@ -1831,11 +1969,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         });
     }
     let sampled = read_times.read(
-        &asker,
+        asker,
         entity,
         one_batch(
             &ask(
-                &asker,
+                asker,
                 DataRequest::SampleEntities {
                     table: entity.source.clone(),
                     key: vec![key.clone()],
@@ -1903,7 +2041,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // rows read for them (decision E19).
     let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
     let target = Labelling {
-        asker: &asker,
+        asker,
         times: &read_times,
         sampled: &sampled,
         entity_rows: &entity_rows,
@@ -1969,7 +2107,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let labels = labelled.labels.truncated(num_train);
     #[cfg(feature = "test-ops")]
     if labels_only {
-        return labels_result(&asker, &train_keys, &anchors, &labels);
+        return labels_result(asker, &train_keys, &anchors, &labels).map(Gathered::Done);
     }
     // The inference options, read for the task's config class, as the
     // engine reads them before it lays out any request.
@@ -2006,15 +2144,15 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // The subgraph: each example's entity row.
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
     let looked_up = read_times.read(
-        &asker,
+        asker,
         entity,
         one_batch(
             &ask(
-                &asker,
+                asker,
                 sample::by_pkey(
                     entity,
                     entity_names.clone(),
-                    key_set(&asker, sample::seeds(all_keys, vec![])?)?,
+                    key_set(asker, sample::seeds(all_keys, vec![])?)?,
                 )?,
             )
             .await?,
@@ -2066,7 +2204,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
 
     // The neighbors of each example's entity, hop by hop.
     let walked = crate::subgraph::Walk {
-        asker: &asker,
+        asker,
         graph: &graph,
         times: &read_times,
         anchors: &anchors,
@@ -2109,7 +2247,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // order: the tables, the columns the model does not read, and the
     // context that answers the question.
     notices(
-        &asker,
+        asker,
         &description,
         &asked,
         &sent,
@@ -2117,17 +2255,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         built.answering,
         aggregated.is_some(),
     );
-    let payload = asker.attach(Attachment::Bytes(built.bytes))?;
-    let query = asker.attach(Attachment::Bytes(
-        serde_json::to_vec(&source_query).map_err(|_| internal("a query does not serialize"))?,
-    ))?;
-    Ok(OperationResult::Materialize(Materialized {
-        state: RequestState {
-            version: REQUEST_STATE_VERSION,
-            payload,
-            query,
-        },
-    }))
+    Ok(Gathered::Request(built.bytes, source_query))
 }
 
 /// `at + offset` in nanoseconds: a fixed span added without bound, as the

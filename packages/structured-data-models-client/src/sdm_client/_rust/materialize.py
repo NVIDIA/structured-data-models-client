@@ -287,6 +287,14 @@ def gather(
             }
         ),
     }
+    if str(getattr(query, 'problem_type', '')).endswith('FORECAST'):
+        # How many steps the caller lets a forecast be asked as, which the
+        # core holds it to (T1.36 fix 21).
+        from sdm_client import decompose
+
+        operation['most_parts'] = max(
+            0, min(int(decompose.MOST_PARTS), 2**32 - 1)
+        )
     source: Any = schema.source
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
@@ -299,5 +307,19 @@ def gather(
     )
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
-    finished.take(state['query'])
-    return (payload,), {'version': state['version']}
+    query = json.loads(finished.take(state['query']))
+    kept: dict[str, Any] = {'version': state['version']}
+    if state.get('forecast') is not None:
+        # A forecast, which the core asked as one regression per step (T1.36
+        # fix 21): step 1's query, and each later step's number, payload
+        # and query, from which the client keeps one request per step.
+        kept['query'] = query
+        kept['forecast'] = [
+            (
+                step['step'],
+                json.loads(finished.take(step['payload'])),
+                json.loads(finished.take(step['query'])),
+            )
+            for step in state['forecast']
+        ]
+    return (payload,), kept

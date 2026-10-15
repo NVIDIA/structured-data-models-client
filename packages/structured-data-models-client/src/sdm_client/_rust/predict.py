@@ -257,17 +257,29 @@ def predict(
         raise RouteError(
             'predict on the core needs a request materialize built on the core'
         )
-    payloads = request.payloads
-    if payloads is None or len(payloads) != 1:
-        raise RouteError(
-            'predict on the core takes the one payload materialize wrote'
-        )
-    [payload] = payloads
+    # A forecast the core gathered is held as one request per step (T1.36
+    # fix 21), which the core predicts in one run, step by step.
+    steps = request.parts if request.parts is not None else (request,)
+    held = []
+    for step in steps:
+        payloads = step.payloads
+        if payloads is None or len(payloads) != 1:
+            raise RouteError(
+                'predict on the core takes the one payload materialize wrote'
+            )
+        held.append((payloads[0], step.query))
+    [(payload, query), *later] = held
     # A model handle is the host's object; its id, or the id given, is the
     # core's to check.
     model_id = model if isinstance(model, str) else spec_for(model).model_id
 
+    calls = 0
+
     def model_call(body: bytes) -> bytes:
+        nonlocal calls
+        # A forecast's steps are called in order, one call each, so the
+        # call is the step a refusal of the endpoint is said of.
+        calls += 1
         # What failed is noted inside the handlers and raised after them, so
         # the transport's exception, whose text the endpoint wrote, is not
         # even the context of what is raised.
@@ -306,8 +318,11 @@ def predict(
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is
             # chained to the transport's exception.
-            raise _refusal(refused)
+            raised = _refusal(refused)
+            raised._forecast_step = calls  # type: ignore[attr-defined]
+            raise raised
         if failure is not None:
+            failure._forecast_step = calls  # type: ignore[attr-defined]
             raise failure
         return _encoded(answer)
 
@@ -330,8 +345,17 @@ def predict(
         operation['default_outputs'] = True
     attachments = {
         1: _payload(payload),
-        2: codec.attachment(request.query),
+        2: codec.attachment(query),
     }
+    if request.parts is not None:
+        operation['state']['forecast'] = []
+        for number, (more, asked) in enumerate(later, start=2):
+            at = 2 * number - 1
+            attachments[at] = _payload(more)
+            attachments[at + 1] = codec.attachment(asked)
+            operation['state']['forecast'].append(
+                {'step': number, 'payload': at, 'query': at + 1}
+            )
     finished = run(operation, attachments, model=model_call)
     answered = finished.result
     # The core's rows are ordered by row_index, as the result's frame is;
@@ -341,7 +365,7 @@ def predict(
         key=lambda row: row['answer_index'],
     )
     metadata = json.loads(finished.take(answered['metadata']))
-    return PredictionResult(
+    result = PredictionResult(
         model=answered['model'],
         request_id=answered['request_id'],
         items=[
@@ -359,3 +383,6 @@ def predict(
         metadata=metadata,
         outputs=tuple(answered['outputs']),
     )
+    # A forecast's answer names its step, rows or none (`_by_step`).
+    result._names_its_step = request.parts is not None
+    return result

@@ -490,6 +490,26 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
+        on_the_core = (
+            None
+            if ranking
+            or not request.parts
+            or getattr(request.parts[0], '_core_state', None) is None
+            else _predicts_on_the_core(request.parts[0])
+        )
+        if on_the_core is not None:
+            # A forecast the core gathered, which the core predicts step by
+            # step and puts together (T1.36 fix 21); a refusal is said of
+            # the step it names, as each part's is below.
+            try:
+                merged = on_the_core.predict(self, request, model, outputs)
+            except StructuredDataError as error:
+                step = getattr(error, '_forecast_step', None)
+                details = getattr(error, 'details', None)
+                if step is None and isinstance(details, dict):
+                    step = details.pop('forecast_step', None)
+                raise about_the_part(error, rewritten, step or 1) from error
+            return _report_absent(merged, outputs, spec_for(model).model_id)
         answers = []
         for position, (part, (_, about)) in enumerate(
             zip(request.parts or (), rewritten.parts, strict=True)

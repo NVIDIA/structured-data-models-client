@@ -1215,6 +1215,40 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
     })
 }
 
+/// A forecast's answers put together, each step's answer to its own
+/// regression (`_by_step`, T1.36 fix 21): every step's answers in step
+/// order, each in the endpoint's order and carrying its step, the first
+/// step's model, request id and answer type, and no metadata (the
+/// client's merged result names none); no step refused (`INTERNAL_ERROR`).
+pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
+    let mut steps = steps.into_iter();
+    let Some((step, first)) = steps.next() else {
+        return Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a forecast with no step to put together",
+        ));
+    };
+    let mut rows = Vec::new();
+    for (step, part) in std::iter::once((step, first.rows)).chain(steps.map(|(s, p)| (s, p.rows))) {
+        rows.extend(part.into_iter().map(|row| Row {
+            forecast_step: Some(i64::from(step)),
+            ..row
+        }));
+    }
+    for (at, row) in rows.iter_mut().enumerate() {
+        row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
+    }
+    Ok(Part {
+        model: first.model,
+        request_id: first.request_id,
+        metadata: Value::Object(vec![]),
+        rows,
+        answers: first.answers,
+        text_ids: first.text_ids,
+    })
+}
+
 /// The outputs the caller named that the answer does not carry
 /// (`PredictionResult.absent`), each once, in the order named: none for an
 /// answer with no rows; `prediction` when no answer holds one,

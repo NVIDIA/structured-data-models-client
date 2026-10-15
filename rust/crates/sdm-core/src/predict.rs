@@ -30,8 +30,8 @@ use sdm_contract::ops::{OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_request::predict::{
-    Notice, Part, absent, absent_notice, bad_response, body, call_bytes, empty, layout, merge,
-    nothing_to_score, preflight, prepare, refused, table,
+    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, empty, layout,
+    merge, nothing_to_score, preflight, prepare, refused, table,
 };
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
@@ -51,6 +51,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
 ];
 
 /// What a `predict` start gives its body.
+#[derive(Clone)]
 pub(crate) struct Inputs {
     /// The request state's payload, as the host attached it.
     pub payload: Vec<u8>,
@@ -64,6 +65,10 @@ pub(crate) struct Inputs {
     pub default_outputs: bool,
     /// The inference options the caller set at `materialize`.
     pub inference_asked: Vec<String>,
+    /// A forecast's later steps, each its number, payload and query, in
+    /// order; none for a forecast of one step, and `None` for any other
+    /// request (T1.36 fix 21).
+    pub forecast: Option<Vec<(u32, Vec<u8>, String)>>,
 }
 
 /// The JSON a request state's payload holds, or a refusal naming where in
@@ -95,7 +100,54 @@ fn warn(asker: &Asker, notice: Notice) {
     });
 }
 
-pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
+pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationResult, CoreError> {
+    let Some(later) = inputs.forecast.take() else {
+        let (merged, outputs) = one(&asker, &inputs).await?;
+        return finish(&asker, merged, outputs);
+    };
+    // A forecast: each step's regression predicted as the client predicts
+    // each part (`_answer_in_parts`), in order, a refusal naming the step
+    // it happened in (`forecast_step`), and the answers put together as
+    // its `_by_step` puts them.
+    let mut steps = vec![(1, inputs.payload.clone(), inputs.query.clone())];
+    steps.extend(later);
+    let mut answers = Vec::with_capacity(steps.len());
+    let mut outputs = Vec::new();
+    for (step, payload, query) in steps {
+        let asked = Inputs {
+            payload,
+            query,
+            forecast: None,
+            ..inputs.clone()
+        };
+        let (answer, named) = one(&asker, &asked)
+            .await
+            .map_err(|e| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step))))?;
+        if answers.is_empty() {
+            outputs = named;
+        }
+        answers.push((step, answer));
+    }
+    finish(&asker, by_step(answers)?, outputs)
+}
+
+/// The result of a request's answer, attached.
+fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<OperationResult, CoreError> {
+    let laid = table(&merged)?;
+    let result = asker.attach(Attachment::Arrow(ArrowData::new(laid.schema(), vec![laid])))?;
+    let metadata = asker.attach(Attachment::Bytes(merged.metadata.to_bytes()))?;
+    Ok(OperationResult::Predict(Predicted {
+        result,
+        model: merged.model,
+        request_id: merged.request_id,
+        metadata,
+        outputs,
+    }))
+}
+
+/// One request's answer, and the outputs it asked for: the body of
+/// `predict` before T1.36 fix 21.
+async fn one(asker: &Asker, inputs: &Inputs) -> Result<(Part, Vec<String>), CoreError> {
     let payload = payload(&inputs.payload)?;
     let outputs = prepare(
         &payload,
@@ -110,30 +162,21 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         empty(&inputs.model, &payloads[0])
     } else {
         for notice in preflight(&payloads, &outputs, &inputs.query, &inputs.model)? {
-            warn(&asker, notice);
+            warn(asker, notice);
         }
         let mut parts = Vec::with_capacity(payloads.len());
         for payload in &payloads {
-            parts.push(call(&asker, &inputs, payload, &outputs).await?);
+            parts.push(call(asker, inputs, payload, &outputs).await?);
         }
         merge(parts)?
     };
     if !inputs.default_outputs {
         let left_out = absent(&merged, &outputs);
         if !left_out.is_empty() {
-            warn(&asker, absent_notice(&inputs.model, &left_out));
+            warn(asker, absent_notice(&inputs.model, &left_out));
         }
     }
-    let laid = table(&merged)?;
-    let result = asker.attach(Attachment::Arrow(ArrowData::new(laid.schema(), vec![laid])))?;
-    let metadata = asker.attach(Attachment::Bytes(merged.metadata.to_bytes()))?;
-    Ok(OperationResult::Predict(Predicted {
-        result,
-        model: merged.model,
-        request_id: merged.request_id,
-        metadata,
-        outputs,
-    }))
+    Ok((merged, outputs))
 }
 
 /// One payload's call, sent and its answer laid out.

@@ -112,6 +112,7 @@ pub fn messages() -> Vec<ControlMessage> {
         version: 1,
         payload: AttachmentId(1),
         query: AttachmentId(2),
+        forecast: None,
     };
     vec![
         start(Operation::ValidateQuery(validate)),
@@ -141,6 +142,7 @@ pub fn messages() -> Vec<ControlMessage> {
             anchor_entity: false,
             values: None,
             options: vec!["num_neighbors".into()],
+            most_parts: None,
             sampler_state: Some(SamplerState {
                 version: 1,
                 memo: AttachmentId(4),

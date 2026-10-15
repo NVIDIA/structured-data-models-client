@@ -64,6 +64,9 @@ pub struct Validation {
     /// D4's warning for each day-first date literal read, in the order
     /// read, accepted or not.
     pub warnings: Vec<CoreWarning>,
+    /// A forecast's steps, when it has no errors: the regression each step
+    /// is asked as ([`per_step`]), in order, step 1 first.
+    pub steps: Option<Vec<String>>,
 }
 
 impl Validation {
@@ -73,6 +76,7 @@ impl Validation {
             query: None,
             text: None,
             warnings,
+            steps: None,
         }
     }
 
@@ -191,12 +195,61 @@ fn resolve_here(
             query: Some(query),
             text: Some(validated.query.to_string_with(false, false)),
             warnings,
+            steps: per_step(&validated)?,
         });
     }
     let later = found.split_off(found.iter().take_while(|d| is_error(d)).count());
     found.extend(refusals);
     found.extend(later);
     Ok(Validation::refused(found, warnings))
+}
+
+/// A forecast's steps, each the regression the client's `_per_step` asks
+/// it as (T1.36 fix 21): the same aggregation of what it aggregates,
+/// filter and all, its window moved along by the step times its span, and
+/// the same entity clause, filter and all; none for a query that is not a
+/// forecast. A forecast whose target ends in no aggregation, or whose
+/// window has no start, the reference cannot split (an `AttributeError`
+/// or `TypeError`), refused by name, as the regression it would ask is.
+fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<Vec<String>>, CoreError> {
+    let query = &validated.query;
+    if query.problem_type != Some(t::ProblemType::Forecast) {
+        return Ok(None);
+    }
+    let aggregation = validated
+        .get_final_target_aggregation()
+        .ok_or_else(|| sdm_engine::not_yet("problem_type"))?;
+    let (aggr, target) = match &aggregation.borrow().kind {
+        Kind::Aggregation { aggr, target, .. } => (aggr.value(), ast::to_string(target)),
+        _ => return Err(internal("a final aggregation is not an aggregation")),
+    };
+    let window =
+        ast::date_offset_range(&aggregation).ok_or_else(|| sdm_engine::not_yet("open_window"))?;
+    let window = window.borrow();
+    let start = i128::from(
+        window
+            .start
+            .ok_or_else(|| sdm_engine::not_yet("open_window"))?,
+    );
+    let end = i128::from(window.end);
+    let span = end - start;
+    let steps = query
+        .num_forecasts
+        .to_i64()
+        .ok_or_else(|| internal("a validated query forecasts past i64"))?;
+    let entity = format!("{} {}", query.for_each, ast::to_string(&query.entity_ast));
+    Ok(Some(
+        (0..i128::from(steps))
+            .map(|step| {
+                format!(
+                    "PREDICT {aggr}({target}, {}, {}, {}) {entity}",
+                    start + step * span,
+                    end + step * span,
+                    window.unit.value(),
+                )
+            })
+            .collect(),
+    ))
 }
 
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {

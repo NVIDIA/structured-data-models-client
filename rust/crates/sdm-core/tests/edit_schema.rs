@@ -237,6 +237,7 @@ fn a_schema_changed_past_its_description_is_refused_by_name() {
             anchor_entity: false,
             values: None,
             options: vec![],
+            most_parts: None,
             sampler_state: None,
         }),
         Attachments::from([

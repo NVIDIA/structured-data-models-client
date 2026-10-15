@@ -28,6 +28,7 @@ otherwise, and the model asked to answer it has to be that same one.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 from numbers import Integral
@@ -37,6 +38,7 @@ import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client.decompose import (
+    FORECAST,
     Decomposition,
     about_the_part,
     parts_of,
@@ -192,12 +194,20 @@ class PredictiveQuery:
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
+        # A forecast over a DuckDB source on the core route is split into
+        # its steps by the core (T1.36 fix 21).
+        on_the_core = (
+            relational
+            and getattr(self.schema.source, 'backend', None) == 'duckdb'
+            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+        )
         rewritten = parts_of(
             asked,
             self.text,
             list(candidates) if candidates is not None else None,
             options,
             self.schema,
+            on_the_core=on_the_core,
         )
         if task is not None and (relational or rewritten is not None):
             why = (
@@ -212,6 +222,15 @@ class PredictiveQuery:
                 f'the query rather than beside it',
                 code='INVALID_REQUEST',
                 details={'task': repr(task)},
+            )
+
+        if rewritten is not None and rewritten.kind == FORECAST and on_the_core:
+            return self._in_steps_on_the_core(
+                asked,
+                rewritten,
+                indices=indices,
+                num_context_samples=num_context_samples,
+                options=options,
             )
 
         if rewritten is not None:
@@ -420,6 +439,72 @@ class PredictiveQuery:
         whole._decomposition = rewritten
         whole._asked = self.text
         return whole
+
+    def _in_steps_on_the_core(
+        self,
+        asked: ValidatedPredictiveQuery,
+        rewritten: Decomposition,
+        *,
+        indices: Sequence[Any] | None,
+        num_context_samples: int | None,
+        options: dict[str, Any],
+    ) -> Request:
+        r"""A forecast gathered on the core, which asks each step as the
+        regression :meth:`_in_parts` would (T1.36 fix 21), kept together as
+        :meth:`_in_parts` keeps the parts it gathers: a refusal said of the
+        step it happened in, which the core names (``forecast_step``), or of
+        the first where this client refuses the call's options before the
+        core runs.
+        """
+        import copy
+
+        steps = int(getattr(asked, 'num_forecasts', 1) or 1)
+        named = Decomposition(
+            FORECAST, tuple((None, n + 1) for n in range(steps))
+        )
+        assert indices is not None
+        try:
+            whole = self._relational_materializer.materialize(
+                query=asked,
+                indices=indices,
+                num_context_samples=num_context_samples,
+                options=options,
+            )
+        except MissingExtraError:
+            raise
+        except StructuredDataError as error:
+            details = getattr(error, 'details', None)
+            step = (
+                details.pop('forecast_step', 1)
+                if isinstance(details, dict)
+                else 1
+            )
+            raise about_the_part(error, named, step) from error
+        state = whole._core_state
+        gathered = []
+        for step, payload, query in [
+            (1, whole.payloads[0], state['query']),
+            *state.get('forecast', ()),
+        ]:
+            part = Request.materialized(
+                payloads=(payload,),
+                windowed=whole._windowed,
+                schema=self.schema.snapshot(),
+                query=query,
+                indices=list(indices),
+                entity_table=whole.entity_table,
+                requested_inference=whole.requested_inference,
+            )
+            part._core_state = {'version': state['version']}
+            gathered.append((part, query, step))
+        carrier = copy.copy(gathered[0][0])
+        carrier._parts = tuple(part for part, _, _ in gathered)
+        carrier._decomposition = dataclasses.replace(
+            rewritten,
+            parts=tuple((query, step) for _, query, step in gathered),
+        )
+        carrier._asked = self.text
+        return carrier
 
     def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
         r"""Parse and validate the query.

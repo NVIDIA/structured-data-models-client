@@ -93,7 +93,14 @@ impl Operation {
                 named.extend(m.values.map(|id| (id, Bytes)));
                 named
             }
-            Operation::Predict(p) => vec![(p.state.payload, Bytes), (p.state.query, Bytes)],
+            Operation::Predict(p) => {
+                let mut named = vec![(p.state.payload, Bytes), (p.state.query, Bytes)];
+                for step in p.state.forecast.iter().flatten() {
+                    named.push((step.payload, Bytes));
+                    named.push((step.query, Bytes));
+                }
+                named
+            }
             #[cfg(feature = "test-ops")]
             Operation::Test(t) => t.attachments(),
         }
@@ -660,6 +667,12 @@ pub struct Materialize {
     /// passes each the call gave, so it refuses none of its own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
+    /// The most steps a forecast is asked as, one call each, which the host
+    /// lets its caller set (the client's `decompose.MOST_PARTS`); 200 where
+    /// it names none. A forecast of more is refused, `INVALID_REQUEST`, rule
+    /// `too_many_parts` (T1.36 fix 21).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub most_parts: Option<u32>,
     /// The sampler state the materializer's last run left, which the host
     /// hands back as it took it (decision E52); none for a materializer's
     /// first run.
@@ -835,6 +848,24 @@ pub struct RequestState {
     pub payload: AttachmentId,
     /// The query text: a bytes attachment of a JSON string.
     pub query: AttachmentId,
+    /// A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one
+    /// regression per step, the window moved a span along at each (T1.36
+    /// fix 21): `payload` and `query` are step 1's, and this holds every
+    /// later step's, in order, empty for a forecast of one step. Absent for
+    /// any other request. `predict` sends each step's payload and gives the
+    /// answers back as one, each row carrying its step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forecast: Option<Vec<ForecastStep>>,
+}
+
+/// One later step of a forecast's request state: its number, from 2, and
+/// its payload and query, as [`RequestState`]'s.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ForecastStep {
+    pub step: u32,
+    pub payload: AttachmentId,
+    pub query: AttachmentId,
 }
 
 /// Send a materialized request to the model and lay out its answer.
@@ -941,6 +972,10 @@ pub struct Attachments {
     pub request_state_payload: StatePayload,
     #[schemars(rename = "RequestState.query")]
     pub request_state_query: String,
+    #[schemars(rename = "ForecastStep.payload")]
+    pub forecast_step_payload: StatePayload,
+    #[schemars(rename = "ForecastStep.query")]
+    pub forecast_step_query: String,
     #[schemars(rename = "Predicted.metadata")]
     pub predicted_metadata: EndpointMetadata,
 }

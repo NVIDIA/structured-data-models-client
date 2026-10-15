@@ -30,8 +30,9 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, EditSchema, Materialize, Operation, OperationResult, Predict, ProfileSpec,
-    QuerySchema, RequestState, SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
+    DescribeSource, EditSchema, ForecastStep, Materialize, Operation, OperationResult, Predict,
+    ProfileSpec, QuerySchema, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
+    ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -742,7 +743,14 @@ pub struct HeldState {
     pub version: u32,
     pub payload: Vec<u8>,
     pub query: Vec<u8>,
+    /// A forecast's later steps, each its number, payload and query
+    /// (T1.36 fix 21).
+    pub forecast: Option<Vec<HeldStep>>,
 }
+
+/// A forecast's later step as this host holds it: its number, and its
+/// payload's and query's bytes.
+pub type HeldStep = (u32, Vec<u8>, Vec<u8>);
 
 /// A materializer's sampler state as this host keeps it between runs
 /// (decision E52): its version and its memo's bytes, as the run left them.
@@ -788,10 +796,19 @@ fn materialize(
                     _ => bail!("{}: the request state is not attached", case.id),
                 }
             };
+            let mut forecast = None;
+            if let Some(steps) = &state.forecast {
+                let mut later = Vec::new();
+                for step in steps {
+                    later.push((step.step, bytes(step.payload)?, bytes(step.query)?));
+                }
+                forecast = Some(later);
+            }
             let held = HeldState {
                 version: state.version,
                 payload: bytes(state.payload)?,
                 query: bytes(state.query)?,
+                forecast,
             };
             let recorded = json!({
                 "version": held.version,
@@ -893,6 +910,7 @@ fn start_materialize(
             anchor_entity: false,
             values: Some(AttachmentId(6)),
             options: vec![],
+            most_parts: None,
             sampler_state: sampler
                 .as_ref()
                 .and_then(|held| held.as_ref())
@@ -1170,6 +1188,16 @@ fn predict(
                 version: state.version,
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
+                forecast: state.forecast.as_ref().map(|steps| {
+                    (0u32..)
+                        .zip(steps)
+                        .map(|(at, (step, ..))| ForecastStep {
+                            step: *step,
+                            payload: AttachmentId(3 + 2 * at),
+                            query: AttachmentId(4 + 2 * at),
+                        })
+                        .collect()
+                }),
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
@@ -1181,10 +1209,14 @@ fn predict(
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
-    let attachments = BTreeMap::from([
+    let mut attachments = BTreeMap::from([
         (AttachmentId(1), Attachment::Bytes(state.payload)),
         (AttachmentId(2), Attachment::Bytes(state.query)),
     ]);
+    for (at, (_, payload, query)) in (0u32..).zip(state.forecast.unwrap_or_default()) {
+        attachments.insert(AttachmentId(3 + 2 * at), Attachment::Bytes(payload));
+        attachments.insert(AttachmentId(4 + 2 * at), Attachment::Bytes(query));
+    }
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
@@ -1192,52 +1224,65 @@ fn predict(
             return Ok(());
         }
     };
-    let next = handle.next();
+    // Each model call answered in turn, a forecast's one per step (T1.36
+    // fix 21); the bodies recorded are every call's, in order, one call's
+    // as itself.
+    let mut bodies: Vec<Value> = Vec::new();
+    let mut next = handle.next();
     take_warnings(&handle, &mut observed.warnings)?;
-    let call = match next {
-        Err(failed) => {
+    loop {
+        let call = match &next {
+            Err(failed) => {
+                observed.answer = error_of(failed)?;
+                return Ok(());
+            }
+            Ok(out) => match read(out).map_err(|_| anyhow!("an unreadable step"))? {
+                ControlMessage::Step(Step::CallModel(call)) => call,
+                _ if !bodies.is_empty() => break,
+                _ => bail!(
+                    "{}: predict asked for a step other than a model call",
+                    case.id
+                ),
+            },
+        };
+        let Ok(Some(Attachment::Bytes(body))) = handle.take_attachment(call.body) else {
+            bail!("{}: the model call's body is not attached", case.id);
+        };
+        let sent = numbers_as_text(serde_json::from_slice(&body)?);
+        // The id this host started predict with is the one the call carries.
+        if sent["metadata"]["request_id"] != REQUEST_ID {
+            bail!(
+                "{}: the call does not carry the request id it was given",
+                case.id
+            );
+        }
+        bodies.push(sent);
+        let (status, answered) = endpoint::answer("POST", endpoint::PREDICTIONS, &body);
+        let reply = encode(&ControlMessage::ModelReply(ModelReply {
+            id: call.id,
+            outcome: ModelOutcome::Response {
+                status,
+                content_type: "application/json".into(),
+                body: AttachmentId(1),
+            },
+        }))
+        .map_err(|_| anyhow!("a reply does not encode"))?;
+        let answer = BTreeMap::from([(
+            AttachmentId(1),
+            Attachment::Bytes(serde_json::to_vec(&answered)?),
+        )]);
+        if let Err(failed) = handle.reply(&reply, answer) {
             observed.answer = error_of(&failed)?;
             return Ok(());
         }
-        Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
-            ControlMessage::Step(Step::CallModel(call)) => call,
-            _ => bail!(
-                "{}: predict asked for a step other than a model call",
-                case.id
-            ),
-        },
-    };
-    let Ok(Some(Attachment::Bytes(body))) = handle.take_attachment(call.body) else {
-        bail!("{}: the model call's body is not attached", case.id);
-    };
-    let sent = numbers_as_text(serde_json::from_slice(&body)?);
-    // The id this host started predict with is the one the call carries.
-    if sent["metadata"]["request_id"] != REQUEST_ID {
-        bail!(
-            "{}: the call does not carry the request id it was given",
-            case.id
-        );
+        next = handle.next();
+        take_warnings(&handle, &mut observed.warnings)?;
     }
-    let (status, answered) = endpoint::answer("POST", endpoint::PREDICTIONS, &body);
-    let reply = encode(&ControlMessage::ModelReply(ModelReply {
-        id: call.id,
-        outcome: ModelOutcome::Response {
-            status,
-            content_type: "application/json".into(),
-            body: AttachmentId(1),
-        },
-    }))
-    .map_err(|_| anyhow!("a reply does not encode"))?;
-    let answer = BTreeMap::from([(
-        AttachmentId(1),
-        Attachment::Bytes(serde_json::to_vec(&answered)?),
-    )]);
-    if let Err(failed) = handle.reply(&reply, answer) {
-        observed.answer = error_of(&failed)?;
-        return Ok(());
-    }
-    let next = handle.next();
-    take_warnings(&handle, &mut observed.warnings)?;
+    let sent = if bodies.len() == 1 {
+        bodies.remove(0)
+    } else {
+        Value::Array(bodies)
+    };
     observed.answer = match next {
         Err(failed) => error_of(&failed)?,
         Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {

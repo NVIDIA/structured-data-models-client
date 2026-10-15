@@ -624,6 +624,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 version: 1,
                 payload,
                 query,
+                forecast: None,
             },
         }))
     }));
@@ -702,6 +703,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             anchor_entity: false,
             values: None,
             options: vec![],
+            most_parts: None,
             sampler_state: None,
         }),
         vec![],

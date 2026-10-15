@@ -684,6 +684,7 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
                 version,
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
+                forecast: None,
             },
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),

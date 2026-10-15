@@ -1846,6 +1846,9 @@ entries:
     T1.28, T1.28a, T1.29].
     T1.36 fix 1 lifted target_type for a multiclass target of floats: it is
     materialized as the reference's (contract/float-multiclass-vectors.json).
+    T1.36 fix 21 (E153) lifted problem_type for a forecast: the core asks it
+    as one regression per step, as the client did (contract/t136-forecast-vectors.json);
+    problem_type stays for ranking, whose split stays the client's.
 
 - id: P1B-4
   title: SDMClient.predict on the core route refuses what T1.11d's thin predict does not port yet

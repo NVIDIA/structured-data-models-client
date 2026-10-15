@@ -202,6 +202,7 @@ fn materialize_start(
         anchor_entity: false,
         values: None,
         options: vec![],
+        most_parts: None,
         sampler_state: None,
     });
     let indices = RecordBatch::try_new(

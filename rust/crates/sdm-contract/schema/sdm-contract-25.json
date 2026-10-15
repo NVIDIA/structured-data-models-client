@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/24",
+  "$id": "sdm-contract/25",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -297,6 +297,12 @@
         "RequestState.query": {
           "type": "string"
         },
+        "ForecastStep.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "ForecastStep.query": {
+          "type": "string"
+        },
         "Predicted.metadata": {
           "$ref": "#/$defs/EndpointMetadata"
         }
@@ -318,6 +324,8 @@
         "SamplerState.memo",
         "RequestState.payload",
         "RequestState.query",
+        "ForecastStep.payload",
+        "ForecastStep.query",
         "Predicted.metadata"
       ]
     },
@@ -2912,6 +2920,15 @@
                 "type": "string"
               }
             },
+            "most_parts": {
+              "description": "The most steps a forecast is asked as, one call each, which the host\nlets its caller set (the client's `decompose.MOST_PARTS`); 200 where\nit names none. A forecast of more is refused, `INVALID_REQUEST`, rule\n`too_many_parts` (T1.36 fix 21).",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
             "sampler_state": {
               "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it (decision E52); none for a materializer's\nfirst run.",
               "anyOf": [
@@ -3287,11 +3304,44 @@
         "query": {
           "description": "The query text: a bytes attachment of a JSON string.",
           "$ref": "#/$defs/AttachmentId"
+        },
+        "forecast": {
+          "description": "A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one\nregression per step, the window moved a span along at each (T1.36\nfix 21): `payload` and `query` are step 1's, and this holds every\nlater step's, in order, empty for a forecast of one step. Absent for\nany other request. `predict` sends each step's payload and gives the\nanswers back as one, each row carrying its step.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ForecastStep"
+          }
         }
       },
       "additionalProperties": false,
       "required": [
         "version",
+        "payload",
+        "query"
+      ]
+    },
+    "ForecastStep": {
+      "description": "One later step of a forecast's request state: its number, from 2, and\nits payload and query, as [`RequestState`]'s.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "step",
         "payload",
         "query"
       ]

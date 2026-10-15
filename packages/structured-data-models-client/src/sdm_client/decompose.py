@@ -74,6 +74,8 @@ def parts_of(
     candidates: list[Any] | None,
     options: Mapping[str, Any],
     schema: Schema | None = None,
+    *,
+    on_the_core: bool = False,
 ) -> Decomposition | None:
     r"""The queries this one is asked as, or nothing if it is asked as itself.
 
@@ -119,6 +121,14 @@ def parts_of(
                 'ranks nothing; it gives back one value per step',
                 code='INVALID_REQUEST',
             )
+        if on_the_core:
+            # On the core route the core asks each step (T1.36 fix 21): its
+            # parts are the ones it gathered, and only how many are asked
+            # for is this client's to refuse.
+            _refuse_too_many(
+                int(getattr(query, 'num_forecasts', 1) or 1), 'forecast steps'
+            )
+            return Decomposition(FORECAST, ())
         return Decomposition(FORECAST, tuple(_per_step(query)))
     return None
 
