@@ -4243,8 +4243,10 @@ entries:
     DuckDB on rust-host by sdm-testkit's tests/t133_type_reach.rs and
     tests/t133p3_reads.rs (each payload cell against DuckDB's own text);
     each transition held by contract/tests/test_t133_type_set.py.
-    Without arrow_lossless_conversion, DuckDB itself exports a UHUGEINT
-    above 10^38-1 wrapped (2^128-1 arrives as -1), before the core sees it.
+    Without arrow_lossless_conversion, DuckDB exports UHUGEINT as
+    decimal128(38,0), even for values exceeding its declared precision;
+    values above 2^127-1 wrap to signed i128 (2^128-1 arrives as -1),
+    before the core sees them.
 
 - id: P1B-44
   title: Text and binary DuckDB hands over as view types, and lists of text views, are read as text and binary where the reference fails unnamed
