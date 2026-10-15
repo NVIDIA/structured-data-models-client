@@ -950,9 +950,9 @@ def _runtime_only(
     :func:`_host_fields`), so python-old's warnings, its runtime ones left
     out, are the first of python-core's, and the rest of python-core's,
     raised past the stop, are not compared, as :func:`_host_fields` holds a
-    runner past the reference's stop. Truncating python-core's warnings to
-    python-old's count first (T1.32g fix 12) would hold python-core's own
-    warnings past the stop against the runtime's DeprecationWarnings
+    runner past the reference's stop. Before T1.32g fix 12, python-core's
+    warnings were cut to python-old's count first, which held python-core's
+    own warnings past the stop against the runtime's DeprecationWarnings
     python-old raised before it (pandas 2.2.0 under pyarrow 14, the
     floor-pandas2.2 cell)."""
     if not narrowed:
