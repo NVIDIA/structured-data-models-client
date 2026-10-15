@@ -39,9 +39,9 @@ this script keeps:
 - ``host_arrow``: the entities as one Arrow column by the host's natural
   inference (``pa.array(values)``) or, when that fails (mixed kinds, an
   integer past int64), as text: each value's text (``host_text``: a float
-  as the core writes a float entity, its shortest digits with no exponent
-  and a whole one with no point, ``1e16`` as ``10000000000000000``, not
-  Python's ``1e+16``; T1.32g; any other value its ``str()``), None, NaN,
+  as a float entity alone is written, T1.32g's rule, in the reference's
+  text since T1.36, pyarrow's: ``1e16`` as ``1e+16``, ``1.5e-07`` as
+  ``1.5e-7``, ``1.0`` as ``1``; any other value its ``str()``), None, NaN,
   ``pd.NA`` and ``pd.NaT`` as null, a column of them alone Arrow's null
   type (design, "Host-held semantics", the ledger's row for this cast).
   ``rust-host`` hands the core this column; ``python-core`` hands the
@@ -374,9 +374,17 @@ def _large_vectors() -> dict[str, tuple[list[Any], dict[str, Any]]]:
 
 #: The key types whose table holds the neighbours a cast could land on,
 #: or values 38 digits wide, each with its own entities only.
-#: ``utf8-float-text``'s keys: ``user_id`` 1 to 3 as the core's text of
-#: three floats, every other its digits.
+#: ``utf8-float-text``'s keys: ``user_id`` 1 to 3 as the text of three
+#: floats a host writes in a mix (``host_text``, the reference's text of a
+#: float entity since T1.36), every other its digits.
 FLOAT_TEXT_KEYS = (
+    "CASE X WHEN 1 THEN '1e+16' WHEN 2 THEN '1.5e-7' "
+    "WHEN 3 THEN '1.0594382859262542e+15' ELSE X::VARCHAR END"
+)
+#: ``utf8-float-rust-text``'s keys: the same floats as Rust's ``{}`` writes
+#: them, the core's text of a float entity before T1.36, which neither a
+#: float alone nor one in a mix may reach any more.
+RUST_FLOAT_TEXT_KEYS = (
     "CASE X WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' "
     "WHEN 3 THEN '1059438285926254.3' ELSE X::VARCHAR END"
 )
@@ -648,27 +656,66 @@ ROUND_2: list[dict[str, Any]] = [
         },
     },
     {
-        # T1.32g (T1.32a's carried P3): a text key holding the text the
-        # core writes for three floats Python writes otherwise (``str``:
-        # ``1e+16``, ``1.5e-07``, ``1059438285926254.2``), so a float
-        # mixed with text reaches a key only by the core's text: an
+        # T1.32g (T1.32a's carried P3), T1.36: a text key holding the text
+        # a host writes for three floats in a mix, the reference's text of
+        # a float entity (pyarrow's: ``1e+16``, ``1.5e-7``,
+        # ``1.0594382859262542e+15``; Python's ``str`` gives ``1.5e-07``
+        # and ``1059438285926254.2``, Rust's ``{}`` the plain digits), so a
+        # float mixed with text reaches the key a float alone reaches: an
         # exponent each way, and a tie of the shortest digits
-        # (1059438285926254.25, which Rust writes away from zero).
+        # (1059438285926254.25).
         'id': 'utf8-float-text',
         'setup': _alter('VARCHAR', FLOAT_TEXT_KEYS),
         'extra': lambda: {
             'mixed.float-1e16-text': [1e16, '0'],
             'mixed.float-tiny-text': [1.5e-07, '0'],
             'mixed.float-tie-text': [1059438285926254.2, '0'],
-            'text.1e16': ['10000000000000000', '0'],
-            # T1.36 (the final review's P2-2): the same floats alone. The
-            # reference writes each as pyarrow does (``1e+16``, ``1.5e-7``,
-            # ``1.0594382859262542e+15``), which no key here holds.
+            'text.1e16': ['1e+16', '0'],
+            # T1.36 (the final review's P2-2): the same floats alone, which
+            # the reference writes so.
             'float.1e16': [1e16],
             'float.tiny': [1.5e-07],
             'float.tie': [1059438285926254.2],
             'numpy.float32-1e16': [_numpy().float32(1e16)],
         },
+    },
+    {
+        # T1.36: the same floats against Rust's text of them, alone and in
+        # a mix: the reference reaches no key here.
+        'id': 'utf8-float-rust-text',
+        'setup': _alter('VARCHAR', RUST_FLOAT_TEXT_KEYS),
+        'extra': lambda: {
+            'mixed.float-1e16-text': [1e16, '0'],
+            'mixed.float-tiny-text': [1.5e-07, '0'],
+            'mixed.float-tie-text': [1059438285926254.2, '0'],
+            'float.1e16': [1e16],
+            'float.tiny': [1.5e-07],
+            'float.tie': [1059438285926254.2],
+            'text.1e16': ['10000000000000000', '0'],
+        },
+    },
+    {
+        # T1.36: a float key holding 1e16 and 1.5e-7, and both mixed with
+        # text, which a host writes ``1e+16`` and ``1.5e-7``: the core reads
+        # a float key's text with an exponent each way.
+        'id': 'float32-exponent',
+        'setup': _alter(
+            'FLOAT',
+            "CASE X WHEN 1 THEN '1e16'::FLOAT WHEN 2 THEN '1.5e-7'::FLOAT "
+            'ELSE X END',
+        ),
+        'extra': lambda: {'mixed.float-text': [1e16, 1.5e-07, '0']},
+    },
+    {
+        # T1.36: the same for a decimal key, whose reader takes a float's
+        # text too.
+        'id': 'decimal128-38-10-exponent',
+        'setup': _alter(
+            'DECIMAL(38, 10)',
+            'CASE X WHEN 1 THEN 10000000000000000 WHEN 2 THEN 0.00000015 '
+            'ELSE X END',
+        ),
+        'extra': lambda: {'mixed.float-text': [1e16, 1.5e-07, '0']},
     },
     {
         # T1.36 (the final review's P2-2): a text key holding the text the
@@ -983,49 +1030,35 @@ def unscaled(value: Decimal, scale: int) -> int:
     return -whole if sign else whole
 
 
-def float_text(value: float) -> str:
-    r"""A float as the core writes a float entity (``sdm_engine::keys``'s
-    ``Entity::Float``, Rust's ``{}`` of an ``f64``): the shortest digits
-    that read back as it, a tie between two such digit strings going away
-    from zero (Rust's choice; Python's ``repr`` takes the even one), written
-    with no exponent, a whole one with no point: ``1e16`` is
-    ``10000000000000000``, ``1.0`` is ``1``, ``-0.0`` is ``-0``,
-    ``1.5e-07`` is ``0.00000015`` and ``1059438285926254.25`` is
-    ``1059438285926254.3`` (``repr``: ``.2``). Exact arithmetic throughout
-    (``Fraction``), never a decimal context."""
-    if not math.isfinite(value):
-        return str(value)  # 'inf' and '-inf', as Rust writes them
-    sign, digits, exponent = Decimal(repr(value)).as_tuple()
-    assert isinstance(exponent, int)
-    whole = int(''.join(map(str, digits)))
-    unit = Fraction(10) ** exponent
-    if 2 * (abs(Fraction(value)) - whole * unit) == unit:
-        up = (whole + 1) * unit
-        if float(up) == abs(value):
-            whole += 1
-    text = str(whole)
-    if whole == 0:
-        exponent = 0
-    else:
-        # Trailing zeros (``1.0``'s, or a tie carried up) carry nothing.
-        stripped = text.rstrip('0')
-        exponent += len(text) - len(stripped)
-        text = stripped
-    if exponent >= 0:
-        written = text + '0' * exponent
-    elif -exponent < len(text):
-        written = f'{text[:exponent]}.{text[exponent:]}'
-    else:
-        written = '0.' + '0' * (-exponent - len(text)) + text
-    return ('-' if sign else '') + written
+def float_text(value: Any) -> str:
+    r"""A float as the reference writes a float entity of a text key, the
+    core's text of a float entity since T1.36 (the final review's P2-2):
+    pyarrow's cast of the float, at its own width (NumPy's ``float32`` as a
+    float32), to text, which pandas' cast to the key's ``ArrowDtype`` of
+    text makes. The shortest digits that read back as it, plain from 1e-6
+    to below 1e10, otherwise one digit, the rest after a point, ``e``, the
+    exponent's sign and its digits, unpadded; a whole one with no point:
+    ``1e16`` is ``1e+16``, ``1.0`` is ``1``, ``-0.0`` is ``-0``,
+    ``1.5e-07`` is ``1.5e-7``, ``1e-06`` is ``0.000001``, and an infinity
+    ``inf`` or ``-inf``."""
+    import numpy as np
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    width = pa.float32() if isinstance(value, np.float32) else pa.float64()
+    text = pc.cast(pa.array([value], width), pa.string())[0].as_py()
+    assert isinstance(text, str)
+    return text
 
 
 def host_text(value: Any) -> str:
     r"""A value as the host's text column holds it where pyarrow infers no
-    one type: a float (NumPy's ``float64`` too) as the core writes a float
-    entity (``float_text``; T1.32g, T1.32a's carried P3), any other value
-    its ``str()``."""
-    if isinstance(value, float):
+    one type: a float (NumPy's too) as the reference writes a float entity
+    (``float_text``; T1.32g's rule, a float in a mix written as a float
+    alone is, with T1.36's text), any other value its ``str()``."""
+    import numpy as np
+
+    if isinstance(value, (float, np.floating)):
         return float_text(value)
     return str(value)
 

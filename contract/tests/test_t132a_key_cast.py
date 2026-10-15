@@ -43,18 +43,22 @@ same vectors, so the two hosts agree through them.
   its answer is the host's own answer to that text given as text, and,
   where the reference answers that text otherwise than INTERNAL_ERROR, the
   reference's answer to it. That text is the recorder's ``host_text``, and
-  a float's is the core's text of a float entity (T1.32g, T1.32a's
-  carried P3): ``1e16`` is ``10000000000000000``, not Python's ``1e+16``.
-  The ``utf8-float-text`` key holds those texts as keys, so a host writing
-  a float otherwise reaches no key.
+  a float's is its text as a float entity alone (T1.32g, T1.32a's carried
+  P3), the reference's since T1.36 (P1B-35's meaning, the coordinator's
+  decision): ``1e16`` is ``1e+16``, ``1.5e-07`` is ``1.5e-7``. The
+  ``utf8-float-text`` key holds those texts as keys, so a float mixed with
+  text reaches the key a float alone reaches, and ``utf8-float-rust-text``
+  Rust's texts of the same floats, which neither reaches.
 - A float entity alone, of a text key (T1.36, the final review's P2-2):
   the reference writes it as pyarrow casts a float to text (``1e16`` is
   ``1e+16``, ``1.5e-07`` is ``1.5e-7``, ``1e-06`` is ``0.000001``), and the
   owner's decision is to match it. ``utf8-float-pyarrow-text`` holds those
   texts as keys, ``utf8-numeric-ids`` holds 17-digit IDs (``1e16`` reaches
   none), ``utf8-numeric-ids-and-exponent`` the same and ``1e+16``; the
-  floats alone on ``utf8-float-text`` must miss the core's old text. No
-  register entry may excuse one of these vectors.
+  floats alone reach ``utf8-float-text`` and miss ``utf8-float-rust-text``.
+  No register entry may excuse one of these vectors. ``float32-exponent``
+  and ``decimal128-38-10-exponent`` hold ``1e16`` and ``1.5e-7``, which a
+  mix with text reaches by the text ``1e+16`` and ``1.5e-7``.
 - The vectors themselves: recorded at the reference of
   ``contract/reference-env.txt``; every key type and input of the
   recorder present; each input read back exactly; the host's column, the
@@ -401,23 +405,32 @@ def test_the_derived_float_rule_is_exact() -> None:
     assert R.float_bits(R.nearest(exact, 24), 24) == '3f800001'
 
 
-def test_the_host_text_of_a_float_is_the_core_s() -> None:
+def test_the_host_text_of_a_float_is_the_reference_s() -> None:
     # The recorder's text of a float in a mix, against values worked by
-    # hand from Rust's ``{}`` of an f64 (keys.rs's Entity::Float): the
-    # shortest digits, no exponent, a whole one with no point, a tie of
-    # the shortest digits away from zero; in a hostile decimal context.
+    # hand from the reference's text of a float entity (T1.36, pyarrow's):
+    # the shortest digits of the float's width, plain from 1e-6 to below
+    # 1e10, otherwise an exponent with its sign, unpadded; a whole one
+    # with no point; in a hostile decimal context.
+    import numpy as np
+
     worked = [
-        (1e16, '10000000000000000'),
+        (1e16, '1e+16'),
         (1.0, '1'),
         (-0.0, '-0'),
         (0.0, '0'),
         (2.5, '2.5'),
-        (1.5e-07, '0.00000015'),
-        (1e22, '10000000000000000000000'),
+        (1.5e-07, '1.5e-7'),
+        (1e-06, '0.000001'),
+        (1e9, '1000000000'),
+        (1e10, '1e+10'),
+        (1e22, '1e+22'),
         (-1234.5, '-1234.5'),
-        (1059438285926254.2, '1059438285926254.3'),
-        (-1059438285926254.2, '-1059438285926254.3'),
-        (1059438285926254.8, '1059438285926254.8'),
+        (1059438285926254.2, '1.0594382859262542e+15'),
+        (-1059438285926254.2, '-1.0594382859262542e+15'),
+        (math.inf, 'inf'),
+        (np.float64(1e16), '1e+16'),
+        (np.float32(1e16), '1e+16'),
+        (np.float32(0.1), '0.1'),
     ]
     with _hostile():
         for value, text in worked:
@@ -425,7 +438,7 @@ def test_the_host_text_of_a_float_is_the_core_s() -> None:
             assert R.host_text(value) == text, repr(value)
     assert R.host_text('1e16') == '1e16'
     assert R.host_text(7) == '7'
-    assert R.as_text([1e16, None, '2']) == ['10000000000000000', None, '2']
+    assert R.as_text([1e16, None, '2']) == ['1e+16', None, '2']
 
 
 #: T1.36 (the final review's P2-2): the key types and vectors where a float
@@ -433,10 +446,11 @@ def test_the_host_text_of_a_float_is_the_core_s() -> None:
 #: the reference does, so no register entry may excuse one.
 SPELLING_KEYS = (
     'utf8-float-pyarrow-text',
+    'utf8-float-rust-text',
     'utf8-numeric-ids',
     'utf8-numeric-ids-and-exponent',
 )
-SPELLING_ON_THE_CORE_S_TEXT = (
+SPELLING_ALONE = (
     'utf8-float-text.float.*',
     'utf8-float-text.numpy.float32-*',
 )
@@ -444,8 +458,7 @@ SPELLING_ON_THE_CORE_S_TEXT = (
 
 def _spelling(vector_id: str) -> bool:
     return vector_id.split('.')[0] in SPELLING_KEYS or any(
-        fnmatch.fnmatchcase(vector_id, glob)
-        for glob in SPELLING_ON_THE_CORE_S_TEXT
+        fnmatch.fnmatchcase(vector_id, glob) for glob in SPELLING_ALONE
     )
 
 
@@ -579,12 +592,18 @@ def test_the_vectors_are_not_vacuous() -> None:
     for key in ('float32', 'float64', 'decimal128-18-0', 'decimal128-38-0'):
         mark = by_id[f'{key}.mixed.float-text']['register']
         assert mark['required'] and mark['disposition'] == 'as_text', key
-    # T1.32g: each float whose text Python writes otherwise than the core
-    # reaches a key of utf8-float-text only by the core's text.
+    # T1.32g, T1.36: each float whose text Python and Rust write otherwise
+    # than the reference reaches a key of utf8-float-text, mixed with text,
+    # only by the reference's text, and none of utf8-float-rust-text.
     for name in ('1e16', 'tiny', 'tie'):
         vector = by_id[f'utf8-float-text.mixed.float-{name}-text']
         assert vector['register']['disposition'] == 'as_text', name
         assert vector['reference']['as_text']['outcome'] == 'success', name
+        rust = by_id[f'utf8-float-rust-text.mixed.float-{name}-text']
+        assert rust['reference']['as_text']['outcome'] == 'refusal', name
+    for key in ('float32-exponent', 'decimal128-38-10-exponent'):
+        mark = by_id[f'{key}.mixed.float-text']['register']
+        assert mark['required'] and mark['disposition'] == 'as_text', key
     # Each key type has successes and refusals of both codes, or fails
     # everywhere with INTERNAL_ERROR (the reference's decimal and
     # large_string keys).

@@ -591,6 +591,9 @@ key_types! {
     rust_host_writes_a_float_entity_of_a_text_key_as_the_reference => "utf8-float-pyarrow-text",
     rust_host_misses_numeric_ids_by_the_reference_s_float_text => "utf8-numeric-ids",
     rust_host_reaches_numeric_ids_by_the_reference_s_float_text => "utf8-numeric-ids-and-exponent",
+    rust_host_misses_rust_s_float_text => "utf8-float-rust-text",
+    rust_host_reads_a_float32_key_s_text_with_an_exponent => "float32-exponent",
+    rust_host_reads_a_decimal_key_s_text_with_an_exponent => "decimal128-38-10-exponent",
 }
 
 #[test]

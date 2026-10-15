@@ -183,8 +183,29 @@
   {
    "id": "utf8-float-text",
    "setup": [
+    "ALTER TABLE users ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '1e+16' WHEN 2 THEN '1.5e-7' WHEN 3 THEN '1.0594382859262542e+15' ELSE user_id::VARCHAR END",
+    "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '1e+16' WHEN 2 THEN '1.5e-7' WHEN 3 THEN '1.0594382859262542e+15' ELSE user_id::VARCHAR END"
+   ]
+  },
+  {
+   "id": "utf8-float-rust-text",
+   "setup": [
     "ALTER TABLE users ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' WHEN 3 THEN '1059438285926254.3' ELSE user_id::VARCHAR END",
     "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING CASE user_id WHEN 1 THEN '10000000000000000' WHEN 2 THEN '0.00000015' WHEN 3 THEN '1059438285926254.3' ELSE user_id::VARCHAR END"
+   ]
+  },
+  {
+   "id": "float32-exponent",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE FLOAT USING CASE user_id WHEN 1 THEN '1e16'::FLOAT WHEN 2 THEN '1.5e-7'::FLOAT ELSE user_id END",
+    "ALTER TABLE orders ALTER user_id TYPE FLOAT USING CASE user_id WHEN 1 THEN '1e16'::FLOAT WHEN 2 THEN '1.5e-7'::FLOAT ELSE user_id END"
+   ]
+  },
+  {
+   "id": "decimal128-38-10-exponent",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 10) USING CASE user_id WHEN 1 THEN 10000000000000000 WHEN 2 THEN 0.00000015 ELSE user_id END",
+    "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 10) USING CASE user_id WHEN 1 THEN 10000000000000000 WHEN 2 THEN 0.00000015 ELSE user_id END"
    ]
   },
   {
@@ -45057,7 +45078,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "10000000000000000"
+      "v": "1e+16"
      },
      {
       "t": "utf8",
@@ -45081,7 +45102,7 @@
      "entities": [
       [
        "s",
-       "10000000000000000"
+       "1e+16"
       ],
       [
        "s",
@@ -45093,7 +45114,7 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['10000000000000000', '0'], the same as that text given as text, which the reference answers otherwise (success)",
+     "the host hands the core the text column ['1e+16', '0'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as utf8-float-text.text.1e16, which the reference answers differently"
     ],
     "disposition": "as_text"
@@ -45118,7 +45139,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "0.00000015"
+      "v": "1.5e-7"
      },
      {
       "t": "utf8",
@@ -45142,7 +45163,7 @@
      "entities": [
       [
        "s",
-       "0.00000015"
+       "1.5e-7"
       ],
       [
        "s",
@@ -45154,7 +45175,7 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['0.00000015', '0'], the same as that text given as text, which the reference answers otherwise (success)"
+     "the host hands the core the text column ['1.5e-7', '0'], the same as that text given as text, which the reference answers otherwise (success)"
     ],
     "disposition": "as_text"
    }
@@ -45178,7 +45199,7 @@
     "values": [
      {
       "t": "utf8",
-      "v": "1059438285926254.3"
+      "v": "1.0594382859262542e+15"
      },
      {
       "t": "utf8",
@@ -45202,7 +45223,7 @@
      "entities": [
       [
        "s",
-       "1059438285926254.3"
+       "1.0594382859262542e+15"
       ],
       [
        "s",
@@ -45214,7 +45235,7 @@
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1059438285926254.3', '0'], the same as that text given as text, which the reference answers otherwise (success)"
+     "the host hands the core the text column ['1.0594382859262542e+15', '0'], the same as that text given as text, which the reference answers otherwise (success)"
     ],
     "disposition": "as_text"
    }
@@ -45222,6 +45243,536 @@
   {
    "id": "utf8-float-text.text.1e16",
    "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "str",
+     "v": "1e+16"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "1e+16"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ],
+      [
+       "s",
+       "0"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the host gives the core the same column as utf8-float-text.mixed.float-1e16-text, which the reference answers differently"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.float.1e16",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.float.tiny",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.5e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.float.tie",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1059438285926254.2"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1059438285926254.2"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1.0594382859262542e+15"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.0594382859262542e+15"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-text.numpy.float32-1e16",
+   "key": "utf8-float-text",
+   "input": [
+    {
+     "t": "numpy.float32",
+     "v": "1.0000000272564224e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "float",
+    "values": [
+     {
+      "t": "f32",
+      "v": "1.0000000272564224e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.mixed.float-1e16-text",
+   "key": "utf8-float-rust-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "text",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "1e+16"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.mixed.float-tiny-text",
+   "key": "utf8-float-rust-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "text",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "1.5e-7"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.mixed.float-tie-text",
+   "key": "utf8-float-rust-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1059438285926254.2"
+    },
+    {
+     "t": "str",
+     "v": "0"
+    }
+   ],
+   "host_arrow": {
+    "rule": "text",
+    "type": "string",
+    "values": [
+     {
+      "t": "utf8",
+      "v": "1.0594382859262542e+15"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.float.1e16",
+   "key": "utf8-float-rust-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1e+16"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1e+16"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1e+16"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.float.tiny",
+   "key": "utf8-float-rust-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1.5e-07"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1.5e-07"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.5e-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.float.tie",
+   "key": "utf8-float-rust-text",
+   "input": [
+    {
+     "t": "float",
+     "v": "1059438285926254.2"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "double",
+    "values": [
+     {
+      "t": "f64",
+      "v": "1059438285926254.2"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1.0594382859262542e+15"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "utf8-float-rust-text.text.1e16",
+   "key": "utf8-float-rust-text",
    "input": [
     {
      "t": "str",
@@ -45275,71 +45826,43 @@
     }
    },
    "register": {
-    "required": true,
-    "why": [
-     "the host gives the core the same column as utf8-float-text.mixed.float-1e16-text, which the reference answers differently"
-    ],
+    "required": false,
+    "why": [],
     "disposition": null
    }
   },
   {
-   "id": "utf8-float-text.float.1e16",
-   "key": "utf8-float-text",
+   "id": "float32-exponent.mixed.float-text",
+   "key": "float32-exponent",
    "input": [
     {
      "t": "float",
      "v": "1e+16"
-    }
-   ],
-   "host_arrow": {
-    "rule": "inferred",
-    "type": "double",
-    "values": [
-     {
-      "t": "f64",
-      "v": "1e+16"
-     }
-    ]
-   },
-   "reference": {
-    "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
     },
-    "cast": {
-     "dtype": "string[pyarrow]",
-     "values": [
-      [
-       "s",
-       "1e+16"
-      ]
-     ]
-    }
-   },
-   "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
-   }
-  },
-  {
-   "id": "utf8-float-text.float.tiny",
-   "key": "utf8-float-text",
-   "input": [
     {
      "t": "float",
      "v": "1.5e-07"
+    },
+    {
+     "t": "str",
+     "v": "0"
     }
    ],
    "host_arrow": {
-    "rule": "inferred",
-    "type": "double",
+    "rule": "text",
+    "type": "string",
     "values": [
      {
-      "t": "f64",
-      "v": "1.5e-07"
+      "t": "utf8",
+      "v": "1e+16"
+     },
+     {
+      "t": "utf8",
+      "v": "1.5e-7"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
      }
     ]
    },
@@ -45351,79 +45874,67 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "string[pyarrow]",
-     "values": [
+     "dtype": "float[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "success",
+     "entities": [
       [
-       "s",
-       "1.5e-7"
+       "f",
+       "4341c37940000000"
+      ],
+      [
+       "f",
+       "3e8421f600000000"
+      ],
+      [
+       "f",
+       "0000000000000000"
       ]
      ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1e+16', '1.5e-7', '0'], the same as that text given as text, which the reference answers otherwise (success)"
+    ],
+    "disposition": "as_text"
    }
   },
   {
-   "id": "utf8-float-text.float.tie",
-   "key": "utf8-float-text",
+   "id": "decimal128-38-10-exponent.mixed.float-text",
+   "key": "decimal128-38-10-exponent",
    "input": [
     {
      "t": "float",
-     "v": "1059438285926254.2"
-    }
-   ],
-   "host_arrow": {
-    "rule": "inferred",
-    "type": "double",
-    "values": [
-     {
-      "t": "f64",
-      "v": "1059438285926254.2"
-     }
-    ]
-   },
-   "reference": {
-    "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "v": "1e+16"
     },
-    "cast": {
-     "dtype": "string[pyarrow]",
-     "values": [
-      [
-       "s",
-       "1.0594382859262542e+15"
-      ]
-     ]
-    }
-   },
-   "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
-   }
-  },
-  {
-   "id": "utf8-float-text.numpy.float32-1e16",
-   "key": "utf8-float-text",
-   "input": [
     {
-     "t": "numpy.float32",
-     "v": "1.0000000272564224e+16"
+     "t": "float",
+     "v": "1.5e-07"
+    },
+    {
+     "t": "str",
+     "v": "0"
     }
    ],
    "host_arrow": {
-    "rule": "inferred",
-    "type": "float",
+    "rule": "text",
+    "type": "string",
     "values": [
      {
-      "t": "f32",
-      "v": "1.0000000272564224e+16"
+      "t": "utf8",
+      "v": "1e+16"
+     },
+     {
+      "t": "utf8",
+      "v": "1.5e-7"
+     },
+     {
+      "t": "utf8",
+      "v": "0"
      }
     ]
    },
@@ -45435,19 +45946,22 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "string[pyarrow]",
-     "values": [
-      [
-       "s",
-       "1e+16"
-      ]
-     ]
+     "dtype": "decimal128(38, 10)[pyarrow]",
+     "raised": "ArrowInvalid"
+    },
+    "as_text": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the host hands the core the text column ['1e+16', '1.5e-7', '0'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)"
+    ],
+    "disposition": "as_text"
    }
   },
   {
