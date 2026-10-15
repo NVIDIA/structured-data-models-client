@@ -36,7 +36,6 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
         },
         nullable: true,
         unique: false,
-        declared_type: None,
     }
 }
 

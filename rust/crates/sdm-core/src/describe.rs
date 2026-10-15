@@ -110,6 +110,8 @@ pub(crate) async fn run(
     };
 
     let mut tables = Vec::with_capacity(names.len());
+    // Each table's marked big integers' declared types (big_integer_types).
+    let mut big_types = Vec::with_capacity(names.len());
     for table in &names {
         let one = || vec![table.source.clone()];
         let asked = describe_all(
@@ -176,6 +178,7 @@ pub(crate) async fn run(
         }
         // A big integer's tier, the whole column's (P1B-43).
         let preview = whole_column_tiers(&asker, &table.source, preview).await?;
+        big_types.push(big_integer_types(&preview, &declared));
         let previewed = infer::preview(
             &table.name,
             &table.source,
@@ -290,6 +293,14 @@ pub(crate) async fn run(
     for warning in warnings {
         asker.warn(warning);
     }
+    for (table, types) in description.tables.iter_mut().zip(big_types) {
+        for column in &mut table.columns {
+            column.declared_type = types
+                .iter()
+                .find(|(name, _)| *name == column.name)
+                .map(|(_, declared)| declared.clone());
+        }
+    }
     // Each table's repeated keys, as the reference's count sets them.
     if let Some(counted) = counted {
         for (table, repeats) in description.tables.iter_mut().zip(counted) {
@@ -318,6 +329,25 @@ fn falls_back(failed: &CoreError) -> bool {
         }
         _ => false,
     }
+}
+
+/// The catalog's declared type of each big-integer column the host layer
+/// read from an opaque type and marked ([`crate::big_integer`]), by name:
+/// what the described schema keeps (`DescribedColumn::declared_type`), so a
+/// `decimal128(38, 0)` seed is joined to such a key in the key's own type
+/// with no statement `materialize` adds (register P1B-43). Every other
+/// column keeps none, and joins as before part 3.
+fn big_integer_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(String, String)> {
+    preview
+        .schema
+        .fields()
+        .iter()
+        .filter(|f| big_integer::is_marked(f))
+        .filter_map(|f| {
+            let column = declared.iter().find(|c| &c.name == f.name())?;
+            Some((column.name.clone(), column.declared_type.clone()))
+        })
+        .collect()
 }
 
 /// `preview` with each big-integer column the host layer read
