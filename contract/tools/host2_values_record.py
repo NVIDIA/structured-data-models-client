@@ -181,6 +181,184 @@ def _sources() -> dict[str, dict[str, Any]]:
                 'UPDATE users SET f = far.f FROM far WHERE user_id = far.k',
             ],
         }
+
+    # The reference's from_source reads the first non-null value of each
+    # time-column candidate (a timestamp not named as a load stamp or a birth
+    # date) as a Python datetime (predictive_query/time_columns.py,
+    # _refused_for_values: present.iloc[0]), which fails unnamed
+    # (OverflowError) past the years 1 to 9999. So the same values in the
+    # first row read: users' row 0, orders' row 0.
+    def first(kind: str, value: Any, name: str = 'f') -> list[Any]:
+        return [
+            f'ALTER TABLE users ADD COLUMN {name} {kind}',
+            f"UPDATE users SET {name} = TIMESTAMP '2020-01-01'::{kind}",
+            *_put('users', 'user_id', name, kind, 0, value),
+        ]
+
+    def _put(
+        table: str, key: str, column: str, kind: str, row: int, value: Any
+    ) -> list[Any]:
+        if isinstance(value, str):
+            return [
+                f'UPDATE {table} SET {column} = {value} WHERE {key} = {row}'
+            ]
+        unit = {'TIMESTAMP_S': 's', 'TIMESTAMP_MS': 'ms'}[kind]
+        return [
+            {
+                'arrow': 'far',
+                'type': f'timestamp[{unit}]',
+                'rows': [[row, value]],
+            },
+            f'UPDATE {table} SET {column} = far.f FROM far WHERE {key} = far.k',
+        ]
+
+    entity = "the entity table's only timestamp, its first row"
+    firsts: dict[str, tuple[str, list[Any]]] = {
+        'first.users.TIMESTAMP_S.infinity': (
+            entity,
+            first('TIMESTAMP_S', "'infinity'"),
+        ),
+        'first.users.TIMESTAMP_S.-infinity': (
+            entity,
+            first('TIMESTAMP_S', "'-infinity'"),
+        ),
+        'first.users.TIMESTAMP_MS.infinity': (
+            entity,
+            first('TIMESTAMP_MS', "'infinity'"),
+        ),
+        'first.users.far.s.past': (entity, first('TIMESTAMP_S', 10**16)),
+        'first.users.far.s.before': (entity, first('TIMESTAMP_S', -(10**16))),
+        'first.users.far.s.just-past': (
+            entity,
+            first('TIMESTAMP_S', 9_223_372_036_855),
+        ),
+        'first.users.far.ms.past': (entity, first('TIMESTAMP_MS', 10**17)),
+        'first.users.TIMESTAMP_S.year-10000': (
+            entity,
+            first('TIMESTAMP_S', "'10000-01-01'::TIMESTAMP_S"),
+        ),
+        'first.users.TIMESTAMP.infinity': (
+            entity,
+            first('TIMESTAMP', "'infinity'"),
+        ),
+        'first.users.TIMESTAMP.year-10000': (
+            entity,
+            first('TIMESTAMP', "'10000-01-01'::TIMESTAMP"),
+        ),
+        'first.users.TIMESTAMP_S.null-then-infinity': (
+            "the entity table's only timestamp, null in its first row and "
+            'past the years in its second',
+            [
+                *first('TIMESTAMP_S', 'NULL'),
+                "UPDATE users SET f = 'infinity' WHERE user_id = 1",
+            ],
+        ),
+        'first.feature.TIMESTAMP_S.infinity': (
+            "a feature (orders.ts the time column), orders' first row",
+            [
+                'ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S',
+                'ALTER TABLE orders ADD COLUMN seen TIMESTAMP_S',
+                'UPDATE orders SET seen = ts',
+                "UPDATE orders SET seen = 'infinity' WHERE order_id = 0",
+            ],
+        ),
+        'first.time.TIMESTAMP_S.infinity': (
+            "the time column, orders' first row",
+            [
+                'ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S',
+                "UPDATE orders SET ts = 'infinity' WHERE order_id = 0",
+            ],
+        ),
+        'first.time.TIMESTAMP_S.-infinity': (
+            "the time column, orders' first row",
+            [
+                'ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S',
+                "UPDATE orders SET ts = '-infinity' WHERE order_id = 0",
+            ],
+        ),
+        # Controls: the reference reads these first rows.
+        'first.users.TIMESTAMP_S.year-9999': (
+            entity + ' (control: within the years)',
+            first('TIMESTAMP_S', "'9999-12-31'::TIMESTAMP_S"),
+        ),
+        'first.users.TIMESTAMP_NS.infinity': (
+            entity + ' (control: a nanosecond infinity is within them)',
+            first('TIMESTAMP_NS', "'infinity'"),
+        ),
+        'first.users.TIMESTAMP_S.infinity.loaded_at': (
+            entity + ' (control: a load stamp is no candidate)',
+            first('TIMESTAMP_S', "'infinity'", 'loaded_at'),
+        ),
+        'first.users.TIMESTAMP_S.infinity.birth_date': (
+            entity + ' (control: a birth date is no candidate)',
+            first('TIMESTAMP_S', "'infinity'", 'birth_date'),
+        ),
+    }
+    for name, (role, setup) in firsts.items():
+        column = name.split('.')[1]
+        out[name] = {
+            'column': {
+                'users': 'users.'
+                + (
+                    name.split('.')[-1]
+                    if name.endswith(('loaded_at', 'birth_date'))
+                    else 'f'
+                ),
+                'feature': 'orders.seen',
+                'time': 'orders.ts',
+            }[column],
+            'role': role,
+            'setup': setup,
+        }
+    # The three sources of fix 3's differential (seed 3136) whose
+    # reference from_source failed unnamed, as generated.
+    out['generated.g24.users.TIMESTAMP_S'] = {
+        'column': 'users.f',
+        'role': entity + ' (-10**16), and two more past the years',
+        'setup': [
+            'ALTER TABLE users ADD COLUMN f TIMESTAMP_S',
+            "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+            {'arrow': 'far0', 'type': 'timestamp[s]', 'rows': [[7, 10**16]]},
+            'UPDATE users SET f = far0.f FROM far0 WHERE user_id = far0.k',
+            {'arrow': 'far1', 'type': 'timestamp[s]', 'rows': [[0, -(10**16)]]},
+            'UPDATE users SET f = far1.f FROM far1 WHERE user_id = far1.k',
+            {
+                'arrow': 'far2',
+                'type': 'timestamp[s]',
+                'rows': [[1, 9_223_372_036_855]],
+            },
+            'UPDATE users SET f = far2.f FROM far2 WHERE user_id = far2.k',
+        ],
+    }
+    out['generated.g30.feature.TIMESTAMP_MS'] = {
+        'column': 'orders.seen',
+        'role': "a feature, 'infinity' in orders' first row",
+        'setup': [
+            'ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS',
+            'ALTER TABLE orders ADD COLUMN seen TIMESTAMP_MS',
+            'UPDATE orders SET seen = ts',
+            "UPDATE orders SET seen = 'infinity'::TIMESTAMP_MS WHERE order_id = 0",
+            "UPDATE orders SET seen = '-infinity'::TIMESTAMP_MS WHERE order_id = 5",
+        ],
+    }
+    out['generated.g32.feature.TIMESTAMP_S'] = {
+        'column': 'orders.seen',
+        'role': "a feature, 9223372036855 s in orders' first row",
+        'setup': [
+            'ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S',
+            'ALTER TABLE orders ADD COLUMN seen TIMESTAMP_S',
+            'UPDATE orders SET seen = ts',
+            'UPDATE orders SET seen = NULL WHERE order_id = 40',
+            "UPDATE orders SET seen = TIMESTAMP '1000-01-01'::TIMESTAMP_S "
+            'WHERE order_id = 64',
+            {
+                'arrow': 'far2',
+                'type': 'timestamp[s]',
+                'rows': [[0, 9_223_372_036_855]],
+            },
+            'UPDATE orders SET seen = far2.f FROM far2 WHERE order_id = far2.k',
+        ],
+    }
     return out
 
 
@@ -313,6 +491,10 @@ def answer(setup: list[Any], route: str) -> dict[str, Any]:
                 'code': None if code is None else str(code),
                 'message': str(error).splitlines()[0][:240],
             }
+            # Which request of the run failed, where the error says.
+            details = getattr(error, 'details', None)
+            if isinstance(details, dict) and 'request' in details:
+                got['outcome']['request'] = str(details['request'])
             if os.environ.get('HOST2_TRACE'):
                 traceback.print_exception(error)
     ends = [*list(starts.values())[1:], len(shown)]

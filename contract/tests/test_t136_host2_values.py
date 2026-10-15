@@ -49,14 +49,38 @@ refuses ``VALUE_OUT_OF_RANGE`` at ``materialize``.
 
 The ``big`` rows take about 7 GB and up to six minutes each, so the test
 making their public calls is defined only with ``SDM_T136_BIG=1``; by
-default only the recorded rows are held. Their rule: where the reference fails at ``from_source`` with
-no code (DuckDB refuses to write the value without large buffers), the core
+default only the recorded rows are held. Their rule: where the reference
+fails at ``from_source`` with no code (DuckDB refuses to write the value without large buffers), the core
 fails there too, by name (E66(b)); where the reference describes the source,
 the core describes it as the reference does, and where the reference goes
 on through ``predict`` (the ``BLOB``, which it leaves out), so does the
 core. The ``VARCHAR`` with large buffers fails the reference's
 ``materialize`` with DuckDB's out-of-memory error on a 24 GB machine, an
 answer of the machine, so only its ``from_source`` is held.
+
+Added after fix 3 (97aefc9d), from its review (register P1B-81):
+
+- (a) a finite value past microseconds in the time column makes DuckDB
+  fail the time bounds' ``CAST(ts AS TIMESTAMP)``, the statement both
+  routes send. The reference gives ``INTERNAL_ERROR`` (DuckDB's
+  ``ConversionException``); the core cannot tell that failure from another
+  without the driver's message, which the contract keeps out, so it gives
+  ``PROVIDER_ERROR``, its request ``time_bounds`` (DT-12's shape, E66(b)):
+  ``time.far.*`` are held to that, never ``INTERNAL_ERROR`` or a panic.
+- (b) the reference's ``from_source`` reads the first non-null value of each
+  time-column candidate (a timestamp column not named as a load stamp or a
+  birth date) as a Python datetime (``predictive_query/time_columns.py``,
+  ``_refused_for_values``: ``present.iloc[0]``, pyarrow's ``as_py``), which
+  fails unnamed (``OverflowError``) past the years 1 to 9999. The
+  ``first.*`` vectors put the values above in that first row (and a
+  microsecond infinity and the year 10000, which fail the same way); the
+  ``generated.*`` ones are the three sources of fix 3's differential where
+  it happened. Where the reference fails so, the core refuses at
+  ``from_source`` too, by name (E66(b)): a ``StructuredDataError`` with a
+  code other than ``INTERNAL_ERROR``. Their controls (a nanosecond infinity,
+  the year 9999, a column named ``loaded_at`` or ``birth_date``) and every
+  vector above, whose value is not in a first row, the reference describes,
+  and the core must too.
 
 Each answer is the public calls on one route in this process: the default
 route is the reference's code, and ``SDM_CORE_ROUTES`` forces the core
@@ -117,13 +141,27 @@ def _kind(vector: dict[str, Any]) -> str:
     return part
 
 
-#: The vectors past int64 microseconds the core refuses when written.
+#: The vectors past int64 microseconds the core refused when written, none
+#: in a row the reference reads first.
 PAST_MICROSECONDS = [
     v['name']
     for v in ALL
-    if _kind(v) in ('TIMESTAMP_S', 'TIMESTAMP_MS')
+    if v['name'].startswith(('time.', 'feature.', 'users.'))
+    and _kind(v) in ('TIMESTAMP_S', 'TIMESTAMP_MS')
     and (v['name'].endswith('infinity') or '.far.' in v['name'])
 ]
+#: P1B-81(a): finite values past microseconds in the time column, whose
+#: time bounds DuckDB fails to cast.
+TIME_BOUNDS = [v['name'] for v in ALL if v['name'].startswith('time.far.')]
+#: P1B-81(b): the sources whose reference from_source fails unnamed.
+READ_FIRST = [
+    v['name']
+    for v in ALL
+    if v['reference']['outcome']['stage'] == 'from_source'
+    and v['reference']['outcome']['result'] == 'refusal'
+]
+#: The sources the reference describes.
+DESCRIBED = [v['name'] for v in ALL if v['reference']['described'] is not None]
 
 
 def _routed(route: str, setup: list[Any]) -> dict[str, Any]:
@@ -210,6 +248,48 @@ def test_the_vector_file_is_what_it_says() -> None:
                 assert f'{role}.{kind}.{value}' in PAST_MICROSECONDS
         for label in ('s.past', 's.before', 'ms.past'):
             assert f'{role}.far.{label}' in PAST_MICROSECONDS
+    assert len(TIME_BOUNDS) == 4
+    assert {n for n in READ_FIRST if n.startswith('generated.')} == {
+        'generated.g24.users.TIMESTAMP_S',
+        'generated.g30.feature.TIMESTAMP_MS',
+        'generated.g32.feature.TIMESTAMP_S',
+    }
+    assert len(READ_FIRST) == 17
+
+
+def test_the_reference_fails_unnamed_only_on_a_first_value_past_the_years() -> (
+    None
+):
+    r"""P1B-81(b)'s trigger, as recorded: the reference's from_source fails
+    with a bare OverflowError exactly on the sources holding, first in some
+    time-column candidate, a value past the years 1 to 9999, and on no
+    control; every other vector it describes."""
+    for vector in ALL:
+        name = vector['name']
+        outcome = vector['reference']['outcome']
+        if name in READ_FIRST:
+            assert name.startswith(('first.', 'generated.')), name
+            assert (outcome['error'], outcome['code']) == (
+                'OverflowError',
+                None,
+            ), name
+            assert vector['reference']['described'] is None, name
+        else:
+            assert name in DESCRIBED, name
+    controls = [
+        'first.users.TIMESTAMP_S.year-9999',
+        'first.users.TIMESTAMP_NS.infinity',
+        'first.users.TIMESTAMP_S.infinity.loaded_at',
+        'first.users.TIMESTAMP_S.infinity.birth_date',
+    ]
+    assert set(controls) <= set(DESCRIBED)
+    # Every first-row value past the years fails it, at s, ms and us, in
+    # each role, after leading nulls too.
+    assert {
+        n for n in BY_NAME if n.startswith('first.') and n not in controls
+    } <= set(READ_FIRST)
+    # The 22 values past microseconds in a later row it describes.
+    assert set(PAST_MICROSECONDS) <= set(DESCRIBED)
 
 
 def test_each_value_past_int64_microseconds_is_one_the_reference_describes() -> (
@@ -275,13 +355,11 @@ def test_the_reference_answers_as_recorded(name: str) -> None:
 # --- the core ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize('name', list(BY_NAME))
+@pytest.mark.parametrize('name', DESCRIBED)
 def test_the_core_describes_each_source_as_the_reference_does(
     name: str,
 ) -> None:
     reference = BY_NAME[name]['reference']
-    # Every vector's reference describes its source.
-    assert reference['described'] is not None
     got = core(name)
     assert got['described'] is not None, (
         f'{name}: the reference describes this source and the core refuses '
@@ -292,8 +370,11 @@ def test_the_core_describes_each_source_as_the_reference_does(
 
 @pytest.mark.parametrize('name', list(BY_NAME))
 def test_the_core_ends_where_the_reference_does(name: str) -> None:
-    r"""Through predict where the reference gets there; else refused at
-    materialize, a time past the nanosecond range (DT-14)."""
+    r"""Through predict where the reference gets there; refused by name at
+    from_source where the reference's from_source fails unnamed (P1B-81(b),
+    E66(b)); refused PROVIDER_ERROR of the time bounds where DuckDB fails
+    their cast (P1B-81(a)); else refused at materialize, a time past the
+    nanosecond range (DT-14)."""
     reference = BY_NAME[name]['reference']['outcome']
     got = core(name)['outcome']
     if reference['result'] == 'success':
@@ -302,7 +383,41 @@ def test_the_core_ends_where_the_reference_does(name: str) -> None:
             f'core: {got}'
         )
         return
+    if name in READ_FIRST:
+        assert reference['code'] is None
+        assert (got['result'], got['stage'], got.get('error')) == (
+            'refusal',
+            'from_source',
+            'StructuredDataError',
+        ), (
+            f'{name}: the reference fails from_source unnamed '
+            f'({reference["error"]}); the core must refuse there by name, '
+            f'not: {got}'
+        )
+        assert got['code'] not in (None, 'INTERNAL_ERROR'), got
+        return
     assert reference['stage'] == 'materialize'
+    if name in TIME_BOUNDS:
+        assert reference['code'] == 'INTERNAL_ERROR'
+        assert 'ConversionException' in reference['message']
+        assert (
+            got['result'],
+            got['stage'],
+            got.get('error'),
+            got.get('code'),
+            got.get('request'),
+        ) == (
+            'refusal',
+            'materialize',
+            'StructuredDataError',
+            'PROVIDER_ERROR',
+            'time_bounds',
+        ), (
+            f"{name}: DuckDB fails the time bounds' cast, the reference "
+            f'with INTERNAL_ERROR; the core must give PROVIDER_ERROR of the '
+            f'time_bounds request, not: {got}'
+        )
+        return
     assert (got['result'], got['stage'], got.get('error'), got.get('code')) == (
         'refusal',
         'materialize',
