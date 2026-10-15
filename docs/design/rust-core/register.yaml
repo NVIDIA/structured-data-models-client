@@ -797,8 +797,13 @@ entries:
     of January, 15/03/2024 the 15th of March, unreadable values become NaT with
     a warning, and mixed offsets raise ValueError under pandas 3.
   new_behavior: >-
-    Proposed: keep, so one text column can still read differently as a frame
-    and as a SQL source.
+    Kept as the provider's capability (ProviderCapabilities.text_times,
+    E62): a SQL source's text time column is read value by value from the
+    fetch. From T1.25b (E68) that reading is the core's fixed list of
+    formats, not the engine's: a value outside the list is refused by name
+    at materialize (DT-15), the order of day and month is the client's rule
+    over the fetch's values (DT-16), and a value the source's CAST cannot
+    read is the provider's error (DT-12); those three are owner-approved.
   affected_inputs: SQL sources whose time column is stored as text.
   cases: [T0.6, time.text-us-date, time.text-one-bad-value]
   status: approved
@@ -861,8 +866,10 @@ entries:
     only the canonical spelling and refused the rest, which refused input the
     reference accepts; the owner's rule is that a refusal of such input is a
     regression, so the lookup now takes every case. This entry refuses
-    nothing, so it is for the independent reviewer, not the owner. The
-    inventory cases that reach it, if any, are listed here when T1.33 runs.
+    nothing, so the independent reviewer could approve it; the owner
+    approved it first, at the T1.7b check-in (above). The inventory cases
+    that reach it were to be listed here at T1.33, and are not (as-built,
+    T1.33, "Not done in part 2").
 
 - id: DT-9
   title: PQL date literals with a field of five or more digits (interim)

@@ -239,17 +239,22 @@ Each lane's new rows go in its own table below, and in that table only; the rows
 - Re-review R2: dropping `Lookup`; the journey reaches the reference's `_by_pkey`.
 - Re-review R2: chaining the raw driver exception as `__cause__`; driver text quotes values, so the host keeps class and codes only (H17).
 
-## Open decisions
+## Closed decisions
 
-- The owner confirms or changes the orchestrator rows at the check-ins (H12).
-- Q2's narrowing fallback, only if T1.11a finds the driver capture infeasible; T1.11a then stops for the owner.
-- At T1.11e: H9's rule against the measured counts.
-- P1B-1: any Phase 1b case whose new outcome refuses an input the reference accepts comes to the owner case by case, as its case lands (H19).
+Once listed under "Open decisions", each closed by T1.36, with what closed it; kept here, as superseded rows are kept.
+
+- The owner confirms or changes the orchestrator rows at the check-ins (H12). Every row marked "owner to confirm", 58 in all, confirmed by owner 2026-10-15 (E143).
+- Never needed: Q2's narrowing fallback, only if T1.11a finds the driver capture infeasible; T1.11a then stops for the owner. T1.11a found the capture feasible and built it (as-built, T1.11a).
+- At T1.11e, H9's rule against the measured counts. Measured at T1.11e, H9 holds (E48(h)).
+- P1B-1: any Phase 1b case whose new outcome refuses an input the reference accepts comes to the owner case by case, as its case lands (H19). P1B-1 closed as superseded by its cases' own entries (E88(e)).
 - P1B-2 (T1.11b), P1B-3 (T1.11c) and P1B-4 (T1.11d): the thin core routes' named refusals of inputs the reference accepts, proposed as temporary (closed as superseded by the owner 2026-10-13, E88(e)); E41(c) and E41(j), the coverage warning's and the index read's lifetimes, are answered by E52 (state as a value the host hands back; the per-process dedupe in `sdm-host`), built at T1.26.
 - The held-out no-go threshold (H11), at T1.20: answered, approved as written (E66(e)).
-- From checkpoint 4 (T1.12b): the entities' cast moved from "stays host" to T1.32a, enacted as an orchestrator reading of E50, owner to confirm (design, "Host-held semantics"); and proposals for the owner, none enacted: E56(d), the freeze's secondary layer retired at T1.28b's landing and the freeze deleted once the ledger holds only "stays host" rows; T1.15 narrowed to `--check` unless a locked check needs `--gate S0`, and T1.31 folded into the type families as T1.30 was (tracker, "Owner check-ins"). Since enacted by the owner (E66(f)): E56(d)'s retirement at T1.28b's landing, T1.15 narrowed to `--check`, T1.31 folded into T1.32a to T1.32e.
-- E6: the instants at or past 9999-12-30T22:00Z that T1.25's time module meets, and whether any path cannot avoid a refusal there (then a case and a register entry, P1B-1).
+- From checkpoint 4 (T1.12b): the entities' cast moved from "stays host" to T1.32a, enacted as an orchestrator reading of E50, confirmed by owner 2026-10-15 (E82, E143) (design, "Host-held semantics"); and proposals for the owner, none enacted: E56(d), the freeze's secondary layer retired at T1.28b's landing and the freeze deleted once the ledger holds only "stays host" rows; T1.15 narrowed to `--check` unless a locked check needs `--gate S0`, and T1.31 folded into the type families as T1.30 was (tracker, "Owner check-ins"). Since enacted by the owner (E66(f)): E56(d)'s retirement at T1.28b's landing, T1.15 narrowed to `--check`, T1.31 folded into T1.32a to T1.32e.
+- E6: the instants at or past 9999-12-30T22:00Z that T1.25's time module meets, and whether any path cannot avoid a refusal there (then a case and a register entry, P1B-1). T1.25 computes them without a refusal (E62(a)), and where pandas raises or misreads there it is register DT-10, approved by owner (E140).
 - E25: whether a small fix round may use one reviewer: answered, every review round has two reviewers, small re-checks included (E73(c)).
-- A proposal for the owner, not applied: register PK-4's approved `new_behavior` reads "as agreed with the PQL team"; since E18 it could read "as the reference gives them".
-- An option from checkpoint 1, not taken: folding E8's validated-query lock into the contract lock, now that the format is this client's own (E18).
-- The owner's go or no-go at the end of Phase 1b (T1.36).
+- Dropped at T1.36: a proposal for the owner, not applied: register PK-4's approved `new_behavior` reads "as agreed with the PQL team"; since E18 it could read "as the reference gives them". PK-4 is owner-approved and its notes already say there is no PQL-team agreement since E18, so rewording it would reopen an approved entry for no change in behavior.
+- Not taken: an option from checkpoint 1, folding E8's validated-query lock into the contract lock, now that the format is this client's own (E18).
+
+## Open decisions
+
+- The owner's go or no-go at the end of Phase 1b (T1.36). The owner's answer of 2026-10-14 (night, item 33) is a conditional go: go on the final SHA once both final reviews find no P1 or P2 on the whole phase, both locked gates pass on that SHA and the evidence pack is complete; the owner merges.
