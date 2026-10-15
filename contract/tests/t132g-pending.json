@@ -3,11 +3,7 @@
  "pending": {
   "python-core": [],
   "rust-host": [],
-  "exits": [
-   "py:test_python_old_s_runtime_deprecations_before_its_stop_are_left_out[a pyarrow deprecation too]",
-   "py:test_python_old_s_runtime_deprecations_before_its_stop_are_left_out[around a kept warning]",
-   "py:test_python_old_s_runtime_deprecations_before_its_stop_are_left_out[as run: two pandas deprecations]"
-  ]
+  "exits": []
  },
  "authored": {
   "python-core": [],

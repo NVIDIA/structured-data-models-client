@@ -896,7 +896,10 @@ def _host_fields(
         shown = shown[: len(reference['host']['warnings'])]
     if shown != reference['host']['warnings']:
         if against == 'python-old' and _runtime_only(
-            observation['host'], reference['host'], report.narrowed
+            observation['host'],
+            reference['host'],
+            report.narrowed,
+            held=stop is not None,
         ):
             report.note(
                 f'{where}: host.warnings: python-old alone shows the '
@@ -926,7 +929,9 @@ def _host_fields(
         report.fail(f'{where}: {found}', 'payload')
 
 
-def _runtime_only(core: Any, old: Any, narrowed: bool) -> bool:
+def _runtime_only(
+    core: Any, old: Any, narrowed: bool, held: bool = False
+) -> bool:
     r"""Whether python-core's warnings are python-old's with only the
     runtime's DeprecationWarnings left out (HOST-5): each removed one a
     ``DeprecationWarning`` whose recorded origin is one of
@@ -939,7 +944,17 @@ def _runtime_only(core: Any, old: Any, narrowed: bool) -> bool:
     stand in for one of the runtime's that python-old shows. False unless
     ``narrowed`` (the entry the owner approved) and both runners recorded
     every warning's origin, its class the one the warning list names; a
-    missing, short or retyped record never narrows anything."""
+    missing, short or retyped record never narrows anything.
+
+    ``held``: python-core went past where python-old stopped (``stop`` in
+    :func:`_host_fields`), so python-old's warnings, its runtime ones left
+    out, are the first of python-core's, and the rest of python-core's,
+    raised past the stop, are not compared, as :func:`_host_fields` holds a
+    runner past the reference's stop. Truncating python-core's warnings to
+    python-old's count first (T1.32g fix 12) would hold python-core's own
+    warnings past the stop against the runtime's DeprecationWarnings
+    python-old raised before it (pandas 2.2.0 under pyarrow 14, the
+    floor-pandas2.2 cell)."""
     if not narrowed:
         return False
     mine, theirs = _origins(core), _origins(old)
@@ -955,7 +970,7 @@ def _runtime_only(core: Any, old: Any, narrowed: bool) -> bool:
             at += 1
         elif not _runtime(each):
             return False
-    return at == len(mine)
+    return held or at == len(mine)
 
 
 def _runtime(warning: tuple[str, str | None]) -> bool:
