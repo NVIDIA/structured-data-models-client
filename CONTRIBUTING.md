@@ -33,7 +33,7 @@ python3.12 -m venv .venv
   -e './packages/structured-data-models-api[test]' \
   -e './packages/structured-data-models-pql[test]' \
   -e './packages/structured-data-models-client[test]' \
-  -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,test]'
+  -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
 .venv/bin/python -m pytest \
   packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
   packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q
