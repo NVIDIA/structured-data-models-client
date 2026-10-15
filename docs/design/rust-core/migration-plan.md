@@ -104,7 +104,7 @@ Retired (Phase 1 decision E18, approved by owner 2026-10-08): the asks stay a Ph
 | Other | bool, null (all-null columns) |
 
 Every accepted type is preserved or refused with a named error, never silently turned into nulls.
-Arrow-to-Arrow admission into this set is one lossless table in `sdm-host`, shared by every language; a value the admitted type cannot hold is refused by name (Phase 1 decisions B-D6 and E13, pending owner confirmation).
+Arrow-to-Arrow admission into this set is one lossless table in `sdm-host`, shared by every language; a value the admitted type cannot hold is refused by name (Phase 1 decisions B-D6, confirmed by owner 2026-10-15, and E13, approved by owner 2026-10-08).
 Phase 1b validates this set against its case inventory before it is final.
 
 ### What lives where
@@ -170,7 +170,7 @@ The core is plain Rust and doesn't know which language loads it.
 Each language uses its standard binding tool, over one shared Rust layer:
 
 - **`sdm-host`**, plain Rust, written once: encodes control messages as versioned JSON, hands data over as Arrow, owns native resource lifetimes, contains panics, and sets the threading rules; it schedules no domain work.
-  Its calls take and give control messages as bytes with the attachments each names (Phase 1 decision E13, pending owner confirmation).
+  Its calls take and give control messages as bytes with the attachments each names (Phase 1 decision E13, approved by owner 2026-10-08).
 - **Python:** a thin PyO3 binding built with maturin as `abi3` wheels; it converts types, maps errors to Python classes, releases the GIL while the core runs, and passes Arrow through the standard PyCapsule interface without copying.
   On the epic branch that is the only path: the `pyarrow>=14.0.1` floor guarantees it, and the `_export_to_c` fallback for pyarrow older than 14 is dropped (Phase 1 decision E16, approved by owner 2026-10-08).
 - **Java:** a thin `jni-rs` binding loaded from the JAR (JDK 17 and 21); it maps errors to Java classes and passes Arrow through Arrow Java's C Data module without copying.
@@ -197,7 +197,7 @@ The core keeps the round trips as they are and should cut the CPU, as long as th
 - Data providers hand the driver's Arrow straight to the core, with no pandas round trip; drivers without Arrow build Arrow columns from rows directly.
 - Tables cross zero-copy through the Arrow C Data Interface.
 - JSON is only for small control messages, capped (for example at 64 KB); anything row-shaped travels as Arrow.
-  Byte buffers and Arrow tables cross as attachments named by id (Phase 1 decision E2, pending owner confirmation), and so does every field whose size grows with user input, such as query text and schemas, so the cap never refuses an input (Phase 1 decision H5, approved by owner 2026-10-08).
+  Byte buffers and Arrow tables cross as attachments named by id (Phase 1 decision E2, approved by owner 2026-10-08), and so does every field whose size grows with user input, such as query text and schemas, so the cap never refuses an input (Phase 1 decision H5, approved by owner 2026-10-08).
 - The host never parses or re-encodes the model request or response body; it passes the bytes on.
 - Data requests are batched per hop, with no chatty per-row or per-entity steps.
 - Object columns convert column-wise, never cell by cell.
@@ -217,7 +217,7 @@ The names and boundaries below are the target ownership, not a reason to rename 
 | `sdm-schema` | Canonical schema, inference over Arrow, source-neutral metric and semantic view interpretation | Keep the engine; move catalog SQL to `sdm-data`; drop the pandas column models and dtype parsing; YAML through a library |
 | `sdm-engine` | Modules for time (one calendar, the date parsing rules recorded in Phase 0, `DateOffset`, time zones), random streams, sampling (plan, neighbor sampler, graph store) and labels (kernels and windows) | Merges today's time, random, sampling and label code with one value model; time on a library, not a pandas date-inference clone; Arrow compute where answers allow |
 | `sdm-request` | Modules for materialization, session state, decomposition, limits, payload encoding, response decoding and result layout | Keep the logic; drop the CPython sort and `json.dumps` size emulation |
-| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the PQL parser (crate `sdm-pql`, `sdm-pql-interim` until Phase 1 task T1.28w renamed it; Phase 1 decision A3, pending owner confirmation, and Phase 1 decision E18, approved by owner 2026-10-08) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
+| `sdm-core` | The single Run state machine, public operation dispatch, cancellation, model capability checks and profiles; the PQL parser (crate `sdm-pql`, `sdm-pql-interim` until Phase 1 task T1.28w renamed it; Phase 1 decision A3, confirmed by owner 2026-10-15, and Phase 1 decision E18, approved by owner 2026-10-08) behind one adapter | Rewrite the host API; typed operations only; capability checks from today's `pql` crate |
 | `sdm-testkit` | Contract runner, provider conformance kit, fixtures | Dev-only; nothing in the shipped crates |
 | `sdm-host` | Control-message codecs, Arrow handoff, native resource lifetime, panic containment, threading; no domain scheduling | New, written once |
 | `sdm-py`, `sdm-jni` | Thin PyO3 and `jni-rs` bindings over `sdm-host`: convert types, map errors, release the GIL | Rewrite `sdm-py` much slimmer; new `sdm-jni` |
@@ -231,7 +231,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 | Columnar data and kernels | `arrow` crates, including `arrow-cast`, `arrow-ord`, `arrow-arith`, `arrow-select`, `arrow-row` and `arrow-ipc` |
 | Decimals and big integers | Arrow's decimal types and `arrow-buffer`'s `i256`, under the contract's exact-encoding policy |
 | PQL parsing | This client's own Rust parser, no C++ (Phase 1 decision E18, approved by owner 2026-10-08; the PQL team's crate over its C++ core is superseded) |
-| Dates, times, zones | `jiff`, with the host's ordered zone lookup roots and a bundled fallback, the source and version recorded per zone; `chrono` only as Arrow's transitive dependency and `chrono-tz` banned (Phase 1 decision A7, pending owner confirmation): it met DT-1 and DT-2 on every T0.6 zone and `DateOffset` answer, where `chrono-tz` failed. Instants past `jiff`'s range use civil arithmetic and are never refused for that reason (Phase 1 decision E6, pending owner confirmation). Inside the core, one instant and one span type in nanoseconds, columns kept as Arrow arrays, conversions checked (Phase 1 decision F3, approved by owner 2026-10-08) |
+| Dates, times, zones | `jiff`, with the host's ordered zone lookup roots and a bundled fallback, the source and version recorded per zone; `chrono` only as Arrow's transitive dependency and `chrono-tz` banned (Phase 1 decision A7, confirmed by owner 2026-10-15): it met DT-1 and DT-2 on every T0.6 zone and `DateOffset` answer, where `chrono-tz` failed. Instants past `jiff`'s range use civil arithmetic and are never refused for that reason (Phase 1 decision E6, approved by owner 2026-10-08). Inside the core, one instant and one span type in nanoseconds, columns kept as Arrow arrays, conversions checked (Phase 1 decision F3, approved by owner 2026-10-08) |
 | YAML (metric and semantic views) | A maintained YAML 1.2 crate such as `saphyr` or `yaml-rust2` (not the archived `serde_yaml`); behavior differences go through the register |
 | JSON | `serde`, `serde_json` |
 | Error types | `thiserror`; no `anyhow` in core crates |
@@ -244,7 +244,7 @@ Today's `wire` crate is generated from the model API; `sdm-request` uses it, and
 **Policy:** `Cargo.lock` is committed and the toolchain is pinned; the pinned toolchain is the minimum supported Rust version.
 `cargo-deny` checks advisories, licenses, bans and sources in L0, starting from the first attempt's `deny.toml` and toolchain file.
 The wheel and JAR ship third-party notices, including for statically linked C++.
-Dependency updates are reviewed changes made only at slice gates, with `arrow`, `pyo3` and `jni` updated together (today Arrow 58, `pyo3` 0.28 and `duckdb` 1.10506.0: Phase 1 decision B-D2, pending owner confirmation).
+Dependency updates are reviewed changes made only at slice gates, with `arrow`, `pyo3` and `jni` updated together (today Arrow 58, `pyo3` 0.28 and `duckdb` 1.10506.0: Phase 1 decision B-D2, confirmed by owner 2026-10-15).
 
 On the Python side, pandas and pyarrow stay as host dependencies, and the old engine is deleted on the epic branch in Phase 5.
 
