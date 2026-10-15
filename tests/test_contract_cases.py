@@ -517,6 +517,33 @@ _VECTOR_ZONE_PENDING = {
 }
 
 
+#: A plain per-connection zone statement: the caller's connection alone.
+_SESSION_ZONE = re.compile(
+    r"^\s*SET\s+(SESSION\s+)?TimeZone\s*(=|TO)\s*'[^']+'\s*;?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _vector_zone_problems(where: str, statements: list[str]) -> list[str]:
+    r""":func:`_zone_problems`, but a plain session ``SET TimeZone`` is
+    allowed in a setup that also sets the database's zone with ``SET
+    GLOBAL``: every cursor then takes the global zone, and the session
+    statement only sets the setup's own connection, as a vector may do on
+    purpose to show that the source does not read in it
+    (t136-host2-zone-vectors.json's session.* and verbatim.* vectors). Any
+    other form (RESET, LOCAL, set_config, a compound statement) is still a
+    problem, global zone or not."""
+    pinned = any(_GLOBAL_ZONE.match(each) for each in statements)
+    return _zone_problems(
+        where,
+        [
+            each
+            for each in statements
+            if not (pinned and _SESSION_ZONE.match(each))
+        ],
+    )
+
+
 def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
     r"""Each setup ``node`` holds under :data:`_VECTOR_SETUP_KEYS`, with
     the id of the nearest enclosing object that has one."""
@@ -550,9 +577,30 @@ def test_a_vector_sets_its_time_zone_for_every_cursor() -> None:
         document = json.loads(path.read_text(encoding='utf-8'))
         for vector, setup in _vector_setups(document, '?'):
             named += sum(bool(_ZONE.search(each)) for each in setup)
-            problems.update(_zone_problems(f'{path.name} {vector}', setup))
+            problems.update(
+                _vector_zone_problems(f'{path.name} {vector}', setup)
+            )
     assert problems == _VECTOR_ZONE_PENDING
     assert named > len(_VECTOR_ZONE_PENDING), 'no vector sets its zone'
+    # Seeded: a session SET passes only beside a global one, in the same
+    # setup; nothing else does.
+    pinned = "SET GLOBAL TimeZone = 'UTC'"
+    for setup in (
+        ["SET TimeZone = 'America/New_York'"],
+        ["SET SESSION TimeZone = 'UTC'"],
+        [pinned, 'RESET TimeZone'],
+        [pinned, "SET LOCAL TimeZone = 'UTC'"],
+        [pinned, "SELECT set_config('TimeZone', 'UTC')"],
+        [pinned, "SET GLOBAL TimeZone = 'UTC'; SET TimeZone = 'Asia/Tokyo'"],
+    ):
+        assert _vector_zone_problems('seed', setup), setup
+    for setup in (
+        [pinned, "SET TimeZone = 'America/New_York'"],
+        ["SET TimeZone='America/New_York'", pinned],
+        [pinned, "set session timezone to 'UTC'"],
+        [pinned],
+    ):
+        assert not _vector_zone_problems('seed', setup), setup
 
 
 def test_the_bases_are_the_inventorys_and_adventureworks() -> None:

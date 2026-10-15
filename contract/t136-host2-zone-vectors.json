@@ -1,10 +1,10 @@
 {
  "format": "sdm-host2-zone-vectors/1",
- "about": "Register P1B-81(b)'s first value read with a zone (T1.36 fix 11, written by the independent test author before the fix): what DuckDB 1.5.6, the reference and the core do with a TIMESTAMPTZ whose instant lies within the years 1 to 9999 but whose wall clock, in the zone DuckDB hands it over in, does not. `vectors`: each a source (contract/bases.yaml's `shop`, then `setup`), the column it is about, its role, the zone the database is in (SET GLOBAL TimeZone) and the instant in user 0's row, and the public calls' answer on each route, recorded by contract/tools/host2_zones_record.py with the answers of contract/tools/host2_values_record.py: `reference` from the reference checkout's interpreter, `core_at_measurement` from the candidate on the core route, evidence of what the core did when measured, never an expectation. `zones`: the Arrow type a new connection to the database (cursor(), as both routes read) hands a TIMESTAMPTZ over as, for each zone and with the caller's connection SET otherwise; what an Arrow import's zone becomes; and per vector the zone's offset at its instant and the wall clock there, as Python's zoneinfo gives them (pyarrow's as_py: astimezone to zoneinfo.ZoneInfo, from the system tz database). The reference's from_source fails unnamed (OverflowError, predictive_query/time_columns.py _refused_for_values, present.iloc[0]) exactly where that wall clock leaves 0001-01-01T00:00:00 to 9999-12-31T23:59:59.999999, both ends held. `zone.whole.*` (fix 11's review): the same instants in every row, a constant column the reference warns of, the warning showing the value at its wall clock (\"every row holds 0001-01-01 00:00:00-04:56:02\"). Held by contract/tests/test_t136_host2_zones.py.",
+ "about": "Register P1B-81(b)'s first value read with a zone (T1.36 fix 11, written by the independent test author before the fix): what DuckDB 1.5.6, the reference and the core do with a TIMESTAMPTZ whose instant lies within the years 1 to 9999 but whose wall clock, in the zone DuckDB hands it over in, does not. `vectors`: each a source (contract/bases.yaml's `shop`, then `setup`), the column it is about, its role, the zone the database is in (SET GLOBAL TimeZone) and the instant in user 0's row, and the public calls' answer on each route, recorded by contract/tools/host2_zones_record.py with the answers of contract/tools/host2_values_record.py: `reference` from the reference checkout's interpreter, `core_at_measurement` from the candidate on the core route, evidence of what the core did when measured, never an expectation. `zones`: the Arrow type a new connection to the database (cursor(), as both routes read) hands a TIMESTAMPTZ over as, for each zone and with the caller's connection SET otherwise; what an Arrow import's zone becomes; and per vector the zone's offset at its instant and the wall clock there, as Python's zoneinfo gives them (pyarrow's as_py: astimezone to zoneinfo.ZoneInfo, from the system tz database), the microseconds DuckDB holds, whether the UTC datetime and the wall clock each lie within the years, counted, and as_py's own answer. The reference's from_source fails unnamed (OverflowError, predictive_query/time_columns.py _refused_for_values, present.iloc[0]) exactly where the UTC datetime as_py builds first, or the wall clock it moves it to, leaves 0001-01-01T00:00:00 to 9999-12-31T23:59:59.999999, both ends held. `zone.whole.*` (fix 11's review): the same instants in every row, a constant column the reference warns of, the warning showing the value at its wall clock (\"every row holds 0001-01-01 00:00:00-04:56:02\"). Held by contract/tests/test_t136_host2_zones.py.",
  "recorded": {
   "by": "contract/tools/host2_zones_record.py",
   "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
-  "candidate": "57af5ba69b2c7d33a5adfb47015f274e52606e2a",
+  "candidate": "4a2aee5b6895f0f7984a9c61accc223fe748719a",
   "environments": {
    "reference": {
     "python": "3.12.13",
@@ -18,7 +18,7 @@
     "pandas": "3.0.6",
     "pyarrow": "25.0.1",
     "duckdb": "1.5.6",
-    "sdm_client": "/private/tmp/t136-g13/packages/structured-data-models-client/src/sdm_client"
+    "sdm_client": "/private/tmp/claude-501/-Users-awadaskar-code-sdm-client/b87dd10f-bd49-48f0-b283-f122bc8d1295/scratchpad/venv-final/lib/python3.12/site-packages/sdm_client"
    }
   },
   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
@@ -79,194 +79,497 @@
    "zone.verbatim.los-angeles.year-1": {
     "zone": "America/Los_Angeles",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 16:07:02",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.verbatim.utc.year-1": {
     "zone": "UTC",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
     "offset": "0:00:00",
-    "wall_clock": "0001-01-01T00:00:00+00:00"
+    "wall_clock": "0001-01-01T00:00:00+00:00",
+    "as_py": "0001-01-01T00:00:00+00:00"
    },
    "zone.session.utc.global-new-york.year-1": {
     "zone": "America/New_York",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.session.new-york.global-utc.year-1": {
     "zone": "UTC",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
     "offset": "0:00:00",
-    "wall_clock": "0001-01-01T00:00:00+00:00"
+    "wall_clock": "0001-01-01T00:00:00+00:00",
+    "as_py": "0001-01-01T00:00:00+00:00"
    },
    "zone.first.new-york.year-1": {
     "zone": "America/New_York",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.new-york.year-1.local-midnight-less-1us": {
     "zone": "America/New_York",
     "instant": "0001-01-01 04:56:01.999999+00",
+    "microseconds": "-62135579038000001",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T04:56:01.999999",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.new-york.year-1.local-midnight": {
     "zone": "America/New_York",
     "instant": "0001-01-01 04:56:02+00",
+    "microseconds": "-62135579038000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T04:56:02",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "0001-01-01T00:00:00-04:56:02"
+    "wall_clock": "0001-01-01T00:00:00-04:56:02",
+    "as_py": "0001-01-01T00:00:00-04:56:02"
    },
    "zone.first.new-york.year-1.0500": {
     "zone": "America/New_York",
     "instant": "0001-01-01 05:00:00+00",
+    "microseconds": "-62135578800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T05:00:00",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "0001-01-01T00:03:58-04:56:02"
+    "wall_clock": "0001-01-01T00:03:58-04:56:02",
+    "as_py": "0001-01-01T00:03:58-04:56:02"
    },
    "zone.first.new-york.year-1.hour-inside": {
     "zone": "America/New_York",
     "instant": "0001-01-01 05:56:02+00",
+    "microseconds": "-62135575438000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T05:56:02",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "0001-01-01T01:00:00-04:56:02"
+    "wall_clock": "0001-01-01T01:00:00-04:56:02",
+    "as_py": "0001-01-01T01:00:00-04:56:02"
    },
    "zone.first.utc.year-1": {
     "zone": "UTC",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
     "offset": "0:00:00",
-    "wall_clock": "0001-01-01T00:00:00+00:00"
+    "wall_clock": "0001-01-01T00:00:00+00:00",
+    "as_py": "0001-01-01T00:00:00+00:00"
    },
    "zone.first.tokyo.year-9999": {
     "zone": "Asia/Tokyo",
     "instant": "9999-12-31 23:59:59+00",
+    "microseconds": "253402300799000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "9999-12-31T23:59:59",
     "offset": "9:00:00",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.tokyo.year-9999.local-midnight": {
     "zone": "Asia/Tokyo",
     "instant": "9999-12-31 15:00:00+00",
+    "microseconds": "253402268400000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "9999-12-31T15:00:00",
     "offset": "9:00:00",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.tokyo.year-9999.local-last-us": {
     "zone": "Asia/Tokyo",
     "instant": "9999-12-31 14:59:59.999999+00",
+    "microseconds": "253402268399999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T14:59:59.999999",
     "offset": "9:00:00",
-    "wall_clock": "9999-12-31T23:59:59.999999+09:00"
+    "wall_clock": "9999-12-31T23:59:59.999999+09:00",
+    "as_py": "9999-12-31T23:59:59.999999+09:00"
    },
    "zone.first.tokyo.year-9999.hour-inside": {
     "zone": "Asia/Tokyo",
     "instant": "9999-12-31 13:59:59.999999+00",
+    "microseconds": "253402264799999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T13:59:59.999999",
     "offset": "9:00:00",
-    "wall_clock": "9999-12-31T22:59:59.999999+09:00"
+    "wall_clock": "9999-12-31T22:59:59.999999+09:00",
+    "as_py": "9999-12-31T22:59:59.999999+09:00"
    },
    "zone.first.utc.year-9999": {
     "zone": "UTC",
     "instant": "9999-12-31 23:59:59.999999+00",
+    "microseconds": "253402300799999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T23:59:59.999999",
     "offset": "0:00:00",
-    "wall_clock": "9999-12-31T23:59:59.999999+00:00"
+    "wall_clock": "9999-12-31T23:59:59.999999+00:00",
+    "as_py": "9999-12-31T23:59:59.999999+00:00"
    },
    "zone.first.new-york.year-9999": {
     "zone": "America/New_York",
     "instant": "9999-12-31 23:59:59.999999+00",
+    "microseconds": "253402300799999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T23:59:59.999999",
     "offset": "-1 day, 19:00:00",
-    "wall_clock": "9999-12-31T18:59:59.999999-05:00"
+    "wall_clock": "9999-12-31T18:59:59.999999-05:00",
+    "as_py": "9999-12-31T18:59:59.999999-05:00"
    },
    "zone.first.kiritimati.year-9999": {
     "zone": "Pacific/Kiritimati",
     "instant": "9999-12-31 10:00:00+00",
+    "microseconds": "253402250400000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "9999-12-31T10:00:00",
     "offset": "14:00:00",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.kiritimati.year-9999.local-last-us": {
     "zone": "Pacific/Kiritimati",
     "instant": "9999-12-31 09:59:59.999999+00",
+    "microseconds": "253402250399999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T09:59:59.999999",
     "offset": "14:00:00",
-    "wall_clock": "9999-12-31T23:59:59.999999+14:00"
+    "wall_clock": "9999-12-31T23:59:59.999999+14:00",
+    "as_py": "9999-12-31T23:59:59.999999+14:00"
    },
    "zone.first.kiritimati.year-1": {
     "zone": "Pacific/Kiritimati",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 13:30:40",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.kiritimati.year-1.local-midnight": {
     "zone": "Pacific/Kiritimati",
     "instant": "0001-01-01 10:29:20+00",
+    "microseconds": "-62135559040000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T10:29:20",
     "offset": "-1 day, 13:30:40",
-    "wall_clock": "0001-01-01T00:00:00-10:29:20"
+    "wall_clock": "0001-01-01T00:00:00-10:29:20",
+    "as_py": "0001-01-01T00:00:00-10:29:20"
    },
    "zone.first.pago-pago.year-1": {
     "zone": "Pacific/Pago_Pago",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
     "offset": "12:37:12",
-    "wall_clock": "0001-01-01T12:37:12+12:37:12"
+    "wall_clock": "0001-01-01T12:37:12+12:37:12",
+    "as_py": "0001-01-01T12:37:12+12:37:12"
    },
    "zone.candidate.new-york.year-1": {
     "zone": "America/New_York",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.first.new-york.year-1.loaded_at": {
     "zone": "America/New_York",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
    },
    "zone.whole.new-york.year-1.local-midnight": {
     "zone": "America/New_York",
     "instant": "0001-01-01 04:56:02+00",
+    "microseconds": "-62135579038000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T04:56:02",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "0001-01-01T00:00:00-04:56:02"
+    "wall_clock": "0001-01-01T00:00:00-04:56:02",
+    "as_py": "0001-01-01T00:00:00-04:56:02"
    },
    "zone.whole.new-york.year-1.hour-inside": {
     "zone": "America/New_York",
     "instant": "0001-01-01 05:56:02+00",
+    "microseconds": "-62135575438000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T05:56:02",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "0001-01-01T01:00:00-04:56:02"
+    "wall_clock": "0001-01-01T01:00:00-04:56:02",
+    "as_py": "0001-01-01T01:00:00-04:56:02"
    },
    "zone.whole.pago-pago.year-1": {
     "zone": "Pacific/Pago_Pago",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
     "offset": "12:37:12",
-    "wall_clock": "0001-01-01T12:37:12+12:37:12"
+    "wall_clock": "0001-01-01T12:37:12+12:37:12",
+    "as_py": "0001-01-01T12:37:12+12:37:12"
    },
    "zone.whole.kiritimati.year-1.local-midnight": {
     "zone": "Pacific/Kiritimati",
     "instant": "0001-01-01 10:29:20+00",
+    "microseconds": "-62135559040000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T10:29:20",
     "offset": "-1 day, 13:30:40",
-    "wall_clock": "0001-01-01T00:00:00-10:29:20"
+    "wall_clock": "0001-01-01T00:00:00-10:29:20",
+    "as_py": "0001-01-01T00:00:00-10:29:20"
    },
    "zone.whole.utc.year-1": {
     "zone": "UTC",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
     "offset": "0:00:00",
-    "wall_clock": "0001-01-01T00:00:00+00:00"
+    "wall_clock": "0001-01-01T00:00:00+00:00",
+    "as_py": "0001-01-01T00:00:00+00:00"
    },
    "zone.whole.tokyo.year-9999.local-last-us": {
     "zone": "Asia/Tokyo",
     "instant": "9999-12-31 14:59:59.999999+00",
+    "microseconds": "253402268399999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T14:59:59.999999",
     "offset": "9:00:00",
-    "wall_clock": "9999-12-31T23:59:59.999999+09:00"
+    "wall_clock": "9999-12-31T23:59:59.999999+09:00",
+    "as_py": "9999-12-31T23:59:59.999999+09:00"
    },
    "zone.whole.kiritimati.year-9999.local-last-us": {
     "zone": "Pacific/Kiritimati",
     "instant": "9999-12-31 09:59:59.999999+00",
+    "microseconds": "253402250399999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T09:59:59.999999",
     "offset": "14:00:00",
-    "wall_clock": "9999-12-31T23:59:59.999999+14:00"
+    "wall_clock": "9999-12-31T23:59:59.999999+14:00",
+    "as_py": "9999-12-31T23:59:59.999999+14:00"
    },
    "zone.whole.utc.year-9999": {
     "zone": "UTC",
     "instant": "9999-12-31 23:59:59.999999+00",
+    "microseconds": "253402300799999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T23:59:59.999999",
     "offset": "0:00:00",
-    "wall_clock": "9999-12-31T23:59:59.999999+00:00"
+    "wall_clock": "9999-12-31T23:59:59.999999+00:00",
+    "as_py": "9999-12-31T23:59:59.999999+00:00"
    },
    "zone.whole.new-york.year-1": {
     "zone": "America/New_York",
     "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": false,
+    "utc": "0001-01-01T00:00:00",
     "offset": "-1 day, 19:03:58",
-    "wall_clock": "OverflowError: date value out of range"
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.verbatim.new-york.year-10000": {
+    "zone": "America/New_York",
+    "instant": "10000-01-01 00:00:00+00",
+    "microseconds": "253402300800000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "-1 day, 19:00:00",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.first.new-york.year-10000": {
+    "zone": "America/New_York",
+    "instant": "10000-01-01 00:00:00+00",
+    "microseconds": "253402300800000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "-1 day, 19:00:00",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.whole.new-york.year-10000": {
+    "zone": "America/New_York",
+    "instant": "10000-01-01 00:00:00+00",
+    "microseconds": "253402300800000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "-1 day, 19:00:00",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.verbatim.tokyo.utc-year-0": {
+    "zone": "Asia/Tokyo",
+    "instant": "0001-01-01 00:00:00+09",
+    "microseconds": "-62135629200000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "9:18:59",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.first.tokyo.utc-year-0": {
+    "zone": "Asia/Tokyo",
+    "instant": "0001-01-01 00:00:00+09",
+    "microseconds": "-62135629200000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "9:18:59",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.whole.tokyo.utc-year-0": {
+    "zone": "Asia/Tokyo",
+    "instant": "0001-01-01 00:00:00+09",
+    "microseconds": "-62135629200000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "9:18:59",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.first.pago-pago.utc-year-0.last-us": {
+    "zone": "Pacific/Pago_Pago",
+    "instant": "0001-12-31 (BC) 23:59:59.999999+00",
+    "microseconds": "-62135596800000001",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "12:37:12",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.first.pago-pago.utc-year-10000.local-last-second": {
+    "zone": "Pacific/Pago_Pago",
+    "instant": "10000-01-01 10:59:59+00",
+    "microseconds": "253402340399000000",
+    "utc_within_years": false,
+    "wall_within_years": true,
+    "utc": "OverflowError: date value out of range",
+    "offset": "-1 day, 13:00:00",
+    "wall_clock": "OverflowError: date value out of range",
+    "as_py": "OverflowError: date value out of range"
+   },
+   "zone.first.new-york.year-9999.2300": {
+    "zone": "America/New_York",
+    "instant": "9999-12-31 23:00:00+00",
+    "microseconds": "253402297200000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T23:00:00",
+    "offset": "-1 day, 19:00:00",
+    "wall_clock": "9999-12-31T18:00:00-05:00",
+    "as_py": "9999-12-31T18:00:00-05:00"
+   },
+   "zone.whole.new-york.year-9999.2300": {
+    "zone": "America/New_York",
+    "instant": "9999-12-31 23:00:00+00",
+    "microseconds": "253402297200000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T23:00:00",
+    "offset": "-1 day, 19:00:00",
+    "wall_clock": "9999-12-31T18:00:00-05:00",
+    "as_py": "9999-12-31T18:00:00-05:00"
+   },
+   "zone.first.tokyo.year-1": {
+    "zone": "Asia/Tokyo",
+    "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
+    "offset": "9:18:59",
+    "wall_clock": "0001-01-01T09:18:59+09:18:59",
+    "as_py": "0001-01-01T09:18:59+09:18:59"
+   },
+   "zone.whole.tokyo.year-1": {
+    "zone": "Asia/Tokyo",
+    "instant": "0001-01-01 00:00:00+00",
+    "microseconds": "-62135596800000000",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "0001-01-01T00:00:00",
+    "offset": "9:18:59",
+    "wall_clock": "0001-01-01T09:18:59+09:18:59",
+    "as_py": "0001-01-01T09:18:59+09:18:59"
+   },
+   "zone.first.pago-pago.year-9999": {
+    "zone": "Pacific/Pago_Pago",
+    "instant": "9999-12-31 23:59:59.999999+00",
+    "microseconds": "253402300799999999",
+    "utc_within_years": true,
+    "wall_within_years": true,
+    "utc": "9999-12-31T23:59:59.999999",
+    "offset": "-1 day, 13:00:00",
+    "wall_clock": "9999-12-31T12:59:59.999999-11:00",
+    "as_py": "9999-12-31T12:59:59.999999-11:00"
    }
   }
  },
@@ -3044,7 +3347,7 @@
      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 01:00:00-04:56:02. If it does say when a row became true, name it: time_columns={'users': 'f'}."
     ],
     "core_at_measurement": [
-     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 00:56:02-04:56:02. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 01:00:00-04:56:02. If it does say when a row became true, name it: time_columns={'users': 'f'}."
     ]
    }
   },
@@ -3372,7 +3675,7 @@
      "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 00:00:00-10:29:20. If it does say when a row became true, name it: time_columns={'users': 'f'}."
     ],
     "core_at_measurement": [
-     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-02 00:29:20-10:29:20. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 00:00:00-10:29:20. If it does say when a row became true, name it: time_columns={'users': 'f'}."
     ]
    }
   },
@@ -4067,6 +4370,1444 @@
     },
     "warnings": {
      "from_source": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.verbatim.new-york.year-10000",
+   "column": "users.ts",
+   "role": "users.ts in every row, the table's only timestamp (the review's reproduction, shop dropped): UTC past the years, the wall clock 9999-12-31 19:00:00",
+   "zone": "America/New_York",
+   "instant": "10000-01-01 00:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'America/New_York'",
+    "SET TimeZone='America/New_York'",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, TIMESTAMPTZ '10000-01-01 00:00:00+00' AS ts FROM range(8) t(i)"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Table 'orders' does not exist in the schema. Please be mindful of case sensitivity and ensure "
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.first.new-york.year-10000",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (UTC a microsecond past the years, the wall clock 9999-12-31 19:00:00)",
+   "zone": "America/New_York",
+   "instant": "10000-01-01 00:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'America/New_York'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '10000-01-01 00:00:00+00' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.whole.new-york.year-10000",
+   "column": "users.f",
+   "role": "the entity table's only timestamp, the instant in every row (a constant column, warned of) (UTC past the years, the wall clock within them)",
+   "zone": "America/New_York",
+   "instant": "10000-01-01 00:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'America/New_York'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '10000-01-01 00:00:00+00'"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "NotImplementedError",
+     "code": null,
+     "message": "Localizing Timestamps which are outside the range of Python's standard library datetime is not supported (year 10000 is out of range)."
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.verbatim.tokyo.utc-year-0",
+   "column": "users.ts",
+   "role": "users.ts in every row, the table's only timestamp (the review's reproduction, shop dropped): UTC 0000-12-31 15:00, before the years; the wall clock 0001-01-01 00:18:59 (local mean time)",
+   "zone": "Asia/Tokyo",
+   "instant": "0001-01-01 00:00:00+09",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Asia/Tokyo'",
+    "SET TimeZone='America/New_York'",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, TIMESTAMPTZ '0001-01-01 00:00:00+09' AS ts FROM range(8) t(i)"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Table 'orders' does not exist in the schema. Please be mindful of case sensitivity and ensure "
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.first.tokyo.utc-year-0",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (UTC before the years, the wall clock within them)",
+   "zone": "Asia/Tokyo",
+   "instant": "0001-01-01 00:00:00+09",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Asia/Tokyo'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '0001-01-01 00:00:00+09' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.whole.tokyo.utc-year-0",
+   "column": "users.f",
+   "role": "the entity table's only timestamp, the instant in every row (a constant column, warned of) (UTC before the years, the wall clock within them)",
+   "zone": "Asia/Tokyo",
+   "instant": "0001-01-01 00:00:00+09",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Asia/Tokyo'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '0001-01-01 00:00:00+09'"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": [
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 00:00:00+09:18:59. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+    ]
+   }
+  },
+  {
+   "name": "zone.first.pago-pago.utc-year-0.last-us",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (UTC a microsecond before the years, the wall clock 0001-01-01 12:37:11.999999)",
+   "zone": "Pacific/Pago_Pago",
+   "instant": "0001-12-31 (BC) 23:59:59.999999+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Pacific/Pago_Pago'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '0001-12-31 (BC) 23:59:59.999999+00' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.first.pago-pago.utc-year-10000.local-last-second",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (UTC past the years, the wall clock 9999-12-31 23:59:59)",
+   "zone": "Pacific/Pago_Pago",
+   "instant": "10000-01-01 10:59:59+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Pacific/Pago_Pago'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '10000-01-01 10:59:59+00' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "OverflowError",
+     "code": null,
+     "message": "date value out of range"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.first.new-york.year-9999.2300",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (control: the wall clock 9999-12-31 18:00:00)",
+   "zone": "America/New_York",
+   "instant": "9999-12-31 23:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'America/New_York'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '9999-12-31 23:00:00+00' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 9999-12-31 23:00:00"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.whole.new-york.year-9999.2300",
+   "column": "users.f",
+   "role": "the entity table's only timestamp, the instant in every row (a constant column, warned of) (control: the wall clock 9999-12-31 18:00:00)",
+   "zone": "America/New_York",
+   "instant": "9999-12-31 23:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'America/New_York'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '9999-12-31 23:00:00+00'"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 9999-12-31 23:00:00"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 9999-12-31 18:00:00-05:00. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+    ],
+    "core_at_measurement": [
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 9999-12-31 18:00:00-05:00. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+    ]
+   }
+  },
+  {
+   "name": "zone.first.tokyo.year-1",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (control: UTC the first instant of the years, the wall clock 0001-01-01 09:18:59)",
+   "zone": "Asia/Tokyo",
+   "instant": "0001-01-01 00:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Asia/Tokyo'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '0001-01-01 00:00:00+00' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 0-12-31 23:41:01"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [],
+    "core_at_measurement": []
+   }
+  },
+  {
+   "name": "zone.whole.tokyo.year-1",
+   "column": "users.f",
+   "role": "the entity table's only timestamp, the instant in every row (a constant column, warned of) (control: the wall clock 0001-01-01 09:18:59)",
+   "zone": "Asia/Tokyo",
+   "instant": "0001-01-01 00:00:00+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Asia/Tokyo'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '0001-01-01 00:00:00+00'"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 0-12-31 23:41:01"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "from_source_text": {
+    "reference": [
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 09:18:59+09:18:59. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+    ],
+    "core_at_measurement": [
+     "Some time columns were inferred, or refused, on a guess about what a column holds:\n- users.f was not taken as the time column because every row holds 0001-01-01 09:18:59+09:18:59. If it does say when a row became true, name it: time_columns={'users': 'f'}."
+    ]
+   }
+  },
+  {
+   "name": "zone.first.pago-pago.year-9999",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (its time column), user 0's row (control: UTC the last instant of the years, the wall clock 9999-12-31 12:59:59.999999)",
+   "zone": "Pacific/Pago_Pago",
+   "instant": "9999-12-31 23:59:59.999999+00",
+   "setup": [
+    "SET GLOBAL TimeZone = 'Pacific/Pago_Pago'",
+    "ALTER TABLE users ADD COLUMN f TIMESTAMPTZ",
+    "UPDATE users SET f = TIMESTAMPTZ '2020-01-01 00:00:00+00'",
+    "UPDATE users SET f = TIMESTAMPTZ '9999-12-31 23:59:59.999999+00' WHERE user_id = 0"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 9999-12-31 23:59:59"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
     }
    },
    "from_source_text": {

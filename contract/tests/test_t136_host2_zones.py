@@ -62,6 +62,17 @@ local midnight of the year 1 in New York and in Pago Pago. ``zone.whole.
 new-york.year-1``, a wall clock before the year 1, is refused like the
 first-row sources.
 
+Added after fix 11's second commit (45c7d526), from its review (Codex):
+pyarrow builds the UTC datetime first and moves it to the zone after, so
+the reference also fails where the UTC instant leaves the years and the
+wall clock does not (New York at 10000-01-01 00:00+00, local
+9999-12-31 19:00; Tokyo at 0001-01-01 00:00+09, UTC 0000-12-31 15:00,
+local 0001-01-01 00:18:59), first in the column, filling it and in the
+review's own table, and at each end's last microsecond in Pago Pago,
+whose offset has seconds. Their neighbours, both readings within the
+years, are controls. The rule is now: either reading outside, the
+reference fails unnamed and the core must refuse by name.
+
 Each answer is the public calls on one route in this process: the default
 route is the reference's code, and ``SDM_CORE_ROUTES`` forces the core.
 Every vector sets the database's zone, so no answer depends on the
@@ -235,11 +246,20 @@ def test_the_vector_file_is_what_it_says() -> None:
         'zone.first.kiritimati.year-1',
         'zone.candidate.new-york.year-1',
         'zone.whole.new-york.year-1',
+        # A UTC instant outside the years, its wall clock within them.
+        'zone.verbatim.new-york.year-10000',
+        'zone.first.new-york.year-10000',
+        'zone.whole.new-york.year-10000',
+        'zone.verbatim.tokyo.utc-year-0',
+        'zone.first.tokyo.utc-year-0',
+        'zone.whole.tokyo.utc-year-0',
+        'zone.first.pago-pago.utc-year-0.last-us',
+        'zone.first.pago-pago.utc-year-10000.local-last-second',
     }
-    assert len(DESCRIBED) == 22
+    assert len(DESCRIBED) == 27
     # The constant columns: both ends, zones of either sign and UTC.
     whole = {n for n in DESCRIBED if n.startswith('zone.whole.')}
-    assert len(whole) == 8
+    assert len(whole) == 10
     for vector in ALL:
         assert set(vector['from_source_text']) == {
             'reference',
@@ -282,23 +302,34 @@ def test_duckdb_and_zoneinfo_hand_over_what_the_file_says() -> None:
         assert facts['wall_clocks'][name]['offset'] == offset, name
 
 
-def test_the_reference_fails_unnamed_exactly_where_the_wall_clock_leaves_the_years() -> (
+def test_the_reference_fails_unnamed_exactly_where_the_utc_instant_or_the_wall_clock_leaves_the_years() -> (
     None
 ):
     r"""The trigger, as recorded: the reference's from_source fails with a
-    bare OverflowError exactly on the sources whose first value's wall
-    clock, in the database's zone, is outside the years 1 to 9999 (in a
-    column not named as a load stamp: such a one is never read); both
-    ends are held (local 0001-01-01T00:00:00 and 9999-12-31T23:59:59.999999
-    read), and a microsecond past either fails."""
+    bare OverflowError exactly on the sources whose first value, read as
+    pyarrow's as_py reads it, leaves the years 1 to 9999: its UTC datetime
+    (built first) or its wall clock in the database's zone (moved to
+    after), in a column not named as a load stamp (such a one is never
+    read). Both ends are held (local 0001-01-01T00:00:00 and
+    9999-12-31T23:59:59.999999 read, as are UTC's), and a microsecond past
+    either fails, whichever of the two passes."""
     low, high = dt.datetime.min, dt.datetime.max
     for vector in ALL:
         name = vector['name']
-        wall = WALL[name]['wall_clock']
-        outside = wall.startswith('OverflowError')
+        fact = WALL[name]
+        within = fact['utc_within_years'] and fact['wall_within_years']
+        # The counted readings are pyarrow's own answer.
+        assert fact['as_py'].startswith('OverflowError') == (not within), name
+        assert fact['utc'].startswith('OverflowError') == (
+            not fact['utc_within_years']
+        ), name
+        if fact['utc_within_years']:
+            assert fact['wall_clock'].startswith('OverflowError') == (
+                not fact['wall_within_years']
+            ), name
         # A load stamp is no time-column candidate, so is never read.
         candidate = not name.endswith('.loaded_at')
-        assert (name in REFUSED) == (outside and candidate), (name, wall)
+        assert (name in REFUSED) == (candidate and not within), (name, fact)
         if name in REFUSED:
             outcome = vector['reference']['outcome']
             assert (outcome['error'], outcome['code'], outcome['message']) == (
@@ -308,14 +339,24 @@ def test_the_reference_fails_unnamed_exactly_where_the_wall_clock_leaves_the_yea
             ), name
             assert vector['reference']['described'] is None, name
         elif candidate:
-            local = dt.datetime.fromisoformat(wall).replace(tzinfo=None)
-            assert low <= local <= high, name
+            local = dt.datetime.fromisoformat(fact['wall_clock'])
+            assert low <= local.replace(tzinfo=None) <= high, name
+            assert fact['as_py'] == fact['wall_clock'], name
         else:
-            assert outside, name
-        # Every instant itself is within the years, so a check of the UTC
-        # instant alone refuses none.
-        instant = dt.datetime.fromisoformat(vector['instant'] + ':00')
-        assert low <= instant.replace(tzinfo=None) <= high
+            assert not within, name
+    # Not vacuous: each reading alone takes a source out, at each end.
+    alone = {
+        (fact['utc_within_years'], fact['wall_within_years'], end)
+        for name, fact in WALL.items()
+        if name in REFUSED
+        for end in ('low' if int(fact['microseconds']) < 0 else 'high',)
+    }
+    assert alone >= {
+        (True, False, 'low'),
+        (True, False, 'high'),
+        (False, True, 'low'),
+        (False, True, 'high'),
+    }
     edges = {
         'zone.first.new-york.year-1.local-midnight': '0001-01-01T00:00:00',
         'zone.first.kiritimati.year-1.local-midnight': '0001-01-01T00:00:00',

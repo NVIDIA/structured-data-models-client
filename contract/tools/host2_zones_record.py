@@ -19,8 +19,9 @@ each time-column candidate as a Python ``datetime``
 (``predictive_query/time_columns.py``, ``_refused_for_values``:
 ``present.iloc[0]``, pyarrow's ``TimestampScalar.as_py``). For a
 ``TIMESTAMPTZ`` that is the UTC instant moved to the zone DuckDB hands the
-column over in, which fails unnamed (``OverflowError``) where the wall clock
-there falls outside the years 1 to 9999, though the instant itself does not.
+column over in: the UTC datetime built first, then moved, so it fails
+unnamed (``OverflowError``) where either the UTC instant or the wall clock
+there falls outside the years 1 to 9999, though the other does not.
 Each vector here is ``users.f TIMESTAMPTZ`` (unless it says otherwise),
 ``2020-01-01 00:00+00`` in every row but user 0's, which holds the vector's
 instant, read in the database's ``TimeZone`` its setup sets (``SET GLOBAL``).
@@ -40,6 +41,7 @@ import datetime as dt
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import zoneinfo
@@ -85,10 +87,13 @@ ABOUT = (
     "zone and with the caller's connection SET otherwise; what an Arrow "
     "import's zone becomes; and per vector the zone's offset at its instant "
     "and the wall clock there, as Python's zoneinfo gives them (pyarrow's "
-    'as_py: astimezone to zoneinfo.ZoneInfo, from the system tz database). '
+    'as_py: astimezone to zoneinfo.ZoneInfo, from the system tz database), '
+    'the microseconds DuckDB holds, whether the UTC datetime and the wall '
+    "clock each lie within the years, counted, and as_py's own answer. "
     "The reference's from_source fails unnamed (OverflowError, "
     'predictive_query/time_columns.py _refused_for_values, present.iloc[0]) '
-    'exactly where that wall clock leaves 0001-01-01T00:00:00 to '
+    'exactly where the UTC datetime as_py builds first, or the wall clock it '
+    'moves it to, leaves 0001-01-01T00:00:00 to '
     "9999-12-31T23:59:59.999999, both ends held. `zone.whole.*` (fix 11's "
     'review): the same instants in every row, a constant column the '
     'reference warns of, the warning showing the value at its wall clock '
@@ -98,6 +103,16 @@ ABOUT = (
 
 #: The value every other row holds.
 ELSEWHERE = '2020-01-01 00:00:00'
+
+
+def literal(instant: str) -> str:
+    r"""``instant`` as the ``TIMESTAMPTZ`` literal written: as given where
+    it carries its offset (``+09``, ``-05``), else in UTC (``+00``)."""
+    return (
+        instant
+        if re.search(r'[+-]\d{2}(:\d{2})*$', instant)
+        else instant + '+00'
+    )
 
 
 def first(
@@ -111,7 +126,8 @@ def first(
         *before,
         f'ALTER TABLE users ADD COLUMN {name} TIMESTAMPTZ',
         f"UPDATE users SET {name} = TIMESTAMPTZ '{ELSEWHERE}+00'",
-        f"UPDATE users SET {name} = TIMESTAMPTZ '{instant}+00' WHERE user_id = 0",
+        f"UPDATE users SET {name} = TIMESTAMPTZ '{literal(instant)}' "
+        'WHERE user_id = 0',
     ]
 
 
@@ -122,7 +138,7 @@ def whole(zone: str, instant: str) -> list[str]:
     return [
         f"SET GLOBAL TimeZone = '{zone}'",
         'ALTER TABLE users ADD COLUMN f TIMESTAMPTZ',
-        f"UPDATE users SET f = TIMESTAMPTZ '{instant}+00'",
+        f"UPDATE users SET f = TIMESTAMPTZ '{literal(instant)}'",
     ]
 
 
@@ -135,7 +151,21 @@ WHOLE = (
     'constant column, warned of)'
 )
 ENTITY = "the entity table's only timestamp (its time column), user 0's row"
+
+
 #: The review's reproduction (Codex, final review round 2), shop dropped.
+def verbatim(instant: str) -> list[str]:
+    r"""The review's reproduction (shop dropped) with ``instant`` (a
+    ``TIMESTAMPTZ`` literal) in every row of ``users.ts``."""
+    return [
+        f"SET TimeZone='{NY}'",
+        'DROP TABLE orders',
+        'DROP TABLE users',
+        'CREATE TABLE users AS SELECT i::BIGINT AS user_id, '
+        f"TIMESTAMPTZ '{instant}' AS ts FROM range(8) t(i)",
+    ]
+
+
 VERBATIM = [
     f"SET TimeZone='{NY}'",
     'DROP TABLE orders',
@@ -358,6 +388,103 @@ _SPECS: dict[str, tuple[str, str, str, list[str] | None]] = {
         WHOLE + ' (the wall clock before the year 1)',
         whole(NY, '0001-01-01 00:00:00'),
     ),
+    # Fix 11's review (Codex): pyarrow builds the UTC datetime before it
+    # moves it to the zone, so the reference fails where either is outside
+    # the years, a wall clock within them notwithstanding.
+    'zone.verbatim.new-york.year-10000': (
+        NY,
+        '10000-01-01 00:00:00',
+        "users.ts in every row, the table's only timestamp (the review's "
+        'reproduction, shop dropped): UTC past the years, the wall clock '
+        '9999-12-31 19:00:00',
+        [f"SET GLOBAL TimeZone = '{NY}'", *verbatim('10000-01-01 00:00:00+00')],
+    ),
+    'zone.first.new-york.year-10000': (
+        NY,
+        '10000-01-01 00:00:00',
+        ENTITY + ' (UTC a microsecond past the years, the wall clock '
+        '9999-12-31 19:00:00)',
+        None,
+    ),
+    'zone.whole.new-york.year-10000': (
+        NY,
+        '10000-01-01 00:00:00',
+        WHOLE + ' (UTC past the years, the wall clock within them)',
+        whole(NY, '10000-01-01 00:00:00'),
+    ),
+    'zone.verbatim.tokyo.utc-year-0': (
+        TOKYO,
+        '0001-01-01 00:00:00+09',
+        "users.ts in every row, the table's only timestamp (the review's "
+        'reproduction, shop dropped): UTC 0000-12-31 15:00, before the '
+        'years; the wall clock 0001-01-01 00:18:59 (local mean time)',
+        [
+            f"SET GLOBAL TimeZone = '{TOKYO}'",
+            *verbatim('0001-01-01 00:00:00+09'),
+        ],
+    ),
+    'zone.first.tokyo.utc-year-0': (
+        TOKYO,
+        '0001-01-01 00:00:00+09',
+        ENTITY + ' (UTC before the years, the wall clock within them)',
+        None,
+    ),
+    'zone.whole.tokyo.utc-year-0': (
+        TOKYO,
+        '0001-01-01 00:00:00+09',
+        WHOLE + ' (UTC before the years, the wall clock within them)',
+        whole(TOKYO, '0001-01-01 00:00:00+09'),
+    ),
+    # The same at each end's last microsecond, in a zone whose offset there
+    # has seconds (Pago Pago: +12:37:12 local mean time in the year 1, -11
+    # in the year 9999).
+    'zone.first.pago-pago.utc-year-0.last-us': (
+        PAGO_PAGO,
+        '0001-12-31 (BC) 23:59:59.999999+00',
+        ENTITY + ' (UTC a microsecond before the years, the wall clock '
+        '0001-01-01 12:37:11.999999)',
+        None,
+    ),
+    'zone.first.pago-pago.utc-year-10000.local-last-second': (
+        PAGO_PAGO,
+        '10000-01-01 10:59:59',
+        ENTITY + ' (UTC past the years, the wall clock 9999-12-31 23:59:59)',
+        None,
+    ),
+    # Their neighbours, the UTC instant and the wall clock both within the
+    # years.
+    'zone.first.new-york.year-9999.2300': (
+        NY,
+        '9999-12-31 23:00:00',
+        ENTITY + ' (control: the wall clock 9999-12-31 18:00:00)',
+        None,
+    ),
+    'zone.whole.new-york.year-9999.2300': (
+        NY,
+        '9999-12-31 23:00:00',
+        WHOLE + ' (control: the wall clock 9999-12-31 18:00:00)',
+        whole(NY, '9999-12-31 23:00:00'),
+    ),
+    'zone.first.tokyo.year-1': (
+        TOKYO,
+        '0001-01-01 00:00:00',
+        ENTITY + ' (control: UTC the first instant of the years, the wall '
+        'clock 0001-01-01 09:18:59)',
+        None,
+    ),
+    'zone.whole.tokyo.year-1': (
+        TOKYO,
+        '0001-01-01 00:00:00',
+        WHOLE + ' (control: the wall clock 0001-01-01 09:18:59)',
+        whole(TOKYO, '0001-01-01 00:00:00'),
+    ),
+    'zone.first.pago-pago.year-9999': (
+        PAGO_PAGO,
+        '9999-12-31 23:59:59.999999',
+        ENTITY + ' (control: UTC the last instant of the years, the wall '
+        'clock 9999-12-31 12:59:59.999999)',
+        None,
+    ),
 }
 
 
@@ -375,7 +502,7 @@ def _sources() -> dict[str, dict[str, Any]]:
             'column': column,
             'role': role,
             'zone': zone,
-            'instant': instant + '+00',
+            'instant': literal(instant),
             'setup': setup if setup is not None else first(zone, instant),
         }
     return out
@@ -385,22 +512,75 @@ SOURCES = _sources()
 
 
 def wall_clock(zone: str, instant: str) -> dict[str, str]:
-    r"""``instant`` (UTC, ``+00``) moved to ``zone`` as the reference moves
-    it (pyarrow's ``as_py``: ``astimezone`` to ``zoneinfo.ZoneInfo``): the
-    offset there and the wall clock, or the error it raises."""
-    utc = dt.datetime.fromisoformat(instant.removesuffix('+00')).replace(
-        tzinfo=dt.UTC
+    r"""``instant`` (a ``TIMESTAMPTZ`` literal) as the reference reads it in
+    ``zone`` (pyarrow's ``as_py``: ``datetime(1970, 1, 1)`` plus the
+    microseconds, the UTC datetime, then ``astimezone`` to
+    ``zoneinfo.ZoneInfo``): the microseconds DuckDB holds, the UTC datetime,
+    the zone's offset there and the wall clock, each or the error it raises,
+    and ``as_py``'s own answer."""
+    import duckdb
+    import pyarrow as pa
+
+    [(micros,)] = (
+        duckdb.connect()
+        .execute(f"SELECT epoch_us(TIMESTAMPTZ '{instant}')")
+        .fetchall()
     )
     tz = zoneinfo.ZoneInfo(zone)
+
+    def said(run: Any) -> str:
+        try:
+            return str(run())
+        except OverflowError as error:
+            return f'OverflowError: {error}'
+
     try:
-        local = utc.astimezone(tz)
+        utc = dt.datetime(1970, 1, 1) + dt.timedelta(microseconds=micros)
     except OverflowError as error:
-        offset = tz.utcoffset(utc.replace(tzinfo=None))
-        return {
-            'offset': str(offset),
-            'wall_clock': f'OverflowError: {error}',
-        }
-    return {'offset': str(local.utcoffset()), 'wall_clock': local.isoformat()}
+        utc = None
+        utc_said = f'OverflowError: {error}'
+    else:
+        utc_said = utc.isoformat()
+    local: Any = None
+    if utc is None:
+        wall = utc_said
+    else:
+        try:
+            local = utc.replace(tzinfo=dt.UTC).astimezone(tz)
+        except OverflowError as error:
+            wall = f'OverflowError: {error}'
+        else:
+            wall = local.isoformat()
+    # The offset the wall clock was read at; where none was, the zone's at
+    # the UTC datetime, or at the end of the years it passed.
+    at = utc or (dt.datetime.max if micros > 0 else dt.datetime.min)
+    offset = local.utcoffset() if local is not None else tz.utcoffset(at)
+    assert offset is not None
+    low = (dt.datetime.min - dt.datetime(1970, 1, 1)) // dt.timedelta(
+        microseconds=1
+    )
+    high = (dt.datetime.max - dt.datetime(1970, 1, 1)) // dt.timedelta(
+        microseconds=1
+    )
+    shifted = micros + offset // dt.timedelta(microseconds=1)
+    return {
+        'microseconds': str(micros),
+        # Each reading against 0001-01-01T00:00 .. 9999-12-31T23:59:59.999999,
+        # counted, so that a wall clock is known where its UTC datetime
+        # cannot be built.
+        'utc_within_years': low <= micros <= high,
+        'wall_within_years': low <= shifted <= high,
+        'utc': utc_said,
+        'offset': str(offset),
+        'wall_clock': wall,
+        'as_py': said(
+            lambda: (
+                pa.scalar(micros, pa.timestamp('us', tz=zone))
+                .as_py()
+                .isoformat()
+            )
+        ),
+    }
 
 
 def zone_facts() -> dict[str, Any]:
