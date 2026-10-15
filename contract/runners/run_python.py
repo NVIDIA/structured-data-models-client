@@ -575,13 +575,13 @@ class _Capture:
             self._body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
-            # The id of the step this call is: the calls come in step order.
-            expected = (
-                self._request_ids.pop(0)
-                if self._request_ids
-                else self._request_id
-            )
-            if self._body.get('metadata', {}).get('request_id') != expected:
+            # The calls come in step order, and a step with no row to score
+            # makes no call (T1.36 fix 25): the call's id is the next of the
+            # steps' ids it carries, any step skipped before it dropped.
+            carried = self._body.get('metadata', {}).get('request_id')
+            if carried in self._request_ids:
+                del self._request_ids[: self._request_ids.index(carried) + 1]
+            elif self._request_ids or carried != self._request_id:
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
                     'was started with'
