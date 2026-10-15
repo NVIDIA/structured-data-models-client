@@ -709,8 +709,11 @@ def run(
     the endpoint refuses (an HTTP 4xx or 5xx, the client's
     ``NimRequestError``), is recorded with its refusal (class, code and
     HTTP status, never the text an endpoint wrote), and its unit is not
-    scored; the other units still run. The two routes' requests of each
-    seed are compared (:func:`compare_requests`)."""
+    scored; the other units still run. A status the client retries (429,
+    502, 503 or 504) is the exception: the wire refuses the retry, a second
+    request, so the run stops there (the summary written, exit 1) rather
+    than failing that unit alone. The two routes' requests of each seed are
+    compared (:func:`compare_requests`)."""
     from sdm_client import KumoRelational, NimRequestError
 
     described = [] if described is None else described

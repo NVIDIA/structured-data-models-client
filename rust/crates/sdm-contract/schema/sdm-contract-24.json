@@ -2627,7 +2627,7 @@
           "$ref": "#/$defs/PlatformFacts"
         },
         "date_literal_range": {
-          "description": "The instants the host can hold a PQL date literal as, when it holds\nfewer than the core reads (years 0 to 9999); none when it holds them\nall. A literal outside them is refused as one that cannot be read\n(`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a\nhost: pandas 2 holds a literal as a nanosecond `Timestamp`.",
+          "description": "The instants the host can hold a PQL date literal as, when it holds\nfewer than the core reads (years 0 to 9999); none when it holds them\nall. A literal outside them is refused as one that cannot be read\n(`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a\nhost: pandas 2 holds a literal as a nanosecond `Timestamp`.\n\nA bridge fact: it is needed only because the Python host's S0\nshadow check runs the old pandas validator on every query the core\naccepts. It is deleted with that check in Phase 5, and the core then\nreads years 0 to 9999 on every host.",
           "anyOf": [
             {
               "$ref": "#/$defs/InstantRange"

@@ -321,6 +321,12 @@ pub(crate) async fn run(
 /// fetch raises, or the request refused as one the provider does not
 /// declare (`UNSUPPORTED_REQUEST` naming it), as a table that cannot ask
 /// its source falls back there. Anything else is the core's error.
+///
+/// The second test reads only the code and the `request` field: any
+/// `UNSUPPORTED_REQUEST` naming `column_ranges` falls back, whatever
+/// raised it. Today only [`crate::compose::undeclared`] raises one; a
+/// refusal of another kind that came to carry that field would fall back
+/// too.
 fn falls_back(failed: &CoreError) -> bool {
     match failed.code {
         ErrorCode::ProviderError => true,

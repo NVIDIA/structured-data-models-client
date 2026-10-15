@@ -12,11 +12,13 @@
 //! definition it is used on holds (the request state's payload: `type` of
 //! `object`, `array`, `string`, `boolean` or `integer`, `properties`,
 //! `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `minimum`,
-//! the schemas `true` and `false`, and the annotations `description`, `title`, `format`
-//! and any `x-` keyword, which it does not read) and fails closed on any
-//! other, so a definition cannot pass by naming a keyword it does not
-//! check; a definition that comes to need another needs it added here,
-//! with a test (T1.28w).
+//! the schemas `true` and `false`, and the annotations `description`,
+//! `title`, `format` and any `x-` keyword, which it does not read) and
+//! fails on any other keyword in a subschema the value reaches. It does
+//! not walk the whole definition: a keyword under a property the value
+//! does not carry, under a type the value is not, or in an `anyOf` option
+//! not tried or not holding is never seen. A definition that comes to need
+//! another keyword needs it added here, with a test (T1.28w).
 
 use serde_json::Value;
 

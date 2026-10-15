@@ -25,12 +25,12 @@
 //! `["interval", months, days, nanoseconds as digits]` (a month-day-nano
 //! interval); a dictionary is read as its values. A value of any other
 //! type (a `date64`, a year-month or day-time interval) is `["?", its
-//! type's name]` and is listed as unencodable,
-//! inside a map or a chosen union member too, which the comparator never
-//! takes as equal; a member no row chooses names nothing. A row is the compact JSON of its cells, ASCII only
-//! (Python's `json.dumps` with `ensure_ascii`), so its order as text is its
-//! order as bytes; `ordered` is the SHA-256 of the rows in the order read,
-//! `unordered` of the same rows sorted by their text.
+//! type's name]` and is listed as unencodable, inside a map or a chosen
+//! union member too, which the comparator never takes as equal; a member
+//! no row chooses names nothing. A row is the compact JSON of its cells,
+//! ASCII only (Python's `json.dumps` with `ensure_ascii`), so its order as
+//! text is its order as bytes; `ordered` is the SHA-256 of the rows in
+//! the order read, `unordered` of the same rows sorted by their text.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;

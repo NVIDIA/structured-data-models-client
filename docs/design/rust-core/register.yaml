@@ -1513,7 +1513,8 @@ entries:
     rule): column_type (a struct or a map, P1B-10, and a list of other
     than integers, floats or text, P1B-51; from T1.32c binary and a
     duration are left out with the reference's warning, as the reference
-    leaves them out), float_nan, float_signed_zero,
+    leaves them out, a duration by the reference's _WIRE_DTYPE, which no
+    DuckDB source reaches), float_nan, float_signed_zero,
     text_time, multicategorical, key_type, key_name_order, key_tie,
     composite_key (a key of several columns named) and empty_table
     (P1B-11). T1.21d removed
@@ -1594,19 +1595,22 @@ entries:
     T1.21b's refusal map (contract/refusal-maps/base.adventureworks.json)
     records which of these E27's AdventureWorks journey reaches and which
     task removes each, and T1.21e's family maps which the inventory's cases
-    reach; they approve nothing. Approved by the owner on 2026-10-13, relayed by the orchestrator (E92), for the Phase 2 class only: composite_key, float_nan, float_signed_zero, key_name_order, key_tie stay refused by name until Phase 2 (docs/design/rust-core/phase-1/not-yet-refusals.md); key_missing and key_repeats left the class, moved by the owner into T1.32e part 1 the same day and ported there (E84). The entry's other rules stay proposed: time_whole_table, a bug fixed at T1.32e (E83), and multicategorical, to be ported, are T1.32e's by the owner's decisions of 2026-10-13; column_type, key_type and empty_table are their families' (P1B-10, P1B-11, P1B-51); text_time is DT-15's.
+    reach; they approve nothing. Approved by the owner on 2026-10-13, relayed by the orchestrator (E92), for the Phase 2 class only: composite_key, float_nan, float_signed_zero, key_name_order, key_tie stay refused by name until Phase 2 (docs/design/rust-core/phase-1/not-yet-refusals.md); key_missing and key_repeats left the class, moved by the owner into T1.32e part 1 the same day and ported there (E84). The entry's other rules stay proposed: time_whole_table, a bug fixed at T1.32e (E83), and multicategorical, to be ported, are T1.32e's by the owner's decisions of 2026-10-13; column_type is its family's (P1B-10 for a struct or a map, P1B-51 for a list), empty_table P1B-11's and key_type the keys family's (T1.32a); text_time is DT-15's.
     Closed as superseded by the owner on 2026-10-13 (night; the owner's
     answers, item 12, E88), recorded as approved by the owner since the
     register has no superseded status; it approves no outcome of its own. Its
     rules are E92's Phase 2 class (approved above), lifted at T1.32e
     (time_whole_table, multicategorical, key_missing, key_repeats: E83, E84,
-    E86), or their families' entries (column_type, key_type, empty_table:
-    P1B-10, P1B-11, P1B-51) and text_time DT-15's. One question stays with the
+    E86), or their families' entries (column_type: P1B-10 for a struct or a
+    map, P1B-51 for a list; empty_table: P1B-11; key_type: the keys family,
+    T1.32a) and text_time DT-15's. One question stays with the
     owner, on T1.33's list (as-built, T1.33): free text under a time-like name
     (rel-trial's outcomes.time_frame and designs.time_perspective), refused
     text_time by the core and described by the reference, as a Phase 2 refusal
     or as DT-17's permanent reading. Relayed by the orchestrator, recorded at
-    T1.33 part 2; never the implementer's approval.
+    T1.33 part 2; never the implementer's approval. The owner answered it on
+    2026-10-14 (item 24, E120): a column whose values are not times is text
+    under any name, and T1.33 part 3 reads it so.
     Its cases are emptied at T1.33 fix 3 (the orchestrator's decision):
     per-case entries now name every inventory case, and an approved entry
     listing a case in its cases would excuse that case's every difference from
@@ -2355,8 +2359,7 @@ entries:
     2026-10-14 (the owner's answers of that morning, item 19: a key
     naming one column twice is refused), relayed by the orchestrator,
     recorded at T1.32h's fix 2 (E102); never the implementer's approval.
-    It landed
-    after the main fix, as T1.32h's part 2, from the commits both
+    It landed after the main fix, as T1.32h's part 2, from the commits both
     reviewers approved. Codex asked the owner to say whether edit_schema
     should refuse it too; the design leaves it describe-only, as
     approved. Held by contract/given-vectors.json's key.twice,
@@ -3554,9 +3557,11 @@ entries:
     every runner each meets its reference observation on every gated rule,
     so no outcome changes: success at predict on the Python runners and
     success on rust-host, as before. Measured by gate.sh against f1d1808
-    in ref-pandas3 and dbr17-pandas2 (compare: no differences); in
+    (part 1) in ref-pandas3 and dbr17-pandas2 (compare: no differences); in
     floor-pandas2.2 the warnings rule differs, which is HOST-5's, judged
-    by part 1's comparator once HOST-5 is approved.
+    by part 1's comparator once HOST-5 is approved. Part 2, as landed, was
+    measured against c6fd9c5, with HOST-5 approved by the owner: every check
+    passes in all three cells (tracker, T1.29; corrected at T1.36).
   affected_inputs: >-
     The case files of base.regression, base.binary, base.multiclass and
     base.adventureworks, which the ratchet's cases rule passes only under an
@@ -4254,6 +4259,14 @@ entries:
     decimal128(38,0), even for values exceeding its declared precision;
     values above 2^127-1 wrap to signed i128 (2^128-1 arrives as -1),
     before the core sees them.
+    Known edges of the seed join, from T1.33 part 3's review, recorded at
+    T1.36; each fails by name, never with wrong rows: a key read in the
+    text tier joins its seeds as before part 3, so linking keys of
+    different big-integer types (a HUGEINT key against a 41-digit VARINT)
+    fails PROVIDER_ERROR, naming the provider's failure; and a key that is
+    a decimal with a scale (DECIMAL(10, 2)) joined to a seed of 1e36 or
+    more fails DuckDB's conversion, PROVIDER_ERROR likewise (as-built,
+    T1.33 part 3).
 
 - id: P1B-44
   title: Text and binary DuckDB hands over as view types, and lists of text views, are read as text and binary where the reference fails unnamed
@@ -4948,10 +4961,9 @@ entries:
     outcome class, so the reviewers may approve it; named to the owner as
     the core differing from the reference by being exact. Never
     self-approved.
-    Approver: owner (T1.33: as written here it refuses an input the reference
-    accepts; the owner withdrew the refusal on 2026-10-13, evening, E99(c),
-    and the T1.32g bundle rewrites the entry as the narrow difference from
-    scale 28).
+    Approver: reviewer (T1.32g's exact-conversion rewrite; success to
+    success under E66(b). The earlier refusal required owner approval and
+    was withdrawn under E99(c)).
     Approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
     the independent subagent), relayed by the orchestrator:
     APPROVE-P1B-71-rewrite, for the narrow exact-conversion behaviour

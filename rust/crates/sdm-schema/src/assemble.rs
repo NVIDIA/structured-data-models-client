@@ -353,8 +353,9 @@ fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
 /// table's time column; each time column's table and column the schema's,
 /// not part of its key, and of a type that can hold a time. A key of more
 /// than one column is refused by name (`composite_key`), as composite keys
-/// are elsewhere, after a column named twice (`key_column_twice`, P1B-73). Naming a key marks its column an identifier, what it
-/// meant kept, and gives the table's other columns back what they meant;
+/// are elsewhere, after a column named twice (`key_column_twice`,
+/// P1B-73). Naming a key marks its column an identifier, what it meant
+/// kept, and gives the table's other columns back what they meant;
 /// naming a time column makes it a timestamp; a time column cleared
 /// (`None`) leaves the table none, its columns meaning what they meant, as
 /// the reference's setter takes `None` (decision E61). A key or time

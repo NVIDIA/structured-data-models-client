@@ -141,6 +141,11 @@ RULES = {
     'aggregation': 'P1B-3',
     'open_window': 'P1B-3',
     'parent_table': 'P1B-3',
+    # No longer emitted: T1.32e ported the reference's key rules (E84), and
+    # the core has no keyless_neighbors refusal since. Kept so an older
+    # record still classifies, and so a core refusing it again reads as the
+    # umbrella's but never as approved (E84 moved it out of E92's class;
+    # contract/tests/test_t133_umbrellas.py).
     'keyless_neighbors': 'P1B-3',
     'text_column': 'P1B-3',
     # A static decimal target's (P1B-18); every other label type's is
