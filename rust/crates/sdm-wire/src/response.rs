@@ -221,13 +221,12 @@ const WHITE_SPACE: [u32; 25] = [
     0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
 ];
 
-/// Text as Python's `float` reads it (the grammar its documentation gives
-/// for a string argument): white space around it, a sign, then `inf`,
-/// `infinity` or `nan` in any case, or a decimal number (digits with an
-/// optional fraction, or a fraction alone, then an optional exponent), any
-/// Unicode decimal digit read as the digit it stands for and a single
-/// underscore allowed between two digits; `None` for any other text.
-pub fn numeric_text(text: &str) -> Option<f64> {
+/// Text as every supported Python's `float` and `int` see it before they
+/// read it: each white space a space and each Unicode decimal digit the
+/// ASCII digit it stands for, the spaces around it trimmed, and a single
+/// underscore between two digits dropped; `None` for text holding any other
+/// character outside ASCII, or an underscore anywhere else.
+fn ascii_digits(text: &str) -> Option<String> {
     let mut ascii = String::with_capacity(text.len());
     for c in text.chars() {
         let code = u32::from(c);
@@ -256,7 +255,36 @@ pub fn numeric_text(text: &str) -> Option<f64> {
             return None;
         }
     }
-    let plain: String = trimmed.chars().filter(|c| *c != '_').collect();
+    Some(trimmed.chars().filter(|c| *c != '_').collect())
+}
+
+/// Text as Python's `int` reads it (the grammar its documentation gives for
+/// a string argument in base 10), as `ascii_digits` sees it: a sign, then
+/// decimal digits; the integer's digits, with no leading zero and a minus
+/// sign only for a negative one, or `None` for any other text.
+pub fn integer_text(text: &str) -> Option<String> {
+    let plain = ascii_digits(text)?;
+    let negative = plain.starts_with('-');
+    let digits = plain.strip_prefix(['+', '-']).unwrap_or(&plain);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let digits = digits.trim_start_matches('0');
+    Some(match (digits.is_empty(), negative) {
+        (true, _) => "0".to_owned(),
+        (false, true) => format!("-{digits}"),
+        (false, false) => digits.to_owned(),
+    })
+}
+
+/// Text as Python's `float` reads it (the grammar its documentation gives
+/// for a string argument): white space around it, a sign, then `inf`,
+/// `infinity` or `nan` in any case, or a decimal number (digits with an
+/// optional fraction, or a fraction alone, then an optional exponent), any
+/// Unicode decimal digit read as the digit it stands for and a single
+/// underscore allowed between two digits; `None` for any other text.
+pub fn numeric_text(text: &str) -> Option<f64> {
+    let plain = ascii_digits(text)?;
     let unsigned = plain.strip_prefix(['+', '-']).unwrap_or(&plain);
     let lower = unsigned.to_ascii_lowercase();
     if matches!(lower.as_str(), "inf" | "infinity" | "nan") {

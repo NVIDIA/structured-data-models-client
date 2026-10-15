@@ -4382,7 +4382,7 @@
           "type": "object",
           "properties": {
             "result": {
-              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).",
+              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `id_as_written` where\nthe ids are not all integers or all text (utf8: the JSON text of the\nreference's item value, null where there was none), `forecast_step`\nwhere an answer given as written carries one, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).",
               "$ref": "#/$defs/AttachmentId"
             },
             "model": {

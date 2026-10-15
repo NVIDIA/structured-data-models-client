@@ -550,7 +550,9 @@ fn what_predict_does_not_port_yet_is_refused_by_name() {
     );
     let mut run = predict_run(REQUEST_STATE_VERSION, forecast, "kumo-relational").unwrap();
     assert_eq!(rule(&run.next().unwrap_err()), Some(&text("problem_type")));
-    // An entity of a key whose type the result does not lay out yet.
+    // An entity of a float key is read as the reference's `as_declared`
+    // reads it, a double, and given as the JSON text of that value (T1.36
+    // fix 8; until then refused by rule id_type).
     let payload = payload_text().replace(
         r#""user_id":{"dtype":"int64"}"#,
         r#""user_id":{"dtype":"float64"}"#,
@@ -562,11 +564,30 @@ fn what_predict_does_not_port_yet_is_refused_by_name() {
         ModelResult::Response {
             status: 200,
             content_type: "application/json".into(),
-            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[]}"#.to_vec(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.0},{"id":"3","row_index":1,"prediction":2.0}]}"#.to_vec(),
         },
     )
     .unwrap();
-    assert_eq!(rule(&run.next().unwrap_err()), Some(&text("id_type")));
+    let Step::Done {
+        result: OperationResult::Predict(predicted),
+    } = run.next().unwrap()
+    else {
+        panic!("done");
+    };
+    let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
+        panic!("the result is attached");
+    };
+    let [batch] = result.batches.as_slice() else {
+        panic!("one batch");
+    };
+    let written = batch
+        .column_by_name("id_as_written")
+        .expect("each id as written")
+        .as_string::<i32>();
+    assert_eq!(
+        (written.value(0), written.value(1)),
+        ("7.0", "9007199254740992.0")
+    );
 }
 
 #[test]

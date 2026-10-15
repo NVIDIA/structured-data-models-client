@@ -38,7 +38,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "5d5ef4f66190644d8a2793b976f31d8c5db01a8195fa09bf3b457248b9c6c497"
+        "fingerprint": "70775df2e899c1df7a5b35b0ee2c8033a72d5b49659f984c04ede0f47b1dc564"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
@@ -52,6 +52,9 @@
       "_encoded": {
         "fingerprint": "f6bc6bcb2531586a957eb581aeaf812de9a73bc4e0759cb561e8c99ea0dc8cd3"
       },
+      "_id": {
+        "fingerprint": "07f444e73ad5cf801ec843054ba7481c828c172c754e33d43d4f100ad66eb721"
+      },
       "_payload": {
         "fingerprint": "d9061a285f7423ab88ce87416e10788d5cc95ec3f6ff8387d64ace6f55f15016"
       },
@@ -62,7 +65,7 @@
         "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
       },
       "predict": {
-        "fingerprint": "871a50a8a82359565d6d2e9d434aeac24aa38fca00d3de64bde418e829e56de8"
+        "fingerprint": "041a862429f177fef070ac5a7245a4daa00c6922bcf1ba0ecaba13510ca8f159"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {

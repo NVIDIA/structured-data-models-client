@@ -875,7 +875,10 @@ pub struct Predict {
 pub struct Predicted {
     /// An Arrow attachment, one row per answer, ordered by `row_index` as
     /// the reference's result frame orders them (T1.28b), whose schema
-    /// names its columns in order: `row_index`, `id`, `prediction` where an
+    /// names its columns in order: `row_index`, `id`, `id_as_written` where
+    /// the ids are not all integers or all text (utf8: the JSON text of the
+    /// reference's item value, null where there was none), `forecast_step`
+    /// where an answer given as written carries one, `prediction` where an
     /// answer carries one, `prediction_as_answered` where the prediction
     /// column changed an answer (utf8: the JSON text of the reference's item
     /// value, null where there was none; present only for a regression's

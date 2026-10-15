@@ -26,7 +26,9 @@
 //! - [`layout`] is `normalize` and `_named_entities`, with the answer's
 //!   classes given back as the target's own type (`as_declared_target`):
 //!   each answer checked against the row it claims and given back under the
-//!   entity it is about, as a [`Part`];
+//!   entity it is about, read back as the key's dtype (`as_declared`), or,
+//!   where the payload names no entity, given back as written, as a
+//!   [`Part`];
 //! - [`merge`] is `PredictionResult.merge`, the parts of one request put
 //!   together, and [`absent`] is `_report_absent`'s finding, the outputs the
 //!   caller named that no answer carries;
@@ -48,7 +50,7 @@ use arrow_array::{
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_wire::json::{Value, is_integer_token};
-use sdm_wire::response::{PredictionResponse, Refused};
+use sdm_wire::response::{PredictionResponse, Refused, integer_text, numeric_text};
 
 /// The model this build sends a relational request to.
 pub const RELATIONAL: &str = "kumo-relational";
@@ -760,11 +762,20 @@ pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
     Ok(bytes)
 }
 
-/// The entity a row is about, as the result gives it.
+/// The entity a row is about, as the result gives it: as the reference's
+/// `as_declared` reads its value back as the key's dtype, or as written
+/// where it does not read or no dtype is known.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Entity {
     Integer(i64),
     Text(String),
+    /// A null entity, or an answer that names no id.
+    None,
+    /// A float key's entity, read as a double.
+    Float(f64),
+    /// Any other value, as written: a boolean, an integer past int64, a
+    /// float where no float is declared, an array or an object.
+    Written(Value),
 }
 
 /// An answer's prediction as the result gives it: a regression's as an
@@ -796,6 +807,9 @@ pub enum AnswerType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     pub row_index: i64,
+    /// The answer's forecast step, which only an answer given as written
+    /// (a payload with no entity-reference column) may carry.
+    pub forecast_step: Option<i64>,
     /// The answer's place in the endpoint's order (across a merge's parts,
     /// the parts in order), which the result's items keep.
     pub answer_index: i64,
@@ -816,7 +830,8 @@ pub struct Part {
     /// The answers, in the endpoint's order.
     pub rows: Vec<Row>,
     pub answers: AnswerType,
-    /// Whether an entity's key is text (else an integer).
+    /// Whether an entity's key is text (else an integer), for the result's
+    /// `id` column where no answer's entity gives its type.
     pub text_ids: bool,
 }
 
@@ -983,18 +998,68 @@ fn spelled(probabilities: &[(String, f64)], answers: AnswerType) -> Vec<(String,
 }
 
 /// The answer to one payload laid out (`normalize`, `_named_entities`,
-/// `as_declared_target`): each answer checked against the row it claims
-/// before it is given the entity of that row (in range, not a forecast's,
-/// once, under the instance id the row was asked under, every row
-/// answered), its prediction given back as [`answer_of`] reads it.
+/// `as_declared_target`), its prediction given back as [`answer_of`] reads
+/// it. Where the payload's predicted instance table has a column named with
+/// the entity-reference prefix (the first such, by position), each answer
+/// is checked against the row it claims before it is given the entity of
+/// that row, read as [`entity`] reads it (in range, not a forecast's, once,
+/// under the instance id the row was asked under, every row answered).
+/// Where it has none, each answer is given back as written, as the
+/// reference gives it: its id the instance id it was answered under, as
+/// text, and no row checked (a `row_index` or forecast step past int64,
+/// which the result's columns do not hold, refused as `INVALID_RESPONSE`,
+/// register P1B-86).
 pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, CoreError> {
     let answers = answer_type(payload)?;
     let (names, rows) = instance_table(payload, "predict").ok_or_else(|| bad_payload("predict"))?;
-    let reference = names
-        .iter()
-        .position(|n| n.starts_with(ENTITY_REF))
-        .ok_or_else(|| not_yet("entity_ref"))?;
-    let dtype = key_dtype(payload, names[reference]);
+    let (placed, text_ids) = match names.iter().position(|n| n.starts_with(ENTITY_REF)) {
+        Some(reference) => {
+            let dtype = key_dtype(payload, names[reference]);
+            let text_ids = dtype.as_deref() == Some("string");
+            (
+                named(response, &names, rows, reference, dtype.as_deref())?,
+                text_ids,
+            )
+        }
+        None => (as_written(response)?, true),
+    };
+
+    let mut laid = Vec::with_capacity(placed.len());
+    for (item, (row_index, id, forecast_step)) in response.predictions.iter().zip(placed) {
+        if let Some(field) = item.carried.first() {
+            return Err(not_yet("response_field").with_field("field", Detail::text(*field)));
+        }
+        laid.push(Row {
+            row_index,
+            forecast_step,
+            answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
+            id,
+            prediction: answer_of(item.prediction.as_ref(), answers)?,
+            probabilities: item
+                .probabilities
+                .as_ref()
+                .map(|given| spelled(given, answers)),
+        });
+    }
+    Ok(Part {
+        model: response.model.clone(),
+        request_id: response.id.clone(),
+        metadata: response.metadata.clone(),
+        rows: laid,
+        answers,
+        text_ids,
+    })
+}
+
+/// Each answer's row, entity and forecast step, where the payload names
+/// its entities in the column at `reference` (`_named_entities`).
+fn named(
+    response: &PredictionResponse,
+    names: &[&str],
+    rows: &[Value],
+    reference: usize,
+    dtype: Option<&str>,
+) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
     let instance = names.iter().position(|n| *n == INSTANCE_ID);
     let cell = |row: &Value, at: usize| -> Result<Value, CoreError> {
         match row {
@@ -1004,8 +1069,8 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, Co
     };
     let entities = rows
         .iter()
-        .map(|row| entity(&cell(row, reference)?, dtype.as_deref()))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|row| Ok(entity(&cell(row, reference)?, dtype)))
+        .collect::<Result<Vec<_>, CoreError>>()?;
     let instances = match instance {
         Some(at) => Some(
             rows.iter()
@@ -1016,7 +1081,7 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, Co
     };
 
     let mut answered = vec![false; entities.len()];
-    let mut placed = Vec::with_capacity(response.predictions.len());
+    let mut named = Vec::with_capacity(response.predictions.len());
     for item in &response.predictions {
         let index = usize::try_from(item.row_index)
             .ok()
@@ -1037,36 +1102,38 @@ pub fn layout(payload: &Value, response: &PredictionResponse) -> Result<Part, Co
                 return Err(bad_response("prediction.id", "not_the_row_s"));
             }
         }
-        placed.push(index);
+        named.push((
+            i64::try_from(index).unwrap_or(i64::MAX),
+            entities[index].clone(),
+            None,
+        ));
     }
     if answered.iter().any(|a| !a) {
         return Err(bad_response("prediction.row_index", "unanswered"));
     }
+    Ok(named)
+}
 
-    let mut laid = Vec::with_capacity(placed.len());
-    for (item, index) in response.predictions.iter().zip(&placed) {
-        if let Some(field) = item.carried.first() {
-            return Err(not_yet("response_field").with_field("field", Detail::text(*field)));
-        }
-        laid.push(Row {
-            row_index: i64::try_from(*index).unwrap_or(i64::MAX),
-            answer_index: i64::try_from(laid.len()).unwrap_or(i64::MAX),
-            id: entities[*index].clone(),
-            prediction: answer_of(item.prediction.as_ref(), answers)?,
-            probabilities: item
-                .probabilities
-                .as_ref()
-                .map(|given| spelled(given, answers)),
-        });
-    }
-    Ok(Part {
-        model: response.model.clone(),
-        request_id: response.id.clone(),
-        metadata: response.metadata.clone(),
-        rows: laid,
-        answers,
-        text_ids: dtype.as_deref() == Some("string"),
-    })
+/// Each answer's row, id and forecast step as the endpoint wrote them,
+/// where the payload names no entity (`_named_entities` with no reference
+/// column): no row is checked, and the id is the instance id the answer
+/// names, as text, or none.
+fn as_written(response: &PredictionResponse) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
+    response
+        .predictions
+        .iter()
+        .map(|item| {
+            let row_index = i64::try_from(item.row_index)
+                .map_err(|_| bad_response("prediction.row_index", "out_of_range"))?;
+            let forecast_step = item
+                .forecast_step
+                .map(i64::try_from)
+                .transpose()
+                .map_err(|_| bad_response("prediction.forecast_step", "out_of_range"))?;
+            let id = item.id.clone().map_or(Entity::None, Entity::Text);
+            Ok((row_index, id, forecast_step))
+        })
+        .collect()
 }
 
 /// The answers of one request sent in several calls, put together
@@ -1158,8 +1225,12 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
 /// The result of a part: one row per answer, ordered by `row_index` (as
 /// `PredictionResult.to_pandas` orders them; the order is stable among
 /// equal ones, which a merge of parts holds), with `row_index` (int64),
-/// `id` (int64 for an integer key, utf8 for a text one), `prediction` when
-/// any answer holds one (a regression's as pandas infers it: int64 where
+/// `id` (int64 where every id is an integer, utf8 where every one is text,
+/// the part's key type deciding where none is either; a missing one null;
+/// where they are mixed, or one is of another type, utf8 with
+/// `id_as_written`, each id as the JSON text of the reference's item value,
+/// or null), `forecast_step` when any answer given as written carries one
+/// (int64, null where it has none), `prediction` when any answer holds one (a regression's as pandas infers it: int64 where
 /// every answer is an integer, else float64, an integer as its double; a
 /// class as bool, int64 or utf8; a missing one as null, a NaN as NaN; with
 /// `prediction_as_answered`, each answer's prediction as the JSON text of
@@ -1175,32 +1246,50 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     let row_index: ArrayRef = Arc::new(Int64Array::from_iter_values(
         rows.iter().map(|r| r.row_index),
     ));
-    let (id_type, ids): (DataType, ArrayRef) = if part.text_ids {
+    let integers = rows
+        .iter()
+        .all(|r| matches!(r.id, Entity::Integer(_) | Entity::None));
+    let texts = rows
+        .iter()
+        .all(|r| matches!(r.id, Entity::Text(_) | Entity::None));
+    let (id_type, ids): (DataType, ArrayRef) = if integers && !(texts && part.text_ids) {
         (
-            DataType::Utf8,
-            Arc::new(StringArray::from_iter_values(rows.iter().map(
-                |r| match &r.id {
-                    Entity::Text(text) => text.clone(),
-                    Entity::Integer(n) => n.to_string(),
-                },
-            ))),
+            DataType::Int64,
+            Arc::new(Int64Array::from_iter(rows.iter().map(|r| match &r.id {
+                Entity::Integer(n) => Some(*n),
+                _ => None,
+            }))),
         )
     } else {
         (
-            DataType::Int64,
-            Arc::new(Int64Array::from_iter_values(rows.iter().map(
-                |r| match &r.id {
-                    Entity::Integer(n) => *n,
-                    Entity::Text(_) => 0,
-                },
-            ))),
+            DataType::Utf8,
+            Arc::new(StringArray::from_iter(rows.iter().map(|r| match &r.id {
+                Entity::Integer(n) => Some(n.to_string()),
+                Entity::Text(text) => Some(text.clone()),
+                other => id_as_written(other),
+            }))),
         )
     };
     let mut fields = vec![
         Field::new("row_index", DataType::Int64, false),
-        Field::new("id", id_type, false),
+        Field::new("id", id_type, true),
     ];
     let mut columns = vec![row_index, ids];
+    // Where the ids are neither all integers nor all text (a null aside),
+    // or one is of another type, each id as the JSON text of the
+    // reference's item value, null where it had none.
+    if !integers && !texts {
+        fields.push(Field::new("id_as_written", DataType::Utf8, true));
+        columns.push(Arc::new(StringArray::from_iter(
+            rows.iter().map(|r| id_as_written(&r.id)),
+        )));
+    }
+    if rows.iter().any(|r| r.forecast_step.is_some()) {
+        fields.push(Field::new("forecast_step", DataType::Int64, true));
+        columns.push(Arc::new(Int64Array::from_iter(
+            rows.iter().map(|r| r.forecast_step),
+        )));
+    }
     if rows.iter().any(|r| r.prediction != Answer::None) {
         let (data_type, column): (DataType, ArrayRef) = match part.answers {
             // A regression's column as pandas infers it from the answers:
@@ -1315,23 +1404,40 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
 /// a non-finite number as the token Python's reader takes; `None` where it
 /// had none.
 fn as_answered(answer: &Answer) -> Option<String> {
-    let float = |v: f64| {
-        if v.is_nan() {
-            Some("NaN".to_owned())
-        } else if v.is_infinite() {
-            Some(if v > 0.0 { "Infinity" } else { "-Infinity" }.to_owned())
-        } else {
-            Value::float(v).map(|f| String::from_utf8_lossy(&f.to_bytes()).into_owned())
-        }
-    };
     match answer {
         Answer::None => None,
-        Answer::Float(v) | Answer::NonFinite(v) => float(*v),
+        Answer::Float(v) | Answer::NonFinite(v) => float_text(*v),
         Answer::Int(n) => Some(n.to_string()),
         Answer::Bool(b) => Some(b.to_string()),
         Answer::Text(text) => {
             Some(String::from_utf8_lossy(&Value::text(text).to_bytes()).into_owned())
         }
+    }
+}
+
+/// A double as JSON text, a non-finite one as the token Python's reader
+/// takes.
+fn float_text(v: f64) -> Option<String> {
+    if v.is_nan() {
+        Some("NaN".to_owned())
+    } else if v.is_infinite() {
+        Some(if v > 0.0 { "Infinity" } else { "-Infinity" }.to_owned())
+    } else {
+        Value::float(v).map(|f| String::from_utf8_lossy(&f.to_bytes()).into_owned())
+    }
+}
+
+/// An entity as the JSON text of the reference's item value, a non-finite
+/// float as the token Python's reader takes; `None` where it had none.
+fn id_as_written(id: &Entity) -> Option<String> {
+    match id {
+        Entity::None => None,
+        Entity::Integer(n) => Some(n.to_string()),
+        Entity::Float(v) => float_text(*v),
+        Entity::Text(text) => {
+            Some(String::from_utf8_lossy(&Value::text(text).to_bytes()).into_owned())
+        }
+        Entity::Written(value) => Some(String::from_utf8_lossy(&value.to_bytes()).into_owned()),
     }
 }
 
@@ -1386,22 +1492,55 @@ fn entity_dtype(payload: &Value) -> Option<String> {
 }
 
 /// The entity of a row: its reference's value read back as the key's
-/// dtype, as the reference's client reads it. This build takes an integer
-/// key, written as an integer or, past the doubles' exact range, as its
-/// digits, and a text key; any other is refused by name.
-fn entity(value: &Value, dtype: Option<&str>) -> Result<Entity, CoreError> {
-    match (dtype, value) {
-        (Some("int8" | "int16" | "int32" | "int64"), Value::Number(token) | Value::Text(token))
-            if is_integer_token(token) =>
-        {
-            token
-                .parse::<i64>()
-                .map(Entity::Integer)
-                .map_err(|_| not_yet("id_type"))
+/// dtype, as the reference's `as_declared` reads it, or as written where it
+/// does not read or no dtype is known: a null as none; a declared boolean
+/// from a boolean, the text spelling one or the integer 0 or 1
+/// ([`as_bool`]); a declared integer (any other boolean as written) from an
+/// integer, a whole float, or text Python's `int` reads ([`integer_text`]);
+/// a declared float from a number not past a double's range, or text
+/// Python's `float` reads ([`numeric_text`]); any other dtype as written.
+fn entity(value: &Value, dtype: Option<&str>) -> Entity {
+    let read = match (dtype, value) {
+        (None, _) | (_, Value::Null) => None,
+        (Some(d), _) if d.starts_with("bool") => {
+            as_bool(value).map(|b| Entity::Written(Value::Bool(b)))
         }
-        (Some("string"), Value::Text(text)) => Ok(Entity::Text(text.clone())),
-        _ => Err(not_yet("id_type")),
-    }
+        (_, Value::Bool(_)) => None,
+        (Some(d), _) if d.starts_with("int") => match value {
+            Value::Text(text) => integer_text(text).map(|digits| integer(&digits)),
+            Value::Number(token) if is_integer_token(token) => Some(integer(token)),
+            Value::Number(token) => token
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite() && v.fract() == 0.0)
+                .map(|v| integer(&format!("{v:.0}"))),
+            _ => None,
+        },
+        (Some(d), _) if d.starts_with("float") => match value {
+            Value::Text(text) => numeric_text(text).map(Entity::Float),
+            Value::Number(token) => token
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .map(Entity::Float),
+            _ => None,
+        },
+        _ => None,
+    };
+    read.unwrap_or_else(|| match value {
+        Value::Null => Entity::None,
+        Value::Text(text) => Entity::Text(text.clone()),
+        Value::Number(token) if is_integer_token(token) => integer(token),
+        other => Entity::Written(other.clone()),
+    })
+}
+
+/// An integer's digits as an entity: an int64, or past it as written.
+fn integer(digits: &str) -> Entity {
+    digits.parse::<i64>().map_or_else(
+        |_| Entity::Written(Value::Number(digits.to_owned())),
+        Entity::Integer,
+    )
 }
 
 /// A row's instance id as an answer names it: an integer's digits, or the
@@ -1432,5 +1571,35 @@ mod tests {
         assert_eq!(predicted_column("PREDICT users.age"), None);
         assert_eq!(predicted_column("PREDICTusers.age FOR"), None);
         assert_eq!(predicted_column("PREDICT 1a.b FOR"), None);
+    }
+
+    #[test]
+    fn an_entity_is_read_back_as_as_declared_reads_it() {
+        let number = |t: &str| Value::Number(t.to_owned());
+        let text = |t: &str| Value::Text(t.to_owned());
+        let int = Some("int64");
+        assert_eq!(entity(&number("7"), int), Entity::Integer(7));
+        assert_eq!(entity(&text(" +0_07 "), int), Entity::Integer(7));
+        assert_eq!(entity(&text("\u{665}"), int), Entity::Integer(5));
+        assert_eq!(entity(&number("5.0"), int), Entity::Integer(5));
+        assert_eq!(entity(&number("5.5"), int), Entity::Written(number("5.5")));
+        assert_eq!(entity(&text("abc"), int), Entity::Text("abc".into()));
+        assert_eq!(
+            entity(&Value::Bool(true), int),
+            Entity::Written(Value::Bool(true))
+        );
+        assert_eq!(entity(&Value::Null, int), Entity::None);
+        assert_eq!(
+            entity(&text("1180591620717411303424"), int),
+            Entity::Written(number("1180591620717411303424"))
+        );
+        assert_eq!(entity(&number("7"), Some("float64")), Entity::Float(7.0));
+        assert_eq!(
+            entity(&text("1"), Some("bool")),
+            Entity::Written(Value::Bool(true))
+        );
+        // No dtype known, or a text key: as written.
+        assert_eq!(entity(&text("7"), None), Entity::Text("7".into()));
+        assert_eq!(entity(&number("7"), Some("string")), Entity::Integer(7));
     }
 }

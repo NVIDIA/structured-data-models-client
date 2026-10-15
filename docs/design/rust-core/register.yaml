@@ -5277,3 +5277,84 @@ entries:
     unnamed ValueError, STRUCT(a BOOLEAN) an unnamed RuntimeError, the core
     side held by T1.36's tests. Its two registration tests leave
     t133p2-pending.json's pending list with this approval.
+
+- id: P1B-86
+  title: With no entity-reference column, an answer whose row_index or forecast_step is past int64 is refused where the reference passes it through
+  kind: change
+  old_behavior: >-
+    Where a materialized request's predicted instance table has no column
+    named with the __kumo_entity_ref prefix (the caller renamed or dropped
+    it), the reference's _named_entities gives the answers back as the
+    endpoint wrote them, checking no row, so a row_index or forecast_step of
+    any size the bindings read (a Python int) is in the result, and
+    to_pandas() holds it.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build,
+    SDMClient.predict gives such answers back as written too (T1.36 fix 8,
+    sdm-request's predict::layout), but the result's row_index and
+    forecast_step columns are int64, so an answer whose row_index or
+    forecast_step is past int64 (and one past the reader's 128 bits) is
+    refused: StructuredDataError, code INVALID_RESPONSE, field
+    prediction.row_index or prediction.forecast_step, reason out_of_range.
+    Where the column is kept both routes refuse such an answer, as before.
+    The default route is unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a request materialized on the core over a DuckDB
+    source, its entity-reference column renamed or dropped, under a forced
+    core route, answered with a row_index or forecast_step below -2**63 or
+    at or past 2**63.
+  cases: [T1.36]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E151}
+  notes: >-
+    A refusal of an answer the reference accepts, so the owner's (locked
+    check 5); not E66(b)'s class. Approver: owner. Question for the owner:
+    may the core refuse, as INVALID_RESPONSE, an answer to an edited request
+    whose row_index or forecast_step does not fit int64, or should the
+    result carry such numbers as written? Recommendation: approve; no
+    endpoint answers a row past int64, and carrying one needs a column the
+    result's contract does not have. Measured by the implementer's
+    old-route versus core-route probe at T1.36 fix 8 (a row_index of 2**63
+    and 2**130, a forecast_step of 2**63, with the column dropped or
+    renamed: the reference answers, the core refuses; -2**63 the same on
+    both). Never self-approved.
+
+- id: P1B-87
+  title: An entity of an integer or float key written as text with a decimal digit Unicode added after 13.0 is given as the text where Python 3.12 reads it as a number
+  kind: change
+  old_behavior: >-
+    The reference reads each entity of a predicted request back as its
+    key's dtype with as_declared, which for an integer key calls Python's
+    int on text and for a float key Python's float: on Python 3.12 (the
+    reference's) these take any decimal digit of Unicode 15.0, so a Kawi
+    digit five reads as the integer 5, and on Python 3.10 the same text is
+    left as text.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    core reads the decimal digits every supported Python reads, Unicode
+    13.0's, on every interpreter (sdm_wire::response's integer_text and
+    numeric_text, the portable policy of P1B-25), so an entity written with
+    a later digit is given back as the text it is, as Python 3.10's
+    as_declared gives it. Entities written with Unicode 13.0's digits read
+    as on the reference (T1.36 fix 8). The default route is unchanged.
+  affected_inputs: >-
+    SDMClient.predict of a request materialized on the core over a DuckDB
+    source, under a forced core route, whose entity-reference cells a
+    caller edited to text holding a decimal digit Unicode added after 13.0,
+    for an integer or a float key, on Python 3.11 and later.
+  cases: [T1.36]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E151}
+  notes: >-
+    The same digit policy the owner approved for numeric text (P1B-25,
+    E93: the Unicode 13 digit rule, which can be revisited later), met at a
+    new site: an entity read back from text. It changes an outcome the
+    reference gives (an int where the core gives text), so the owner's.
+    Approver: owner. Question for the owner: does E93's Unicode 13 digit
+    rule cover entities read back as integers or floats too?
+    Recommendation: approve as the same rule. Measured by the implementer's
+    old-route versus core-route probe at T1.36 fix 8 (Kawi and Tangsa digit
+    five: the reference gives 5, the core the text; Arabic-Indic five: 5 on
+    both). Never self-approved.

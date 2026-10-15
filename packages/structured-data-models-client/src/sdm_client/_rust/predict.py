@@ -201,6 +201,19 @@ def _as_answered(row: dict[str, Any]) -> Any:
     return row.get('prediction')
 
 
+def _id(row: dict[str, Any]) -> Any:
+    r"""A row's id as the reference's item holds it: where the core's ids
+    are not all of one type, or one is of another than an integer or text
+    (an entity read as written), the core gives each as the JSON text of
+    that value (``id_as_written``), read as the client's transport reads
+    JSON; elsewhere the column's value, a missing id ``None`` either
+    way."""
+    if 'id_as_written' in row:
+        text = row['id_as_written']
+        return None if text is None else json.loads(text)
+    return row.get('id')
+
+
 def _adapter(client: SDMClient, model_id: str) -> Any:
     r"""The client's adapter of the model the core checked, which explains
     the endpoint's refusals as on the old route (E47)."""
@@ -334,7 +347,8 @@ def predict(
         items=[
             PredictionItem(
                 row_index=row['row_index'],
-                id=row['id'],
+                id=_id(row),
+                forecast_step=row.get('forecast_step'),
                 prediction=_as_answered(row),
                 probabilities=None
                 if row.get('probabilities') is None

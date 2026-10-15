@@ -22,6 +22,15 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
       "moved": "T1.32h (P1B-12): the boundary conversion the owner authorized on 2026-10-13 (owner decisions item 18, decision E101): the bridge writes each key and time column as the contract's Given, and the refusals of a value that is not a name or a sequence of names (_as_key_tuple's, a time column's) are the core's (sdm-schema apply_keys_and_times); with D4 (P1B-74, the owner's), the host refuses a table named by anything but a str before the run, as JSON would write it as its text"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
+      "moved": "T1.36 fix 8: the module gains _id, the host's half of the entity reading moved into the core (sdm-request's predict::layout and entity, as the reference's _named_entities and as_declared): the bridge reads the id the core gives, as the JSON text of the reference's item value where the core's column cannot hold it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
+      "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
+      "moved": "T1.36 fix 8: each item's id read through _id, and its forecast_step the core's forecast_step column, which an answer given as written (a payload with no entity-reference column, the reference's _named_entities passing it through) carries; both decided in the core"
     }
   }
 }
