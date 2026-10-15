@@ -64,9 +64,11 @@ pub struct Validation {
     /// D4's warning for each day-first date literal read, in the order
     /// read, accepted or not.
     pub warnings: Vec<CoreWarning>,
-    /// A forecast's steps, when it has no errors: the regression each step
-    /// is asked as ([`per_step`]), in order, step 1 first.
-    pub steps: Option<Vec<String>>,
+    /// A forecast's plan, when it has no errors: how many steps it asks,
+    /// and what each step's regression is written from ([`per_step`]),
+    /// never the steps themselves, which a caller writes within its own
+    /// bound ([`ForecastPlan::step`], T1.36 fix 23).
+    pub steps: Option<ForecastPlan>,
 }
 
 impl Validation {
@@ -204,14 +206,47 @@ fn resolve_here(
     Ok(Validation::refused(found, warnings))
 }
 
-/// A forecast's steps, each the regression the client's `_per_step` asks
-/// it as (T1.36 fix 21): the same aggregation of what it aggregates,
-/// filter and all, its window moved along by the step times its span, and
-/// the same entity clause, filter and all; none for a query that is not a
-/// forecast. A forecast whose target ends in no aggregation, or whose
-/// window has no start, the reference cannot split (an `AttributeError`
-/// or `TypeError`), refused by name, as the regression it would ask is.
-fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<Vec<String>>, CoreError> {
+/// A forecast as the client's `_per_step` splits it, kept compact: how
+/// many steps it asks, and the parts every step's regression is written
+/// from. Nothing here grows with the step count (T1.36 fix 23).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForecastPlan {
+    /// `FORECAST n TIMEFRAMES`'s n, saturated at `u64::MAX`.
+    pub count: u64,
+    aggr: &'static str,
+    target: String,
+    start: i128,
+    end: i128,
+    unit: &'static str,
+    entity: String,
+}
+
+impl ForecastPlan {
+    /// Step `step`'s regression (from 1): the same aggregation of what it
+    /// aggregates, filter and all, its window moved along by `step - 1`
+    /// times its span, and the same entity clause, filter and all.
+    pub fn step(&self, step: u64) -> String {
+        let span = self.end - self.start;
+        let moved = i128::from(step.saturating_sub(1)) * span;
+        format!(
+            "PREDICT {}({}, {}, {}, {}) {}",
+            self.aggr,
+            self.target,
+            self.start + moved,
+            self.end + moved,
+            self.unit,
+            self.entity,
+        )
+    }
+}
+
+/// A forecast's plan, the regressions the client's `_per_step` asks it as
+/// (T1.36 fix 21), written by [`ForecastPlan::step`]; none for a query that
+/// is not a forecast. A forecast whose target ends in no aggregation, or
+/// whose window has no start, the reference cannot split (an
+/// `AttributeError` or `TypeError`), refused by name, as the regression it
+/// would ask is. Nothing is written per step here (T1.36 fix 23).
+fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, CoreError> {
     let query = &validated.query;
     if query.problem_type != Some(t::ProblemType::Forecast) {
         return Ok(None);
@@ -231,25 +266,19 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<Vec<String>>, C
             .start
             .ok_or_else(|| sdm_engine::not_yet("open_window"))?,
     );
-    let end = i128::from(window.end);
-    let span = end - start;
-    let steps = query
+    let count = query
         .num_forecasts
         .to_i64()
-        .ok_or_else(|| internal("a validated query forecasts past i64"))?;
-    let entity = format!("{} {}", query.for_each, ast::to_string(&query.entity_ast));
-    Ok(Some(
-        (0..i128::from(steps))
-            .map(|step| {
-                format!(
-                    "PREDICT {aggr}({target}, {}, {}, {}) {entity}",
-                    start + step * span,
-                    end + step * span,
-                    window.unit.value(),
-                )
-            })
-            .collect(),
-    ))
+        .map_or(u64::MAX, |n| u64::try_from(n).unwrap_or(0));
+    Ok(Some(ForecastPlan {
+        count,
+        aggr,
+        target,
+        start,
+        end: i128::from(window.end),
+        unit: window.unit.value(),
+        entity: format!("{} {}", query.for_each, ast::to_string(&query.entity_ast)),
+    }))
 }
 
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {

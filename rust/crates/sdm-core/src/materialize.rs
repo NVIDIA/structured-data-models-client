@@ -1563,8 +1563,10 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .with_field("field", Detail::text("top_k"))
         .with_field("rule", Detail::text("forecast_top_k")));
     }
+    // The host's limit is checked against the plan's count before any step
+    // is written, so nothing grows with a count past it (T1.36 fix 23).
     let most = inputs.most_parts.unwrap_or(MOST_PARTS);
-    if steps.len() > most as usize {
+    if steps.count > u64::from(most) {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
             ErrorCode::InvalidRequest,
@@ -1572,18 +1574,19 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         )
         .with_field("field", Detail::text("query"))
         .with_field("rule", Detail::text("too_many_parts"))
-        .with_field("steps", count(steps.len()))
+        .with_field("steps", Detail::Scalar(Scalar::UInt64(steps.count)))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
     }
     let handed = inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
         source: inputs.source.clone(),
         ..SamplerMemo::default()
     });
-    let mut gathered = Vec::with_capacity(steps.len());
-    for (at, text) in steps.into_iter().enumerate() {
-        let step = u32::try_from(at + 1).map_err(|_| internal("a forecast's steps past u32"))?;
+    // Within the checked bound, a `u32` (the limit's type).
+    let bound = u32::try_from(steps.count).map_err(|_| internal("a forecast's steps past u32"))?;
+    let mut gathered = Vec::with_capacity(bound as usize);
+    for step in 1..=bound {
         let mut asked = inputs.clone();
-        asked.query = text;
+        asked.query = steps.step(u64::from(step));
         asked.memo = None;
         let tagged =
             |e: CoreError| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step)));
@@ -1627,11 +1630,11 @@ fn attach_request(
     Ok((payload, query))
 }
 
-/// A forecast's steps, each the regression it is asked as
-/// ([`crate::pql::resolve`]'s `steps`), when the query resolves to one;
+/// A forecast's plan ([`crate::pql::resolve`]'s `steps`), when the query
+/// resolves to one;
 /// none otherwise, the query then gathered as itself, which refuses it
 /// where it does not resolve as before.
-fn forecast_steps(inputs: &Inputs) -> Option<Vec<String>> {
+fn forecast_steps(inputs: &Inputs) -> Option<crate::pql::ForecastPlan> {
     let mut description = inputs.description.clone();
     consistent(&mut description).ok()?;
     let profile = Profile::resolve(&ProfileSpec {
