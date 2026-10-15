@@ -5,7 +5,7 @@
 //! `sdm-contract-run`: the pure-Rust host over contract cases.
 //!
 //! ```text
-//! sdm-contract-run --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY...
 //! ```
 //!
 //! Runs every case through `HostRun`, building a case's data from
@@ -16,20 +16,29 @@
 //! non-zero and leaves no output file, an earlier run's included;
 //! observations are written only when every case was recorded. The
 //! identity's commit is the checkout the command runs in.
+//!
+//! `--pre-given-specs` reads every case's `core.describe_source.source` as
+//! contract 22's, written before T1.32h, and runs it as the current shape
+//! ([`sdm_testkit::pre_given`]); a bundle frozen before then cannot be
+//! rewritten. Without it, a spec in that shape is a runner failure.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
-use sdm_testkit::{bases, case, host, observation};
+use sdm_testkit::{bases, case, host, observation, pre_given};
 
 fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
+    let (pre_given_specs, arguments) = match arguments {
+        [flag, rest @ ..] if flag == "--pre-given-specs" => (true, rest),
+        _ => (false, arguments),
+    };
     let (out, cases) = match arguments {
         [flag, out, cases @ ..] if flag == "--out" && !cases.is_empty() => (
             PathBuf::from(out),
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
-        _ => bail!("usage: sdm-contract-run --out FILE CASE_OR_DIRECTORY..."),
+        _ => bail!("usage: sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY..."),
     };
     let mut partial = out.clone().into_os_string();
     partial.push(".partial");
@@ -42,9 +51,14 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             _ => {}
         }
     }
-    let loaded = case::load(&cases)?;
+    let mut loaded = case::load(&cases)?;
     if loaded.is_empty() {
         bail!("no cases");
+    }
+    if pre_given_specs {
+        for each in &mut loaded {
+            pre_given::upgrade(&mut each.case)?;
+        }
     }
     let here = std::env::current_dir()?;
     let identity = observation::Identity::new(&here)?;

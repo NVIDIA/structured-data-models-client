@@ -18,6 +18,8 @@
 //! form, for the observation's `driver` section (T1.11e). [`edits`] makes
 //! the user's edits to the description the host's own `describe_source`
 //! answered, which is the schema its `materialize` samples (T1.21d).
+//! [`pre_given`] reads a case written before contract 23, for
+//! `sdm-contract-run --pre-given-specs` alone.
 
 pub mod bases;
 pub mod case;
@@ -27,4 +29,5 @@ pub mod edits;
 pub mod endpoint;
 pub mod host;
 pub mod observation;
+pub mod pre_given;
 pub mod values;
