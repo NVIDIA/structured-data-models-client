@@ -18,7 +18,7 @@
       "moved": "T1.32a: the entities are passed to the core without the schema or the entity's name, which only the bridge's cast read"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
-      "moved": "T1.32g: the host's half of the moved cast (T1.32a's carried P3): a float in a mix written as the core writes a float entity (sdm_engine::keys's Entity::Float, Rust's Display of an f64: shortest round-trip digits, no exponent, a tie away from zero), so the core reads back the number the host was given; a boolean as before"
+      "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
       "moved": "T1.32h (P1B-12): the boundary conversion the owner authorized on 2026-10-13 (owner decisions item 18, decision E101): the bridge writes each key and time column as the contract's Given, and the refusals of a value that is not a name or a sequence of names (_as_key_tuple's, a time column's) are the core's (sdm-schema apply_keys_and_times); with D4 (P1B-74, the owner's), the host refuses a table named by anything but a str before the run, as JSON would write it as its text"

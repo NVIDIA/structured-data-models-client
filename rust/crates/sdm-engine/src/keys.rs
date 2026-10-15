@@ -225,8 +225,8 @@ impl Target {
 enum Entity<'a> {
     Null,
     Int(i128),
-    /// A float, with the shortest decimal text that reads back as it at
-    /// its own width, with no exponent.
+    /// A float, with its text as the reference writes it ([`float_text`]):
+    /// `1e16` is `1e+16`.
     Float(f64, String),
     Bool(bool),
     Text(&'a str),
@@ -261,12 +261,12 @@ fn entity(entities: &ArrayRef, row: usize) -> Entity<'_> {
         DataType::UInt32 => int!(UInt32Type),
         DataType::UInt64 => int!(UInt64Type),
         DataType::Float32 => {
-            let value = entities.as_primitive::<Float32Type>().value(row);
-            Entity::Float(f64::from(value), format!("{value}"))
+            let value = f64::from(entities.as_primitive::<Float32Type>().value(row));
+            Entity::Float(value, float_text(value, true))
         }
         DataType::Float64 => {
             let value = entities.as_primitive::<Float64Type>().value(row);
-            Entity::Float(value, format!("{value}"))
+            Entity::Float(value, float_text(value, false))
         }
         DataType::Boolean => Entity::Bool(entities.as_boolean().value(row)),
         DataType::Utf8 => Entity::Text(entities.as_string::<i32>().value(row)),
@@ -439,7 +439,7 @@ enum Cast {
 /// |---|---|---|---|
 /// | null | null | null | null |
 /// | integer | itself, in the key's range | its digits | exact at scale s, in p digits |
-/// | float | finite and whole, in range | finite: its shortest text, a whole one without a point | finite: its shortest text, read as a decimal |
+/// | float | finite and whole, in range | its text as the reference writes it ([`float_text`]), an infinity `inf` or `-inf` | finite: that text, read as a decimal |
 /// | boolean | 1 or 0 | `true` or `false` | 1 or 0 |
 /// | text | `-?[0-9]+`, in range | itself | `[+-]?` digits, `.`, digits, exponent, exact at scale s, in p digits |
 /// | decimal | whole, in range | its digits at its own scale | exact at scale s, in p digits |
@@ -458,6 +458,8 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
     match (entity, target) {
         (Entity::Null, _) => Ok(Cast::Null),
         (Entity::Other, _) => Err(Uncast::Type),
+        // An infinity is text (`inf`, `-inf`), as the reference casts it.
+        (Entity::Float(_, text), Target::Text) => Ok(Cast::Text(text)),
         (Entity::Float(value, _), _) if !value.is_finite() => Err(Uncast::NotFinite),
 
         (Entity::Int(value), Target::Int { min, max }) => in_range(value, min, max),
@@ -480,7 +482,6 @@ fn cast_one(entity: Entity<'_>, target: Target) -> Result<Cast, Uncast> {
         }
 
         (Entity::Int(value), Target::Text) => Ok(Cast::Text(value.to_string())),
-        (Entity::Float(_, text), Target::Text) => Ok(Cast::Text(text)),
         (Entity::Bool(value), Target::Text) => Ok(Cast::Text(value.to_string())),
         (Entity::Text(text), Target::Text) => Ok(Cast::Text(text.to_owned())),
         (Entity::Decimal { scale, digits, .. }, Target::Text) => {
@@ -596,6 +597,105 @@ fn decimal_text(digits: &str, scale: i8) -> String {
     let padded = format!("{digits:0>width$}", width = scale + 1);
     let (whole, fraction) = padded.split_at(padded.len() - scale);
     format!("{sign}{whole}.{fraction}")
+}
+
+/// A float's text as the reference writes a float entity of a text key:
+/// pandas casts the entities to the key's Arrow string type through
+/// pyarrow's cast of a float to text, which is Arrow C++'s
+/// `FloatToStringFormatter`, double-conversion's `ToShortest` with the
+/// flag `EMIT_POSITIVE_EXPONENT_SIGN`, `inf` and `nan`, the exponent
+/// character `e` and the plain range `-6` to `10` (T1.36 fix 4, the final
+/// review's P2-2). So: the shortest digits that read back as the float at
+/// its own width (`single`: a 32-bit float's as a 32-bit float), the
+/// nearer of two such and the even one of two as near; written plainly
+/// from `1e-6` to below `1e10` (`0.000001`, `9999999000`, `3`, `-0`),
+/// outside that as one digit, a point and the rest, `e`, the exponent's
+/// sign and its digits, unpadded (`1e-7`, `1e+10`, `1.5e-7`, `5e-324`);
+/// `inf`, `-inf` and `nan`.
+fn float_text(value: f64, single: bool) -> String {
+    if value.is_nan() {
+        return "nan".to_owned();
+    }
+    let sign = if value.is_sign_negative() { "-" } else { "" };
+    if value.is_infinite() {
+        return format!("{sign}inf");
+    }
+    let (digits, exponent) = shortest(value.abs(), single);
+    let count = i64::try_from(digits.len()).unwrap_or(i64::MAX);
+    let written = if (-6..10).contains(&exponent) {
+        // The decimal point's place, counted from the first digit.
+        let point = exponent + 1;
+        if point <= 0 {
+            let zeros = "0".repeat(usize::try_from(-point).unwrap_or(0));
+            format!("0.{zeros}{digits}")
+        } else if point >= count {
+            let zeros = "0".repeat(usize::try_from(point - count).unwrap_or(0));
+            format!("{digits}{zeros}")
+        } else {
+            let (whole, fraction) = digits.split_at(usize::try_from(point).unwrap_or(0));
+            format!("{whole}.{fraction}")
+        }
+    } else {
+        let (first, rest) = digits.split_at(1);
+        let point = if rest.is_empty() { "" } else { "." };
+        let exponent_sign = if exponent < 0 { '-' } else { '+' };
+        format!(
+            "{first}{point}{rest}e{exponent_sign}{}",
+            exponent.unsigned_abs()
+        )
+    };
+    format!("{sign}{written}")
+}
+
+/// The shortest digits of a finite `value` (not negative) that read back
+/// as it at its own width, and the power of ten of the first: Rust's
+/// shortest, which takes the upper of two as near, made the even one, as
+/// double-conversion's is (and Python's `repr`).
+fn shortest(value: f64, single: bool) -> (String, i64) {
+    let (digits, exponent) = exponential(&if single {
+        // Exact: `value` is a 32-bit float widened.
+        #[allow(clippy::cast_possible_truncation)]
+        let narrow = value as f32;
+        format!("{narrow:e}")
+    } else {
+        format!("{value:e}")
+    });
+    // Rust's shortest is the nearer of two of the same length that read
+    // back, and the upper of two as near, where double-conversion takes the
+    // even one. So they differ only where Rust's last digit is odd, the
+    // digits one less in it read back too, and the float's exact value is
+    // their midpoint: those digits and a 5 (every finite double's exact
+    // digits are within 800).
+    let Some((&last, head)) = digits.as_bytes().split_last() else {
+        return (digits, exponent);
+    };
+    if (last - b'0').is_multiple_of(2) {
+        return (digits, exponent);
+    }
+    let lower = format!("{}{}", String::from_utf8_lossy(head), char::from(last - 1));
+    let place = exponent - i64::try_from(head.len()).unwrap_or(i64::MAX);
+    let text = format!("{lower}e{place}");
+    let reads_back = if single {
+        text.parse::<f32>().map(f64::from).ok() == Some(value)
+    } else {
+        text.parse::<f64>().ok() == Some(value)
+    };
+    if !reads_back {
+        return (digits, exponent);
+    }
+    let (exact, top) = exponential(&format!("{value:.800e}"));
+    if top == exponent && exact.trim_end_matches('0') == format!("{lower}5") {
+        return (lower.trim_end_matches('0').to_owned(), exponent);
+    }
+    (digits, exponent)
+}
+
+/// Rust's exponential text (`1.5e-7`) as its digits and the power of ten
+/// of the first.
+fn exponential(text: &str) -> (String, i64) {
+    let (mantissa, exponent) = text.split_once('e').unwrap_or((text, "0"));
+    let digits = mantissa.chars().filter(char::is_ascii_digit).collect();
+    (digits, exponent.parse().unwrap_or(0))
 }
 
 /// Whether `entities` holds a missing entity: a null, or a float NaN,
@@ -729,8 +829,8 @@ pub fn cast(entities: &ArrayRef, key: &DataType) -> Result<ArrayRef, CoreError> 
 mod tests {
     use super::*;
     use arrow_array::{
-        BooleanArray, Decimal128Array, Float64Array, Int64Array, NullArray, StringArray,
-        TimestampMicrosecondArray, UInt64Array,
+        BooleanArray, Decimal128Array, Float32Array, Float64Array, Int64Array, NullArray,
+        StringArray, TimestampMicrosecondArray, UInt64Array,
     };
 
     fn cast_to(entities: ArrayRef, key: &DataType) -> Result<ArrayRef, (String, u64)> {
@@ -795,7 +895,9 @@ mod tests {
         assert_eq!(cast_to(decimal, &DataType::Int32).unwrap_err().0, "inexact");
         let infinite: ArrayRef = Arc::new(Float64Array::from(vec![f64::INFINITY]));
         assert_eq!(
-            cast_to(infinite, &DataType::Utf8).unwrap_err().0,
+            cast_to(infinite, &DataType::Decimal128(38, 0))
+                .unwrap_err()
+                .0,
             "not_finite"
         );
     }
@@ -875,6 +977,91 @@ mod tests {
         let booleans: ArrayRef = Arc::new(BooleanArray::from(vec![true, false]));
         let cast = cast_to(booleans, &DataType::Utf8).unwrap();
         assert_eq!(cast.as_string::<i32>().value(0), "true");
+    }
+
+    #[test]
+    fn a_float_is_written_as_pyarrow_writes_it() {
+        // Each worked by pyarrow 25.0.1's cast of a double to text.
+        for (value, text) in [
+            (1e16, "1e+16"),
+            (1.2e15, "1.2e+15"),
+            (1e10, "1e+10"),
+            (9_999_999_999.0, "9999999999"),
+            (9.999_999e9, "9999999000"),
+            (1e9, "1000000000"),
+            (1e-6, "0.000001"),
+            (1.5e-6, "0.0000015"),
+            // The doubles either side of 1e-6 and below 1e10.
+            (9.999_999_999_999_997e-7, "9.999999999999997e-7"),
+            (1.000_000_000_000_000_2e-6, "0.0000010000000000000002"),
+            (9_999_999_999.999_998, "9999999999.999998"),
+            (1e-7, "1e-7"),
+            (1.5e-7, "1.5e-7"),
+            (1.234_567_890_123_456_8e17, "1.2345678901234568e+17"),
+            (1e21, "1e+21"),
+            (1e22, "1e+22"),
+            (5e-324, "5e-324"),
+            (f64::MAX, "1.7976931348623157e+308"),
+            (f64::MIN_POSITIVE, "2.2250738585072014e-308"),
+            // Two shortest texts as near: the even one, as `repr` takes.
+            (1_059_438_285_926_254.2, "1.0594382859262542e+15"),
+            (0.1, "0.1"),
+            (2.5, "2.5"),
+            (3.0, "3"),
+            (-0.0, "-0"),
+            (0.0, "0"),
+            (-1.5e-7, "-1.5e-7"),
+            (-1e16, "-1e+16"),
+            (f64::INFINITY, "inf"),
+            (f64::NEG_INFINITY, "-inf"),
+        ] {
+            assert_eq!(float_text(value, false), text, "{value:e}");
+        }
+        // A 32-bit float is written at its own width.
+        for (value, text) in [
+            (1e16_f32, "1e+16"),
+            (0.1_f32, "0.1"),
+            (1.5e-7_f32, "1.5e-7"),
+            (16_777_216_f32, "16777216"),
+            (1e10_f32, "1e+10"),
+            (9.999_999e9_f32, "9999999000"),
+            (1e-6_f32, "0.000001"),
+            (9.999_999e-7_f32, "9.999999e-7"),
+            (f32::MAX, "3.4028235e+38"),
+            (f32::from_bits(1), "1e-45"),
+        ] {
+            assert_eq!(float_text(f64::from(value), true), text, "{value:e}");
+        }
+        // Widened, the same 32-bit floats are other doubles.
+        assert_eq!(float_text(f64::from(0.1_f32), false), "0.10000000149011612");
+        assert_eq!(
+            float_text(f64::from(1e16_f32), false),
+            "1.0000000272564224e+16"
+        );
+    }
+
+    #[test]
+    fn a_text_key_takes_a_float_as_its_text() {
+        let floats: ArrayRef = Arc::new(Float64Array::from(vec![
+            1e16,
+            1.5e-7,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ]));
+        let cast = cast_to(floats, &DataType::Utf8).unwrap();
+        let cast = cast.as_string::<i32>();
+        let texts: Vec<&str> = (0..cast.len()).map(|row| cast.value(row)).collect();
+        assert_eq!(texts, ["1e+16", "1.5e-7", "inf", "-inf"]);
+        let single: ArrayRef = Arc::new(Float32Array::from(vec![1e16_f32, 0.1]));
+        let cast = cast_to(single, &DataType::Utf8).unwrap();
+        let cast = cast.as_string::<i32>();
+        assert_eq!((cast.value(0), cast.value(1)), ("1e+16", "0.1"));
+        // The same text reads as a decimal's value.
+        let floats: ArrayRef = Arc::new(Float64Array::from(vec![1e16, 1.5e-7]));
+        let cast = cast_to(floats, &DataType::Decimal128(38, 10)).unwrap();
+        let cast = cast.as_primitive::<Decimal128Type>();
+        assert_eq!(cast.value(0), 10_i128.pow(26));
+        assert_eq!(cast.value(1), 1500);
     }
 
     #[test]

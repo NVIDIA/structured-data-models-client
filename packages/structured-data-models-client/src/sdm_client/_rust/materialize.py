@@ -176,8 +176,9 @@ def _indices(indices: Sequence[Any]) -> Any:
     r"""The entities to predict for as one Arrow column, of the type
     pyarrow infers from the values themselves (``pa.array``); where it
     infers none, as when numbers and text are mixed or an integer is past
-    int64, each value as its text (``str``; a boolean as ``true`` or
-    ``false``, as Arrow writes one), a missing one (``None``, ``pd.NA``,
+    int64, each value as its text (``_text``: ``str``, a boolean as
+    ``true`` or ``false``, as Arrow writes one, and a float as the core
+    writes a float entity), a missing one (``None``, ``pd.NA``,
     ``pd.NaT`` or a float NaN) null, and missing values alone a column of
     Arrow's null type. A float NaN pyarrow infers stays a NaN, which the
     core reads as missing, as it reads this null. The core casts the
@@ -201,44 +202,23 @@ def _indices(indices: Sequence[Any]) -> Any:
 
 def _text(value: Any) -> str:
     r"""A value as its text, a boolean as Arrow writes one and a float as
-    the core writes a float entity (``sdm_engine::keys``'s ``Entity::Float``,
-    Rust's ``{}`` of an ``f64``), so the core reads the same number back:
-    the shortest digits that read back as it, a tie between two such digit
-    strings going away from zero (Rust's choice, where ``repr`` takes the
-    even one), with no exponent and a whole one with no point (``1e16`` is
-    ``10000000000000000``, ``1.0`` is ``1``, ``1.5e-07`` is
-    ``0.00000015``). Exact arithmetic, never a decimal context."""
+    the core writes a float entity (``sdm_engine::keys``'s ``float_text``,
+    T1.36 fix 4), which is the reference's text of it: pyarrow's cast of
+    the float to text, at its own width (a NumPy ``float32`` as a 32-bit
+    float; a NumPy ``float64`` is a ``float``), so the core reads back the
+    number the host was given. That is the shortest digits that read back
+    as it, written plainly from ``1e-6`` to below ``1e10`` and with an
+    exponent outside (``1e16`` is ``1e+16``, ``1.5e-07`` is ``1.5e-7``,
+    ``1.0`` is ``1``, an infinity ``inf``)."""
     import numpy as np
 
     if isinstance(value, (bool, np.bool_)):
         return 'true' if value else 'false'
-    if not isinstance(value, float) or not math.isfinite(value):
-        return str(value)  # an infinity is 'inf' or '-inf', as Rust's
-    from decimal import Decimal
-    from fractions import Fraction
+    if isinstance(value, (float, np.float32, np.float16)):
+        import pyarrow as pa
 
-    sign, digits, exponent = Decimal(repr(float(value))).as_tuple()
-    assert isinstance(exponent, int)
-    whole = int(''.join(map(str, digits)))
-    unit = Fraction(10) ** exponent
-    if 2 * (abs(Fraction(value)) - whole * unit) == unit and float(
-        (whole + 1) * unit
-    ) == abs(value):
-        whole += 1  # a tie: Rust's shortest digits go away from zero
-    text = str(whole)
-    if whole == 0:
-        exponent = 0
-    else:
-        stripped = text.rstrip('0')
-        exponent += len(text) - len(stripped)
-        text = stripped
-    if exponent >= 0:
-        written = text + '0' * exponent
-    elif -exponent < len(text):
-        written = f'{text[:exponent]}.{text[exponent:]}'
-    else:
-        written = '0.' + '0' * (-exponent - len(text)) + text
-    return ('-' if sign else '') + written
+        return str(pa.array([value]).cast(pa.string())[0].as_py())
+    return str(value)
 
 
 def _missing(value: Any) -> bool:

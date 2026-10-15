@@ -3527,8 +3527,8 @@ entries:
     the text to the key's type: [1, '2'] is entities 1 and 2 of an integer
     key and '1' and '2' of a text key, [1.0, '2'] the floats 1 and 2 of a
     float key; a NumPy int64 is an integer like any other. A float in such
-    a mix is written as the core writes a float entity (from T1.32g): Rust's
-    shortest round-trip text, with no exponent (1e16 is 10000000000000000).
+    a mix is written as the core writes a float entity, which from T1.36
+    fix 4 is pyarrow's text, the reference's spelling (1e16 is 1e+16).
     The default route is unchanged.
   affected_inputs: >-
     PredictiveQuery.materialize with indices over a DuckDB source under a
@@ -3555,6 +3555,9 @@ entries:
     T1.32g's ref (utf8-float-text.mixed.float-*-text) approved by both
     reviewers of T1.32g part 2b's review round 1 (Codex and the independent
     subagent), relayed by the orchestrator: APPROVE-P1B-35-ref.
+    Wording updated at T1.36 fix 4 to follow the float entity's spelling,
+    the meaning both reviewers recorded at T1.32g (the host writes each
+    float as the core writes a float entity); for the reviewers to confirm.
 
 - id: P1B-36
   title: A decimal entity of a float key is rounded once, at the key's width, where the reference rounds it twice
