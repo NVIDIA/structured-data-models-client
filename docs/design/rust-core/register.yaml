@@ -2839,9 +2839,9 @@ entries:
     NULL.
   cases: [T1.27, T1.28a, T1.36]
   refs: [contract/t136-average-null-vectors.json, contract/tests/test_t136_average_null.py, contract/tools/average_null_record.py, E145]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E145}
   notes: >-
     Narrowed at T1.36 fix 2 to the reference's crash condition. The
     independent test author's 104 cases recorded on the reference (54
@@ -2856,6 +2856,13 @@ entries:
     Approver: reviewer (E66(b): INTERNAL_ERROR to a named refusal, narrowed
     at T1.36 fix 2 after both final reviews, the subagent's REJECT-P1B-21
     and Codex's APPROVE-P1B-21)
+    Approved by both reviewers of the final review's round 2 at 84d68cf5
+    (Codex's and the independent subagent's: APPROVE-P1B-21), relayed by
+    the orchestrator, recorded at T1.36 fix 12; never the implementer's
+    approval. Codex: limited to the narrowed AVG, MIN and MAX
+    reference-crash condition, not all NULL comparisons; the subagent:
+    reproduced as the entry states, the named refusal only where the
+    reference fails INTERNAL_ERROR.
 
 - id: P1B-22
   title: A model's answer nested past 128 levels is refused INVALID_RESPONSE where the reference reads it
@@ -3567,7 +3574,11 @@ entries:
     subagent), relayed by the orchestrator: APPROVE-P1B-35-ref.
     Wording updated at T1.36 fix 4 to follow the float entity's spelling,
     the meaning both reviewers recorded at T1.32g (the host writes each
-    float as the core writes a float entity); for the reviewers to confirm.
+    float as the core writes a float entity). Confirmed by both reviewers of
+    the final review's round 2 at 84d68cf5 (Codex: the revised 1e16 to
+    1e+16 example describes pyarrow's spelling, mixed text included; the
+    subagent: the owner-approved transition unchanged in meaning), recorded
+    at T1.36 fix 12.
 
 - id: P1B-36
   title: A decimal entity of a float key is rounded once, at the key's width, where the reference rounds it twice
@@ -5420,8 +5431,8 @@ entries:
   refs:
   - 'contract/t136-host2-vectors.json#big.varchar.small refusal UNNAMED -> refusal PROVIDER_ERROR'
   - 'contract/t136-host2-vectors.json#big.blob.small refusal UNNAMED -> refusal PROVIDER_ERROR'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E146}
   notes: >-
     A named refusal where the reference fails unnamed, E66(b)'s class, for
@@ -5431,6 +5442,13 @@ entries:
     held by contract/tests/test_t136_host2_values.py, the public calls only
     with SDM_T136_BIG=1 (about 7 GB). Taken out of HOST-2 at T1.36 fix 3,
     where its offsets clause stood unmeasured. Never self-approved.
+    Approved by both reviewers of the final review's round 2 at 84d68cf5
+    (Codex's and the independent subagent's: APPROVE-P1B-79), relayed by
+    the orchestrator, recorded at T1.36 fix 12; never the implementer's
+    approval. Codex: the measured default small-buffer VARCHAR and BLOB
+    failures only, not P1B-80's large-buffer successes; neither reviewer
+    repeated the multi-GiB allocation, both resting on the test author's
+    recordings.
 
 - id: P1B-80
   title: A single text or binary value past int32 offsets under arrow_large_buffer_size is refused at from_source where the reference reads it
