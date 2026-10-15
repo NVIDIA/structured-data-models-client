@@ -98,9 +98,13 @@ gating run on the candidate (the landing commit's parent), or, for a moved
 landing, on its ``Moved-from`` commit, whose tree must be the landing's.
 That run must be green; a red one fails, and a cancelled or unfinished one
 asks for a rerun. The landing commit's own runs, which CI skips, are
-reported and need not exist; one that ran and failed fails. On a failure
-it prints how to revert the fast-forward and changes nothing: it never
-reverts by itself.
+reported and need not exist; one that ran and failed fails. A moved
+landing's are the exception: CI runs them (E131 (c)), judging it against
+its own Base-SHA, which the moved-from commit's run never did, so one of
+them must be green, and without one (none, skipped, cancelled,
+unfinished, or a pull request's only) ``verify`` is incomplete (exit 3).
+On a failure it prints how to revert the fast-forward and changes
+nothing: it never reverts by itself.
 
 ``--moved-from X`` (decision E130, the owner's of 2026-10-14) lands a
 candidate C on X's reviews and X's green run, with no reviewer re-run and
@@ -1320,15 +1324,29 @@ def verify(
             unresolved.append(run)
         else:
             problems.append(why or f'no evidence on {what}')
-    # The landing commit's own runs, which CI skips: reported, never
-    # required; one that ran and failed is real, and fails.
+    # The landing commit's own runs. CI skips an ordinary landing's, so
+    # they are reported, never required; one that ran and failed is real,
+    # and fails. A moved landing's are not skipped (E131 (c)): one of them,
+    # green, is its judgement against its own Base-SHA, which the
+    # moved-from commit's run never made, so without one it is incomplete.
+    moved_landing = 'Moved-from' in trailers
+    own_green: list[dict[str, object]] = []
     for run in runs_on(tools, sha):
         final = run
         if run.get('status') != 'completed':
             out(f'wait {describe(run)} {run.get("url")}')
             final = watch(tools, run.get('databaseId'))
         conclusion = final.get('conclusion')
-        if conclusion == 'cancelled':
+        if final.get('status') != 'completed':
+            out(
+                f'WAIT {describe(final)} {final.get("url")} (the landing commit)'
+            )
+        elif conclusion == 'success':
+            own_green.append(final)
+            out(
+                f'ok   {describe(final)} {final.get("url")} (the landing commit)'
+            )
+        elif conclusion == 'cancelled':
             # Cancelled says nothing about the tree; the run it landed on
             # does.
             out(
@@ -1341,7 +1359,7 @@ def verify(
                     else ''
                 )
             )
-        elif conclusion in ('success', 'skipped', 'neutral'):
+        elif conclusion in ('skipped', 'neutral'):
             out(
                 f'ok   {describe(final)} {final.get("url")} (the landing commit)'
             )
@@ -1360,6 +1378,14 @@ def verify(
         )
         for run in unresolved:
             out(f'  gh run rerun {run.get("databaseId")}   # then verify again')
+        return 3
+    if moved_landing and not own_green:
+        out(
+            f'VERIFY INCOMPLETE: {sha[:12]} is a moved landing (Moved-from), '
+            'which CI runs to judge it against its own Base-SHA, and no run '
+            'of it on a push is green yet; nothing failed, so wait for its '
+            'runs, or rerun a cancelled one, and verify again'
+        )
         return 3
     out(
         f'VERIFIED {sha}: the run it landed on is green, and it changes no file'
