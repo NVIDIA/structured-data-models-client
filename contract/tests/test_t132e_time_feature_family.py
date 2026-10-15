@@ -171,6 +171,20 @@ def registered_case(case: str) -> str | None:
     return None
 
 
+def registered_entries(case: str) -> list[str]:
+    r"""Every approved entry, other than the placeholder, that lists
+    ``case`` in its ``cases``, by ID: several may list one case, in any
+    order in the register, and :func:`registered_case` gives the first."""
+    path = ROOT / 'docs/design/rust-core/register.yaml'
+    return sorted(
+        str(entry['id'])
+        for entry in yaml.safe_load(path.read_text(encoding='utf-8'))['entries']
+        if entry['id'] not in UMBRELLAS
+        and entry.get('status') == 'approved'
+        and case in (entry.get('cases') or [])
+    )
+
+
 # --- the family's runs ---------------------------------------------------------
 
 
@@ -381,7 +395,8 @@ def test_the_answer_comparison_fails_closed() -> None:
     # The placeholder lists cases but excuses none; an unlisted case has no
     # entry; DT-12, approved, lists the text dates the source cannot cast.
     assert registered_case('time.date') is None
-    assert registered_case('time.text-us-date') == 'DT-12'
+    assert registered_entries('time.date') == []
+    assert 'DT-12' in registered_entries('time.text-us-date')
 
 
 # --- statement counts and the capture -----------------------------------------

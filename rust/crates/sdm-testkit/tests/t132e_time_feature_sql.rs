@@ -760,11 +760,12 @@ fn the_answer_comparison_fails_closed() {
     assert!(!agrees(&unnamed, &unnamed));
     // The placeholder lists cases but excuses none; DT-12, approved, lists
     // the text dates the source cannot cast.
+    // Several entries may list a case, in any register order (DT-7 lists
+    // these dates too, ahead of DT-12), so DT-12 is sought among them all.
     assert_eq!(registered_case("time.date"), None);
-    assert_eq!(
-        registered_case("time.text-us-date").as_deref(),
-        Some("DT-12")
-    );
+    assert!(register_lists("cases").iter().any(|(entry, cases)| {
+        entry == "DT-12" && cases.iter().any(|c| c == "time.text-us-date")
+    }));
 }
 
 #[test]
