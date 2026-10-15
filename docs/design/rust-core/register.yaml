@@ -3092,14 +3092,19 @@ entries:
     held only past the first 1,000 rows, or mostly empty past them, is
     passed over (sparse) where the reference took it unchecked; one whose
     first 1,000 rows hold one value is taken with no warning where the
-    reference warned it was taken unchecked. The default route is
+    reference warned it was taken unchecked; one holding a single value,
+    in every row or only past the first 1,000, is passed over as constant
+    where the reference took it unchecked. The default route is
     unchanged.
   affected_inputs: >-
     Schema.from_source under a forced core route over a DuckDB table of
     1,000 rows or more holding a TIMESTAMP WITH TIME ZONE column that is
     a time column candidate, compared with the reference run without
     pytz.
-  cases: [T1.32e]
+  cases: [T1.32e, T1.36]
+  refs:
+  - contract/t136-host2-zone-vectors.json#p1b39.held-past-the-preview
+  - contract/t136-host2-zone-vectors.json#p1b39.constant-in-every-row
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E83}
@@ -3113,6 +3118,20 @@ entries:
     asks for; the difference is the reference's environment. Owner to
     approve (a different success, not E66(b)'s class); never
     self-approved. Approved by the owner on 2026-10-13, relayed by the orchestrator (E85).
+    Two more cases, measured at T1.36 by the test author's "T1.36 tests: a
+    whole-table MIN's text and P1B-39's zoned whole table held as measured"
+    (contract/t136-host2-zone-vectors.json's p1b39 section, 2,500 rows
+    under UTC, beside shop), fall under the general sentence above (where
+    the preview and the whole table disagree, the time column chosen or
+    the warning differs): p1b39.held-past-the-preview (events.f null in
+    the 1,000 rows the preview reads, 2020-01-01+00 after) and
+    p1b39.constant-in-every-row (2020-01-01+00 in every row). In both the
+    reference without pytz takes f unchecked ("taken as the time column
+    although ... because the query over the whole table failed"), while
+    the core, like the reference with pytz, passes it over as constant
+    ("every row that holds a value holds 2020-01-01 00:00:00+00:00",
+    "every row holds ..."); p1b39.control.varying agrees on every route.
+    Recorded at T1.36 fix 13; the status and approval stand.
 
 - id: P1B-40
   title: Rows a walk reaches with a null text or decimal key beside keys that are not null are left out, with a warning, where the reference fails

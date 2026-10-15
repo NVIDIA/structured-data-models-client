@@ -570,9 +570,10 @@ def _shown_timestamp(value: codec.Temporal) -> str:
     own ``tz_convert`` labels such a value with the zone's offset at that
     instant but moves it by another, and refuses some near year 1
     (T1.36 fix 11). One ``as_py`` cannot hold, past the years 1 to 9999
-    in UTC or in the zone, which the reference cannot show at all (its
-    from_source fails there), at its UTC instant, so no warning fails on it
-    (T1.36 fix 13); every other value as pandas holds it."""
+    in UTC or in the zone, reaches a warning only as a whole table's
+    smallest value, which the reference reads through DuckDB's
+    ``fetchall`` as DuckDB's own text (:func:`_duckdb_text`) and shows as it
+    is (T1.36 fix 13); every other value as pandas holds it."""
     if value.tag != 'date32' and value.zone is not None:
         import pandas as pd
         import pyarrow as pa
@@ -582,11 +583,48 @@ def _shown_timestamp(value: codec.Temporal) -> str:
             read = pa.scalar(value.value, pa.timestamp(unit, tz=value.zone))
             held = read.as_py()
         except OverflowError:
-            return str(pd.Timestamp(value.value, unit=unit, tz='UTC'))
+            return _duckdb_text(value.value, unit)
         if unit != 'ns':
             held = pd.Timestamp(held).as_unit(unit)
         return str(held)
     return str(_timestamp(value))
+
+
+def _duckdb_text(count: int, unit: str) -> str:
+    r"""A ``TIMESTAMPTZ`` of ``count`` ``unit`` since the epoch as DuckDB
+    writes one Python's ``datetime`` cannot hold: its UTC wall clock, the
+    year at least four digits, a year before 1 as ``1 - year`` followed by
+    `` (BC)``, the fraction of a second without its trailing zeros, then
+    ``+00`` (``10000-06-01 12:34:56.5+00``, ``0001-12-31 (BC)
+    15:00:00+00``)."""
+    micros = count // 1_000 if unit == 'ns' else count
+    days, of_day = divmod(micros, 86_400_000_000)
+    # Days since 1970-01-01 to a proleptic Gregorian date (civil_from_days).
+    shifted = days + 719_468
+    era = shifted // 146_097
+    of_era = shifted - era * 146_097
+    year_of_era = (
+        of_era - of_era // 1_460 + of_era // 36_524 - of_era // 146_096
+    ) // 365
+    of_year = of_era - (
+        365 * year_of_era + year_of_era // 4 - year_of_era // 100
+    )
+    month_index = (5 * of_year + 2) // 153
+    day = of_year - (153 * month_index + 2) // 5 + 1
+    month = month_index + 3 if month_index < 10 else month_index - 9
+    year = year_of_era + era * 400 + (1 if month <= 2 else 0)
+    seconds, fraction = divmod(of_day, 1_000_000)
+    clock = (
+        f'{seconds // 3_600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}'
+    )
+    if fraction:
+        clock += f'.{fraction:06d}'.rstrip('0')
+    date = (
+        f'{year:04d}-{month:02d}-{day:02d}'
+        if year > 0
+        else f'{1 - year:04d}-{month:02d}-{day:02d} (BC)'
+    )
+    return f'{date} {clock}+00'
 
 
 def _as_timestamp(value: str) -> Any:
