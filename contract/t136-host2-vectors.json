@@ -1,0 +1,5256 @@
+{
+ "format": "sdm-host2-vectors/1",
+ "about": "Register HOST-2's values (T1.36, written by the independent test author before the fix): what DuckDB 1.5.6, the reference and the core do with a TIMESTAMP_S or TIMESTAMP_MS value DuckDB hands over as an int64 past what an int64 count of microseconds reaches, and with one VARCHAR or BLOB value past int32 offsets. `vectors`: each a source (contract/bases.yaml's `shop`, then `setup`), the column it is about and its role, and the public calls' answer on each route, recorded by contract/tools/host2_values_record.py: `reference` from the reference checkout's interpreter, `core_at_measurement` from the candidate (`recorded.candidate`) on the core route, evidence of what the core did when measured, never an expectation. `outcome` is success (through predict) or the stage a call failed at, the exception's class, its code and the first line of its message; `described` the schema from_source gave. `duckdb`: what DuckDB itself hands over and holds. DuckDB writes an infinity as int64 max (and -infinity as its negation) in the column's own unit, so a TIMESTAMP_S or TIMESTAMP_MS infinity passes int64 microseconds; DuckDB holds no finite TIMESTAMP_S or TIMESTAMP_MS past them (its casts and its Arrow import refuse one), and a duration or date64 never comes out of it (an Arrow duration is stored as INTERVAL, read back as month_day_nano; a date64 as DATE, read back as date32): contract/type-set-vectors.json marks duration.* and date64 not reachable, and in Phase 1 the core routes only DuckDB sources (sdm_client/_routing.py CORE_ROUTED). `big`: one value of 2**31 + 16 bytes, with and without arrow_large_buffer_size, recorded with --big (about 7 GB at the peak, so contract/tests/test_t136_host2_values.py runs it only when SDM_T136_BIG=1). Held by contract/tests/test_t136_host2_values.py.",
+ "recorded": {
+  "by": "contract/tools/host2_values_record.py",
+  "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+  "candidate": "c49ee4f8a6d33b8294556177799596361b80572b",
+  "environments": {
+   "reference": {
+    "python": "3.12.13",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "duckdb": "1.5.6",
+    "sdm_client": "/Users/awadaskar/code/sdmc-reference/packages/structured-data-models-client/src/sdm_client"
+   },
+   "core": {
+    "python": "3.12.13",
+    "pandas": "3.0.6",
+    "pyarrow": "25.0.1",
+    "duckdb": "1.5.6",
+    "sdm_client": "/private/tmp/t136-g3/packages/structured-data-models-client/src/sdm_client"
+   }
+  },
+  "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+  "indices": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7
+  ],
+  "anchor_time": "2024-03-01",
+  "core_routes": [
+   "schema.from-source/all-tables/duckdb",
+   "schema.from-source/catalog-keys/duckdb",
+   "query.materialize/indices-binary/duckdb",
+   "query.materialize/indices-multiclass/duckdb",
+   "query.materialize/indices-regression/duckdb",
+   "query.materialize/indices-link-prediction/duckdb",
+   "query.materialize/indices-ranking/duckdb",
+   "query.materialize/indices-forecast/duckdb",
+   "client.predict/binary/duckdb",
+   "client.predict/multiclass/duckdb",
+   "client.predict/regression/duckdb",
+   "client.predict/link-prediction/duckdb",
+   "client.predict/ranking/duckdb",
+   "client.predict/forecast/duckdb"
+  ]
+ },
+ "duckdb": {
+  "version": "1.5.6",
+  "infinity": {
+   "TIMESTAMP_S infinity": [
+    "timestamp[s]",
+    9223372036854775807
+   ],
+   "TIMESTAMP_S -infinity": [
+    "timestamp[s]",
+    -9223372036854775807
+   ],
+   "TIMESTAMP_MS infinity": [
+    "timestamp[ms]",
+    9223372036854775807
+   ],
+   "TIMESTAMP_MS -infinity": [
+    "timestamp[ms]",
+    -9223372036854775807
+   ],
+   "TIMESTAMP infinity": [
+    "timestamp[us]",
+    9223372036854775807
+   ],
+   "TIMESTAMP -infinity": [
+    "timestamp[us]",
+    -9223372036854775807
+   ],
+   "TIMESTAMP_NS infinity": [
+    "timestamp[ns]",
+    9223372036854775807
+   ],
+   "TIMESTAMP_NS -infinity": [
+    "timestamp[ns]",
+    -9223372036854775807
+   ]
+  },
+  "finite_past_int64_microseconds": {
+   "SELECT '294247-01-10 04:00:55'::TIMESTAMP_S": "ConversionException: Conversion Error: Could not convert string '294247-01-10 04:00:55' to INT64",
+   "SELECT '294247-01-10 04:00:54.776'::TIMESTAMP_MS": "ConversionException: Conversion Error: Could not convert string '294247-01-10 04:00:54.776' to INT64",
+   "SELECT '290309-12-21 (BC) 23:59:59'::TIMESTAMP_S": "ConversionException: Conversion Error: Could not convert string '290309-12-21 (BC) 23:59:59' to INT64",
+   "Arrow timestamp[s] 10000000000000000 imported": {
+    "stored_as": "TIMESTAMP_S",
+    "handed_over": [
+     "timestamp[s]",
+     10000000000000000
+    ],
+    "cast_to_text": "ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+   },
+   "Arrow timestamp[s] -10000000000000000 imported": {
+    "stored_as": "TIMESTAMP_S",
+    "handed_over": [
+     "timestamp[s]",
+     -10000000000000000
+    ],
+    "cast_to_text": "ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+   },
+   "Arrow timestamp[ms] 100000000000000000 imported": {
+    "stored_as": "TIMESTAMP_MS",
+    "handed_over": [
+     "timestamp[ms]",
+     100000000000000000
+    ],
+    "cast_to_text": "ConversionException: Conversion Error: Could not convert Timestamp(MS) to Timestamp(US)"
+   },
+   "Arrow timestamp[s] 9223372036855 imported": {
+    "stored_as": "TIMESTAMP_S",
+    "handed_over": [
+     "timestamp[s]",
+     9223372036855
+    ],
+    "cast_to_text": "ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+   },
+   "Arrow timestamp[s] 9223372036854775806 imported": {
+    "stored_as": "TIMESTAMP_S",
+    "handed_over": [
+     "timestamp[s]",
+     9223372036854775806
+    ],
+    "cast_to_text": "ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+   }
+  },
+  "duration_and_date64": {
+   "d (duration[s]) stored then read": "month_day_nano_interval",
+   "m (duration[ms]) stored then read": "month_day_nano_interval",
+   "e (date64) stored then read": "date32[day]"
+  }
+ },
+ "vectors": [
+  {
+   "name": "time.TIMESTAMP_S.infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    "UPDATE orders SET ts = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: date value out of range"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP_S.infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_S",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 292277026596-12-04 15:30:07"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP_S.infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_S",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = 'infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 292277026596-12-04 15:30:07"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_S.-infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    "UPDATE orders SET ts = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -292277022657-01-27 08:29:53"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [
+      [
+       "SDMWarning",
+       "1,000 context examples were gathered, which is all this route takes by default; pass num_context_samples to ask for up to 10,000."
+      ]
+     ]
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP_S.-infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_S",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -292277022657-01-27 08:29:53"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP_S.-infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_S",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = '-infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -292277022657-01-27 08:29:53"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_S.finite",
+   "column": "orders.ts",
+   "role": "time column (control: no infinity)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_MS.infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS",
+    "UPDATE orders SET ts = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: date value out of range"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP_MS.infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_MS",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 292278994-08-17 07:12:55"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP_MS.infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_MS",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = 'infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 292278994-08-17 07:12:55"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_MS.-infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS",
+    "UPDATE orders SET ts = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -292275055-05-16 16:47:04"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [
+      [
+       "SDMWarning",
+       "1,000 context examples were gathered, which is all this route takes by default; pass num_context_samples to ask for up to 10,000."
+      ]
+     ]
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP_MS.-infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_MS",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -292275055-05-16 16:47:04"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP_MS.-infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_MS",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = '-infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -292275055-05-16 16:47:04"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_MS.finite",
+   "column": "orders.ts",
+   "role": "time column (control: no infinity)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP.infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP",
+    "UPDATE orders SET ts = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: date value out of range"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP.infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 294247-01-10 04:00:54"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP.infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = 'infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 294247-01-10 04:00:54"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP.-infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP",
+    "UPDATE orders SET ts = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -290308-12-21 19:59:05"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [
+      [
+       "SDMWarning",
+       "1,000 context examples were gathered, which is all this route takes by default; pass num_context_samples to ask for up to 10,000."
+      ]
+     ]
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP.-infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -290308-12-21 19:59:05"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP.-infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = '-infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -290308-12-21 19:59:05"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP.finite",
+   "column": "orders.ts",
+   "role": "time column (control: no infinity)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_NS.infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS",
+    "UPDATE orders SET ts = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OverflowError: date value out of range"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP_NS.infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_NS",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = 'infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP_NS.infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_NS",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = 'infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_NS.-infinity",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS",
+    "UPDATE orders SET ts = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [
+      [
+       "SDMWarning",
+       "1,000 context examples were gathered, which is all this route takes by default; pass num_context_samples to ask for up to 10,000."
+      ]
+     ],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "feature.TIMESTAMP_NS.-infinity",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS",
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_NS",
+    "UPDATE orders SET seen = ts",
+    "UPDATE orders SET seen = '-infinity' WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "users.TIMESTAMP_NS.-infinity",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_NS",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'",
+    "UPDATE users SET f = '-infinity' WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_NS.finite",
+   "column": "orders.ts",
+   "role": "time column (control: no infinity)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_S.max",
+   "column": "orders.ts",
+   "role": "time column (the largest finite value the type holds)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    "UPDATE orders SET ts = '294247-01-10 04:00:54'::TIMESTAMP_S WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] month must be in 1..12: 294247-01-10 04:00:54"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_MS.max",
+   "column": "orders.ts",
+   "role": "time column (the largest finite value the type holds)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS",
+    "UPDATE orders SET ts = '294247-01-10 04:00:54.775'::TIMESTAMP_MS WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] month must be in 1..12: 294247-01-10 04:00:54.775"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_S.min",
+   "column": "orders.ts",
+   "role": "time column (the largest finite value the type holds)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    "UPDATE orders SET ts = '290309-12-22 (BC) 00:00:00'::TIMESTAMP_S WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Unknown datetime string format, unable to parse: 290309-12-22 (BC) 00:00:00"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   }
+  },
+  {
+   "name": "time.TIMESTAMP_NS.max",
+   "column": "orders.ts",
+   "role": "time column (the largest finite value the type holds)",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS",
+    "UPDATE orders SET ts = '2262-04-11 23:47:16.854775806'::TIMESTAMP_NS WHERE order_id = 5"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   },
+   "core_at_measurement": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": [],
+     "predict": []
+    }
+   }
+  },
+  {
+   "name": "time.far.s.past",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       5,
+       10000000000000000
+      ]
+     ]
+    },
+    "UPDATE orders SET ts = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.far.s.past",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_S",
+    "UPDATE orders SET seen = ts::TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       5,
+       10000000000000000
+      ]
+     ]
+    },
+    "UPDATE orders SET seen = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 316889355-01-25 17:46:40"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.far.s.past",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_S",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'::TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       3,
+       10000000000000000
+      ]
+     ]
+    },
+    "UPDATE users SET f = far.f FROM far WHERE user_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 316889355-01-25 17:46:40"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.far.s.before",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       5,
+       -10000000000000000
+      ]
+     ]
+    },
+    "UPDATE orders SET ts = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.far.s.before",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_S",
+    "UPDATE orders SET seen = ts::TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       5,
+       -10000000000000000
+      ]
+     ]
+    },
+    "UPDATE orders SET seen = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -316885416-12-06 06:13:20"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.far.s.before",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_S",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'::TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       3,
+       -10000000000000000
+      ]
+     ]
+    },
+    "UPDATE users SET f = far.f FROM far WHERE user_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: -316885416-12-06 06:13:20"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.far.ms.past",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_MS",
+    {
+     "arrow": "far",
+     "type": "timestamp[ms]",
+     "rows": [
+      [
+       5,
+       100000000000000000
+      ]
+     ]
+    },
+    "UPDATE orders SET ts = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: ConversionException: Conversion Error: Could not convert Timestamp(MS) to Timestamp(US)"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "feature.far.ms.past",
+   "column": "orders.seen",
+   "role": "feature (orders.ts the time column)",
+   "setup": [
+    "ALTER TABLE orders ADD COLUMN seen TIMESTAMP_MS",
+    "UPDATE orders SET seen = ts::TIMESTAMP_MS",
+    {
+     "arrow": "far",
+     "type": "timestamp[ms]",
+     "rows": [
+      [
+       5,
+       100000000000000000
+      ]
+     ]
+    },
+    "UPDATE orders SET seen = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ],
+       [
+        "seen",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 3170843-11-07 09:46:40"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "Some time columns were inferred, or refused, on a guess about what a column holds:"
+      ]
+     ],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "users.far.ms.past",
+   "column": "users.f",
+   "role": "the entity table's only timestamp (inferred its time column)",
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f TIMESTAMP_MS",
+    "UPDATE users SET f = TIMESTAMP '2020-01-01'::TIMESTAMP_MS",
+    {
+     "arrow": "far",
+     "type": "timestamp[ms]",
+     "rows": [
+      [
+       3,
+       100000000000000000
+      ]
+     ]
+    },
+    "UPDATE users SET f = far.f FROM far WHERE user_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": "f"
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST",
+     "message": "[INVALID_REQUEST] Out of bounds nanosecond timestamp: 3170843-11-07 09:46:40"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  },
+  {
+   "name": "time.far.s.just-past",
+   "column": "orders.ts",
+   "role": "time column",
+   "setup": [
+    "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_S",
+    {
+     "arrow": "far",
+     "type": "timestamp[s]",
+     "rows": [
+      [
+       5,
+       9223372036855
+      ]
+     ]
+    },
+    "UPDATE orders SET ts = far.f FROM far WHERE order_id = far.k"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: ConversionException: Conversion Error: Could not convert Timestamp(S) to Timestamp(US)"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    }
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    }
+   }
+  }
+ ],
+ "big": [
+  {
+   "name": "big.varchar.small",
+   "bytes": 2147483664,
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f VARCHAR",
+    "UPDATE users SET f = 'a'",
+    "UPDATE users SET f = repeat('x', 2147483664) WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "GraphConstructionError",
+     "code": null,
+     "message": "Reading the DuckDB source failed while building the graph: InvalidInputException: Invalid Input Error: Arrow Appender: The maximum total string size for regular string buffers is 2147483647 but the offset of 2147483667 exceeds this."
+    },
+    "warnings": {
+     "from_source": []
+    },
+    "seconds": 15.7,
+    "peak_rss_bytes": 6233686016
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "PROVIDER_ERROR",
+     "message": "[PROVIDER_ERROR] the data source failed"
+    },
+    "warnings": {
+     "from_source": []
+    },
+    "seconds": 19.7,
+    "peak_rss_bytes": 5803655168
+   }
+  },
+  {
+   "name": "big.varchar.large",
+   "bytes": 2147483664,
+   "setup": [
+    "SET arrow_large_buffer_size = true",
+    "ALTER TABLE users ADD COLUMN f VARCHAR",
+    "UPDATE users SET f = 'a'",
+    "UPDATE users SET f = repeat('x', 2147483664) WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ],
+       [
+        "f",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR",
+     "message": "[INTERNAL_ERROR] the relational engine failed while building this request: OutOfMemoryException: Out of Memory Error: could not allocate block of size 2.0 GiB (18.0 GiB/19.1 GiB used)"
+    },
+    "warnings": {
+     "from_source": [],
+     "materialize": []
+    },
+    "seconds": 370.3,
+    "peak_rss_bytes": 5221023744
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    },
+    "seconds": 25.0,
+    "peak_rss_bytes": 5083283456
+   }
+  },
+  {
+   "name": "big.blob.small",
+   "bytes": 2147483664,
+   "setup": [
+    "ALTER TABLE users ADD COLUMN f BLOB",
+    "UPDATE users SET f = 'a'",
+    "UPDATE users SET f = repeat('x', 2147483664)::BLOB WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "GraphConstructionError",
+     "code": null,
+     "message": "Reading the DuckDB source failed while building the graph: InvalidInputException: Invalid Input Error: Arrow Appender: The maximum total string size for regular string buffers is 2147483647 but the offset of 2147483667 exceeds this."
+    },
+    "warnings": {
+     "from_source": []
+    },
+    "seconds": 38.9,
+    "peak_rss_bytes": 5691686912
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "PROVIDER_ERROR",
+     "message": "[PROVIDER_ERROR] the data source failed"
+    },
+    "warnings": {
+     "from_source": []
+    },
+    "seconds": 33.1,
+    "peak_rss_bytes": 4629217280
+   }
+  },
+  {
+   "name": "big.blob.large",
+   "bytes": 2147483664,
+   "setup": [
+    "SET arrow_large_buffer_size = true",
+    "ALTER TABLE users ADD COLUMN f BLOB",
+    "UPDATE users SET f = 'a'",
+    "UPDATE users SET f = repeat('x', 2147483664)::BLOB WHERE user_id = 3"
+   ],
+   "reference": {
+    "described": {
+     "orders": {
+      "columns": [
+       [
+        "order_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "price",
+        "float64",
+        "numerical"
+       ],
+       [
+        "ts",
+        "timestamp[us]",
+        "timestamp"
+       ]
+      ],
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     "users": {
+      "columns": [
+       [
+        "user_id",
+        "int64",
+        "ID"
+       ],
+       [
+        "age",
+        "int64",
+        "numerical"
+       ],
+       [
+        "country",
+        "string",
+        "categorical"
+       ]
+      ],
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    },
+    "outcome": {
+     "result": "success",
+     "stage": "predict"
+    },
+    "warnings": {
+     "from_source": [
+      [
+       "SDMWarning",
+       "users leaves out f (binary): a request carries one scalar value per cell, and these hold none"
+      ]
+     ],
+     "materialize": [],
+     "predict": []
+    },
+    "seconds": 46.3,
+    "peak_rss_bytes": 4126703616
+   },
+   "core_at_measurement": {
+    "described": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "VALUE_OUT_OF_RANGE",
+     "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
+    },
+    "warnings": {
+     "from_source": []
+    },
+    "seconds": 32.4,
+    "peak_rss_bytes": 4421156864
+   }
+  }
+ ],
+ "not_measured": [
+  {
+   "what": "a list whose child data pass int32 offsets (one TINYINT[] of 2**31 + 16 items)",
+   "why": "building it in DuckDB 1.5.6 alone (CREATE TABLE t AS SELECT list_resize([0::TINYINT], 2147483664, 0::TINYINT) AS f) was killed by the operating system after 322 s, its peak memory footprint 120 GB on a 24 GB machine, before any export; the same source through the public calls on the core route died likewise with no answer. Not measured on either route.",
+   "expected_from": "contract/type-set-vectors.json: the reference leaves a list column out (list.int32 and large-list.int32, success), so a reference answer of success is the likely one; the core refuses a single list value past the offset capacity VALUE_OUT_OF_RANGE (rust/crates/sdm-host/src/admission.rs, Admit::batch; tests/widening.rs a_single_value_past_the_offset_capacity_is_refused_by_name holds the string form)."
+  }
+ ]
+}
