@@ -62,7 +62,7 @@ snowflake = [
     # `_paramstyle` the server-side binding depends on. Both are tractable,
     # neither is work to do against a driver released the morning of a
     # release.
-    "snowflake-connector-python<5",
+    "snowflake-connector-python>=4,<5",
 ]
 databricks = [
     # 4.1.3 is the first release whose SEA route sends a session's
@@ -72,7 +72,12 @@ databricks = [
     # A metric view's definition is YAML, and reading one fails without a
     # parser. Databricks Runtime 14.3 LTS ships none, so the client's
     # `databricks` extra, which points here, has to bring it.
-    "pyyaml>=5.4",
+    #
+    # 6.0.1 is the first release with a CPython 3.12 wheel. Below it there is
+    # only the 6.0 sdist, whose build fails against a current Cython, so a
+    # resolver that backtracks this far stops at a compile error rather than
+    # at an unsatisfiable requirement.
+    "pyyaml>=6.0.1",
     # For `sdm_connectors.databricks.warehouse`, which looks the warehouse up as
     # the caller's workspace client.
     "databricks-sdk>=0.89,<1.0",
