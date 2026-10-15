@@ -1,9 +1,7 @@
 {
  "about": "CI4's second round of independent tests (the coordinator's request on dc1ab8f7): the checkpoint race cases in tests/test_contract_ratchet.py (test_ci4_*: a stacked candidate's checkpoint holds when its package lands mid-run; a landing whose Base-SHA is an unlanded phase commit stays refused; moved copies, a landing the phase branch lacks, a phase push and a recorded base resolve as before) and the audit of tests/test_ci_workflow.py (test_ci4_*: the landing job always runs and hands on its step's answer; the step decides alike in a depth-2 clone; it skips only on a push under rust-core-phase-1; no job's skip condition can be overridden with ||; every image is pinned by digest, wheel-smoke's included; every container is pulled first by pull_image.sh; GITHUB_TOKEN reaches only pull_image.sh and ghcr.io-guarded service credentials; a ghcr.io lookalike gets no token). 'pending' lists, as 'py:' and the test's name with its parameters, those that failed when written at dc1ab8f7; contract/tests/ci4_gate.py holds each to failing until the implementer takes it out, and the implementer changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": {
-  "ratchet": [
-   "py:test_ci4_a_landing_on_an_unlanded_phase_commit_is_still_refused"
-  ],
+  "ratchet": [],
   "workflow": []
  },
  "authored": {

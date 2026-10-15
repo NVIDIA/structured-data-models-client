@@ -22,10 +22,9 @@ the candidate is a landing commit (``Land <ID>: ...``, made by ``land.py``),
 its recorded ``Base-SHA`` is the base instead, so a landing is judged
 against the head it landed on even once the phase branch holds it. When
 ``--base`` moved while the run went on, and the merge base is no landing
-commit (a package the candidate is stacked on landed after it started),
-the checkpoint is the newest landing commit on the candidate's
-first-parent line that the base holds, so every job of a run judges
-against the same commit (decision E131).
+commit but a package the candidate is stacked on, landed on a head that
+is a landing commit, the checkpoint is the merge base with that head, so
+every job of a run judges against the same commit (decision E131).
 ``--phase-push`` is a push to the phase branch, ``BEFORE`` its previous
 tip: the push must land exactly one package, the candidate being that
 landing commit with ``Base-SHA`` ``BEFORE``, as a fast-forward. It refuses
@@ -306,10 +305,20 @@ def is_landing(repo: Path, sha: str) -> bool:
 # --- the checkpoint ------------------------------------------------------------
 
 
-def landed_since(repo: Path, sha: str, base: str) -> bool:
-    r"""Whether a landing commit ``base`` holds landed ``sha``: one on the
-    ancestry path from ``sha`` to ``base`` whose recorded ``Base-SHA`` is a
-    proper ancestor of ``sha``, so ``sha`` is in the range it landed."""
+def landed_on(repo: Path, sha: str, base: str) -> str | None:
+    r"""The phase head ``sha`` was landed on, or None (decision E131): the
+    ``Base-SHA`` of the landing commit ``base`` holds that landed ``sha``,
+    one on the ancestry path from ``sha`` to ``base`` whose recorded
+    ``Base-SHA`` is a proper ancestor of ``sha``, when that ``Base-SHA`` is
+    itself a landing commit.
+
+    A run on a lane or topic branch reads the phase branch's tip when each
+    job starts. When a package the candidate is stacked on lands mid-run,
+    the merge base with the tip becomes that package's last commit, which
+    is no landing commit; the merge base with the head that package landed
+    on is what the run's earlier jobs found. A merge base pushed to the
+    phase branch with no landing after it, or landed on a head that is no
+    landing commit, gives None, and stays refused."""
     out = git(
         repo, 'log', '--ancestry-path', '--format=%H%x00%s', f'{sha}..{base}'
     )
@@ -327,32 +336,7 @@ def landed_since(repo: Path, sha: str, base: str) -> bool:
             recorded != sha
             and git(repo, 'merge-base', recorded, sha).strip() == recorded
         ):
-            return True
-    return False
-
-
-def landed_ancestor(repo: Path, candidate: str, base: str) -> str | None:
-    r"""The newest landing commit on ``candidate``'s first-parent line that
-    ``base`` holds, or None (decision E131).
-
-    Where nothing has landed since the candidate's package started, this is
-    ``git merge-base CANDIDATE BASE``. It stays that commit when a package
-    the candidate is stacked on lands while its CI runs: the phase branch
-    then holds that package's own commits, and the merge base becomes the
-    last of them, which is no landing commit; a job that started after the
-    landing would refuse what one that started before it judged. The caller
-    takes it only when that merge base was landed: a landing commit the base
-    holds descends from it (:func:`landed_since`). A merge base pushed to the
-    phase branch with no landing after it stays refused."""
-    out = git(repo, 'log', '--first-parent', '--format=%H%x00%s', candidate)
-    for line in out.splitlines():
-        sha, _, title = line.partition('\0')
-        if (
-            LANDING.match(title)
-            and is_landing(repo, sha)
-            and git(repo, 'merge-base', sha, base).strip() == sha
-        ):
-            return sha
+            return recorded if is_landing(repo, recorded) else None
     return None
 
 
@@ -414,23 +398,22 @@ def resolve(
         return None, ['no base: give --base or --phase-push']
     base = git(repo, 'rev-parse', f'{base}^{{commit}}').strip()
     found = git(repo, 'merge-base', candidate, base).strip()
-    if (
-        live
-        and found != candidate
-        and not is_landing(repo, found)
-        and landed_since(repo, found, base)
-    ):
-        # The candidate's own newest landed ancestor: the same for every
-        # job of a run, whenever the phase branch moves (E131).
-        landed = landed_ancestor(repo, candidate, base)
-        if landed is not None:
-            notes.append(
-                f'the merge base {found[:12]} with the phase branch is no '
-                'landing commit (a package the candidate is stacked on '
-                f'landed after it started); its newest landed ancestor '
-                f'{landed[:12]} is the checkpoint'
-            )
-            found = landed
+    landed = (
+        landed_on(repo, found, base)
+        if live and found != candidate and not is_landing(repo, found)
+        else None
+    )
+    if landed is not None:
+        # The merge base with the head the stacked package landed on: the
+        # same for every job of a run, whenever the phase branch moves.
+        earlier = git(repo, 'merge-base', candidate, landed).strip()
+        notes.append(
+            f'the merge base {found[:12]} with the phase branch is no '
+            'landing commit: a package the candidate is stacked on landed '
+            f'on {landed[:12]} after it started, so the merge base with '
+            f'that head, {earlier[:12]}, is the checkpoint'
+        )
+        found = earlier
     problems = []
     if found == candidate:
         problems.append(
