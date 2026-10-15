@@ -34,12 +34,20 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # 2.2.2 and 16 are the first releases built against NumPy 2. Below them
-    # pip resolves cleanly and `pip check` passes, and the import fails with
+    # 2.2.2 is the first pandas built against NumPy 2. Below it pip resolves
+    # cleanly and `pip check` passes, and the import fails with
     # "numpy.dtype size changed", because the break is an ABI the metadata
-    # does not describe.
+    # does not describe. pandas declares the NumPy it needs, so this floor
+    # still leaves pip free to pick a release fitting a NumPy already there.
     "pandas>=2.2.2",
-    "pyarrow>=16",
+    # pyarrow is deliberately unbounded. It does not declare that 16 and
+    # above need NumPy 2, so a floor here is not satisfied by resolution
+    # alone: where NumPy is held at 1, as a Databricks runtime holds it and
+    # `docs/get-started/installation.md` says to, a floor evicts that
+    # runtime's working pyarrow 14 or 15 for a 26 that refuses to import.
+    # Unbounded, the preinstalled one satisfies this and is left alone, and
+    # a fresh install still resolves the newest.
+    "pyarrow",
 ]
 
 [project.urls]
