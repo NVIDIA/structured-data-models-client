@@ -39,6 +39,7 @@ import argparse
 import datetime as dt
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import zoneinfo
@@ -88,7 +89,10 @@ ABOUT = (
     "The reference's from_source fails unnamed (OverflowError, "
     'predictive_query/time_columns.py _refused_for_values, present.iloc[0]) '
     'exactly where that wall clock leaves 0001-01-01T00:00:00 to '
-    '9999-12-31T23:59:59.999999, both ends held. Held by '
+    "9999-12-31T23:59:59.999999, both ends held. `zone.whole.*` (fix 11's "
+    'review): the same instants in every row, a constant column the '
+    'reference warns of, the warning showing the value at its wall clock '
+    '("every row holds 0001-01-01 00:00:00-04:56:02"). Held by '
     'contract/tests/test_t136_host2_zones.py.'
 )
 
@@ -111,10 +115,25 @@ def first(
     ]
 
 
+def whole(zone: str, instant: str) -> list[str]:
+    r"""``users.f TIMESTAMPTZ``, ``instant`` (UTC) in every row, read under
+    ``zone``: a constant column, which both routes warn of, its value shown
+    at its wall clock."""
+    return [
+        f"SET GLOBAL TimeZone = '{zone}'",
+        'ALTER TABLE users ADD COLUMN f TIMESTAMPTZ',
+        f"UPDATE users SET f = TIMESTAMPTZ '{instant}+00'",
+    ]
+
+
 NY = 'America/New_York'
 TOKYO = 'Asia/Tokyo'
 KIRITIMATI = 'Pacific/Kiritimati'
 PAGO_PAGO = 'Pacific/Pago_Pago'
+WHOLE = (
+    "the entity table's only timestamp, the instant in every row (a "
+    'constant column, warned of)'
+)
 ENTITY = "the entity table's only timestamp (its time column), user 0's row"
 #: The review's reproduction (Codex, final review round 2), shop dropped.
 VERBATIM = [
@@ -282,6 +301,63 @@ _SPECS: dict[str, tuple[str, str, str, list[str] | None]] = {
         "users.loaded_at, user 0's row (control: a load stamp is no candidate)",
         first(NY, '0001-01-01 00:00:00', name='loaded_at'),
     ),
+    # The same instants filling the column: the constant-column warning shows
+    # the value at its wall clock, which pandas cannot always format (its
+    # isoformat refuses a zoned value at local midnight of the year 1).
+    'zone.whole.new-york.year-1.local-midnight': (
+        NY,
+        '0001-01-01 04:56:02',
+        WHOLE + ' (control: the wall clock 0001-01-01 00:00:00 exactly)',
+        whole(NY, '0001-01-01 04:56:02'),
+    ),
+    'zone.whole.new-york.year-1.hour-inside': (
+        NY,
+        '0001-01-01 05:56:02',
+        WHOLE + ' (control: an hour inside the years)',
+        whole(NY, '0001-01-01 05:56:02'),
+    ),
+    'zone.whole.pago-pago.year-1': (
+        PAGO_PAGO,
+        '0001-01-01 00:00:00',
+        WHOLE + ' (control: the wall clock 0001-01-01 12:37:12)',
+        whole(PAGO_PAGO, '0001-01-01 00:00:00'),
+    ),
+    'zone.whole.kiritimati.year-1.local-midnight': (
+        KIRITIMATI,
+        '0001-01-01 10:29:20',
+        WHOLE + ' (control: the wall clock 0001-01-01 00:00:00 exactly)',
+        whole(KIRITIMATI, '0001-01-01 10:29:20'),
+    ),
+    'zone.whole.utc.year-1': (
+        'UTC',
+        '0001-01-01 00:00:00',
+        WHOLE + ' (control: read in UTC)',
+        whole('UTC', '0001-01-01 00:00:00'),
+    ),
+    'zone.whole.tokyo.year-9999.local-last-us': (
+        TOKYO,
+        '9999-12-31 14:59:59.999999',
+        WHOLE + ' (control: the wall clock 9999-12-31 23:59:59.999999)',
+        whole(TOKYO, '9999-12-31 14:59:59.999999'),
+    ),
+    'zone.whole.kiritimati.year-9999.local-last-us': (
+        KIRITIMATI,
+        '9999-12-31 09:59:59.999999',
+        WHOLE + ' (control: the wall clock 9999-12-31 23:59:59.999999)',
+        whole(KIRITIMATI, '9999-12-31 09:59:59.999999'),
+    ),
+    'zone.whole.utc.year-9999': (
+        'UTC',
+        '9999-12-31 23:59:59.999999',
+        WHOLE + ' (control: read in UTC)',
+        whole('UTC', '9999-12-31 23:59:59.999999'),
+    ),
+    'zone.whole.new-york.year-1': (
+        NY,
+        '0001-01-01 00:00:00',
+        WHOLE + ' (the wall clock before the year 1)',
+        whole(NY, '0001-01-01 00:00:00'),
+    ),
 }
 
 
@@ -397,6 +473,36 @@ def zone_facts() -> dict[str, Any]:
     }
 
 
+def from_source_text(setup: list[Any], route: str) -> list[str]:
+    r"""``Schema.from_source``'s warnings over ``shop`` and ``setup`` on
+    ``route``, each whole, the core's ``[CODE]`` prefix set aside and
+    DuckDB's missing-index advice left out (the answers keep only each
+    warning's first line; the constant-column warning names its value in a
+    later one)."""
+    import re
+    import warnings
+
+    if route == 'core':
+        os.environ['SDM_CORE_ROUTES'] = ','.join(R.CORE_ROUTES)
+    else:
+        os.environ.pop('SDM_CORE_ROUTES', None)
+    from sdm_client import Schema
+    from sdm_connectors import DuckDBSource
+
+    connection = R.source(setup)
+    with warnings.catch_warnings(record=True) as shown:
+        warnings.simplefilter('always')
+        try:
+            Schema.from_source(DuckDBSource(connection))
+        except Exception:  # noqa: BLE001, S110 - the answers record it
+            pass
+    return [
+        re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
+        for w in shown
+        if 'for optimal database querying' not in str(w.message)
+    ]
+
+
 def _run(python: str, argv: list[str]) -> tuple[list[str], int]:
     done = subprocess.run(
         [python, '-I', str(Path(__file__).resolve()), '--child', *argv],
@@ -419,6 +525,9 @@ def main() -> int:
         route, names = sys.argv[3], sys.argv[4:]
         for name in names:
             got = R.answer(SOURCES[name]['setup'], route)
+            got['from_source_text'] = from_source_text(
+                SOURCES[name]['setup'], route
+            )
             print(json.dumps({'name': name, **got}), flush=True)
         return 0
     parser = argparse.ArgumentParser()
@@ -448,7 +557,9 @@ def main() -> int:
             return code
         for line in lines:
             got = json.loads(line)
-            answers.setdefault(got.pop('name'), {})[route] = got
+            entry = answers.setdefault(got.pop('name'), {})
+            entry[f'{route}_text'] = got.pop('from_source_text')
+            entry[route] = got
         lines, code = _run(python, ['environment'])
         if code != 0:
             return code
@@ -473,6 +584,10 @@ def main() -> int:
                 **spec,
                 'reference': answers[name]['reference'],
                 'core_at_measurement': answers[name]['core'],
+                'from_source_text': {
+                    'reference': answers[name]['reference_text'],
+                    'core_at_measurement': answers[name]['core_text'],
+                },
             }
             for name, spec in SOURCES.items()
         ],

@@ -43,13 +43,24 @@ crash becomes a named refusal):
   naming the table and the column;
 - the reference describes the source: so does the core, as the reference
   does (columns, dtypes, stypes, keys, time columns and ``from_source``'s
-  warnings, the core's ``[CODE]`` prefix set aside), and it ends at the
+  warnings, each whole, the core's ``[CODE]`` prefix set aside), and it
+  ends at the
   stage the reference ends at, through ``predict`` or refused there by
   name.
 
 Failing when written: the nine sources the reference fails unnamed (the
 core describes each and refuses at ``materialize``). Passing when written:
 the fourteen controls, and every check of the file and its facts.
+
+Added after fix 11 (57af5ba6), from its review: ``zone.whole.*``, the same
+instants filling the column. The reference refuses such a constant column
+as the time column and warns, naming the value at its wall clock ("every
+row holds 0001-01-01 00:00:00-04:56:02"); the core must say the same, word
+for word. Before fix 11 (39ce95c5) the core crashed unnamed
+(``NotImplementedError``, pandas' ``isoformat``) formatting that warning at
+local midnight of the year 1 in New York and in Pago Pago. ``zone.whole.
+new-york.year-1``, a wall clock before the year 1, is refused like the
+first-row sources.
 
 Each answer is the public calls on one route in this process: the default
 route is the reference's code, and ``SDM_CORE_ROUTES`` forces the core.
@@ -156,6 +167,18 @@ def core_refusal(name: str) -> tuple[str, Any, Any]:
             os.environ['SDM_CORE_ROUTES'] = saved
 
 
+def core_text(name: str) -> list[str]:
+    r"""The core's ``from_source`` warnings on the vector, each whole."""
+    saved = os.environ.get('SDM_CORE_ROUTES')
+    try:
+        return list(Z.from_source_text(BY_NAME[name]['setup'], 'core'))
+    finally:
+        if saved is None:
+            os.environ.pop('SDM_CORE_ROUTES', None)
+        else:
+            os.environ['SDM_CORE_ROUTES'] = saved
+
+
 def _bodies(warnings: list[list[str]]) -> list[str]:
     r"""Each warning's first line, the core's ``[CODE]`` prefix set aside."""
     return [re.sub(r'^\[[A-Z_]+\] ', '', text) for _, text in warnings]
@@ -211,8 +234,20 @@ def test_the_vector_file_is_what_it_says() -> None:
         'zone.first.kiritimati.year-9999',
         'zone.first.kiritimati.year-1',
         'zone.candidate.new-york.year-1',
+        'zone.whole.new-york.year-1',
     }
-    assert len(DESCRIBED) == 14
+    assert len(DESCRIBED) == 22
+    # The constant columns: both ends, zones of either sign and UTC.
+    whole = {n for n in DESCRIBED if n.startswith('zone.whole.')}
+    assert len(whole) == 8
+    for vector in ALL:
+        assert set(vector['from_source_text']) == {
+            'reference',
+            'core_at_measurement',
+        }
+        if vector['name'] in whole:
+            (text,) = vector['from_source_text']['reference']
+            assert 'every row holds ' in text, vector['name']
     assert set(REFUSED) | set(DESCRIBED) == set(BY_NAME)
 
 
@@ -309,6 +344,13 @@ def test_the_reference_answers_as_recorded(name: str) -> None:
     )
     got = _routed('reference', BY_NAME[name]['setup'])
     assert got == BY_NAME[name]['reference']
+    saved = os.environ.get('SDM_CORE_ROUTES')
+    try:
+        text = Z.from_source_text(BY_NAME[name]['setup'], 'reference')
+    finally:
+        if saved is not None:
+            os.environ['SDM_CORE_ROUTES'] = saved
+    assert text == BY_NAME[name]['from_source_text']['reference']
 
 
 # --- the core ------------------------------------------------------------------
@@ -357,6 +399,9 @@ def test_the_core_describes_each_control_as_the_reference_does(
     assert _bodies(got['warnings']['from_source']) == _bodies(
         reference['warnings']['from_source']
     )
+    # Each warning whole: the constant-column one names the value at its
+    # wall clock, in the database's zone, as the reference shows it.
+    assert core_text(name) == BY_NAME[name]['from_source_text']['reference']
     wanted = reference['outcome']
     if wanted['result'] == 'success':
         assert got['outcome'] == wanted
