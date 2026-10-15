@@ -28,7 +28,7 @@
 //! contract's (`INVALID_RESPONSE`, decision E45(f)); T1.28 reads them.
 //! Members the bindings do not read are ignored, as there.
 
-use crate::json::{Value, whole};
+use crate::json::{Value, is_integer_token, whole};
 
 /// Why a response is not one the contract describes: the field, and the
 /// fault, never the value.
@@ -36,8 +36,8 @@ use crate::json::{Value, whole};
 pub struct Refused {
     /// The field, as `prediction.row_index` or `metadata`.
     pub field: &'static str,
-    /// `missing`, `null`, `not_text`, `not_whole`, `not_an_object` or
-    /// `not_a_sequence`.
+    /// `missing`, `null`, `not_text`, `not_whole`, `out_of_range`,
+    /// `not_an_object` or `not_a_sequence`.
     pub reason: &'static str,
 }
 
@@ -174,12 +174,26 @@ fn required_text(value: &Value, name: &str, field: &'static str) -> Result<Strin
 }
 
 /// A whole number, as the bindings' `_whole` takes one: an integer, or a
-/// float with no fraction; never a boolean or text.
+/// finite float with no fraction; never a boolean or text. A whole number
+/// past `i128` (an integer token, or a finite float with no fraction, at
+/// or past 2**127 in size) is one the bindings take, refused as
+/// `out_of_range`, as a row past the request's rows is; a fraction, an
+/// infinity or anything else as `not_whole`.
 fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
-    match value {
-        Value::Number(token) => whole(token).ok_or(refused(field, "not_whole")),
-        _ => Err(refused(field, "not_whole")),
+    let Value::Number(token) = value else {
+        return Err(refused(field, "not_whole"));
+    };
+    if let Some(number) = whole(token) {
+        return Ok(number);
     }
+    let past = is_integer_token(token)
+        || token
+            .parse::<f64>()
+            .is_ok_and(|float| float.is_finite() && float.fract() == 0.0);
+    Err(refused(
+        field,
+        if past { "out_of_range" } else { "not_whole" },
+    ))
 }
 
 /// A probability as the bindings' `_finite` reads one: a number, or text
