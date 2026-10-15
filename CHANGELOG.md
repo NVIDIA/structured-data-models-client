@@ -5,45 +5,7 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
-## Unreleased
-
-### Changed
-
-- A relational `materialize()` takes more entities than one call scores. They
-  are gathered in batches of 10,000, or 200 for a temporal link prediction,
-  and `predict()` sends one call per batch and returns one result. Each call's
-  rows are numbered from where the last call's ended, so `to_pandas()`, which
-  orders by that number, gives the indices back in the order they were asked
-  for rather than interleaving the batches. It used to refuse more than 1,000
-  and ask for the calls to be split by hand.
-
-  `materialize()` takes `rows_per_call` to ask in smaller batches than the
-  endpoint's cap, which is what a graph wide enough to outrun the 30 MiB body
-  needs, and what a deployment holding to less than 10,000 needs. It only goes
-  down: a larger call buys a refusal rather than a bigger call. Where the
-  context is itself over the body, no batch is small enough, and the refusal
-  says which options do come down instead.
-
-  Two things are still refused. Every batch is built before the first is sent,
-  so more than 100,000 entities, or more than 100 calls, in one
-  `materialize()` is refused rather than held in memory at once; and a
-  question asked in parts, a ranking or a forecast, is not batched, because
-  each part is already a call and the fan-out budget counts those.
-
-- A call that fails part way through carries the answers already paid for on
-  the error, as `details['answered']` and `details['rows_answered']`, rather
-  than discarding them. A forecast keeps its answered steps the same way, with
-  how many under `details['parts_answered']`. A ranking keeps only that count,
-  because an order over some of its candidates is a different answer rather
-  than part of the one that was asked for.
-
-- In the relational engine, `batch_mode(batch_size='max')` now means 10,000
-  entities a batch rather than 1,000, following the size the endpoint answers.
-  A graph wide enough that 10,000 entities exceed the 30 MiB body is refused
-  on the first batch where it used to be gathered as batches of 1,000; pass an
-  explicit `batch_size=` for the old behaviour.
-
-## 1.0.0 - 2026-10-13
+## 1.0.0 - 2026-10-15
 
 First public release. The five distributions are versioned and published
 together, and a given version of one is tested only against the same version
@@ -75,6 +37,24 @@ of the others.
   [`docs/reference/stability.md`](docs/reference/stability.md).
 - Publishing to PyPI through NVIDIA's Kitmaker service, which owns the PyPI
   project, and a CycloneDX SBOM attached to each GitHub Release.
+- A relational `materialize()` gathers more entities than one call scores as
+  several calls: batches of 10,000, or 200 for a temporal link prediction, sent
+  one call each and returned as one result. Each call's rows are numbered from
+  where the last call's ended, so `to_pandas()`, which orders by that number,
+  gives the indices back in the order they were asked for rather than
+  interleaving the batches. `materialize(rows_per_call=)` asks in smaller
+  batches than the endpoint's cap, which is what a graph wide enough to outrun
+  the 30 MiB body needs, and what a deployment holding to less than 10,000
+  needs. It only goes down: a larger call buys a refusal rather than a bigger
+  call.
+- A call that fails part way through carries the answers already paid for on
+  the error, as `details['answered']` and `details['rows_answered']`, rather
+  than discarding them. A forecast keeps its answered steps the same way, with
+  how many under `details['parts_answered']`. A ranking keeps only that count,
+  because an order over some of its candidates is a different answer rather
+  than part of the one that was asked for.
+- In the relational engine, `batch_mode(batch_size='max')` means 10,000
+  entities a batch, following the size the endpoint answers.
 
 ### Distributions
 
@@ -130,6 +110,14 @@ raise. Pass `check_keys=False` to skip it.
 functions, from an allowlist per dialect.** Pass `trust_expressions=True` to
 keep a column that calls anything else.
 
+**A batched `materialize()` is bounded, and a question asked in parts is not
+batched.** Every batch is built, with its own context, before the first is
+sent, so more than 100,000 entities, or more than 100 calls, in one
+`materialize()` is refused rather than held in memory at once. A ranking or a
+forecast is asked in parts, each part is already a call, and the fan-out budget
+counts those. Where the context is itself over the 30 MiB body no batch is
+small enough, and the refusal says which options do come down instead.
+
 **`predictive_query` is not public API.** Write predictive queries through
 `sdm_client.PredictiveQuery`.
 
@@ -139,6 +127,9 @@ their reasons in `tests/test_release_contract.py`, which can only shrink.
 ### Compatibility
 
 - The four pure-Python distributions support Python 3.10 to 3.14.
+- The `snowflake` extra holds `snowflake-connector-python` below 5. The 5.0
+  driver changed the shape of its connection surface, and this release is
+  tested against 4.
 - The relational engine ships Linux wheels only, for CPython 3.10 to 3.13 on
   manylinux_2_28 x86-64 and aarch64. There is no source distribution, so
   `structured-data-models-client[relational]` does not install on macOS,
