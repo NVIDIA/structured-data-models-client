@@ -50,13 +50,15 @@ refuses ``VALUE_OUT_OF_RANGE`` at ``materialize``.
 The ``big`` rows take about 7 GB and up to six minutes each, so the test
 making their public calls is defined only with ``SDM_T136_BIG=1``; by
 default only the recorded rows are held. Their rule: where the reference
-fails at ``from_source`` with no code (DuckDB refuses to write the value without large buffers), the core
-fails there too, by name (E66(b)); where the reference describes the source,
-the core describes it as the reference does, and where the reference goes
-on through ``predict`` (the ``BLOB``, which it leaves out), so does the
-core. The ``VARCHAR`` with large buffers fails the reference's
-``materialize`` with DuckDB's out-of-memory error on a 24 GB machine, an
-answer of the machine, so only its ``from_source`` is held.
+fails at ``from_source`` with no code (DuckDB refuses to write the value
+without large buffers), the core fails there too, by name (E66(b)). With
+large buffers the reference describes the source (and takes the ``BLOB``,
+which it leaves out, through ``predict``; the ``VARCHAR`` fails its
+``materialize`` with DuckDB's out-of-memory error on a 24 GB machine), and
+the core refuses it at ``from_source``: register P1B-80, approved by the
+owner on 2026-10-15 (E152), keeps the core's named refusal for Phase 1,
+``VALUE_OUT_OF_RANGE`` naming the column and the Arrow type received,
+matching the reference left to Phase 2 (FX-3).
 
 Added after fix 3 (97aefc9d), from its review (register P1B-81):
 
@@ -487,18 +489,36 @@ if BIG:
 
     @pytest.mark.parametrize('name', [row['name'] for row in BIG_ROWS])
     def test_big_a_value_past_int32_offsets_on_the_core(name: str) -> None:
+        r"""Without large buffers, E66(b): the reference fails with no code,
+        the core by name. With them, P1B-80 (approved, E152): the core
+        refuses at from_source, VALUE_OUT_OF_RANGE, naming the column and
+        the large type received, where the reference describes the
+        source."""
         row = next(r for r in BIG_ROWS if r['name'] == name)
         reference = row['reference']
-        got = _routed('core', row['setup'])
         if reference['described'] is None:
-            # E66(b): the reference fails with no code; the core names it.
+            got = _routed('core', row['setup'])
             assert got['outcome']['stage'] == 'from_source'
             assert got['outcome']['code'] is not None
             return
-        assert got['described'] is not None, (
-            f'{name}: the reference describes this source and the core refuses '
-            f'it at from_source: {got["outcome"]}'
-        )
-        _same_description(got, reference)
-        if reference['outcome']['result'] == 'success':
-            assert got['outcome'] == reference['outcome']
+        assert name.endswith('.large'), name
+        saved = os.environ.get('SDM_CORE_ROUTES')
+        os.environ['SDM_CORE_ROUTES'] = ','.join(R.CORE_ROUTES)
+        try:
+            from sdm_client import Schema, StructuredDataError
+            from sdm_connectors import DuckDBSource
+
+            with pytest.raises(StructuredDataError) as refused:
+                Schema.from_source(DuckDBSource(R.source(row['setup'])))
+        finally:
+            if saved is None:
+                os.environ.pop('SDM_CORE_ROUTES', None)
+            else:
+                os.environ['SDM_CORE_ROUTES'] = saved
+        assert str(refused.value.code) == 'VALUE_OUT_OF_RANGE'
+        details = refused.value.details
+        assert isinstance(details, dict), details
+        assert details.get('column') == 'f', details
+        assert details.get('arrow_type') == (
+            'LargeUtf8' if '.varchar.' in name else 'LargeBinary'
+        ), details

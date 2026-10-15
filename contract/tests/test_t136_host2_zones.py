@@ -83,7 +83,8 @@ Added after fix 13 (cdd26550), from its review:
   ("10000-01-01 00:00:00+00", "0001-12-31 (BC) 15:00:00+00"), and the
   core must show the same, word for word. No first value is read, so the
   reference does not fail.
-- ``p1b89.*`` (fix 13's re-check, P3-1): register P1B-89, owner-pending.
+- ``p1b89.*`` (fix 13's re-check, P3-1): register P1B-89, approved by
+  the owner (E152), the core's reading kept.
   With pytz too, DuckDB's fetchall moves a zoned value to the session's
   zone as a Python datetime, which fails where that wall clock leaves the
   years (``0001-01-01 00:00+00`` in New York), so the reference's
@@ -691,9 +692,9 @@ P1B89_CASES = [
 ]
 
 
-def test_p1b89_is_a_proposed_entry_for_the_owner() -> None:
-    r"""P1B-89 is in the register, proposed, its approver the owner. Fails
-    until the register commit that adds it lands."""
+def test_p1b89_is_the_approved_entry_the_measurements_are_held_to() -> None:
+    r"""P1B-89 is in the register, approved by the owner (E152, 2026-10-15):
+    the core's whole-table reading kept."""
     found = _entries('P1B-89')
     assert len(found) == 1, (
         'register P1B-89 (the reference with pytz takes a zoned column whose '
@@ -701,7 +702,7 @@ def test_p1b89_is_a_proposed_entry_for_the_owner() -> None:
         f'not in docs/design/rust-core/register.yaml: {len(found)} found'
     )
     (entry,) = found
-    assert entry['status'] == 'proposed'
+    assert (entry['status'], entry['approved_by']) == ('approved', 'owner')
     assert 'Approver: owner' in entry['notes']
 
 

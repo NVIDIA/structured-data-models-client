@@ -691,7 +691,7 @@ P1B_86_FITS = [
 def test_p1b_86_a_row_past_int64_is_refused_where_the_reference_passes_it(
     monkeypatch: pytest.MonkeyPatch, edit: str, answer: str
 ) -> None:
-    r"""Register P1B-86 (proposed, the owner's): with the entity-reference
+    r"""Register P1B-86 (approved by the owner, E152): with the entity-reference
     column renamed or dropped, the reference gives the answer back as
     written, the number in its item and in ``to_pandas()``; the core refuses
     it, ``INVALID_RESPONSE`` naming the field, reason ``out_of_range``."""
@@ -781,7 +781,7 @@ def _python_reads(read: Callable[[str], Any], text: str) -> Any:
 def test_p1b_87_a_later_digit_stays_text_where_python_reads_a_number(
     monkeypatch: pytest.MonkeyPatch, query: str, digit: str
 ) -> None:
-    r"""Register P1B-87 (proposed, the owner's): an entity cell edited to
+    r"""Register P1B-87 (approved by the owner, E152): an entity cell edited to
     text with a digit Unicode added after 13.0 is read back by the
     reference as the number this interpreter's ``int``/``float`` reads (on
     Python 3.12, the reference's), and given back as the text on the core,

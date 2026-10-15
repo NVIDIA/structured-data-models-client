@@ -107,7 +107,7 @@ ABOUT = (
     'the reference with pytz (`reference_with_pytz`, the default route of '
     'an interpreter of the same environment with pytz installed, '
     '`p1b39.environment`) and the core, each with its from_source warnings '
-    'whole. `p1b89`: register P1B-89 (owner-pending), recorded the same way: '
+    'whole. `p1b89`: register P1B-89 (approved), recorded the same way: '
     "with pytz, DuckDB's fetchall fails where a zoned value's wall clock in "
     "the session's zone leaves the years, so the reference falls back to its "
     'preview there too.'
@@ -575,7 +575,7 @@ _P1B39_SPECS: dict[str, tuple[str, str, str, list[str]]] = {
     ),
 }
 
-#: Register P1B-89 (owner-pending; fix 13's re-check, P3-1): with pytz
+#: Register P1B-89 (approved, E152; fix 13's re-check, P3-1): with pytz
 #: installed, DuckDB's fetchall moves a TIMESTAMPTZ to the session's zone as
 #: a Python datetime, which fails (OverflowError) where the wall clock there
 #: leaves the years though the instant does not, so the reference's
