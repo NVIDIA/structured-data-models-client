@@ -40,9 +40,14 @@ by name rather than silently changing what the core is held to.
   or by an edit (with or without setting its stype to ``timestamp``), under
   any temporal query, with or without an anchor. The reference refuses it
   with INVALID_REQUEST at materialize ("Failed to collect any context
-  examples"); the core refused it as UNSUPPORTED_REQUEST naming the rule.
-  Held: INVALID_REQUEST at materialize, with no rule. Controls that stay as
-  they are: a static query over such an entity table, or a TIME time
+  examples"; with an anchor too early for the window, its window check
+  first, "Context anchor timestamp is too early", details
+  ``window_outran_the_data``: each case holds the reference to its own
+  measured reason); the core refused it as UNSUPPORTED_REQUEST naming the
+  rule. Held: the reference's stage, class and code, INVALID_REQUEST at
+  materialize, with no rule, its message and details the core's own.
+  Controls that stay as they are: a static query over such an entity
+  table, or a TIME time
   column on a table that is not the entity's (the reference INTERNAL_ERROR,
   DuckDB's failed cast; the core PROVIDER_ERROR, register DT-12's shape);
   a BIGINT or DOUBLE column set to ``timestamp`` (INVALID_REQUEST at the
@@ -341,37 +346,76 @@ def _time_column(table: str, column: str, stype: str | None = None) -> Edit:
     return edit
 
 
+#: Why the reference refuses, as measured: its message's start and its
+#: details. Without enough history, its window check refuses before it
+#: samples; otherwise it collects no example.
+NO_EXAMPLES = ('[INVALID_REQUEST] Failed to collect any context examples', {})
+WINDOW_OUTRAN = (
+    '[INVALID_REQUEST] Context anchor timestamp is too early',
+    {'window_outran_the_data': True},
+)
+
+
 def _entity_time_cases() -> list[Any]:
     timestamp = _time_column('users', 't', 'timestamp')
-    cases: list[tuple[str, str, dict[str, Any]]] = [
-        ('edit-stype SUM', SUM, {'edit': timestamp}),
-        ('edit-stype COUNT', COUNT, {'edit': timestamp}),
-        ('edit-stype AVG', AVG, {'edit': timestamp}),
-        ('edit-stype SUM no-anchor', SUM, {'edit': timestamp, 'anchor': None}),
+    cases: list[tuple[str, str, dict[str, Any], tuple[str, dict[str, Any]]]] = [
+        ('edit-stype SUM', SUM, {'edit': timestamp}, NO_EXAMPLES),
+        ('edit-stype COUNT', COUNT, {'edit': timestamp}, NO_EXAMPLES),
+        ('edit-stype AVG', AVG, {'edit': timestamp}, NO_EXAMPLES),
         (
+            'edit-stype SUM no-anchor',
+            SUM,
+            {'edit': timestamp, 'anchor': None},
+            NO_EXAMPLES,
+        ),
+        (
+            # The orders start 2023-01-01: a 30-day window back from
+            # 2023-01-10 outruns them.
             'edit-stype SUM early-anchor',
             SUM,
             {'edit': timestamp, 'anchor': pd.Timestamp('2023-01-10')},
+            WINDOW_OUTRAN,
         ),
-        ('edit-time-column SUM', SUM, {'edit': _time_column('users', 't')}),
-        ('from_source SUM', SUM, {'time_columns': {'users': 't'}}),
-        ('from_source COUNT', COUNT, {'time_columns': {'users': 't'}}),
+        (
+            'edit-time-column SUM',
+            SUM,
+            {'edit': _time_column('users', 't')},
+            NO_EXAMPLES,
+        ),
+        ('from_source SUM', SUM, {'time_columns': {'users': 't'}}, NO_EXAMPLES),
+        (
+            'from_source COUNT',
+            COUNT,
+            {'time_columns': {'users': 't'}},
+            NO_EXAMPLES,
+        ),
         (
             'from_source SUM no-anchor',
             SUM,
             {'time_columns': {'users': 't'}, 'anchor': None},
+            NO_EXAMPLES,
         ),
     ]
-    return [pytest.param(query, kw, id=name) for name, query, kw in cases]
+    return [
+        pytest.param(query, kw, reason, id=name)
+        for name, query, kw, reason in cases
+    ]
 
 
-@pytest.mark.parametrize(('query', 'kwargs'), _entity_time_cases())
+@pytest.mark.parametrize(('query', 'kwargs', 'reason'), _entity_time_cases())
 def test_a_time_of_day_entity_time_column_is_the_reference_s_invalid_request(
-    monkeypatch: pytest.MonkeyPatch, query: str, kwargs: dict[str, Any]
+    monkeypatch: pytest.MonkeyPatch,
+    query: str,
+    kwargs: dict[str, Any],
+    reason: tuple[str, dict[str, Any]],
 ) -> None:
     reference, core = _routes(monkeypatch, *USERS_TIME, query=query, **kwargs)
     assert reference['stage'] == 'materialize', reference
-    assert 'Failed to collect any context examples' in reference['message']
+    start, details = reason
+    assert reference['message'].startswith(start), reference
+    assert reference['details'] == details, reference
+    # The core is held to the reference's stage, class and code, not its
+    # message or details.
     _refused_alike(reference, core, 'INVALID_REQUEST')
 
 
